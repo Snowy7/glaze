@@ -27,7 +27,10 @@ enum Slot {
 }
 
 /// A decode for the worker: the cache key, the file, the size wanted.
-type Job = (u64, String, PathBuf, (u32, u32));
+enum Job {
+    Decode(u64, String, PathBuf, (u32, u32)),
+    Release,
+}
 
 #[derive(Default)]
 pub struct Images {
@@ -53,6 +56,9 @@ impl Images {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.slots.clear();
         self.sync = None;
+        if let Some(worker) = &self.worker {
+            let _ = worker.send(Job::Release);
+        }
     }
 
     /// Decodes on a worker thread from now on, waking the UI thread when one is ready.
@@ -61,12 +67,26 @@ impl Images {
         let generation = self.generation.clone();
         let release_decoders = self.budget.is_some();
         std::thread::spawn(move || {
-            let Ok(decoder) = Decoder::new() else { return };
-            for (page, key, path, max) in rx {
+            let mut decoder = None;
+            for job in rx {
+                let Job::Decode(page, key, path, max) = job else {
+                    decoder = None;
+                    if release_decoders {
+                        crate::panel::optimize_heap();
+                    }
+                    continue;
+                };
                 if page != generation.load(std::sync::atomic::Ordering::Relaxed) {
                     continue;
                 }
-                let decoded = decode(&decoder, &path, max);
+                let decoder = match &decoder {
+                    Some(decoder) => decoder,
+                    None => {
+                        let Ok(ready) = Decoder::new() else { continue };
+                        decoder.insert(ready)
+                    }
+                };
+                let decoded = decode(decoder, &path, max);
                 let source_size = decoded.as_ref().map(|(_, size)| *size);
                 let image = decoded.map(|(image, _)| Arc::new(image));
                 // The ready pixels outlive the decoder. Return its freed native buffers
@@ -136,7 +156,7 @@ impl Images {
         }
         if let Some(worker) = &self.worker {
             self.slots.insert(key.clone(), Slot::Pending);
-            let _ = worker.send((page, key, path.to_path_buf(), max));
+            let _ = worker.send(Job::Decode(page, key, path.to_path_buf(), max));
             return None;
         }
         let decoder = match &self.sync {
@@ -234,24 +254,44 @@ fn decode(decoder: &Decoder, path: &Path, max: (u32, u32)) -> Option<(Image, (u3
 
 /// The decode worker needs WIC alone. A complete Ui also keeps native font and drawing
 /// factories alive, and reading through a WIC file stream avoids two compressed-file copies.
-struct Decoder(windows::Win32::Graphics::Imaging::IWICImagingFactory);
+struct Decoder {
+    factory: windows::Win32::Graphics::Imaging::IWICImagingFactory,
+    _apartment: Apartment,
+}
+
+/// Balance each successful initialization after this thread's decoder objects are dropped.
+struct Apartment(bool);
+impl Apartment {
+    fn new() -> Self {
+        use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
+        // SAFETY: called and dropped on the image worker (or the synchronous UI thread).
+        Self(unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }.is_ok())
+    }
+}
+impl Drop for Apartment {
+    fn drop(&mut self) {
+        if self.0 {
+            // SAFETY: each successful CoInitializeEx on this thread owns one matching call.
+            unsafe {
+                windows::Win32::System::Com::CoUninitialize();
+            }
+        }
+    }
+}
 
 impl Decoder {
     fn new() -> anyhow::Result<Self> {
         use windows::Win32::{
             Graphics::Imaging::CLSID_WICImagingFactory,
-            System::Com::{
-                CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
-            },
+            System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance},
         };
         // SAFETY: all decoder objects stay on this thread. An existing COM apartment is kept.
         unsafe {
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            Ok(Self(CoCreateInstance(
-                &CLSID_WICImagingFactory,
-                None,
-                CLSCTX_INPROC_SERVER,
-            )?))
+            let apartment = Apartment::new();
+            Ok(Self {
+                factory: CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?,
+                _apartment: apartment,
+            })
         }
     }
 
@@ -266,7 +306,7 @@ impl Decoder {
         };
         // SAFETY: valid local COM objects, bounded dimensions and a correctly sized BGRA buffer.
         unsafe {
-            let decoder = self.0.CreateDecoderFromFilename(
+            let decoder = self.factory.CreateDecoderFromFilename(
                 &windows::core::HSTRING::from(path.as_os_str()),
                 None,
                 GENERIC_READ,
@@ -285,9 +325,9 @@ impl Decoder {
                 .min(1.0);
             let width = (width as f64 * scale).round().max(1.0) as u32;
             let height = (height as f64 * scale).round().max(1.0) as u32;
-            let scaler = self.0.CreateBitmapScaler()?;
+            let scaler = self.factory.CreateBitmapScaler()?;
             scaler.Initialize(&frame, width, height, WICBitmapInterpolationModeFant)?;
-            let converter = self.0.CreateFormatConverter()?;
+            let converter = self.factory.CreateFormatConverter()?;
             converter.Initialize(
                 &scaler,
                 &GUID_WICPixelFormat32bppPBGRA,
@@ -317,14 +357,13 @@ fn shell_thumbnail(path: &Path, max: (u32, u32)) -> anyhow::Result<Image> {
         BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC,
         GetDIBits, GetObjectW, HGDIOBJ, ReleaseDC,
     };
-    use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
     use windows::Win32::UI::Shell::{
         IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_THUMBNAILONLY,
     };
     // SAFETY: COM on this worker thread (kept for its life); the bitmap is ours to delete; the
     // pixel buffer matches the header.
     unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let _apartment = Apartment::new();
         let factory: IShellItemImageFactory =
             SHCreateItemFromParsingName(&windows::core::HSTRING::from(path.as_os_str()), None)?;
         let bitmap = factory.GetImage(
