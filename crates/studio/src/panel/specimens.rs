@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 /// Keep only a page's small previews; large libraries must not grow the panel's footprint.
 pub fn remember(app: &App, key: String, image: &Arc<Image>) {
+    if image.pixels.len() > 4 << 20 { return; }
     let mut cache = app.panel.as_ref().unwrap().specimens.borrow_mut();
     let bytes: usize = cache.values().map(|image| image.pixels.len()).sum();
     if cache.len() >= 80 || bytes + image.pixels.len() > 4 << 20 {
