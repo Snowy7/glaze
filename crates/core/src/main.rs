@@ -149,9 +149,22 @@ fn run() -> Result<()> {
         .file_index
         .then(|| start_optional("index", index_exe.clone()))
         .flatten();
+    // The app styler (experimental; docs/windows-styling.md, "App styler") runs only while its
+    // flag is on. Stopping it, by any path, is what puts Explorer and Settings back.
+    let styler_exe = exe.with_file_name("mypaper-styler.exe");
+    let mut app_styler = config
+        .experimental
+        .app_styler
+        .then(|| start_optional("styler", styler_exe.clone()))
+        .flatten();
 
     let panicked = loop {
-        let children = [Some(&wallpaper), shell.as_ref(), file_index.as_ref()];
+        let children = [
+            Some(&wallpaper),
+            shell.as_ref(),
+            file_index.as_ref(),
+            app_styler.as_ref(),
+        ];
         let handles: Vec<HANDLE> = children
             .iter()
             .flatten()
@@ -215,6 +228,13 @@ fn run() -> Result<()> {
                         file_index = None;
                     }
                 }
+                "styler" => {
+                    if let Some(child) = &mut app_styler
+                        && child.on_exit()? == Outcome::Stopped
+                    {
+                        app_styler = None;
+                    }
+                }
                 _ => {}
             }
         }
@@ -231,6 +251,12 @@ fn run() -> Result<()> {
         {
             log::warn!("{error:#}; continuing without file search");
             file_index = None;
+        }
+        if let Some(child) = &mut app_styler
+            && let Err(error) = child.restart_if_due()
+        {
+            log::warn!("{error:#}; continuing without the app styler");
+            app_styler = None;
         }
         match pumped.signal {
             Some(Signal::Panic) => {
@@ -268,6 +294,14 @@ fn run() -> Result<()> {
                     }
                     file_index = None;
                 }
+                if config.experimental.app_styler && app_styler.is_none() {
+                    app_styler = start_optional("styler", styler_exe.clone());
+                } else if !config.experimental.app_styler {
+                    if let Some(child) = &mut app_styler {
+                        child.stop();
+                    }
+                    app_styler = None;
+                }
             }
         }
     };
@@ -279,6 +313,9 @@ fn run() -> Result<()> {
     bars::replay_journal();
     wallpaper.stop();
     if let Some(child) = &mut file_index {
+        child.stop();
+    }
+    if let Some(child) = &mut app_styler {
         child.stop();
     }
     if let Some(styling) = &mut styling {
