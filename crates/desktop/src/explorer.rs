@@ -13,7 +13,7 @@ use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWi
 use windows::Win32::UI::WindowsAndMessaging::{
     CHILDID_SELF, CreateWindowExW, DefWindowProcW, DestroyWindow, EVENT_OBJECT_CREATE,
     EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, GWLP_USERDATA, GetClassNameW, GetWindowLongPtrW,
-    OBJID_WINDOW, RegisterClassExW, RegisterWindowMessageW, SetWindowLongPtrW,
+    GetWindowThreadProcessId, OBJID_WINDOW, RegisterClassExW, RegisterWindowMessageW, SetWindowLongPtrW,
     WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WNDCLASSEXW, WS_EX_NOACTIVATE,
     WS_EX_TOOLWINDOW, WS_POPUP,
 };
@@ -37,10 +37,43 @@ struct Signals {
 
 /// Watches desktop destruction and replacement shell creation/broadcasts.
 /// Create and pump messages on the owning thread. No polling is used.
+///
+/// While a desktop is known, the hook takes only its Explorer's events (the window lifecycle of
+/// every other process used to wake the owning thread: ~1-3 a second on a quiet desktop, more
+/// while apps open and close windows). Once it is lost, the hook takes every process's again,
+/// so the replacement shell's creation is seen.
 pub struct DesktopEvents {
     window: HWND,
-    hook: HWINEVENTHOOK,
+    hook: Cell<HWINEVENTHOOK>,
+    /// The process the hook is limited to (0: every process).
+    pid: Cell<u32>,
     signals: Rc<Signals>,
+}
+
+/// Hooks window creation, destruction and showing in process `pid` (0: every process).
+fn hook(pid: u32) -> HWINEVENTHOOK {
+    // SAFETY: static callback delivered to this thread; unhooked before its signals drop.
+    unsafe {
+        SetWinEventHook(
+            EVENT_OBJECT_CREATE,
+            EVENT_OBJECT_SHOW,
+            None,
+            Some(on_event),
+            pid,
+            0,
+            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+        )
+    }
+}
+
+/// The Explorer process that owns `host` (0, every process, when there is none).
+fn explorer_pid(host: Option<DesktopHost>) -> u32 {
+    let mut pid = 0;
+    if let Some(host) = host {
+        // SAFETY: a read-only query; a dead window leaves `pid` at 0.
+        unsafe { GetWindowThreadProcessId(host.parent(), Some(&mut pid)) };
+    }
+    pid
 }
 
 impl DesktopEvents {
@@ -81,18 +114,8 @@ impl DesktopEvents {
             SetWindowLongPtrW(window, GWLP_USERDATA, Rc::as_ptr(&signals) as isize);
             window
         };
-        // SAFETY: static callback delivered to this thread; unhooked before signals drop.
-        let hook = unsafe {
-            SetWinEventHook(
-                EVENT_OBJECT_CREATE,
-                EVENT_OBJECT_SHOW,
-                None,
-                Some(on_event),
-                0,
-                0,
-                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
-            )
-        };
+        let pid = explorer_pid(Some(host));
+        let hook = hook(pid);
         if hook.is_invalid() {
             // SAFETY: our window; its signals are still alive.
             let _ = unsafe { DestroyWindow(window) };
@@ -103,13 +126,19 @@ impl DesktopEvents {
         });
         Ok(Self {
             window,
-            hook,
+            hook: Cell::new(hook),
+            pid: Cell::new(pid),
             signals,
         })
     }
 
     pub fn take_lost(&self) -> bool {
-        self.signals.lost.replace(false)
+        let lost = self.signals.lost.replace(false);
+        if lost {
+            // Its Explorer is gone: watch every process for the next one.
+            self.rescope();
+        }
+        lost
     }
     pub fn take_ready(&self) -> bool {
         self.signals.ready.replace(false)
@@ -118,17 +147,41 @@ impl DesktopEvents {
     /// Watches a resolved desktop, or shell creation while waiting for one.
     pub fn set_host(&self, host: Option<DesktopHost>) {
         self.signals.host.set(host);
+        self.rescope();
+    }
+
+    /// Limits the hook to the current desktop's Explorer, or every process without one. Called
+    /// outside the hook's callback (a hook is not replaced from inside its own callback).
+    fn rescope(&self) {
+        let pid = explorer_pid(self.signals.host.get());
+        if pid == self.pid.get() {
+            return;
+        }
+        let new = hook(pid);
+        if new.is_invalid() {
+            return; // keep the wider hook
+        }
+        let old = self.hook.replace(new);
+        self.pid.set(pid);
+        WATCHES.with_borrow_mut(|watches| {
+            if let Some(signals) = watches.remove(&(old.0 as isize)) {
+                watches.insert(new.0 as isize, signals);
+            }
+        });
+        // SAFETY: our previous hook, on its creating thread.
+        let _ = unsafe { UnhookWinEvent(old) };
     }
 }
 
 impl Drop for DesktopEvents {
     fn drop(&mut self) {
+        let hook = self.hook.get();
         WATCHES.with_borrow_mut(|watches| {
-            watches.remove(&(self.hook.0 as isize));
+            watches.remove(&(hook.0 as isize));
         });
         // SAFETY: our hook and window, released on their creating thread, before signals.
         unsafe {
-            let _ = UnhookWinEvent(self.hook);
+            let _ = UnhookWinEvent(hook);
             let _ = DestroyWindow(self.window);
         }
     }
