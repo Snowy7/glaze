@@ -183,12 +183,13 @@ pub struct Scanned {
 pub fn subtree(root: &Path, fetch: Fetch) -> Result<Scanned> {
     let started = Instant::now();
     let mut store = Store::new();
+    let info = metadata(root).ok();
     let id = store.insert(
         0,
         root.to_string_lossy().trim_end_matches('\\'),
-        DIRECTORY,
+        info.as_ref().map_or(DIRECTORY, |entry| entry.attributes),
         0,
-        0,
+        info.as_ref().map_or(0, |entry| entry.modified),
     );
     let mut pending = vec![(id, root.to_owned())];
     let mut denied = 0;

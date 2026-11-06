@@ -125,7 +125,10 @@ fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
                 .file_name()
                 .context("subtree basename")?
                 .to_string_lossy();
-            let id = state.store.upsert(parent, &name, DIRECTORY, 0, 0);
+            let root_info = scanned.store.record(source);
+            let id = state
+                .store
+                .upsert(parent, &name, root_info.attributes, 0, root_info.modified);
             let mut child = scanned.store.record(source).first;
             while child != NONE {
                 state.store.import(&scanned.store, child, id);
@@ -515,6 +518,13 @@ mod tests {
                 .find(&dir.join("b/test.txt").to_string_lossy())
                 .is_some()
         );
+        let moved = state
+            .read()
+            .unwrap()
+            .store
+            .find(&dir.join("b").to_string_lossy())
+            .unwrap();
+        assert!(state.read().unwrap().store.record(moved).modified > 0);
         std::fs::remove_file(dir.join("b/test.txt")).unwrap();
         apply(&state, &dir.join("b/test.txt")).unwrap();
         assert_eq!(state.read().unwrap().store.record(1).files, 0);
