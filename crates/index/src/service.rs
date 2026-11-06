@@ -132,6 +132,10 @@ fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
             .expect("index state")
             .store
             .save_replacing_volume(&snapshot, &scanned.store, root)?;
+        // The scan is now durable. Close its views before touching the new full snapshot,
+        // and release old query pages to avoid retaining both generations in resident RAM.
+        drop(scanned);
+        trim_working_set();
         let replacement = Store::open(&snapshot)?;
         let old = {
             let mut state = state.write().expect("index state");
