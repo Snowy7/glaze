@@ -1213,8 +1213,7 @@ mod tests {
             wallpaper.video = None;
         }
         observe(&app);
-        app.run(crate::actions::Action::SetStyle(Some(mypaper_config::look::Style::Solid)));
-        let entry = app.panel.as_ref().unwrap().history.borrow().entries.last().unwrap().clone();
+        let entry = app.panel.as_ref().unwrap().history.borrow().entries[0].clone();
         app.nav.display = 0;
         let first = thumbnail(&app, &entry, (216, 122)).unwrap();
         app.nav.display = 1;
@@ -1323,7 +1322,8 @@ mod tests {
             wallpaper.video = None;
         }
         observe(&app);
-        let entry = app.panel.as_ref().unwrap().history.borrow().entries[0].clone();
+        app.run(crate::actions::Action::SetStyle(Some(mypaper_config::look::Style::Solid)));
+        let entry = app.panel.as_ref().unwrap().history.borrow().entries.last().unwrap().clone();
         app.panel.as_ref().unwrap().history.borrow_mut().entries = vec![entry; 30];
         app.panel.as_mut().unwrap().page = super::super::Page::History;
         super::super::build(&app, &mut ui.text);

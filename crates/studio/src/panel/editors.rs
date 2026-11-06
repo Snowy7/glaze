@@ -854,7 +854,11 @@ pub fn reveal_search(app: &App, b: &mut B, page: Page, first_target: usize) {
             let hit = b.list.hits.iter().find(|hit| hit.id == index as u32 + 1)?;
             (hit.label.as_ref() == label
                 || hit.label.starts_with(&format!("{label}:"))
-                || hit.label.starts_with(&format!("{label},")))
+                || hit.label.starts_with(&format!("{label},"))
+                || hit
+                    .label
+                    .strip_prefix("Change ")
+                    .is_some_and(|choice| choice.starts_with(&format!("{label}:"))))
             .then_some(target.rect)
         })
         .or_else(|| {
