@@ -34,7 +34,7 @@ fn fixture(ui: &Ui, dark: bool, page: Page) -> App {
 }
 
 fn shot(app: &mut App, ui: &mut Ui, name: &str, hovered: Option<Action>, dark: bool) {
-    let out = std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r7");
+    let out = std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r8");
     let built = crate::panel::build(app, &mut ui.text);
     app.size.1 = (built.scrolls.last().unwrap().content + 48.0).ceil() as u32;
     let built = crate::panel::build(app, &mut ui.text);
@@ -134,6 +134,68 @@ fn render_chooser_review() {
             own,
         ));
         shot(&mut app, &mut ui, "clock-own-material", None, dark);
+        let mut app = fixture(&ui, dark, Page::Widget);
+        app.nav.widget = Some("calendar-1".into());
+        let layout = crate::pages::widgets::layout(&app);
+        let index = layout
+            .instances
+            .iter()
+            .position(|instance| instance.instance == "calendar-1")
+            .unwrap();
+        let own =
+            crate::panel::widget_look::appearance(&app, &layout.instances[index], Style::Oneui);
+        app.run(Action::Set(
+            Edit::new(
+                DocId::Widgets,
+                format!("/instances/{index}/appearance"),
+                "Its own look",
+            ),
+            own,
+        ));
+        shot(&mut app, &mut ui, "calendar-own-material", None, dark);
+        let mut app = fixture(&ui, dark, Page::Look);
+        app.library.items.clear();
+        shot(
+            &mut app,
+            &mut ui,
+            "look-no-wallpaper",
+            Some(Action::SetStyle(Some(Style::Liquid))),
+            dark,
+        );
+        let mut app = fixture(&ui, dark, Page::Windows);
+        app.run(Action::Set(Edit::new(DocId::Config, "/look/windows", "Windows look"),
+            json!({"apps":"light","caption":"#CFD8EA","caption_text":"#1E2A42","border":"#8398B7","corners":"square","backdrop":"acrylic"})));
+        shot(&mut app, &mut ui, "windows-custom", None, dark);
+        let mut app = fixture(&ui, dark, Page::Look);
+        let index = app
+            .library
+            .items
+            .iter()
+            .position(|wallpaper| !wallpaper.active)
+            .unwrap();
+        app.library.items[index].origin = crate::library::Origin::User;
+        app.run(Action::Panel(crate::panel::Command::WallpaperLook(index)));
+        let frame = crate::panel::build(&app, &mut ui.text);
+        app.run(
+            frame
+                .targets
+                .iter()
+                .find(|target| matches!(target.action, Action::More(_)))
+                .unwrap()
+                .action
+                .clone(),
+        );
+        shot(&mut app, &mut ui, "wallpaper-own-look", None, dark);
+        let mut app = fixture(&ui, dark, Page::Windows);
+        app.size.0 = 360;
+        app.theme.ty.text_scale = 1.5;
+        shot(
+            &mut app,
+            &mut ui,
+            "windows-hover-360-large-text",
+            Some(Action::WindowsLook(1)),
+            dark,
+        );
         for bar in [None, Some(Bar::Top), Some(Bar::Dock)] {
             let mut app = fixture(&ui, dark, Page::BarDesign);
             app.nav.bar = bar;
@@ -179,7 +241,7 @@ fn render_chooser_review() {
         let image = render(&mut ui, &built.list, 360, 620).unwrap();
         golden::write(
             &image,
-            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r7").join(format!(
+            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r8").join(format!(
                 "color-360-{}.png",
                 if dark { "dark" } else { "light" }
             )),
