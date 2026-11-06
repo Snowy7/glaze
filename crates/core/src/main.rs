@@ -21,6 +21,7 @@ mod child;
 mod desktop_extras;
 mod restart;
 mod styling;
+mod system;
 mod tray;
 
 use std::path::PathBuf;
@@ -141,6 +142,7 @@ fn run() -> Result<()> {
     // The classic-menu switch (opt-in), via config.json (docs/desktop-extras.md). The desktop
     // right-click menu is the native shell's.
     let mut extras = DesktopExtras::new(&config);
+    let mut system = system::SystemSettings::new(&config);
     let index_exe = exe.with_file_name("mypaper-index.exe");
     let mut file_index = config
         .experimental
@@ -256,6 +258,7 @@ fn run() -> Result<()> {
         }
         if pumped.config_changed {
             extras.follow_config();
+            system.follow_config();
             if let Ok(config) = Config::load() {
                 if config.experimental.file_index && file_index.is_none() {
                     file_index = start_optional("index", index_exe.clone());
@@ -281,6 +284,7 @@ fn run() -> Result<()> {
     if let Some(styling) = &mut styling {
         styling.stop();
     }
+    system.stop();
     if let Ok(host) = DesktopHost::find() {
         host.restore();
     }
