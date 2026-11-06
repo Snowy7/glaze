@@ -868,6 +868,7 @@ pub fn intercept_set(
         app.set(&edit, value);
         return true;
     }
+    if app.panel.is_some() && colors::intercept_set(app, edit, value) { return true; }
     if app.panel.is_some() && editors::intercept_page_set(app, edit, value) { return true; }
     if app.panel.is_some()
         && edit.doc == crate::docs::DocId::Studio
