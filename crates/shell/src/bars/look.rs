@@ -704,6 +704,12 @@ mod tests {
         use mypaper_bars::style::{Motion, MotionStyle};
         for (value, system, performance, expected) in [
             (
+                serde_json::json!({"duration": 5000, "curve": "linear"}),
+                true,
+                false,
+                2000.0,
+            ),
+            (
                 serde_json::json!({"duration": 640, "curve": "linear"}),
                 true,
                 false,

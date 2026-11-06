@@ -631,11 +631,6 @@ impl<C: Clone> Menu<C> {
             .map(|(t, _)| t.clone())
             .or_else(|| STYLE.with_borrow(Clone::clone))
             .unwrap_or_else(|| tokens.clone());
-        if let Some(motion) = self.open_motion {
-            self.tokens.glass_style.fade_ms = if motion.timing.enabled && motion.style != crate::reveal::Reveal::None {
-                (motion.timing.duration.as_secs_f32() * 1000.0).min(2000.0)
-            } else { 0.0 };
-        }
         // Glass when the engine can draw it: the tokens' own, else the active style's.
         self.tokens.glass = self
             .tokens

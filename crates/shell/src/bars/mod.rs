@@ -1695,6 +1695,11 @@ impl Bars {
                     let mut tokens = look::Tokens::resolve(&look, &appearance, &self.system);
                     plugin_style::colors(&colors, self.config.raw(), &mut tokens.theme.color);
                     tokens.cache_config(&look, &config);
+                    let animation = if kind == BarKind::Dock {
+                        &config.dock.animation
+                    } else {
+                        &config.top.animation
+                    };
                     let mut popup_look = look.clone();
                     look::popup_font(&config, bar_key, &mut popup_look);
                     let knobs = Config::load()
@@ -1710,12 +1715,17 @@ impl Bars {
                     if performance {
                         popup.glass = None;
                     }
+                    popup.glass_style.fade_ms = look::fade_ms(
+                        motion::resolve(
+                            animation,
+                            kind == BarKind::Dock,
+                            motion::Leaf::Open,
+                            self.system.animations,
+                            performance,
+                        ),
+                        motion::presentation(animation, kind == BarKind::Dock, motion::Leaf::Open),
+                    );
                     tokens.popup = Some(popup);
-                    let animation = if kind == BarKind::Dock {
-                        &config.dock.animation
-                    } else {
-                        &config.top.animation
-                    };
                     tokens.glass_style.fade_ms = look::fade_ms(
                         motion::resolve(
                             animation,
