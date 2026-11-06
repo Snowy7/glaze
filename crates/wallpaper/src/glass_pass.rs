@@ -199,9 +199,10 @@ impl GlassPass {
             .fork(&gpu.device)
     }
 
-    /// Whether a spring runs on any screen (the engine then keeps drawing frames).
-    pub fn animating(&self) -> bool {
-        self.screens.iter().any(|s| s.animating)
+    /// Whether a spring runs on screen `index` (the engine then keeps drawing it). Springs only
+    /// advance as the screen is drawn, so a covered screen's spring waits, mid-flight, for it.
+    pub fn animating(&self, index: usize) -> bool {
+        self.screens.get(index).is_some_and(|s| s.animating)
     }
 
     /// Draws screen `index`'s glass into the swapchain image `target` (which already holds the

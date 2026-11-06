@@ -498,9 +498,12 @@ impl Engine {
     fn deadline(&self, frame: Option<Instant>) -> Option<Instant> {
         [
             frame,
-            // A glass spring (materialize, a material fade) runs: present pacing sets the rate.
-            self.glass
-                .animating()
+            // A glass spring (materialize, a material fade) runs on a screen that is drawn:
+            // present pacing sets the rate. A covered screen's spring waits for it, without wakes.
+            self.screens
+                .iter()
+                .enumerate()
+                .any(|(i, s)| !s.paused && self.glass.animating(i))
                 .then(|| Instant::now() + Duration::from_millis(4)),
             self.reload_at,
             self.recheck_at,
