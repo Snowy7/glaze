@@ -135,6 +135,7 @@ pub struct State {
     pub history: std::cell::RefCell<history::History>,
     pub specimens:
         std::cell::RefCell<std::collections::HashMap<String, std::sync::Arc<mypaper_ui::Image>>>,
+    specimen_page: std::cell::Cell<Option<Page>>,
     pub save_doc: std::cell::Cell<Option<crate::docs::DocId>>,
     pub sort_drag: Option<lists::Drag>,
     pub fonts: std::cell::OnceCell<Vec<String>>,
@@ -515,6 +516,10 @@ pub fn build(app: &App, text: &mut Text) -> Built {
     let mut page = app.panel.as_ref().map_or(Page::Root, |s| s.page);
     if matches!(page, Page::Top | Page::Dock) && app.nav.module.is_some() {
         page = Page::Module;
+    }
+    let state = app.panel.as_ref().unwrap();
+    if state.specimen_page.replace(Some(page)) != Some(page) {
+        state.specimens.borrow_mut().clear();
     }
     let p = palette_for(app);
     let ty = app.theme.ty.clone();

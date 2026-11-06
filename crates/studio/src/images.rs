@@ -31,12 +31,19 @@ type Job = (String, PathBuf, (u32, u32));
 pub struct Images {
     slots: HashMap<String, Slot>,
     clock: u64,
+    budget: Option<usize>,
     worker: Option<Sender<Job>>,
     /// Goldens decode synchronously, with their own WIC factory.
     sync: Option<mypaper_ui::Ui>,
 }
 
 impl Images {
+    /// A smaller window can bound its decoded-picture cache independently.
+    pub fn set_budget(&mut self, bytes: usize) {
+        self.budget = Some(bytes.max(64 << 10));
+        self.trim();
+    }
+
     /// Decodes on a worker thread from now on, waking the UI thread when one is ready.
     pub fn connect(&mut self, inbox: Sender<crate::app::Msg>, thread: u32) {
         let (tx, rx) = channel::<Job>();
@@ -97,8 +104,9 @@ impl Images {
             Slot::Ready(i, _) => i.pixels.len(),
             _ => 0,
         };
+        let budget = self.budget.unwrap_or(BUDGET);
         let mut total: usize = self.slots.values().map(size).sum();
-        if total <= BUDGET {
+        if total <= budget {
             return;
         }
         let mut by_age: Vec<(u64, String, usize)> = self
@@ -111,7 +119,7 @@ impl Images {
             .collect();
         by_age.sort_unstable();
         for (_, key, bytes) in by_age {
-            if total <= BUDGET * 3 / 4 {
+            if total <= budget * 3 / 4 {
                 break;
             }
             self.slots.remove(&key);

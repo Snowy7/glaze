@@ -737,11 +737,7 @@ pub(super) fn face(
         );
         let mut ui = mypaper_ui::Ui::new().ok()?;
         let image = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, width, height).ok()?);
-        let mut cache = state.specimens.borrow_mut();
-        if cache.len() >= 80 {
-            cache.clear();
-        }
-        cache.insert(cache_key, image.clone());
+        crate::panel::specimens::remember(app, cache_key, &image);
         Some(image)
     });
     if let Some(image) = image {

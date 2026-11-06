@@ -263,6 +263,7 @@ fn run() -> Result<()> {
     let mut ui = Ui::new()?;
     // Studio shows a few hundred labels at once: keep them all laid out.
     ui.text.set_capacity(480);
+    if panel_mode { ui.text.set_capacity(96); }
     // UI Automation loads on its first request rather than before the first paint.
     let min = if panel_mode { (360, 160) } else { (960, 640) };
     let surface = Surface::new_deferred_accessibility(Kind::App { min }, title, Role::Window)?;
@@ -271,6 +272,7 @@ fn run() -> Result<()> {
     let thread = unsafe { GetCurrentThreadId() };
     let (tx, rx) = channel::<Msg>();
     let mut app = App::new(&ui.text, scale, (1280, 800));
+    if panel_mode { app.images.borrow_mut().set_budget(5 << 20); }
     app.window = Some(surface.hwnd());
     app.inbox = Some(tx.clone());
     app.thread = thread;

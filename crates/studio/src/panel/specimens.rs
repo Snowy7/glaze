@@ -6,6 +6,16 @@ use mypaper_ui::controls::Align;
 use mypaper_ui::{Image, Rect, Rgba};
 use std::sync::Arc;
 
+/// Keep only a page's small previews; large libraries must not grow the panel's footprint.
+pub fn remember(app: &App, key: String, image: &Arc<Image>) {
+    let mut cache = app.panel.as_ref().unwrap().specimens.borrow_mut();
+    let bytes: usize = cache.values().map(|image| image.pixels.len()).sum();
+    if cache.len() >= 80 || bytes + image.pixels.len() > 4 << 20 {
+        cache.clear();
+    }
+    cache.insert(key, image.clone());
+}
+
 pub fn wallpaper(app: &App) -> Option<Arc<Image>> {
     let item = app
         .library
@@ -110,11 +120,7 @@ fn softened(app: &App, image: &Arc<Image>, radius: usize) -> Arc<Image> {
         height: height as u32,
         pixels,
     });
-    let mut cache = state.specimens.borrow_mut();
-    if cache.len() >= 80 {
-        cache.clear();
-    }
-    cache.insert(cache_key, image.clone());
+    remember(app, cache_key, &image);
     image
 }
 
@@ -443,11 +449,7 @@ fn bars_at(
             source: None,
         });
         let image = Arc::new(mypaper_ui::render(&mut ui, &reduced, 384, reduced_height).ok()?);
-        let mut cache = app.panel.as_ref().unwrap().specimens.borrow_mut();
-        if cache.len() >= 80 {
-            cache.clear();
-        }
-        cache.insert(cache_key, image.clone());
+        remember(app, cache_key, &image);
         Some(image)
     });
     if let Some(image) = image {
