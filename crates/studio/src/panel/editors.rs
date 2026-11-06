@@ -811,9 +811,13 @@ pub fn number(
 }
 
 pub fn starter_preview(app: &App, b: &mut B, index: usize, rect: Rect) {
+    // The large specimen stretches one tile-sized raster; it never keeps a desktop canvas.
+    let width = rect.width().ceil().clamp(1.0, 224.0) as u32;
     let size = (
-        rect.width().ceil().max(1.0) as u32,
-        rect.height().ceil().max(1.0) as u32,
+        width,
+        (rect.height() * width as f32 / rect.width().max(1.0))
+            .ceil()
+            .max(1.0) as u32,
     );
     let taskbar = match app.overlay {
         Some(crate::app::Overlay::FirstRun { taskbar, .. }) => taskbar,
