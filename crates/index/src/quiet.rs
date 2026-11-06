@@ -96,7 +96,12 @@ impl Quiet {
                         handles.push(owner.handle());
                     }
                     // SAFETY: event and optional checked publisher handle outlive the blocking wait.
-                    let _ = unsafe { WaitForMultipleObjects(&handles, false, INFINITE) };
+                    let result = unsafe { WaitForMultipleObjects(&handles, false, INFINITE) };
+                    if result == windows::Win32::Foundation::WAIT_FAILED {
+                        monitor.set(false);
+                        let _ = tx.try_send(Change::Activity);
+                        break;
+                    }
                 }
             })?;
         Ok(gate)
