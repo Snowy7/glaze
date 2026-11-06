@@ -740,6 +740,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
         );
         let (well, mut buttons) = inner.take_top(px(38.0), px(16.0));
         edit = field(&mut f, well, &app.editor, "Name", true, None);
+        f.hit(EDIT_FIELD, well, Role::TextInput, "Name", true, None);
         if let Some(error) = &app.error {
             let (notice, rest) = buttons.take_top(px(24.0), px(8.0));
             f.text_in(
@@ -767,7 +768,9 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
         );
         f.button(CANCEL, cancel, "Cancel", None, ButtonKind::Plain, true);
         // Modal hits exclude the obscured file list.
-        f.list.hits.retain(|h| h.id == SUBMIT || h.id == CANCEL);
+        f.list
+            .hits
+            .retain(|h| h.id == SUBMIT || h.id == CANCEL || h.id == EDIT_FIELD);
     }
     app.geometry = Geometry {
         viewport: content,
@@ -780,6 +783,13 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
         row: row_height,
         grid_columns: columns,
     };
+    f.list.focus = match app.field {
+        Field::Address => Some(ADDRESS),
+        Field::Search => Some(SEARCH),
+        Field::Rename(_) | Field::NewFolder => Some(EDIT_FIELD),
+        Field::None => app.selection.focus.map(|index| ITEM + index as u32),
+    }
+    .filter(|id| f.list.hits.iter().any(|hit| hit.id == *id));
     let list = f.list;
     if glass {
         app.layered.present(&mut app.surface, ui, list)?;

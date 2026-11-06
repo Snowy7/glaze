@@ -37,6 +37,7 @@ pub const CANCEL: u32 = 17;
 pub const MINIMIZE: u32 = 18;
 pub const MAXIMIZE: u32 = 19;
 pub const CLOSE: u32 = 20;
+pub const EDIT_FIELD: u32 = 21;
 pub const HEADER: u32 = 100;
 pub const SIDEBAR: u32 = 200;
 pub const CRUMB: u32 = 500;
@@ -659,6 +660,7 @@ impl App {
             }
             ADDRESS => self.focus(Field::Address)?,
             SEARCH => self.focus(Field::Search)?,
+            EDIT_FIELD => self.editor.focus(),
             NEW => self.command(Command::NewFolder)?,
             CUT => self.command(Command::Cut)?,
             COPY => self.command(Command::Copy)?,
@@ -712,6 +714,10 @@ impl App {
                 if let Some(path) = self.geometry.crumbs.get((id - CRUMB) as usize) {
                     self.navigate(path.clone(), true)?;
                 }
+            }
+            id if id >= ITEM => {
+                self.selection.choose((id - ITEM) as usize, false, false);
+                self.open_selection()?;
             }
             _ => {}
         }
@@ -890,6 +896,20 @@ impl App {
                 }
             }
             Event::Invoke(id) => self.activate(ui, id)?,
+            Event::Focus(id) => {
+                if id >= ITEM && ((id - ITEM) as usize) < self.shown.len() {
+                    let index = (id - ITEM) as usize;
+                    self.selection.focus = Some(index);
+                    self.interaction.focus = Some(id);
+                    self.interaction.focus_visible = true;
+                    let top =
+                        (index / self.geometry.grid_columns.max(1)) as f32 * self.geometry.row;
+                    self.scroll
+                        .reveal(top, top + self.geometry.row, Instant::now());
+                } else {
+                    self.activate(ui, id)?;
+                }
+            }
             Event::Wheel(pointer, delta) => {
                 if pointer.at.x < self.geometry.viewport.left {
                     self.sidebar_scroll
