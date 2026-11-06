@@ -15,6 +15,20 @@ use crate::{
     watch::{self, Change},
 };
 
+const BENCH_QUERIES: [&str; 11] = [
+    "cargo",
+    "readme",
+    "ext:rs",
+    "folder:src",
+    "wallpaper",
+    "path:projects ext:toml",
+    "unlikely-no-match-8932",
+    "c",
+    "ca",
+    "ra",
+    "e",
+];
+
 pub struct State {
     pub store: Store,
     pub scanning: bool,
@@ -32,7 +46,7 @@ impl State {
     }
 }
 
-fn trim_working_set() {
+pub(crate) fn trim_working_set() {
     // Reclaim validated/scanned file pages when the service settles. The mappings remain
     // valid; future queries fault their pages back from Windows' reclaimable file cache.
     // SAFETY: only trims this optional process, after its query quiet deadline.
@@ -149,6 +163,12 @@ fn apply(state: &RwLock<State>, path: &Path) -> Result<()> {
 fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
     let quiet = state.read().expect("index state").quiet.clone();
     quiet.wait();
+    if !parallel
+        && !scan::metadata(root)
+            .is_ok_and(|entry| entry.attributes & (DIRECTORY | REPARSE) == DIRECTORY)
+    {
+        return apply(state, root);
+    }
     // Measured warm trees on this machine favor Basic over LARGE_FETCH; the CLI retains both
     // so the choice can be remeasured on another disk or Windows version.
     let rules = state
@@ -188,7 +208,7 @@ fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
         // and release old query pages to avoid retaining both generations in resident RAM.
         drop(scanned);
         trim_working_set();
-        let replacement = Store::open(&snapshot)?;
+        let replacement = Store::open_quiet(&snapshot, quiet.clone())?;
         let old = {
             let mut state = state.write().expect("index state");
             std::mem::replace(&mut state.store, replacement)
@@ -246,7 +266,8 @@ fn checkpoint(state: &RwLock<State>, path: &Path) -> Result<()> {
         let state = state.read().expect("index state");
         state.store.save_quiet(path, state.quiet.clone())?;
     }
-    let mapped = Store::open(path)?;
+    let quiet = state.read().expect("index state").quiet.clone();
+    let mapped = Store::open_quiet(path, quiet)?;
     let old = {
         let mut state = state.write().expect("index state");
         std::mem::replace(&mut state.store, mapped)
@@ -271,26 +292,29 @@ fn checkpoint_changes(state: &RwLock<State>, path: &Path) -> Result<()> {
 pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     std::fs::create_dir_all(&cache)?;
     let snapshot = cache.join("snapshot.bin");
+    let (tx, rx) = mpsc::sync_channel(256);
+    let quiet = crate::quiet::Quiet::start(tx.clone())?;
     let started = Instant::now();
-    let mut store = Store::open(&snapshot).unwrap_or_else(|error| {
+    let mut store = Store::open_quiet(&snapshot, quiet.clone()).unwrap_or_else(|error| {
         eprintln!("no usable snapshot: {error:#}");
         Store::new()
     });
     let changes = cache.join("changes.json");
+    store.set_quiet(quiet.clone());
     if changes.exists()
         && let Err(error) = store.load_changes(&changes)
     {
         eprintln!("ignoring unusable change checkpoint: {error:#}");
     }
+    quiet.wait();
+    store.clear_quiet();
     eprintln!(
         "loaded {} entries in {:.3}ms",
         store.len() - 1,
         started.elapsed().as_secs_f64() * 1000.0
     );
-    let (tx, rx) = mpsc::sync_channel(256);
     let config = mypaper_config::Config::load()?;
     let rules = Arc::new(RwLock::new(Rules::new(&config.index, &cache)?));
-    let quiet = crate::quiet::Quiet::start(tx.clone())?;
     let state = Arc::new(RwLock::new(State {
         store,
         scanning: true,
@@ -299,10 +323,18 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
         rules: rules.clone(),
         quiet: quiet.clone(),
     }));
+    let weak = Arc::downgrade(&state);
+    quiet.on_pause(move || {
+        if let Some(state) = weak.upgrade()
+            && let Ok(state) = state.try_read()
+        {
+            state.store.release_query_paths();
+        }
+    });
     pipe::start(state.clone())?;
     crate::spool::cleanup(&cache.join("scan"));
     for root in &roots {
-        watch::start(root.clone(), tx.clone(), rules.clone())
+        watch::start(root.clone(), tx.clone(), rules.clone(), quiet.clone())
             .with_context(|| format!("watch {}", root.display()))?;
     }
     // Watches are armed before reconciliation so scan races are replayed afterwards. A
@@ -516,15 +548,7 @@ pub fn cli(args: Vec<String>) -> Result<()> {
         Some("--bench-query") => {
             let mut times = Vec::new();
             let cold = args.iter().any(|arg| arg == "--cold");
-            let queries = [
-                "cargo",
-                "readme",
-                "ext:rs",
-                "folder:src",
-                "wallpaper",
-                "path:projects ext:toml",
-                "unlikely-no-match-8932",
-            ];
+            let queries = BENCH_QUERIES;
             let rounds = if cold {
                 1
             } else {
@@ -569,6 +593,47 @@ pub fn cli(args: Vec<String>) -> Result<()> {
                 "{}",
                 serde_json::json!({"cold_after_quiet_trim":cold,"queries":times.len(), "p50_ms":times[times.len()/2].0, "p95_ms":times[times.len()*95/100].0, "max_ms":times.last().expect("samples").0,"p50_server_ms":server[server.len()/2],"p95_server_ms":server[server.len()*95/100],"samples":samples})
             );
+            Ok(())
+        }
+        Some("--bench-snapshot") => {
+            let path = args
+                .get(1)
+                .map(PathBuf::from)
+                .unwrap_or(cache_dir()?.join("snapshot.bin"));
+            let mut store = Store::open(&path)?;
+            let mut segments = Vec::new();
+            for overlay in [false, true] {
+                if overlay
+                    && let Err(error) = store.load_changes(&path.with_file_name("changes.json"))
+                {
+                    segments.push(serde_json::json!({"overlay":true,"error":format!("{error:#}")}));
+                    break;
+                }
+                let mut rows = Vec::new();
+                for text in BENCH_QUERIES {
+                    let parsed = query::Query::parse(text);
+                    let filter = crate::names::Filter::new(
+                        &parsed.terms,
+                        &parsed.extensions,
+                        parsed.directory,
+                    );
+                    let profile = Instant::now();
+                    let (blocks, bytes) = store.candidate_blocks(&filter);
+                    let filter_ms = profile.elapsed().as_secs_f64() * 1000.0;
+                    let mut times = Vec::new();
+                    for _ in 0..20 {
+                        let at = Instant::now();
+                        std::hint::black_box(query::search(&store, text, 50));
+                        times.push(at.elapsed().as_secs_f64() * 1000.0);
+                    }
+                    times.sort_by(f64::total_cmp);
+                    rows.push(
+                        serde_json::json!({"query":text,"p50_ms":times[10],"p95_ms":times[19],"filter_ms":filter_ms,"possible_blocks":blocks,"possible_name_bytes":bytes,"total_blocks":store.search_blocks()}),
+                    );
+                }
+                segments.push(serde_json::json!({"overlay":overlay,"entries":store.len()-1,"overlay_records":store.overlay_len(),"queries":rows}));
+            }
+            println!("{}", serde_json::to_string(&segments)?);
             Ok(())
         }
         Some("--bench-scan") => {
@@ -762,6 +827,24 @@ mod tests {
         std::fs::remove_file(dir.join("b/test.txt")).unwrap();
         apply(&state, &dir.join("b/test.txt")).unwrap();
         assert_eq!(state.read().unwrap().store.record(1).files, 0);
+        std::fs::create_dir_all(dir.join("project/bin")).unwrap();
+        std::fs::write(dir.join("project/app.csproj"), b"").unwrap();
+        std::fs::write(dir.join("project/bin/build.dll"), b"123").unwrap();
+        apply(&state, &dir.join("project")).unwrap();
+        assert!(state.read().unwrap().store.hit(1).size_unknown);
+        std::fs::remove_dir_all(dir.join("project")).unwrap();
+        apply(&state, &dir.join("project")).unwrap();
+        // A coalesced .csproj deletion follows its already-removed parent event.
+        reconcile(&state, &dir.join("project"), false).unwrap();
+        assert!(
+            state
+                .read()
+                .unwrap()
+                .store
+                .find(&dir.join("project").to_string_lossy())
+                .is_none()
+        );
+        assert!(!state.read().unwrap().store.hit(1).size_unknown);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

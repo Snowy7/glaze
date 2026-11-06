@@ -16,6 +16,7 @@ pub(crate) struct Windows {
     resident: Mutex<VecDeque<(usize, usize)>>,
     cached: [AtomicUsize; VALIDATION_WINDOWS],
     retained: usize,
+    chunk: usize,
     writable: bool,
 }
 
@@ -25,6 +26,7 @@ impl Default for Windows {
             resident: Mutex::new(VecDeque::new()),
             cached: [const { AtomicUsize::new(0) }; VALIDATION_WINDOWS],
             retained: RETAINED,
+            chunk: WINDOW,
             writable: false,
         }
     }
@@ -45,7 +47,14 @@ fn release(address: usize, length: usize, writable: bool) {
 impl Windows {
     pub fn search() -> Self {
         Self {
-            retained: 8,
+            retained: 2,
+            chunk: 1024 * 1024,
+            ..Self::default()
+        }
+    }
+    pub fn query_records() -> Self {
+        Self {
+            chunk: 2 * 1024 * 1024,
             ..Self::default()
         }
     }
@@ -68,8 +77,8 @@ impl Windows {
             return;
         }
         debug_assert!(offset <= mapped_len && length <= mapped_len - offset);
-        for chunk in offset / WINDOW..=(offset + length - 1) / WINDOW {
-            let start = chunk * WINDOW;
+        for chunk in offset / self.chunk..=(offset + length - 1) / self.chunk {
+            let start = chunk * self.chunk;
             let address = base as usize + start;
             if self
                 .cached
@@ -85,7 +94,7 @@ impl Windows {
                     let (old, len) = resident.pop_front().expect("full resident windows");
                     release(old, len, self.writable);
                 }
-                resident.push_back((address, WINDOW.min(mapped_len - start)));
+                resident.push_back((address, self.chunk.min(mapped_len - start)));
             }
             // FIFO needs no per-record lock or recency writes. A hot record/name pair
             // remains in these four slots until new windows actually need its space.

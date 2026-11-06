@@ -52,10 +52,11 @@ impl Pending {
     }
 }
 
-pub fn start(
+pub(crate) fn start(
     root: PathBuf,
     tx: SyncSender<Change>,
     rules: Arc<std::sync::RwLock<crate::rules::Rules>>,
+    quiet: Arc<crate::quiet::Quiet>,
 ) -> Result<()> {
     let name = long(&root);
     // SAFETY: directory-list access only, with all sharing modes; no elevation required.
@@ -129,6 +130,9 @@ pub fn start(
                 | FILE_NOTIFY_CHANGE_LAST_WRITE
                 | FILE_NOTIFY_CHANGE_ATTRIBUTES;
             loop {
+                if pause_reader(&quiet, &pending) {
+                    continue;
+                }
                 let mut bytes = 0;
                 // SAFETY: aligned 2 MiB output remains alive throughout synchronous I/O.
                 let read = unsafe {
@@ -157,6 +161,9 @@ pub fn start(
                         )
                     }
                 };
+                if pause_reader(&quiet, &pending) {
+                    continue;
+                }
                 if let Err(error) = &read {
                     if extended
                         && (error.code() == ERROR_INVALID_FUNCTION.to_hresult()
@@ -211,6 +218,23 @@ pub fn start(
             drop(owner);
         })?;
     Ok(())
+}
+
+/// Once a game starts, stop rearming directory reads. A single dirty-root handoff replaces
+/// decoding/coalescing every cache write; Windows may overflow while blocked, so resume
+/// reconciles that root. The kernel handle and its buffer stay alive throughout the pause.
+fn pause_reader(quiet: &crate::quiet::Quiet, pending: &(Mutex<Pending>, Condvar)) -> bool {
+    if !quiet.paused() {
+        return false;
+    }
+    {
+        let mut state = pending.0.lock().expect("watch handoff");
+        state.paths.clear();
+        state.overflow = true;
+    }
+    pending.1.notify_one();
+    quiet.wait();
+    true
 }
 
 #[cfg(test)]

@@ -3,6 +3,12 @@ param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\mypape
 $ErrorActionPreference = 'Stop'
 $base = Join-Path $env:USERPROFILE 'mypaper-index-fixtures'
 $root = [IO.Path]::GetFullPath((Join-Path $base ('rules-' + [Guid]::NewGuid().ToString('N'))))
+if (-not $root.StartsWith([IO.Path]::GetFullPath($base) + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid fixture root' }
+function Remove-FixtureTree([string]$Relative) {
+  $path = [IO.Path]::GetFullPath((Join-Path $root $Relative))
+  if (-not $path.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid subtree cleanup path' }
+  Remove-Item -LiteralPath $path -Recurse -Force
+}
 function Reply([string]$Command, [string]$Path) {
   $reply = & $Exe $Command $Path
   if ($LASTEXITCODE -ne 0) { throw 'Pipe request failed' }
@@ -32,7 +38,7 @@ try {
   if ($hidden.hits.Count -ne 0) { throw 'Excluded node_modules file leaked into search' }
   $stub = $unknown.hits | Where-Object name -eq 'node_modules'
   if (-not $stub.excluded -or -not $stub.size_unknown) { throw 'Missing excluded aggregate' }
-  Remove-Item -LiteralPath (Join-Path $root 'node_modules') -Recurse -Force
+  Remove-FixtureTree 'node_modules'
   $knownAgain = Await-Aggregate $root 5 $false
   Put 'rust\target\generated.bin' 17
   $beforeMarker = Await-Aggregate (Join-Path $root 'rust') 17 $false
@@ -46,6 +52,14 @@ try {
   $afterProject = Await-Aggregate (Join-Path $root 'dotnet') 0 $true
   Remove-Item -LiteralPath (Join-Path $root 'dotnet\app.csproj')
   $afterProjectRemoved = Await-Aggregate (Join-Path $root 'dotnet') 19 $false
+  Put 'dotnet\app.csproj' 0
+  $withProjectAgain = Await-Aggregate (Join-Path $root 'dotnet') 0 $true
+  Remove-FixtureTree 'dotnet'
+  $afterDirectoryRemoved = Await-Aggregate $root 22 $false
+  Put 'rust\target\CACHEDIR.TAG' 0
+  $withRustMarkerAgain = Await-Aggregate (Join-Path $root 'rust') 0 $true
+  Remove-FixtureTree 'rust\target'
+  $afterRustDirectoryRemoved = Await-Aggregate $root 5 $false
   [pscustomobject]@{
     excluded_search_hits=$hidden.hits.Count
     excluded_stub=$stub
@@ -58,6 +72,8 @@ try {
     dotnet_before=$beforeProject.hits[0]
     dotnet_after_project=$afterProject.hits[0]
     dotnet_after_project_removed=$afterProjectRemoved.hits[0]
+    after_project_directory_removed=$afterDirectoryRemoved.hits[0]
+    after_rust_build_directory_removed=$afterRustDirectoryRemoved.hits[0]
   } | ConvertTo-Json -Depth 5
 } finally {
   if (-not $root.StartsWith([IO.Path]::GetFullPath($base) + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid fixture root' }

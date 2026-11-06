@@ -47,6 +47,25 @@ impl Record {
     pub fn live(self) -> bool {
         self.attributes != 0
     }
+    fn same_search(self, other: Self) -> bool {
+        (
+            self.name,
+            self.name_len,
+            self.fold_len,
+            self.parent,
+            self.modified,
+            self.attributes & (DIRECTORY | EXCLUDED),
+            self.live(),
+        ) == (
+            other.name,
+            other.name_len,
+            other.fold_len,
+            other.parent,
+            other.modified,
+            other.attributes & (DIRECTORY | EXCLUDED),
+            other.live(),
+        )
+    }
 }
 
 /// Unicode lowercase, shared by indexing, filters and path lookup. Original spelling is kept.
@@ -74,12 +93,38 @@ struct Changes<'a> {
     names: Cow<'a, str>,
 }
 
+struct SearchChange {
+    record: Record,
+    name: Vec<u8>,
+}
+
+#[derive(Default)]
+struct PathCache {
+    entries: HashMap<u32, String>,
+    bytes: usize,
+}
+
+impl PathCache {
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.bytes = 0;
+    }
+    fn insert(&mut self, id: u32, path: &str) {
+        if self.bytes + path.len() > 2 * 1024 * 1024 || self.entries.len() >= 8192 {
+            self.clear();
+        }
+        self.bytes += path.len();
+        self.entries.insert(id, path.to_owned());
+    }
+}
+
 #[derive(Default)]
 pub struct Store {
     quiet: Option<std::sync::Arc<crate::quiet::Quiet>>,
     column: Option<crate::names::Column>,
     column_start: usize,
-    search_windows: Option<crate::residency::Windows>,
+    search_windows: Vec<crate::residency::Windows>,
+    path_cache: std::sync::Mutex<PathCache>,
     windows: Option<crate::residency::Windows>,
     spool: Option<crate::spool::Spool>,
     mapping: Option<Mmap>,
@@ -90,6 +135,8 @@ pub struct Store {
     records: Vec<Record>,
     names: Vec<u8>,
     changed: BTreeMap<u32, Record>,
+    search_changed: BTreeMap<u32, SearchChange>,
+    path_masks_stale: bool,
     // Created only for wide directories reached by live updates/path lookup. A compact
     // hash-to-ID table avoids quadratic bursts without retaining a String per indexed file.
     children: std::sync::Mutex<HashMap<u32, HashMap<u32, u32>>>,
@@ -101,6 +148,12 @@ impl Store {
     }
     pub(crate) fn quiet(&self) -> Option<std::sync::Arc<crate::quiet::Quiet>> {
         self.quiet.clone()
+    }
+    pub(crate) fn release_query_paths(&self) {
+        *self.path_cache.lock().expect("path cache") = PathCache::default();
+    }
+    pub(crate) fn clear_quiet(&mut self) {
+        self.quiet = None;
     }
     /// An independent view for volume reconciliation. The immutable mapping is shared by the
     /// OS; only the bounded overlay is copied. Readers keep the old view until the final swap.
@@ -115,7 +168,8 @@ impl Store {
             quiet: self.quiet.clone(),
             column: None,
             column_start: self.column_start,
-            search_windows: None,
+            search_windows: Vec::new(),
+            path_cache: std::sync::Mutex::new(PathCache::default()),
             windows: None,
             spool: None,
             mapping,
@@ -126,6 +180,8 @@ impl Store {
             records: self.records.clone(),
             names: self.names.clone(),
             changed: self.changed.clone(),
+            search_changed: BTreeMap::new(),
+            path_masks_stale: self.path_masks_stale,
             children: std::sync::Mutex::new(HashMap::new()),
         })
     }
@@ -166,8 +222,47 @@ impl Store {
             .map_or(self.len(), |column| column.blocks.len())
     }
 
+    pub(crate) fn candidate_blocks(&self, filter: &crate::names::Filter) -> (usize, usize) {
+        let Some(column) = &self.column else {
+            return (0, 0);
+        };
+        let mut blocks = 0;
+        let mut bytes = 0;
+        for (i, block) in column.blocks.iter().enumerate() {
+            if block.may_match(filter) {
+                blocks += 1;
+                let next = column.blocks.get(i + 1).map_or(
+                    self.mapping.as_ref().expect("column").len() - self.column_start,
+                    |next| next.offset,
+                );
+                bytes += next - block.offset;
+            }
+        }
+        (blocks, bytes)
+    }
+
     pub fn overridden(&self, id: u32) -> bool {
-        (id as usize) < self.mapped_count && self.changed.contains_key(&id)
+        (id as usize) < self.mapped_count && self.search_changed.contains_key(&id)
+    }
+
+    pub(crate) fn short_prefix(
+        &self,
+        name: &[u8],
+        directory: Option<bool>,
+        limit: usize,
+        extra: &[crate::names::Candidate],
+    ) -> Option<Vec<crate::names::Candidate>> {
+        self.column
+            .as_ref()?
+            .short_prefix(name, directory, limit, extra, |id| self.overridden(id))
+    }
+
+    pub(crate) fn path_possible(&self, parent: u32, name: &[u8], required: &[[u64; 2]]) -> bool {
+        self.path_masks_stale
+            || self
+                .column
+                .as_ref()
+                .is_none_or(|column| column.path_possible(parent, name, required))
     }
 
     /// Search reads only folded names and ranking fields. Overlay entries are searched once
@@ -177,12 +272,13 @@ impl Store {
         start: usize,
         end: usize,
         filter: &crate::names::Filter,
+        lane: usize,
         mut visit: impl FnMut(u32, u32, u32, u32, &[u8], bool),
     ) {
         if let Some(column) = &self.column {
             let map = self.mapping.as_ref().expect("names mapping");
             let touch = |offset, len| {
-                if let Some(windows) = &self.search_windows {
+                if let Some(windows) = self.search_windows.get(lane) {
                     windows.touch(map.as_ptr(), map.len(), self.column_start + offset, len);
                 }
             };
@@ -206,18 +302,23 @@ impl Store {
                 );
             }
             if end == column.blocks.len() {
-                for (id, r) in self.changed.iter().map(|(id, r)| (*id, *r)).chain(
-                    self.records
-                        .iter()
-                        .enumerate()
-                        .map(|(i, r)| ((self.mapped_count + i) as u32, *r)),
-                ) {
+                for (id, r) in &self.search_changed {
                     visit(
-                        id,
+                        *id,
+                        r.record.parent,
+                        r.record.attributes,
+                        r.record.modified,
+                        &r.name,
+                        false,
+                    );
+                }
+                for (i, r) in self.records.iter().enumerate() {
+                    visit(
+                        (self.mapped_count + i) as u32,
                         r.parent,
                         r.attributes,
                         r.modified,
-                        self.folded(r),
+                        self.folded(*r),
                         false,
                     );
                 }
@@ -354,6 +455,16 @@ impl Store {
         self.changed = changes.changed.into_owned();
         self.records = changes.records.into_owned();
         self.names = changes.names.into_owned().into_bytes();
+        self.path_cache.get_mut().expect("path cache").clear();
+        self.search_changed.clear();
+        for (id, record) in self
+            .changed
+            .iter()
+            .map(|(id, r)| (*id, *r))
+            .collect::<Vec<_>>()
+        {
+            self.cache_search_change(id, record);
+        }
         self.children.get_mut().expect("child lookup").clear();
         Ok(())
     }
@@ -393,10 +504,49 @@ impl Store {
             spool.set(id as usize, record);
             return;
         }
+        let old = self.record(id);
+        if (old.name, old.name_len, old.parent) != (record.name, record.name_len, record.parent) {
+            self.path_cache.get_mut().expect("path cache").clear();
+        }
         if (id as usize) < self.mapped_count {
+            self.cache_search_change(id, record);
             self.changed.insert(id, record);
         } else {
             self.records[id as usize - self.mapped_count] = record;
+        }
+    }
+
+    /// Size/count-only ancestor updates use the unchanged column. Search-relevant changes
+    /// own their small folded names once, rather than faulting scattered base pages per key.
+    fn cache_search_change(&mut self, id: u32, record: Record) {
+        if self
+            .search_changed
+            .get(&id)
+            .is_some_and(|old| old.record.same_search(record))
+        {
+            return;
+        }
+        self.touch_mapping(
+            HEADER + id as usize * size_of::<Record>(),
+            size_of::<Record>(),
+        );
+        let base = self.base()[id as usize];
+        if base.directory()
+            && (base.parent != record.parent
+                || (base.name != record.name && self.folded(base) != self.folded(record)))
+        {
+            self.path_masks_stale = true;
+        }
+        if base.same_search(record) {
+            self.search_changed.remove(&id);
+        } else {
+            let name = if record.live() {
+                self.folded(record).to_vec()
+            } else {
+                Vec::new()
+            };
+            self.search_changed
+                .insert(id, SearchChange { record, name });
         }
     }
 
@@ -517,6 +667,11 @@ impl Store {
         modified: u32,
     ) -> u32 {
         let id = u32::try_from(self.len()).expect("index exceeds four billion entries");
+        if id % 1024 == 0
+            && let Some(quiet) = &self.quiet
+        {
+            quiet.wait();
+        }
         let (name, name_len, fold_len) = self.intern(name);
         let mut p = self.record(parent);
         let record = Record {
@@ -616,14 +771,25 @@ impl Store {
     }
 
     pub fn path(&self, mut id: u32) -> String {
+        let mut cache = self.path_cache.lock().expect("path cache");
         let mut components = Vec::new();
+        let mut path = String::new();
         while id != 0 && id != NONE {
+            if let Some(prefix) = cache.entries.get(&id) {
+                path = prefix.clone();
+                break;
+            }
             let r = self.record(id);
-            components.push(self.name(r));
+            components.push((id, self.name(r)));
             id = r.parent;
         }
-        components.reverse();
-        let mut path = components.join("\\");
+        for (id, name) in components.into_iter().rev() {
+            if !path.is_empty() {
+                path.push('\\');
+            }
+            path.push_str(name);
+            cache.insert(id, &path);
+        }
         if path.ends_with(':') {
             path.push('\\');
         }
@@ -1038,6 +1204,18 @@ impl Store {
     }
 
     pub fn open(path: &Path) -> Result<Self> {
+        Self::open_inner(path, None)
+    }
+
+    pub(crate) fn open_quiet(
+        path: &Path,
+        quiet: std::sync::Arc<crate::quiet::Quiet>,
+    ) -> Result<Self> {
+        quiet.wait();
+        Self::open_inner(path, Some(quiet))
+    }
+
+    fn open_inner(path: &Path, quiet: Option<std::sync::Arc<crate::quiet::Quiet>>) -> Result<Self> {
         let file = std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(windows::Win32::Storage::FileSystem::FILE_FLAG_SEQUENTIAL_SCAN.0)
@@ -1062,6 +1240,7 @@ impl Store {
         );
         let generation = u64::from_le_bytes(mapping[24..32].try_into()?);
         let mut store = Self {
+            quiet,
             windows: Some(crate::residency::Windows::validation()),
             mapping: Some(mapping),
             source: Some(std::sync::Arc::new(file)),
@@ -1077,6 +1256,9 @@ impl Store {
             &store.mapping.as_ref().expect("mapped snapshot")[names_start..names_start + names];
         let mut start = 0;
         while start < blob_bytes.len() {
+            if let Some(quiet) = &store.quiet {
+                quiet.wait();
+            }
             let mut end = (start + 4 * 1024 * 1024).min(blob_bytes.len());
             while end < blob_bytes.len() && end > start && blob_bytes[end] & 0xc0 == 0x80 {
                 end -= 1;
@@ -1156,15 +1338,19 @@ impl Store {
             store.column = Some(crate::names::Column::open(
                 &map[start..],
                 count,
+                store.quiet.as_deref(),
                 |offset, length| {
                     windows.touch(map.as_ptr(), map.len(), start + offset, length);
                 },
             )?);
             windows.release();
             store.column_start = start;
-            store.search_windows = Some(crate::residency::Windows::search());
+            store.search_windows = (0..8)
+                .map(|_| crate::residency::Windows::search())
+                .collect();
         }
-        store.windows = Some(crate::residency::Windows::default());
+        store.windows = Some(crate::residency::Windows::query_records());
+        store.quiet = None;
         Ok(store)
     }
 }
@@ -1172,6 +1358,28 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn path_prefilter_stays_conservative_after_a_directory_name_change() {
+        let path =
+            std::env::temp_dir().join(format!("mypaper-index-pathmask-{}.bin", std::process::id()));
+        let mut store = Store::new();
+        let root = store.insert(0, "X:", DIRECTORY, 0, 0);
+        let dir = store.insert(root, "Before", DIRECTORY, 0, 0);
+        store.insert(dir, "report.txt", 128, 1, 0);
+        store.save(&path).unwrap();
+        let mut mapped = Store::open(&path).unwrap();
+        let mut r = mapped.record(dir);
+        (r.name, r.name_len, r.fold_len) = mapped.intern("After");
+        mapped.set(dir, r);
+        assert_eq!(
+            crate::query::search(&mapped, "path:after report", 10).len(),
+            1
+        );
+        assert!(crate::query::search(&mapped, "path:before report", 10).is_empty());
+        drop(mapped);
+        std::fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn wide_directory_lookup_survives_delete_recreate_and_case_changes() {

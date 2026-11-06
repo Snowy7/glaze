@@ -92,9 +92,16 @@ fn word_start(name: &[u8], at: usize) -> bool {
     at == 0 || (name[at - 1].is_ascii() && !name[at - 1].is_ascii_alphanumeric())
 }
 
-type Candidate = (u8, u32, std::cmp::Reverse<u32>);
+type Candidate = crate::names::Candidate;
 
-fn shard(store: &Store, query: &Query, start: usize, end: usize, limit: usize) -> Vec<Candidate> {
+fn shard(
+    store: &Store,
+    query: &Query,
+    start: usize,
+    end: usize,
+    limit: usize,
+    lane: usize,
+) -> Vec<Candidate> {
     // A min-heap keeps common suffix queries bounded without shifting 50 records for every
     // match (notably when enumeration is already ordered by modification time).
     let mut top = std::collections::BinaryHeap::with_capacity(limit);
@@ -111,20 +118,17 @@ fn shard(store: &Store, query: &Query, start: usize, end: usize, limit: usize) -
     let mut last_parent = crate::store::NONE;
     let mut parent_path = String::new();
     let mut missing_filters = Vec::new();
-    let mut filter = crate::names::Filter {
-        extensions: query.extensions.iter().fold(0, |mask, ext| {
-            mask | crate::names::extension_mask(ext.as_bytes())
-        }),
-        directory: query.directory,
-        ..Default::default()
-    };
-    for term in &query.terms {
-        crate::names::union(&mut filter.trigrams, &crate::names::bloom(term.as_bytes()));
-    }
+    let filter = crate::names::Filter::new(&query.terms, &query.extensions, query.directory);
+    let path_masks: Vec<_> = query
+        .paths
+        .iter()
+        .map(|path| crate::names::bloom::<2>(path.as_bytes()))
+        .collect();
     store.visit_names(
         start,
         end,
         &filter,
+        lane,
         |id, parent, attributes, modified, name, base| {
             let directory = attributes & crate::store::DIRECTORY != 0;
             if id == 0
@@ -164,6 +168,9 @@ fn shard(store: &Store, query: &Query, start: usize, end: usize, limit: usize) -
                 return;
             }
             if !query.paths.is_empty() {
+                if !store.path_possible(parent, name, &path_masks) {
+                    return;
+                }
                 // Reuse adjacent siblings' parent, not one allocated full path per file. A match lies in
                 // the parent, in the name, or spans their one separator. This also makes a
                 // nonmatching path filter cheap across a million siblings.
@@ -210,8 +217,20 @@ pub fn search(store: &Store, input: &str, limit: usize) -> Vec<Hit> {
     } else {
         1
     };
-    let mut candidates = if workers == 1 {
-        shard(store, &query, 0, count, limit)
+    let prefix = if query.terms.len() == 1
+        && query.terms[0].len() <= 6
+        && query.extensions.is_empty()
+        && query.paths.is_empty()
+    {
+        let extra = shard(store, &query, count, count, limit, 0);
+        store.short_prefix(query.terms[0].as_bytes(), query.directory, limit, &extra)
+    } else {
+        None
+    };
+    let mut candidates = if let Some(prefix) = prefix {
+        prefix
+    } else if workers == 1 {
+        shard(store, &query, 0, count, limit, 0)
     } else {
         // Created only by a large query in the enabled helper. Workers park between requests;
         // repeated keystrokes pay neither native thread creation nor a periodic wakeup.
@@ -233,6 +252,7 @@ pub fn search(store: &Store, input: &str, limit: usize) -> Vec<Hit> {
                         count * worker / workers,
                         count * (worker + 1) / workers,
                         limit,
+                        worker,
                     )
                 })
                 .collect::<Vec<_>>()
@@ -252,6 +272,39 @@ mod tests {
     use crate::store::DIRECTORY;
 
     #[test]
+    fn short_prefix_cache_cannot_hide_better_rows_after_deletions() {
+        let path =
+            std::env::temp_dir().join(format!("mypaper-index-short-{}.bin", std::process::id()));
+        let mut store = Store::new();
+        let root = store.insert(0, "X:", DIRECTORY, 0, 0);
+        for i in 0..400 {
+            store.insert(root, &format!("r-file-{i}"), 128, 1, 10_000 + i);
+            store.insert(root, &format!("r-dir-{i}"), DIRECTORY, 0, i);
+        }
+        store.save(&path).unwrap();
+        let mut mapped = Store::open(&path).unwrap();
+        for s in [&mut store, &mut mapped] {
+            for i in 300..400 {
+                let id = s.child(root, &format!("r-file-{i}")).unwrap();
+                s.remove(id);
+            }
+        }
+        for text in ["r", "r-", "folder:r", "file:r"] {
+            let expected = search(&store, text, 50)
+                .into_iter()
+                .map(|h| h.path)
+                .collect::<Vec<_>>();
+            let actual = search(&mapped, text, 50)
+                .into_iter()
+                .map(|h| h.path)
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected, "{text}");
+        }
+        drop(mapped);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn persisted_prefilter_and_overlay_match_unfiltered_search() {
         let path =
             std::env::temp_dir().join(format!("mypaper-index-column-{}.bin", std::process::id()));
@@ -260,6 +313,16 @@ mod tests {
         let folder = store.insert(root, "Project 東京", DIRECTORY, 0, 0);
         for i in 0..4200 {
             store.insert(folder, &format!("Report-{i}-İstanbul.rs"), 128, 7, i);
+        }
+        let mut seed = 17u32;
+        for i in 0..256 {
+            let mut name = String::new();
+            for _ in 0..180 {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                name.push(char::from(b'a' + ((seed >> 24) % 26) as u8));
+            }
+            name.push_str("-needle.rs");
+            store.insert(folder, &name, 128, 1, 10_000 + i);
         }
         store.roll_up();
         store.save(&path).unwrap();
@@ -286,6 +349,10 @@ mod tests {
             "r",
             "",
             "🦀",
+            "needle",
+            "needle ext:rs",
+            "path:東京 needle",
+            "path:project/ needle",
         ] {
             let expected = search(&store, query, 100)
                 .into_iter()

@@ -15,6 +15,7 @@ pub(crate) struct Quiet {
     epoch: Instant,
     clock: Mutex<Clock>,
     resumed: Condvar,
+    release: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
 }
 struct Event(usize);
 impl Drop for Event {
@@ -32,18 +33,26 @@ impl Default for Quiet {
                 stopped: Duration::ZERO,
             }),
             resumed: Condvar::new(),
+            release: Mutex::new(None),
         }
     }
 }
 impl Quiet {
-    fn set(&self, paused: bool) {
+    pub fn on_pause(&self, release: impl Fn() + Send + Sync + 'static) {
+        *self.release.lock().expect("quiet release") = Some(Box::new(release));
+    }
+    fn set(&self, paused: bool) -> bool {
         let mut clock = self.clock.lock().expect("quiet clock");
+        let changed = clock.paused_at.is_some() != paused;
         if paused {
             clock.paused_at.get_or_insert_with(Instant::now);
         } else if let Some(at) = clock.paused_at.take() {
             clock.stopped += at.elapsed();
         }
-        self.resumed.notify_all();
+        if changed && !paused {
+            self.resumed.notify_all();
+        }
+        changed
     }
     pub fn paused(&self) -> bool {
         self.clock.lock().expect("quiet clock").paused_at.is_some()
@@ -85,12 +94,25 @@ impl Quiet {
                 let _watcher = watcher;
                 loop {
                     let publisher = mypaper_tweaks::game_activity::read();
-                    monitor.set(
+                    let changed = monitor.set(
                         publisher
                             .as_ref()
                             .is_some_and(|(snapshot, _)| snapshot.activity.pause_background),
                     );
-                    let _ = tx.try_send(Change::Activity);
+                    if changed {
+                        if monitor.paused() {
+                            // One transition wake, not a recurring timer. Cooperative scan/loader
+                            // boundaries park before trimming private filters and mapped pages.
+                            std::thread::sleep(Duration::from_millis(100));
+                            if let Some(release) =
+                                monitor.release.lock().expect("quiet release").as_ref()
+                            {
+                                release();
+                            }
+                            crate::service::trim_working_set();
+                        }
+                        let _ = tx.try_send(Change::Activity);
+                    }
                     let mut handles = vec![HANDLE(event.0 as *mut _)];
                     if let Some((_, owner)) = &publisher {
                         handles.push(owner.handle());
