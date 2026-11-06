@@ -143,6 +143,12 @@ pub fn next_event() -> Option<(SurfaceId, Event)> {
     EVENTS.with(|queue| queue.borrow_mut().pop_front())
 }
 
+/// Queues semantic input from an app-owned IPC window on this UI thread. It bypasses
+/// native keyboard/text dispatch; the caller must own `hwnd` on the calling thread.
+pub fn queue_event(hwnd: HWND, event: Event) {
+    push(SurfaceId(hwnd.0 as isize), event);
+}
+
 pub(crate) fn push(id: SurfaceId, event: Event) {
     EVENTS.with(|queue| queue.borrow_mut().push_back((id, event)));
 }
@@ -153,6 +159,8 @@ pub(crate) struct Shared {
     /// App windows only.
     pub(crate) app: Option<crate::app_window::AppShared>,
     activate: bool,
+    no_activate: Cell<bool>,
+    normally_no_activate: bool,
     desktop: Option<HWND>,
     restacking: Cell<bool>,
     /// Where a left click activates a never-activated window ([`Surface::set_click_activates`]).
@@ -161,6 +169,7 @@ pub(crate) struct Shared {
     /// The window's top-left on screen, for pointer events.
     origin: Cell<(i32, i32)>,
     a11y: RefCell<Option<A11y>>,
+    semantics: RefCell<Vec<(HitId, crate::Semantics)>>,
 }
 
 /// The bitmap `UpdateLayeredWindowIndirect` reads: a DIB section selected into a memory DC.
@@ -366,6 +375,8 @@ impl Surface {
             id,
             app,
             activate,
+            no_activate: Cell::new(false),
+            normally_no_activate: matches!(kind, Kind::Popup { activate: false }),
             desktop: match kind {
                 Kind::DesktopChild { parent } => Some(parent),
                 _ => None,
@@ -374,6 +385,7 @@ impl Surface {
             activates: RefCell::new(Vec::new()),
             field: RefCell::new(None),
             origin: Cell::new((0, 0)),
+            semantics: RefCell::default(),
             a11y: RefCell::new(Some(if deferred {
                 A11y::deferred(hwnd, role, name.into())
             } else {
@@ -749,6 +761,9 @@ impl Surface {
     /// Frees the bitmaps (a hidden surface keeps none); the next [`present`](Self::present)
     /// draws everything again.
     pub fn release(&mut self) {
+        if let Some(app) = &self.shared.app {
+            app.release_canvas();
+        }
         self.pixels = None;
         self.shown = DisplayList::default();
         self.size = (0, 0);
@@ -769,6 +784,25 @@ impl Surface {
         *self.shared.activates.borrow_mut() = rects;
     }
 
+    /// Temporarily keeps keyboard focus in another app (Studio's desktop-pick session).
+    /// Both the style and WM_MOUSEACTIVATE policy are needed for layered desktop popups.
+    pub fn set_no_activate(&self, disabled: bool) {
+        if self.shared.no_activate.replace(disabled) == disabled {
+            return;
+        }
+        // SAFETY: changes only this owned window's activation style.
+        unsafe {
+            let ex = WINDOW_EX_STYLE(GetWindowLongPtrW(self.hwnd, GWL_EXSTYLE) as u32);
+            let normally_disabled = self.shared.normally_no_activate;
+            let ex = if disabled || normally_disabled {
+                ex | WS_EX_NOACTIVATE
+            } else {
+                ex & !WS_EX_NOACTIVATE
+            };
+            SetWindowLongPtrW(self.hwnd, GWL_EXSTYLE, ex.0 as isize);
+        }
+    }
+
     /// Makes this window the foreground window, and says how that went (for logs).
     ///
     /// A click our hook swallowed never reached any window, so Windows may not count us as the
@@ -777,6 +811,9 @@ impl Surface {
     /// share its foreground right). Neither helps against a shell window holding the
     /// foreground lock: there the click itself must activate us ([`Self::set_click_activates`]).
     pub fn take_focus(&self) -> &'static str {
+        if self.shared.no_activate.get() {
+            return "suppressed";
+        }
         let hwnd = self.hwnd;
         // SAFETY: plain window and thread queries; the queue attachment is undone at once.
         unsafe {
@@ -892,15 +929,23 @@ impl Surface {
             hits.clear();
             hits.extend(list.hits.iter().map(|h| h.rect));
         }
-        let events = self
-            .shared
-            .a11y
-            .try_borrow_mut()
-            .ok()
-            .and_then(|mut a11y| a11y.as_mut()?.update(&list.hits, list.focus));
+        let events = self.shared.a11y.try_borrow_mut().ok().and_then(|mut a11y| {
+            a11y.as_mut()?
+                .update_full(&list.hits, list.focus, &self.shared.semantics.borrow())
+        });
         if let Some(events) = events {
             events.raise();
         }
+    }
+
+    /// Optional metadata for the next presented frame; callers that omit it retain their existing tree.
+    pub fn set_accessibility_semantics(&self, semantics: Vec<(HitId, crate::Semantics)>) {
+        *self.shared.semantics.borrow_mut() = semantics;
+    }
+
+    /// Consume a rich UIA request when handling its corresponding `Event::Invoke`.
+    pub fn take_accessibility_action(&self, hit: HitId) -> Option<crate::AccessibilityAction> {
+        self.shared.a11y.borrow().as_ref()?.take_action(hit)
     }
 }
 
@@ -1090,6 +1135,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     let button = |button| (pointer(shared, lparam), button);
     match msg {
         WM_FRAME => push(id, Event::Frame),
+        WM_MOUSEACTIVATE if shared.no_activate.get() => return LRESULT(MA_NOACTIVATE as isize),
         WM_MOUSEACTIVATE if !shared.activate => {
             // SAFETY: reads the position of the message being handled.
             let at = unsafe { windows::Win32::UI::WindowsAndMessaging::GetMessagePos() };

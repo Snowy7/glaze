@@ -79,6 +79,7 @@
     },
     {
       "key": "startDate",
+      "faces": ["ring"],
       "type": "string",
       "label": "Ring starts on, YYYY-MM-DD (empty: a year before)",
       "group": "Look",

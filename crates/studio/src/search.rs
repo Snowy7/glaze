@@ -27,9 +27,20 @@ pub struct Entry {
     pub toggle: Option<&'static Setting>,
     /// What it's remembered as in Recent.
     pub id: String,
+    /// The exact control to scroll to when a panel result opens its page.
+    pub reveal: Option<String>,
 }
 
-const GROUPS: [&str; 6] = ["Settings", "Actions", "Wallpapers", "Widgets", "Integrations", "Go to"];
+const GROUPS: [&str; 8] = [
+    "Settings",
+    "On your desktop",
+    "Actions",
+    "Wallpapers",
+    "Widgets",
+    "Integrations",
+    "History",
+    "Go to",
+];
 const MAX: usize = 9;
 
 fn all(app: &App) -> Vec<Entry> {
@@ -41,21 +52,49 @@ fn all(app: &App) -> Vec<Entry> {
             glyph: setting_glyph(s),
             group: "Settings",
             action: Action::PaletteRun(usize::MAX),
+            reveal: None,
             toggle: matches!(s.kind, Kind::Switch { .. }).then_some(s),
             id: format!("setting:{}", s.id),
         });
     }
-    let paused = app.get(DocId::Config, "/paused").and_then(Value::as_bool).unwrap_or(false);
+    let paused = app
+        .get(DocId::Config, "/paused")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     for (title, g, action) in [
-        (if paused { "Resume the wallpaper" } else { "Pause the wallpaper" }, if paused { glyph::PLAY } else { glyph::PAUSE }, Action::Pause),
+        (
+            if paused {
+                "Resume the wallpaper"
+            } else {
+                "Pause the wallpaper"
+            },
+            if paused { glyph::PLAY } else { glyph::PAUSE },
+            Action::Pause,
+        ),
         ("Peek at the desktop", glyph::EYE, Action::Peek),
-        ("Arrange widgets on the desktop", glyph::MOVE, Action::ArrangeOnDesktop),
+        (
+            "Arrange widgets on the desktop",
+            glyph::MOVE,
+            Action::ArrangeOnDesktop,
+        ),
         ("Add a widget", glyph::ADD, Action::AddWidgetSheet),
         ("Add a wallpaper", glyph::ADD, Action::AddWallpaper),
         ("Restart the shell", glyph::RESET, Action::Restart("shell")),
-        ("Restart the engine", glyph::RESET, Action::Restart("engine")),
-        ("Restore the Windows desktop", glyph::ALERT, Action::RestoreDesktop),
-        ("Start from a preset", glyph::STAR, Action::FirstRunPick(usize::MAX)),
+        (
+            "Restart the engine",
+            glyph::RESET,
+            Action::Restart("engine"),
+        ),
+        (
+            "Restore the Windows desktop",
+            glyph::ALERT,
+            Action::RestoreDesktop,
+        ),
+        (
+            "Start from a preset",
+            glyph::STAR,
+            Action::FirstRunPick(usize::MAX),
+        ),
         ("Copy diagnostics", glyph::COPY, Action::CopyDiagnostics),
         ("Undo", glyph::UNDO, Action::Undo),
         ("Redo", glyph::REDO, Action::Redo),
@@ -66,6 +105,7 @@ fn all(app: &App) -> Vec<Entry> {
             glyph: g,
             group: "Actions",
             action,
+            reveal: None,
             toggle: None,
             id: format!("action:{title}"),
         });
@@ -77,6 +117,7 @@ fn all(app: &App) -> Vec<Entry> {
             glyph: glyph::WALLPAPERS,
             group: "Wallpapers",
             action: Action::UseWallpaper(i),
+            reveal: None,
             toggle: None,
             id: format!("wallpaper:{}", w.apply_as),
         });
@@ -88,6 +129,7 @@ fn all(app: &App) -> Vec<Entry> {
             glyph: crate::pages::widgets::glyph_of(id),
             group: "Widgets",
             action: Action::AddWidget(id.clone()),
+            reveal: None,
             toggle: None,
             id: format!("widget:{id}"),
         });
@@ -99,9 +141,136 @@ fn all(app: &App) -> Vec<Entry> {
             glyph: integration.glyph,
             group: "Integrations",
             action: Action::SelectIntegration(i),
+            reveal: None,
             toggle: None,
             id: format!("integration:{}", integration.name),
         });
+    }
+    if let Some(panel) = &app.panel {
+        let layout = crate::pages::widgets::layout(app);
+        for instance in &layout.instances {
+            let Some(widget) = app.registry.get(&instance.widget) else {
+                continue;
+            };
+            let monitor = app
+                .monitors
+                .iter()
+                .position(|m| m.device == instance.monitor)
+                .unwrap_or(0);
+            let location = format!(
+                "{} \u{b7} {} \u{d7} {} \u{b7} column {}, row {}",
+                crate::panel::display_name(app, monitor),
+                instance.size[0],
+                instance.size[1],
+                instance.cell[0] + 1,
+                instance.cell[1] + 1
+            );
+            out.push(Entry {
+                title: widget.manifest.name.clone(),
+                section: location.clone(),
+                glyph: glyph::WIDGETS,
+                group: "On your desktop",
+                action: Action::SelectWidget(Some(instance.instance.clone())),
+                toggle: None,
+                id: format!("desktop-widget:{}", instance.instance),
+                reveal: None,
+            });
+            let values = widget.manifest.resolve_settings(&instance.settings);
+            for setting in &widget.manifest.settings {
+                let face = [
+                    "variant", "face", "style", "layout", "look", "shape", "display", "frame",
+                ]
+                .into_iter()
+                .find_map(|key| values.get(key).and_then(Value::as_str));
+                if !setting.visible_on(face, &values) {
+                    continue;
+                }
+                let schema = serde_json::to_value(setting).unwrap_or_default();
+                let label = schema["label"]
+                    .as_str()
+                    .unwrap_or(setting.key())
+                    .split(" (")
+                    .next()
+                    .unwrap_or(setting.key());
+                out.push(Entry {
+                    title: format!("{} \u{b7} {label}", widget.manifest.name),
+                    section: location.clone(),
+                    glyph: glyph::WIDGETS,
+                    group: "Settings",
+                    action: Action::SelectWidget(Some(instance.instance.clone())),
+                    toggle: None,
+                    id: format!("desktop-setting:{}:{}", instance.instance, setting.key()),
+                    reveal: Some(label.into()),
+                });
+            }
+        }
+        for (i, plugin) in app.plugins.installed.iter().enumerate() {
+            let action = Action::Panel(crate::panel::Command::Connection(
+                crate::pages::integrations::LIST.len() + i,
+            ));
+            out.push(Entry {
+                title: plugin.name.clone(),
+                section: "Connection".into(),
+                glyph: glyph::INTEGRATIONS,
+                group: "Integrations",
+                action: action.clone(),
+                toggle: None,
+                id: format!("connection:{}", plugin.id),
+                reveal: None,
+            });
+            for setting in &plugin.settings {
+                let Some(key) = setting["key"].as_str() else {
+                    continue;
+                };
+                let label = setting["label"].as_str().unwrap_or(key);
+                out.push(Entry {
+                    title: format!("{} \u{b7} {label}", plugin.name),
+                    section: "Connection options".into(),
+                    glyph: glyph::INTEGRATIONS,
+                    group: "Integrations",
+                    action: action.clone(),
+                    toggle: None,
+                    id: format!("connection-setting:{}:{key}", plugin.id),
+                    reveal: Some(label.into()),
+                });
+            }
+        }
+        for (i, item) in crate::pages::integrations::LIST.iter().enumerate() {
+            for field in item.fields {
+                let crate::pages::integrations::Field::Switch { path, label, .. } = field;
+                out.push(Entry {
+                    title: format!("{} \u{b7} {label}", item.name),
+                    section: "Connection options".into(),
+                    glyph: item.glyph,
+                    group: "Integrations",
+                    action: Action::SelectIntegration(i),
+                    toggle: None,
+                    id: format!("integration-setting:{path}"),
+                    reveal: Some((*label).into()),
+                });
+            }
+        }
+        for (i, entry) in panel.history.borrow().entries.iter().enumerate().rev() {
+            let summary = if entry.summary.is_empty() {
+                &entry.title
+            } else {
+                &entry.summary
+            };
+            out.push(Entry {
+                title: summary.clone(),
+                section: format!(
+                    "History \u{b7} {} \u{b7} {}",
+                    crate::panel::history_time(entry.at),
+                    entry.detail
+                ),
+                glyph: glyph::CLOCK,
+                group: "History",
+                action: Action::Panel(crate::panel::Command::History(i)),
+                toggle: None,
+                id: format!("history:{}:{i}", entry.at),
+                reveal: Some(summary.clone()),
+            });
+        }
     }
     for page in Page::ALL {
         out.push(Entry {
@@ -110,6 +279,7 @@ fn all(app: &App) -> Vec<Entry> {
             glyph: page.glyph(),
             group: "Go to",
             action: Action::Nav(page),
+            reveal: None,
             toggle: None,
             id: format!("page:{}", page.key()),
         });
@@ -121,6 +291,7 @@ fn all(app: &App) -> Vec<Entry> {
             glyph: section.glyph(),
             group: "Go to",
             action: Action::Section(section),
+            reveal: None,
             toggle: None,
             id: format!("section:{}", section.title()),
         });
@@ -165,7 +336,11 @@ pub fn results(app: &App) -> Vec<Entry> {
         let recent: Vec<String> = app
             .get(DocId::Studio, "/recent")
             .and_then(Value::as_array)
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_owned))
+                    .collect()
+            })
             .unwrap_or_default();
         let mut out: Vec<Entry> = recent
             .iter()
@@ -193,7 +368,11 @@ pub fn results(app: &App) -> Vec<Entry> {
             for w in &words {
                 total += score(&e, &keywords, w)?;
             }
-            Some((GROUPS.iter().position(|g| *g == e.group).unwrap_or(9), total, e))
+            Some((
+                GROUPS.iter().position(|g| *g == e.group).unwrap_or(9),
+                total,
+                e,
+            ))
         })
         .collect();
     scored.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
@@ -257,11 +436,14 @@ fn remember(app: &mut App, id: &str) {
     recent.retain(|v| v.as_str() != Some(id));
     recent.insert(0, json!(id));
     recent.truncate(8);
-    app.apply("Recent", vec![Op {
-        doc: DocId::Studio,
-        path: "/recent".into(),
-        value: Some(Value::Array(recent)),
-    }]);
+    app.apply(
+        "Recent",
+        vec![Op {
+            doc: DocId::Studio,
+            path: "/recent".into(),
+            value: Some(Value::Array(recent)),
+        }],
+    );
 }
 
 pub fn view(app: &App, b: &mut B, selected: usize) {
@@ -275,19 +457,50 @@ pub fn view(app: &App, b: &mut B, selected: usize) {
         g.dedup();
         g.len()
     };
-    let body_h = if list.is_empty() { b.px(64.0) } else { list.len() as f32 * row + groups as f32 * b.px(26.0) + b.px(8.0) };
+    let body_h = if list.is_empty() {
+        b.px(64.0)
+    } else {
+        list.len() as f32 * row + groups as f32 * b.px(26.0) + b.px(8.0)
+    };
     let w = b.px(640.0).min(app.size.0 as f32 - b.px(48.0));
     let h = b.px(52.0) + body_h + b.px(36.0);
     let regions = crate::view::regions(app);
-    let rect = Rect::new(regions.main.left + (regions.main.width() - w) / 2.0 - b.px(40.0), b.px(132.0), w, h);
+    let rect = Rect::new(
+        regions.main.left + (regions.main.width() - w) / 2.0 - b.px(40.0),
+        b.px(132.0),
+        w,
+        h,
+    );
     let rect = Rect::new(rect.left.max(b.px(24.0)), rect.top, w, h);
     b.elevated(rect, b.px(12.0));
-    b.hit(key("palette-body"), rect, Role::Dialog, "Search everything", Action::None, mypaper_ui::controls::Behavior::Click);
+    b.hit(
+        key("palette-body"),
+        rect,
+        Role::Dialog,
+        "Search everything",
+        Action::None,
+        mypaper_ui::controls::Behavior::Click,
+    );
     // The input.
-    let input = Rect::new(rect.left + b.px(8.0), rect.top + b.px(10.0), rect.width() - b.px(16.0), b.px(32.0));
-    b.icon(Rect::new(rect.left + b.px(16.0), rect.top, b.px(18.0), b.px(52.0)), glyph::SEARCH, 15.0, p.ink3);
+    let input = Rect::new(
+        rect.left + b.px(8.0),
+        rect.top + b.px(10.0),
+        rect.width() - b.px(16.0),
+        b.px(32.0),
+    );
+    b.icon(
+        Rect::new(rect.left + b.px(16.0), rect.top, b.px(18.0), b.px(52.0)),
+        glyph::SEARCH,
+        15.0,
+        p.ink3,
+    );
     // The field draws without its own frame: the palette is the frame.
-    let field = Rect::new(rect.left + b.px(40.0), rect.top + b.px(16.0), rect.width() - b.px(56.0), b.px(20.0));
+    let field = Rect::new(
+        rect.left + b.px(40.0),
+        rect.top + b.px(16.0),
+        rect.width() - b.px(56.0),
+        b.px(20.0),
+    );
     let _ = input;
     text_field_bare(app, b, field);
     b.hline(rect.left, rect.right, rect.top + b.px(52.0), p.line);
@@ -295,7 +508,18 @@ pub fn view(app: &App, b: &mut B, selected: usize) {
     let mut y = rect.top + b.px(52.0) + b.px(4.0);
     if list.is_empty() {
         let caption = b.font(Font::Caption);
-        b.text_in(Rect::new(rect.left + b.px(16.0), y, rect.width() - b.px(32.0), b.px(56.0)), "No matches. Try a setting's name, a wallpaper or a widget.", &caption, p.ink3, Align::Start);
+        b.text_in(
+            Rect::new(
+                rect.left + b.px(16.0),
+                y,
+                rect.width() - b.px(32.0),
+                b.px(56.0),
+            ),
+            "No matches. Try a setting's name, a wallpaper or a widget.",
+            &caption,
+            p.ink3,
+            Align::Start,
+        );
         y += b.px(60.0);
     }
     let mut last_group = "";
@@ -303,7 +527,15 @@ pub fn view(app: &App, b: &mut B, selected: usize) {
         for (i, e) in list.iter().enumerate() {
             if e.group != last_group {
                 last_group = e.group;
-                b.section_header(Rect::new(rect.left + b.px(16.0), y + b.px(8.0), rect.width() - b.px(32.0), b.px(18.0)), e.group);
+                b.section_header(
+                    Rect::new(
+                        rect.left + b.px(16.0),
+                        y + b.px(8.0),
+                        rect.width() - b.px(32.0),
+                        b.px(18.0),
+                    ),
+                    e.group,
+                );
                 y += b.px(26.0);
             }
             let r = Rect::new(rect.left + b.px(6.0), y, rect.width() - b.px(12.0), row);
@@ -313,32 +545,83 @@ pub fn view(app: &App, b: &mut B, selected: usize) {
             } else {
                 b.wash(k, r, b.px(8.0));
             }
-            b.icon(Rect::new(r.left + b.px(10.0), r.top, b.px(16.0), row), e.glyph, 14.0, p.ink2);
+            b.icon(
+                Rect::new(r.left + b.px(10.0), r.top, b.px(16.0), row),
+                e.glyph,
+                14.0,
+                p.ink2,
+            );
             let body = b.font(Font::Body);
             let caption = b.font(Font::Caption);
             let section_w = b.measure(&e.section, &caption).0.min(r.width() * 0.45);
-            b.text_in(Rect::new(r.left + b.px(38.0), r.top, r.width() - b.px(56.0) - section_w, row), &e.title, &body, p.ink1, Align::Start);
+            b.text_in(
+                Rect::new(
+                    r.left + b.px(38.0),
+                    r.top,
+                    r.width() - b.px(56.0) - section_w,
+                    row,
+                ),
+                &e.title,
+                &body,
+                p.ink1,
+                Align::Start,
+            );
             let mut right = r.right - b.px(10.0);
             if let Some(s) = e.toggle {
                 let on = app.value(s).as_bool().unwrap_or(false);
                 let state = if on { "On" } else { "Off" };
                 let (sw, _) = b.measure(state, &caption);
-                b.text_in(Rect::new(right - sw, r.top, sw + b.px(2.0), row), state, &caption, p.ink2, Align::End);
+                b.text_in(
+                    Rect::new(right - sw, r.top, sw + b.px(2.0), row),
+                    state,
+                    &caption,
+                    p.ink2,
+                    Align::End,
+                );
                 right -= sw + b.px(12.0);
             }
-            b.text_in(Rect::new(right - section_w, r.top, section_w, row), &e.section, &caption, p.ink3, Align::End);
-            b.hit(k, r, Role::ListItem, &format!("{} {}", e.title, e.section), Action::PaletteRun(i), mypaper_ui::controls::Behavior::Click);
+            b.text_in(
+                Rect::new(right - section_w, r.top, section_w, row),
+                &e.section,
+                &caption,
+                p.ink3,
+                Align::End,
+            );
+            b.hit(
+                k,
+                r,
+                Role::ListItem,
+                &format!("{} {}", e.title, e.section),
+                Action::PaletteRun(i),
+                mypaper_ui::controls::Behavior::Click,
+            );
             y += row;
         }
     });
     // Footer keycaps.
-    let foot = Rect::new(rect.left, rect.bottom - b.px(36.0), rect.width(), b.px(36.0));
+    let foot = Rect::new(
+        rect.left,
+        rect.bottom - b.px(36.0),
+        rect.width(),
+        b.px(36.0),
+    );
     let caption = b.font(Font::Caption);
     let mut x = foot.left + b.px(16.0);
-    for (keys, label) in [(&["↑", "↓"][..], "Move"), (&["Enter"][..], "Open"), (&["Space"][..], "Toggle"), (&["Esc"][..], "Close")] {
+    for (keys, label) in [
+        (&["↑", "↓"][..], "Move"),
+        (&["Enter"][..], "Open"),
+        (&["Space"][..], "Toggle"),
+        (&["Esc"][..], "Close"),
+    ] {
         x += b.keys(x, foot.top + b.px(8.0), keys) + b.px(6.0);
         let (lw, _) = b.measure(label, &caption);
-        b.text_in(Rect::new(x, foot.top, lw + b.px(2.0), foot.height()), label, &caption, p.ink3, Align::Start);
+        b.text_in(
+            Rect::new(x, foot.top, lw + b.px(2.0), foot.height()),
+            label,
+            &caption,
+            p.ink3,
+            Align::Start,
+        );
         x += lw + b.px(16.0);
     }
 }
@@ -359,11 +642,22 @@ fn text_field_bare(app: &App, b: &mut B, rect: Rect) {
         None => {
             let shown = app.text(&id);
             let style = b.font(Font::Title2).scaled(1.0);
-            let (text, color) = if shown.is_empty() { ("Search settings, wallpapers, widgets…", b.p.ink4) } else { (shown, b.p.ink1) };
+            let (text, color) = if shown.is_empty() {
+                ("Search settings, wallpapers, widgets…", b.p.ink4)
+            } else {
+                (shown, b.p.ink1)
+            };
             b.text_in(rect, text, &style, color, Align::Start);
         }
     }
-    b.hit(crate::app::field_key(&id), rect, Role::SearchInput, "Search", Action::Field(id), mypaper_ui::controls::Behavior::Field);
+    b.hit(
+        crate::app::field_key(&id),
+        rect,
+        Role::SearchInput,
+        "Search",
+        Action::Field(id),
+        mypaper_ui::controls::Behavior::Field,
+    );
     let _ = text_field;
 }
 
@@ -376,3 +670,81 @@ pub fn step(app: &mut App, delta: i32) {
     app.dirty = true;
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::panel::{Command, Page as PanelPage, State};
+    fn fixture(ui: &mypaper_ui::Ui) -> App {
+        let mut app = crate::goldens::app(true, ui);
+        app.panel = Some(State::default());
+        app.size = (480, 760);
+        crate::pages::plugins::fixture(&mut app.plugins);
+        app
+    }
+    #[test]
+    fn panel_search_routes_to_the_exact_bar_panel() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = fixture(&ui);
+        let setting = SETTINGS
+            .iter()
+            .find(|s| {
+                matches!(s.place, crate::settings::Place::BarsPanel(_))
+                    && !matches!(s.kind, Kind::Custom)
+            })
+            .unwrap();
+        app.texts.insert(FieldId::Palette, setting.label.into());
+        let index = results(&app)
+            .iter()
+            .position(|entry| entry.id == format!("setting:{}", setting.id))
+            .unwrap();
+        crate::panel::run(&mut app, Command::Search(index));
+        assert_eq!(app.panel.as_ref().unwrap().page, PanelPage::BarPanel);
+        let built = crate::panel::build(&app, &mut ui.text);
+        assert!(app.anchors.borrow().contains_key(setting.id));
+        assert!(!built.targets.is_empty());
+    }
+    #[test]
+    fn panel_search_includes_plugin_connections_desktop_widgets_and_history() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = fixture(&ui);
+        crate::panel::record_drag(&app, "First desktop");
+        let entries = all(&app);
+        assert!(entries.iter().any(|e| e.id.starts_with("desktop-widget:")
+            && matches!(e.action, Action::SelectWidget(Some(_)))));
+        assert!(
+            entries
+                .iter()
+                .any(|e| e.id.starts_with("desktop-setting:") && e.reveal.is_some())
+        );
+        assert!(
+            entries
+                .iter()
+                .any(|e| e.title == "Docker" && e.id.starts_with("connection:"))
+        );
+        assert!(entries.iter().any(|e| e.group == "History"));
+        let setting = entries
+            .iter()
+            .find(|e| {
+                e.id.starts_with("desktop-setting:clock-")
+                    && e.reveal.as_deref() == Some("Show seconds")
+            })
+            .unwrap_or_else(|| {
+                entries
+                    .iter()
+                    .find(|e| e.id.starts_with("desktop-setting:clock-"))
+                    .unwrap()
+            });
+        app.texts.insert(FieldId::Palette, setting.title.clone());
+        let index = results(&app)
+            .iter()
+            .position(|e| e.id == setting.id)
+            .unwrap();
+        let version = app.docs.version;
+        crate::panel::run(&mut app, Command::Search(index));
+        assert_eq!(app.panel.as_ref().unwrap().page, PanelPage::Widget);
+        assert_eq!(app.docs.version, version);
+        assert!(app.panel.as_ref().unwrap().search_match.is_some());
+        crate::panel::build(&app, &mut ui.text);
+        assert!(app.anchors.borrow().contains_key("panel-search-match"));
+    }
+}

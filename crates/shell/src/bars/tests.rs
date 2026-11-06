@@ -7,6 +7,63 @@ use mypaper_bars::{
 use mypaper_ui::{Image, Op, Rgba, render};
 
 #[test]
+fn floating_dock_draws_added_modules_without_revealing_hidden_defaults() {
+    let mut ui = Ui::new().unwrap();
+    let base = BarsConfig::parse(r#"{"preset":"macos","dock":{"pinned":[]}}"#).unwrap();
+    assert_eq!(visible_modules(BarKind::Dock, &base).count(), 0);
+    let mut config =
+        BarsConfig::parse(r#"{"preset":"macos","dock":{"left":["clock"],"right":[],"pinned":[]}}"#)
+            .unwrap();
+    config.resolve(Vec::new);
+    let tokens = look::Tokens::resolve(
+        &config.dock.look,
+        &Appearance::default(),
+        &providers::accent::read(),
+    );
+    let frame = view::dock(
+        &config,
+        &model(),
+        &apps(),
+        &tokens,
+        1.,
+        (1280, 100),
+        &[],
+        &[],
+        &mut ui,
+        &mut icons::Images::default(),
+        None,
+    );
+    let modules: Vec<_> = frame
+        .targets
+        .iter()
+        .filter_map(|t| {
+            if let Target::Module(m) = t {
+                Some(m)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(modules, vec![&ModuleRef::Builtin(Module::Clock)]);
+    assert!(frame.list.hits.iter().any(|hit| {
+        frame
+            .targets
+            .get(hit.id as usize - 1)
+            .is_some_and(|t| matches!(t, Target::Module(ModuleRef::Builtin(Module::Clock))))
+    }));
+}
+
+#[test]
+fn studio_dock_preview_matches_saved_override_resolution_without_mutating_the_base() {
+    let config = BarsConfig::parse(r#"{"dock":{"size":48},"overrides":{"secondary":{"dock":{"size":40}}}}"#).unwrap();
+    let before = crate::studio_pick::wire::revision(config.raw());
+    let preview = Bars::studio_preview_config(&config, &[crate::studio_pick::wire::PreviewOp { path: "/dock/size".into(), value: serde_json::json!(72) }]).unwrap();
+    assert_eq!(preview.for_monitor("DISPLAY1", true).unwrap().dock.size(), 72.0);
+    assert_eq!(preview.for_monitor("DISPLAY2", false).unwrap().dock.size(), 40.0);
+    assert_eq!(crate::studio_pick::wire::revision(config.raw()), before);
+}
+
+#[test]
 fn studio_fields_reach_the_shared_preview_and_native_bar_views() {
     use crate::preview::bars as shared;
     let mut ui = Ui::new().unwrap();

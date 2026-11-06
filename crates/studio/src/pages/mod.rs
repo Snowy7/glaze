@@ -153,13 +153,8 @@ pub fn intercept(app: &mut App, path: &str, value: Option<serde_json::Value>) ->
         let (dir, pointer) = rest.split_once('/').unwrap_or((rest, ""));
         let dir = std::path::PathBuf::from(dir.replace("~1", "/").replace("~0", "~"));
         let pointer = format!("/{pointer}");
-        match crate::library::edit_theme(&dir, &pointer, value) {
-            Ok(()) => {
-                app.library = crate::library::Library::scan(crate::app::theme_name(&app.docs).as_deref());
-                app.docs.saved = crate::docs::Saved::Done(std::time::Instant::now());
-            }
-            Err(e) => app.alert(format!("{e:#}")),
-        }
+        crate::panel::remember_theme_edit(app, path, value.as_ref());
+        app.edit_theme("Wallpaper look", &dir, &pointer, value);
         return true;
     }
     if look::intercept_null(app, path) || integrations::intercept(app, path) {

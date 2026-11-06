@@ -38,6 +38,28 @@ pub fn key(parts: impl Hash) -> Key {
     h.finish()
 }
 
+/// Value readouts use one grammar: 55%, 12 px, 30 fps.
+pub fn format_value(value: f64, unit: &str) -> String {
+    let unit = unit.trim();
+    let number = format!("{value:.2}")
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_owned();
+    format!(
+        "{number}{}{unit}",
+        if unit.is_empty() || unit == "%" {
+            ""
+        } else {
+            " "
+        }
+    )
+}
+
+/// Opaque segment selection, legible in both app schemes.
+pub fn segment_fill(dark: bool) -> Rgba {
+    hex(if dark { 0x6b6b6b } else { 0x5e5e5e })
+}
+
 /// The gray tokens of the monochrome design (plans/native/studio-redesign.md, 8.3), retuned
 /// for fills instead of outlines: each surface step is a clear fill step, hover and selection
 /// are washes that read on any of them, and every text step meets the kit's floors (ink-1 7:1,
@@ -178,7 +200,11 @@ impl Palette {
     /// The kit theme over these grays: Mono (no accent hue), its colour roles mapped onto the
     /// tokens, so the kit's components draw Studio's look.
     pub fn theme(&self) -> Theme {
-        let scheme = if self.dark { Scheme::Dark } else { Scheme::Light };
+        let scheme = if self.dark {
+            Scheme::Dark
+        } else {
+            Scheme::Light
+        };
         let mut t = Theme::new(Style::Mono, scheme, self.solid);
         let c = &mut t.color;
         c.label = self.ink1;
@@ -196,7 +222,11 @@ impl Palette {
         c.elevated = self.panel;
         c.hover = self.hover;
         c.pressed = self.selected;
-        c.knob = if self.shadow.a > 0.0 { white(1.0) } else { self.ink1 };
+        c.knob = if self.shadow.a > 0.0 {
+            white(1.0)
+        } else {
+            self.ink1
+        };
         c.scrollbar = self.ink1.with_alpha(0.32);
         c.shadow = self.shadow;
         t.radius.card = 12.0;
@@ -399,6 +429,7 @@ pub enum Align {
 /// Builds one frame: ops, hits and their targets.
 pub struct Builder<'a, A> {
     pub list: DisplayList,
+    pub semantics: Vec<(crate::HitId, crate::Semantics)>,
     pub text: &'a mut Text,
     pub p: &'a Palette,
     pub t: &'a Type,
@@ -417,6 +448,7 @@ impl<'a, A: Clone> Builder<'a, A> {
     pub fn new(text: &'a mut Text, p: &'a Palette, t: &'a Type, s: f32, input: &'a Input) -> Self {
         Self {
             list: DisplayList::default(),
+            semantics: Vec::new(),
             text,
             p,
             t,
@@ -433,6 +465,22 @@ impl<'a, A: Clone> Builder<'a, A> {
     /// Design pixels to device pixels.
     pub fn px(&self, v: f32) -> f32 {
         v * self.s
+    }
+
+    /// The shared label column for inline value controls.
+    pub fn label_width(&self, width: f32) -> f32 {
+        self.px(140.0).min(width * 0.46)
+    }
+
+    /// Rows share an 8-DIP text inset, with 2 DIPs between neighboring selection washes.
+    /// A plate's 12-DIP content padding leaves the wash 4 DIPs inside its edge.
+    pub fn list_row_area(&self, rect: Rect) -> Rect {
+        Rect::new(
+            rect.left - self.px(8.0),
+            rect.top + self.px(2.0),
+            rect.width() + self.px(16.0),
+            rect.height() - self.px(4.0),
+        )
     }
 
     pub fn font(&self, font: Font) -> TextStyle {
@@ -462,6 +510,21 @@ impl<'a, A: Clone> Builder<'a, A> {
     /// The innermost clip, if any.
     pub fn clip_rect(&self) -> Option<Rect> {
         self.clips.last().map(|(_, r)| *r)
+    }
+
+    /// Attach a semantic value or action to an existing control key.
+    pub fn semantics(&mut self, key: Key, value: crate::Semantics) {
+        if let Some(index) = self.targets.iter().position(|target| target.key == key) {
+            self.semantics.push((index as u32 + 1, value));
+        }
+    }
+
+    /// A stable polite live region; changing the message announces save/status feedback.
+    pub fn announce(&mut self, message: &str, revision: u64) {
+        self.semantics.push((
+            u32::MAX - 1 - (revision % (1 << 20)) as u32,
+            crate::Semantics::Status(message.into()),
+        ));
     }
 
     /// Registers a target with its hit, clipped to the current scroll view. A control scrolled
@@ -671,7 +734,22 @@ impl<'a, A: Clone> Builder<'a, A> {
     /// An icon centered in `rect`, about `size` design pixels: the kit's vector (a touch
     /// larger, as Lucide's outlines sit inside their box) or a font glyph.
     pub fn icon(&mut self, rect: Rect, glyph: impl Into<Glyph>, size: f32, color: Rgba) {
-        match glyph.into() {
+        let glyph = glyph.into();
+        let size = if matches!(
+            glyph,
+            Glyph::Icon(
+                Icon::Check
+                    | Icon::ChevronLeft
+                    | Icon::ChevronRight
+                    | Icon::ChevronDown
+                    | Icon::ChevronUp
+            )
+        ) {
+            size * self.t.text_scale
+        } else {
+            size
+        };
+        match glyph {
             Glyph::Icon(icon) => {
                 let px = ((size + 1.0).max(13.0) * self.s).round();
                 let at = Rect::new(
@@ -768,7 +846,11 @@ impl<'a, A: Clone> Builder<'a, A> {
         let p = *self.p;
         let (fill, ink) = match kind {
             ButtonKind::Primary => (
-                if enabled && self.hovered(key) { p.solid_hover } else { p.solid },
+                if enabled && self.hovered(key) {
+                    p.solid_hover
+                } else {
+                    p.solid
+                },
                 p.on_solid,
             ),
             ButtonKind::Secondary => (p.fill, p.ink1),
@@ -777,7 +859,11 @@ impl<'a, A: Clone> Builder<'a, A> {
                 if self.hovered(key) { p.ink1 } else { p.ink2 },
             ),
         };
-        let (fill, ink) = if enabled { (fill, ink) } else { (p.well, p.ink4) };
+        let (fill, ink) = if enabled {
+            (fill, ink)
+        } else {
+            (p.well, p.ink4)
+        };
         self.fill(rect, r, fill);
         if enabled && kind != ButtonKind::Primary {
             self.wash(key, rect, r);
@@ -903,12 +989,14 @@ impl<'a, A: Clone> Builder<'a, A> {
             let w = self.segmented_width(items);
             Rect::new(rect.right - w, rect.top, w, rect.height())
         };
-        let keys: Vec<Key> = (0..items.len()).map(|i| crate::controls::key((key, i))).collect();
+        let keys: Vec<Key> = (0..items.len())
+            .map(|i| crate::controls::key((key, i)))
+            .collect();
         let inset = (2.0 * self.s).round();
         let inner = outer.inflate(-inset);
         // The kit's equal segments, unless a label wouldn't fit one: then each segment is as
         // wide as its label needs, drawn the kit's way.
-        let style = self.kit.font.style(crate::theme::TextRole::Callout, self.s);
+        let style = self.font(Font::Caption);
         let widths: Vec<f32> = items
             .iter()
             .map(|s| self.text.measure(s, &style).0 + self.px(14.0))
@@ -937,14 +1025,7 @@ impl<'a, A: Clone> Builder<'a, A> {
                 })
                 .collect()
         };
-        let proportional = segs.first().is_some_and(|r| (r.width() - equal.round()).abs() > 0.5);
-        if proportional {
-            self.segments_drawn(&keys, outer, &segs, items, selected);
-        } else {
-            self.kit(&keys, |_| {}, |f, base| {
-                f.segmented(base, outer, items, selected.unwrap_or(usize::MAX));
-            });
-        }
+        self.segments_drawn(&keys, outer, &segs, items, selected);
         self.group(key, |b| {
             for (i, item) in items.iter().enumerate() {
                 let seg = segs[i];
@@ -976,14 +1057,30 @@ impl<'a, A: Clone> Builder<'a, A> {
         let radius = self.px(8.0).min(outer.height() / 2.0);
         let inner_radius = (radius - (2.0 * self.s).round()).max(0.0);
         self.fill(outer, radius, c.well);
-        let style = self.kit.font.style(crate::theme::TextRole::Callout, self.s);
+        let style = self.font(Font::Caption);
         for (i, (seg, item)) in segs.iter().zip(items).enumerate() {
             let on = selected == Some(i);
             if on {
-                self.fill(*seg, inner_radius, if self.p.dark { c.fill } else { c.knob });
+                self.fill(
+                    *seg,
+                    inner_radius,
+                    if self.p.selected == self.p.solid {
+                        self.p.solid
+                    } else {
+                        segment_fill(self.p.dark)
+                    },
+                );
             }
             self.wash(keys[i], *seg, inner_radius);
-            let ink = if on { c.label } else { c.secondary };
+            let ink = if on {
+                if self.p.selected == self.p.solid {
+                    self.p.on_solid
+                } else {
+                    hex(0xffffff)
+                }
+            } else {
+                c.secondary
+            };
             self.text_in(seg.inflate(-self.px(4.0)), item, &style, ink, Align::Center);
             self.focus_ring(keys[i], *seg, inner_radius);
         }
@@ -991,12 +1088,170 @@ impl<'a, A: Clone> Builder<'a, A> {
 
     /// The width a segmented control needs for `items` (equal segments, the widest label).
     pub fn segmented_width(&mut self, items: &[&str]) -> f32 {
-        let style = self.kit.font.style(crate::theme::TextRole::Callout, self.s);
+        let style = self.font(Font::Caption);
         let widest = items
             .iter()
             .map(|s| self.text.measure(s, &style).0)
             .fold(0.0, f32::max);
         ((widest + self.px(24.0)) * items.len() as f32 + self.px(4.0)).ceil()
+    }
+
+    /// A page choice always spans its plate below a left-aligned label. Choices wrap to
+    /// readable rows when narrow or enlarged text cannot fit; no label is compressed.
+    pub fn labeled_segments(
+        &mut self,
+        id: Key,
+        rect: Rect,
+        label: &str,
+        items: &[&str],
+        selected: Option<usize>,
+        action: impl Fn(usize) -> A,
+    ) -> Rect {
+        let line = self.px(26.0 * self.t.text_scale);
+        let mut style = self.font(Font::Body);
+        style.size *= 13.0 / 14.0;
+        self.text_in(
+            Rect::new(rect.left, rect.top, rect.width(), line),
+            label,
+            &style,
+            self.p.ink1,
+            Align::Start,
+        );
+        let item_style = self.font(Font::Caption);
+        let needed: Vec<_> = items
+            .iter()
+            .map(|item| self.text.measure(item, &item_style).0 + self.px(20.0))
+            .collect();
+        let mut rows = Vec::new();
+        let mut first = 0;
+        let mut used = 0.0;
+        for (i, width) in needed.iter().enumerate() {
+            if i > first && used + width > rect.width() - self.px(4.0) {
+                rows.push((first, i));
+                first = i;
+                used = 0.0;
+            }
+            used += width;
+        }
+        rows.push((first, items.len()));
+        let row_h = self.px(32.0 * self.t.text_scale);
+        let mut bottom = rect.top + line;
+        for (row, (first, end)) in rows.into_iter().enumerate() {
+            let r = Rect::new(rect.left, bottom, rect.width(), row_h);
+            self.segmented(
+                key((id, row)),
+                r,
+                &items[first..end],
+                selected
+                    .filter(|i| *i >= first && *i < end)
+                    .map(|i| i - first),
+                label,
+                true,
+                |i| action(first + i),
+            );
+            self.stroke(r, self.px(7.0), self.px(1.0), self.p.edge);
+            bottom = r.bottom + self.px(4.0);
+        }
+        Rect::new(rect.left, rect.top, rect.width(), bottom - rect.top)
+    }
+
+    /// The same picture choices for Fit in creation and wallpaper details.
+    pub fn fit_tiles(
+        &mut self,
+        id: Key,
+        rect: Rect,
+        selected: usize,
+        action: impl Fn(usize) -> A,
+    ) -> Rect {
+        let columns = if rect.width() < self.px(340.0) || self.t.text_scale > 1.0 {
+            2
+        } else {
+            4
+        };
+        let gap = self.px(8.0);
+        let width = (rect.width() - gap * (columns - 1) as f32) / columns as f32;
+        let tile_h = self.px(58.0 + 26.0 * self.t.text_scale);
+        let style = self.font(Font::Caption);
+        for (i, label) in ["Fill", "Fit", "Stretch", "Center"].into_iter().enumerate() {
+            let tile = Rect::new(
+                rect.left + (i % columns) as f32 * (width + gap),
+                rect.top + (i / columns) as f32 * (tile_h + gap),
+                width,
+                tile_h,
+            );
+            let k = key((id, i));
+            self.plate(k, tile, self.px(7.0), selected == i);
+            let screen = Rect::new(
+                tile.left + self.px(7.0),
+                tile.top + self.px(8.0),
+                width - self.px(14.0),
+                self.px(34.0),
+            );
+            self.fill(screen, self.px(3.0), self.p.well);
+            let picture = match i {
+                1 => Rect::new(
+                    screen.left + screen.width() * 0.22,
+                    screen.top,
+                    screen.width() * 0.56,
+                    screen.height(),
+                ),
+                3 => Rect::new(
+                    screen.left + screen.width() * 0.32,
+                    screen.top + self.px(8.0),
+                    screen.width() * 0.36,
+                    self.px(18.0),
+                ),
+                _ => screen,
+            };
+            self.fill(picture, self.px(2.0), self.p.ink3.with_alpha(0.45));
+            self.fill(
+                Rect::new(
+                    picture.left + picture.width() * 0.56,
+                    picture.top + picture.height() * 0.18,
+                    self.px(if i == 2 { 12.0 } else { 7.0 }),
+                    self.px(7.0),
+                ),
+                self.px(4.0),
+                self.p.ink1,
+            );
+            self.line(
+                Point::new(picture.left, picture.bottom),
+                Point::new(
+                    picture.left + picture.width() * 0.45,
+                    picture.top + picture.height() * 0.45,
+                ),
+                self.px(2.0),
+                self.p.ink1,
+            );
+            self.text_in(
+                Rect::new(
+                    tile.left,
+                    screen.bottom + self.px(5.0),
+                    width,
+                    self.px(26.0 * self.t.text_scale),
+                ),
+                label,
+                &style,
+                self.p.ink1,
+                Align::Center,
+            );
+            self.hit_checked(
+                k,
+                tile,
+                Role::RadioButton,
+                &format!("Fit: {label}"),
+                Some(selected == i),
+                action(i),
+                Behavior::Click,
+            );
+            self.focus_ring(k, tile, self.px(7.0));
+        }
+        Rect::new(
+            rect.left,
+            rect.top,
+            rect.width(),
+            (4 / columns) as f32 * (tile_h + gap),
+        )
     }
 
     /// The kit's slider over `rect`: the track, then the value text at the right
@@ -1054,6 +1309,15 @@ impl<'a, A: Clone> Builder<'a, A> {
                 max,
                 step,
                 value,
+            },
+        );
+        self.semantics(
+            key,
+            crate::Semantics::Range {
+                value,
+                min,
+                max,
+                step,
             },
         );
     }
@@ -1317,20 +1581,24 @@ impl<'a, A: Clone> Builder<'a, A> {
             Accessory::Switch(on) => Some(on),
             _ => None,
         };
-        self.kit(&[key], |_| {}, |f, id| {
-            f.row(
-                &Row {
-                    id,
-                    lead,
-                    title,
-                    subtitle,
-                    accessory,
-                    selected,
-                    enabled: true,
-                },
-                rect,
-            );
-        });
+        self.kit(
+            &[key],
+            |_| {},
+            |f, id| {
+                f.row(
+                    &Row {
+                        id,
+                        lead,
+                        title,
+                        subtitle,
+                        accessory,
+                        selected,
+                        enabled: true,
+                    },
+                    rect,
+                );
+            },
+        );
         let label = match subtitle {
             Some(s) => format!("{title}: {s}"),
             None => title.to_owned(),
@@ -1403,8 +1671,12 @@ impl<'a, A: Clone> Builder<'a, A> {
     ) -> f32 {
         self.list.ops.push(Op::Clip { rect: viewport });
         let clip = match self.clips.last() {
-            Some((_, outer)) => intersect(viewport, *outer)
-                .unwrap_or(Rect::new(viewport.left, viewport.top, 0.0, 0.0)),
+            Some((_, outer)) => intersect(viewport, *outer).unwrap_or(Rect::new(
+                viewport.left,
+                viewport.top,
+                0.0,
+                0.0,
+            )),
             None => viewport,
         };
         self.clips.push((key, clip));
@@ -1435,7 +1707,11 @@ impl<'a, A: Clone> Builder<'a, A> {
             let k = crate::controls::key((key, "thumb"));
             let hot = self.hovered(k) || self.pressed(k);
             // Quiet at rest (it is always there: no fade timer in an app window), clear on hover.
-            self.fill(bar, w / 2.0, p.ink1.with_alpha(if hot { 0.45 } else { 0.16 }));
+            self.fill(
+                bar,
+                w / 2.0,
+                p.ink1.with_alpha(if hot { 0.45 } else { 0.16 }),
+            );
             self.hit(
                 k,
                 bar.inflate(self.px(3.0)),
@@ -1511,9 +1787,16 @@ mod tests {
         assert_eq!(height, 432.0);
         let labels: Vec<_> = b.list.hits.iter().map(|h| h.label.to_string()).collect();
         assert_eq!(labels, ["A", "In", "Out", "Scroll"]);
-        assert!(b.list.hits[2].rect.is_empty(), "the scrolled-out button takes no clicks");
+        assert!(
+            b.list.hits[2].rect.is_empty(),
+            "the scrolled-out button takes no clicks"
+        );
         assert_eq!(b.targets[2].visible, None);
-        assert_eq!(b.targets[2].scroll, Some(key("view")), "but the keyboard can reach it");
+        assert_eq!(
+            b.targets[2].scroll,
+            Some(key("view")),
+            "but the keyboard can reach it"
+        );
         assert_eq!(b.targets[1].visible, Some(b.targets[1].rect));
         assert_eq!(b.targets[1].action, Act::Go(1));
         assert!(matches!(b.targets[3].behavior, Behavior::Thumb { .. }));
@@ -1564,16 +1847,50 @@ mod tests {
         let (p, t) = (Palette::dark(), Type::new(&text));
         let draw = |text: &mut Text, input: &Input| {
             let mut b: Builder<'_, Act> = Builder::new(text, &p, &t, 1.0, input);
-            b.button(key("b"), Rect::new(0.0, 0.0, 90.0, 32.0), "Go", None, ButtonKind::Secondary, true, Act::Flip);
+            b.button(
+                key("b"),
+                Rect::new(0.0, 0.0, 90.0, 32.0),
+                "Go",
+                None,
+                ButtonKind::Secondary,
+                true,
+                Act::Flip,
+            );
             b.switch(key("s"), Point::new(0.0, 40.0), false, "S", Act::Flip);
-            b.segmented(key("g"), Rect::new(0.0, 70.0, 200.0, 30.0), &["A", "B"], Some(0), "G", true, Act::Go);
-            b.select(key("c"), Rect::new(0.0, 110.0, 120.0, 30.0), "Value", "C", Act::Flip);
-            b.field(key("f"), Rect::new(0.0, 150.0, 120.0, 32.0), None, "Type", true, false, "F", Act::Flip);
+            b.segmented(
+                key("g"),
+                Rect::new(0.0, 70.0, 200.0, 30.0),
+                &["A", "B"],
+                Some(0),
+                "G",
+                true,
+                Act::Go,
+            );
+            b.select(
+                key("c"),
+                Rect::new(0.0, 110.0, 120.0, 30.0),
+                "Value",
+                "C",
+                Act::Flip,
+            );
+            b.field(
+                key("f"),
+                Rect::new(0.0, 150.0, 120.0, 32.0),
+                None,
+                "Type",
+                true,
+                false,
+                "F",
+                Act::Flip,
+            );
             b.list
         };
         let rest = draw(&mut text, &Input::default());
         assert!(
-            !rest.ops.iter().any(|op| matches!(op, Op::Stroke { color, .. } if color.a > 0.0)),
+            !rest
+                .ops
+                .iter()
+                .any(|op| matches!(op, Op::Stroke { color, .. } if color.a > 0.0)),
             "no outlines at rest"
         );
         let focused = draw(
@@ -1585,7 +1902,10 @@ mod tests {
             },
         );
         assert!(
-            focused.ops.iter().any(|op| matches!(op, Op::Stroke { color, .. } if color.a > 0.0)),
+            focused
+                .ops
+                .iter()
+                .any(|op| matches!(op, Op::Stroke { color, .. } if color.a > 0.0)),
             "the kit draws the focused segment's ring"
         );
         let hovered = draw(

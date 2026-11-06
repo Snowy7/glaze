@@ -226,6 +226,7 @@ pub enum FieldId {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
+    Panel(crate::panel::Command),
     /// A hit with nothing to do (a scrim edge, a scroll thumb).
     None,
     Minimize,

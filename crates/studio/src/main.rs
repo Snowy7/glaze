@@ -18,6 +18,7 @@ mod images;
 mod library;
 mod look;
 mod pages;
+mod panel;
 mod peek;
 mod search;
 mod settings;
@@ -97,13 +98,22 @@ impl Studio {
             return;
         }
         app.size = size;
-        if let Some((frame, show)) = pages::stage(app) {
+        panel::prepare_frame(app, surface);
+        if app.panel.is_none() && let Some((frame, show)) = pages::stage(app) {
             stage::prepare(app, ui, (frame.width() as u32, frame.height() as u32), show);
         }
-        stage::prepare_designs(app, ui);
-        let built = view::build(app, &mut ui.text);
+        let mut built = if app.panel.is_some() {
+            panel::build(app, &mut ui.text)
+        } else {
+            stage::prepare_designs(app, ui);
+            view::build(app, &mut ui.text)
+        };
+        if app.panel.is_some() && panel::fit_height(app, surface, &built) {
+            built = panel::build(app, &mut ui.text);
+        }
+        let size = surface.client_size();
         surface.set_chrome(&built.chrome);
-        surface.set_background(app.theme.palette.chrome);
+        surface.set_background(panel::palette_for(app).chrome);
         let anchors = std::mem::take(&mut *app.anchors.borrow_mut());
         app.frame = app::Frame {
             targets: built.targets,
@@ -112,12 +122,14 @@ impl Studio {
             anchors,
             overlay_from: built.overlay_from,
         };
+        surface.set_accessibility_semantics(built.semantics);
         if let Err(e) = surface.present(ui, (0, 0), size, built.list) {
             log::error!("drawing: {e:#}");
         }
         app.dirty = false;
+        if app.panel.is_some() { panel::after_present(app); }
         // A design tile asked for thumbnails this frame: build them in the next one.
-        if app.stage.borrow().designs.pending(app.docs.version) {
+        if app.panel.is_none() && app.stage.borrow().designs.pending(app.docs.version) {
             app.dirty = true;
             crate::wake(app.thread);
         }
@@ -134,7 +146,7 @@ impl Studio {
     /// The window's border and caption follow the palette (light/dark, contrast) live. DWM
     /// wants an opaque border: the edge wash over the window's chrome.
     fn sync_frame(&mut self) {
-        let p = self.app.theme.palette;
+        let p = panel::palette_for(&self.app);
         let frame = (p.dark, mypaper_ui::theme::over(p.edge, p.chrome));
         if self.frame != Some(frame) {
             self.surface.set_frame(frame.0, frame.1);
@@ -165,7 +177,7 @@ impl Studio {
         };
         // SAFETY: our own window; `at` is a valid out pointer.
         let _ = unsafe { windows::Win32::Graphics::Gdi::ClientToScreen(self.surface.hwnd(), &mut at) };
-        let p = self.app.theme.palette;
+        let p = panel::palette_for(&self.app);
         let mut tokens = p.theme().tokens();
         // A popover over the window: the card fill, Studio's selected wash, no hairline in dark.
         tokens.material.tint = p.panel;
@@ -217,7 +229,11 @@ impl Studio {
                 self.app.dirty = true;
                 continue;
             }
-            self.app.event(event);
+            let accessibility = if let mypaper_ui::Event::Invoke(hit) = event {
+                self.surface.take_accessibility_action(hit).map(|action| (hit, action))
+            } else { None };
+            if let Some((hit, action)) = accessibility { panel::accessibility(&mut self.app, hit, action); }
+            else { self.app.event(event); }
             // An event may have opened or closed the live field: attach it to the window.
             self.sync_field();
             self.open_picker();
@@ -231,11 +247,14 @@ impl Studio {
 }
 
 fn run() -> Result<()> {
+    let panel_mode = panel::enabled();
+    let title = if panel_mode { panel::TITLE } else { TITLE };
     // SAFETY: a named mutex held (never closed) for the life of the process.
     unsafe {
-        let _mutex = CreateMutexW(None, true, w!("Local\\mypaper-studio")).context("mutex")?;
+        let name = if panel_mode { w!("Local\\mypaper-studio-panel") } else { w!("Local\\mypaper-studio") };
+        let _mutex = CreateMutexW(None, true, name).context("mutex")?;
         if GetLastError() == ERROR_ALREADY_EXISTS {
-            if let Ok(hwnd) = FindWindowW(w!("mypaper.ui.app"), &windows::core::HSTRING::from(TITLE)) {
+            if let Ok(hwnd) = FindWindowW(w!("mypaper.ui.app"), &windows::core::HSTRING::from(title)) {
                 let _ = ShowWindow(hwnd, SW_RESTORE);
                 let _ = SetForegroundWindow(hwnd);
             }
@@ -246,20 +265,28 @@ fn run() -> Result<()> {
     let mut ui = Ui::new()?;
     // Studio shows a few hundred labels at once: keep them all laid out.
     ui.text.set_capacity(480);
+    if panel_mode { ui.text.set_capacity(24); }
     // UI Automation loads on its first request rather than before the first paint.
-    let surface = Surface::new_deferred_accessibility(Kind::App { min: (960, 640) }, TITLE, Role::Window)?;
+    let min = if panel_mode { (360, 160) } else { (960, 640) };
+    let surface = Surface::new_deferred_accessibility(Kind::App { min }, title, Role::Window)?;
     let scale = surface.scale();
     // SAFETY: the calling thread's id.
     let thread = unsafe { GetCurrentThreadId() };
     let (tx, rx) = channel::<Msg>();
     let mut app = App::new(&ui.text, scale, (1280, 800));
+    if panel_mode { app.images.borrow_mut().set_budget(2 << 20); }
     app.window = Some(surface.hwnd());
     app.inbox = Some(tx.clone());
     app.thread = thread;
     app.images.borrow_mut().connect(tx.clone(), thread);
     surface.set_icon_png(include_bytes!("../assets/icon-32.png"));
-    let (bounds, maximized) = placement(&app, scale);
+    let (bounds, maximized) = if panel_mode { (panel::placement(&app), false) } else { placement(&app, scale) };
     surface.place(bounds);
+    if panel_mode {
+        panel::fit_client(&surface, bounds);
+        panel::round_window(surface.hwnd());
+        app.scale = surface.scale();
+    }
     let studio = Rc::new(RefCell::new(Studio { app, ui, surface, menu: None, picking: None, frame: None }));
     {
         let mut s = studio.borrow_mut();
@@ -285,7 +312,9 @@ fn run() -> Result<()> {
     let result = pump(&studio, &rx);
     mypaper_ui::set_modal_hook(None);
     let mut s = studio.borrow_mut();
-    remember_placement(&mut s);
+    if !panel_mode {
+        remember_placement(&mut s);
+    }
     peek::end(&mut s.app);
     result
 }

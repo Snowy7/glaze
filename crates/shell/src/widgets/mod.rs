@@ -176,6 +176,18 @@ pub struct Widgets {
     _bars_watcher: Option<FileWatch>,
     bars: BarsConfig,
     editing: bool,
+    studio_active: bool,
+    studio_faces: Option<(Instant, u64)>,
+    studio_lift: BTreeSet<String>,
+    studio_layout: Option<Layout>,
+    studio_skin: Option<look::Skin>,
+    studio_bars: Option<BarsConfig>,
+    studio_raw: Value,
+    studio_config_raw: Value,
+    studio_stamp: (Option<u64>, Option<u64>, u64, u64),
+    studio_applied: Instant,
+    studio_pending: bool,
+    studio_resize: Option<crate::studio_pick::resize::Preview>,
     drag: Option<Drag>,
     settling: BTreeMap<String, Settle>,
     ghost: Option<EditSurface>,
@@ -285,6 +297,18 @@ impl Widgets {
         holds.set(Fact::OnBattery, mypaper_desktop::on_battery());
         let skin = load_skin(&config);
         let mut widgets = Self {
+            studio_active: false,
+            studio_faces: None,
+            studio_lift: BTreeSet::new(),
+            studio_layout: None,
+            studio_skin: None,
+            studio_bars: None,
+            studio_raw: studio_raw(&path),
+            studio_config_raw: mypaper_config::path().ok().map_or_else(|| serde_json::json!({}), |p| studio_raw(&p)),
+            studio_stamp: (None, None, 0, 0),
+            studio_applied: Instant::now(),
+            studio_pending: false,
+            studio_resize: None,
             layout,
             layout_error,
             theme_path: None,
@@ -383,6 +407,7 @@ impl Widgets {
                 }
             }
             WM_EDIT => {
+                if self.studio_active { return; }
                 let on = mode(msg.lparam, self.editing);
                 self.set_editing(ui, on);
             }
@@ -413,6 +438,7 @@ impl Widgets {
                     {
                         log::warn!("widget migration: {e:#}");
                     }
+                    self.studio_raw = studio_raw(&self.path);
                     if layout != self.layout {
                         self.cancel_drag();
                         self.settling.clear();
@@ -454,6 +480,8 @@ impl Widgets {
     }
     fn follow_config(&mut self) {
         if let Ok(config) = Config::load() {
+            self.studio_stamp.0 = None;
+            if let Ok(path) = mypaper_config::path() { self.studio_config_raw = studio_raw(&path); }
             self.holds.apply(&config);
             if apply_style(&config) {
                 for entry in self.entries.values_mut() {
@@ -499,6 +527,111 @@ impl Widgets {
                 editing_text: e.model.field.is_some(),
             })
             .collect()
+    }
+
+    /// Transient Studio policy. No layout or widget storage is changed by selection.
+    pub fn studio_revision(&self) -> u64 { crate::studio_pick::wire::revision(&self.studio_raw) }
+
+    pub fn studio_preview(&mut self, ui: &mut Ui, preview: &mut crate::studio_pick::preview::Preview, resize: Option<&crate::studio_pick::resize::Preview>, warm: bool) {
+        use crate::studio_pick::wire::{self, Document};
+        if !preview.has(Document::Config) && !preview.has(Document::Widgets)
+            && self.studio_stamp.0.is_none() && self.studio_stamp.1.is_none()
+            && resize.is_none() && self.studio_resize.is_none() && !warm { return; }
+        let config_revision = wire::revision(&self.studio_config_raw);
+        let widget_revision = wire::revision(&self.studio_raw);
+        let config = preview.effective(Document::Config, config_revision)
+            .map(|(seq, ops)| (seq, ops.to_vec()));
+        let widgets = preview.effective(Document::Widgets, widget_revision);
+        let stamp = (config.as_ref().map(|v| v.0), widgets.map(|v| v.0), config_revision, widget_revision);
+        if self.studio_stamp == stamp && self.studio_resize.as_ref() == resize && !warm { return; }
+        if !warm && self.studio_applied.elapsed() < mypaper_ui::display_frame() {
+            self.studio_pending = true;
+            self.ticker.schedule(true);
+            return;
+        }
+        self.studio_pending = false;
+        self.studio_applied = Instant::now();
+        self.studio_stamp = stamp;
+        self.studio_resize = resize.cloned();
+        let config = config.and_then(|(_, ops)| wire::patched(&self.studio_config_raw, &ops))
+            .unwrap_or_else(|| self.studio_config_raw.clone());
+        if let Ok(config) = Config::parse(&config.to_string()) {
+            self.knobs = glass::knobs(&config.look, glass::Family::Widgets);
+            if apply_style(&config) {
+                for entry in self.entries.values_mut() {
+                    entry.model.dirty = true;
+                    entry.painted = false;
+                }
+            }
+        }
+        self.studio_layout = widgets.and_then(|(_, ops)| wire::patched(&self.studio_raw, ops))
+            .and_then(|raw| Layout::parse(&raw.to_string()).ok());
+        self.studio_skin = preview.snapshot_theme().map(|theme| {
+            let skin = theme.and_then(|theme| theme.theme.widgets.as_ref());
+            look::Skin {
+                appearance: skin.and_then(|skin| skin.appearance.clone()).unwrap_or_default(),
+                css: None,
+                glass: skin.and_then(|skin| skin.glass).unwrap_or_default(),
+            }
+        });
+        self.studio_bars = preview.snapshot_raw(Document::Bars)
+            .and_then(|raw| BarsConfig::parse(&raw.to_string()).ok());
+        if let Some(resize) = resize {
+            let layout = self.studio_layout.get_or_insert_with(|| self.layout.clone());
+            resize.apply(layout);
+        }
+        self.reconcile_needed = true;
+        self.poll(ui);
+    }
+
+    /// Transient Studio policy. No layout or widget storage is changed by selection.
+    pub fn studio_session(&mut self, ui: &mut Ui, active: bool, lifted: BTreeSet<String>) {
+        if self.studio_active == active && self.studio_lift == lifted { return; }
+        if active && self.editing { self.set_editing(ui, false); }
+        self.studio_active = active;
+        self.studio_lift = lifted;
+        for entry in self.entries.values() {
+            entry.surface.set_no_activate(active);
+            entry.surface.set_text_field(if active { None } else { entry.model.field.clone() });
+        }
+        self.reconcile_needed = true;
+        self.poll(ui);
+    }
+
+    pub fn studio_targets(&self) -> Vec<crate::studio_pick::Target> {
+        self.entries.values().filter(|e| e.model.visible).map(|e| {
+            let id = &e.model.placed.instance;
+            let label = self.registry.get(&e.model.placed.widget)
+                .map_or(e.model.placed.widget.as_str(), |w| w.manifest.name.as_str());
+            let screen = &self.monitors[e.monitor];
+            let resize = self.registry.get(&e.model.placed.widget).map(|w| crate::studio_pick::resize::Spec {
+                resizable: w.manifest.resizable,
+                grid: grid_for_bars(&self.layout, screen, &self.bars),
+                cell: e.model.placed.cell, size: e.model.placed.size,
+                saved_cell: self.layout.get(id).map_or(e.model.placed.cell, |i| i.cell),
+                saved_size: self.layout.get(id).map_or(e.model.placed.size, |i| i.size),
+                limits: w.manifest.size.clone(), origin: (screen.rect.x, screen.rect.y), scale: screen.dpi as f32 / 96.0,
+            });
+            crate::studio_pick::Target {
+                selection: crate::studio_pick::wire::Selection {
+                    kind: crate::studio_pick::wire::Kind::Widget,
+                    id: id.clone(), display: self.monitors[e.monitor].device.clone(),
+                },
+                label: label.into(), rect: e.rect,
+                radius: view::plate_radius(&e.model, e.rect, e.dpi_scale * e.tokens.scale),
+                topmost: e.topmost,
+                surface: e.surface.id(), body_selects: true,
+                resize,
+            }
+        }).collect()
+    }
+
+    /// The selected face can move from its empty area; its own buttons and fields keep input.
+    pub fn studio_move_surface(&self, surface: SurfaceId, point: mypaper_ui::Point) -> Option<&Surface> {
+        let entry = self.entries.values().find(|e| e.surface.id() == surface)?;
+        entry.surface.shown().hit_at(point)
+            .is_none_or(|hit| hit.id == view::BODY)
+            .then_some(&entry.surface)
     }
     #[allow(dead_code, reason = "live fixture diagnostics")]
     pub fn costs(&self) -> WorkCosts {
@@ -956,7 +1089,7 @@ impl Widgets {
         self.motion_frame = false;
         self.ticker.schedule(
             !self.held
-                && (self.drag.is_some()
+                && (self.studio_pending || self.drag.is_some()
                     || !self.settling.is_empty()
                     || self.entries.values().any(|e| {
                         e.model.visible
@@ -974,9 +1107,10 @@ impl Widgets {
         };
         let devices: Vec<_> = self.monitors.iter().map(|m| m.device.clone()).collect();
         let primary = self.monitors.iter().position(|m| m.primary).unwrap_or(0);
-        let mut constrained = self.layout.clone();
+        let mut effective = self.studio_layout.clone().unwrap_or_else(|| self.layout.clone());
+        let mut constrained = effective.clone();
         for monitor in &self.monitors {
-            let grid = grid_for_bars(&self.layout, monitor, &self.bars);
+            let grid = grid_for_bars(&effective, monitor, self.studio_bars.as_ref().unwrap_or(&self.bars));
             constrained.instances = edit::constrain(
                 &grid,
                 &constrained.instances,
@@ -984,11 +1118,11 @@ impl Widgets {
                 &self.registry,
             );
         }
-        if constrained != self.layout {
-            self.commit_layout(constrained);
+        if constrained != effective {
+            if self.studio_layout.is_none() { self.commit_layout(constrained.clone()); }
+            effective = constrained;
         }
-        let installed: BTreeSet<_> = self
-            .layout
+        let installed: BTreeSet<_> = effective
             .instances
             .iter()
             .map(|i| i.instance.clone())
@@ -1003,7 +1137,7 @@ impl Widgets {
             self.forget(&id);
             self.entries.remove(&id);
         }
-        for instance in &self.layout.instances {
+        for instance in &effective.instances {
             let Some(manifest) = self.registry.get(&instance.widget).map(|i| &i.manifest) else {
                 continue;
             };
@@ -1012,25 +1146,26 @@ impl Widgets {
             };
             let monitor = devices.iter().position(|d| d == device).unwrap();
             let screen = &self.monitors[monitor];
-            let grid = grid_for_bars(&self.layout, screen, &self.bars);
+            let grid = grid_for_bars(&effective, screen, self.studio_bars.as_ref().unwrap_or(&self.bars));
             let appearance = look::resolve(
                 &instance.appearance,
-                &self.layout.appearance,
-                &look::base(&self.skin),
+                &effective.appearance,
+                &look::base(self.studio_skin.as_ref().unwrap_or(&self.skin)),
                 self.accent,
             );
             let placed = layout::place(instance, manifest, &grid, &appearance);
             let rect = screen_rect(&grid, placed.cell, placed.size, screen);
             let overlay = manifest.preset == mypaper_widgets::manifest::Preset::Overlay;
-            let topmost = overlay && !self.editing;
+            let lifted = self.studio_active && self.studio_lift.contains(&instance.instance);
+            let topmost = (overlay && !self.editing) || lifted;
             let visible = manifest
                 .fit_size(instance.size.map(f64::from), [grid.cols, grid.rows])
                 .is_some()
                 && !self.hidden
-                && (self.editing
+                && (self.editing || lifted
                     || overlay
                     || !self.covered.get(monitor).copied().unwrap_or(false))
-                && (self.editing || self.layout.overlay || !overlay);
+                && (self.editing || effective.overlay || !overlay);
             if !self.entries.contains_key(&instance.instance) {
                 match Model::new(placed.clone(), &mut self.storage, now) {
                     Ok(mut model) => {
@@ -1069,6 +1204,7 @@ impl Widgets {
                 entry.model.dirty = true;
                 entry.painted = false;
             }
+            entry.surface.set_no_activate(self.studio_active);
             let was_visible = entry.model.visible;
             // Cell/size changes do not invalidate content, decoded art, or service subscriptions.
             let changed = entry.model.placed.widget != placed.widget
@@ -1709,7 +1845,7 @@ impl Widgets {
             }
             Event::Press(p, Button::Left) => {
                 let entry = self.entries.get_mut(&id).unwrap();
-                entry.surface.take_focus();
+                if !self.studio_active { entry.surface.take_focus(); }
                 let over = entry.surface.shown().hit_at(p.at).map(|h| h.id);
                 left_button(&mut entry.model.pressed, event, over, false);
                 // A click focuses nothing (rings are for the keyboard); a field keeps its own.
@@ -2150,6 +2286,8 @@ impl Widgets {
         let _ = ui;
     }
     fn open_field(&mut self, id: &str, index: Option<usize>) {
+        // The panel owns text input during desktop picking; ordinary widget buttons still run.
+        if self.studio_active { return; }
         self.finish_fields();
         let entry = self.entries.get_mut(id).unwrap();
         let m = &mut entry.model;
@@ -3280,14 +3418,25 @@ impl Widgets {
                     let a = &e.model.placed.appearance;
                     let surface = a.get("surface").and_then(Value::as_str).unwrap_or("glass");
                     if matches!(surface, "none" | "solid" | "tint") {
+                        e.surface.set_glass(None);
                         return None;
                     }
                     let material = plate_material(
                         &e.model.placed,
-                        &self.skin,
+                        self.studio_skin.as_ref().unwrap_or(&self.skin),
                         &self.knobs,
                         monitor.dpi as f32 / 96.0,
-                    )?;
+                    );
+                    // Lifted widgets use the same popup backdrop channel as bars and flyouts.
+                    // The desktop publisher keeps the HWND id, so the engine excludes doubles.
+                    e.surface.set_glass(if e.topmost {
+                        material.map(|material| mypaper_ui::Glass {
+                            body: Rect::new(0.0, 0.0, e.rect.width(), e.rect.height()),
+                            radius: view::plate_radius(&e.model, e.rect, e.dpi_scale * e.tokens.scale),
+                            material,
+                        })
+                    } else { None });
+                    let material = material?;
                     Some(Plate {
                         id: e.surface.hwnd().0 as usize as u64,
                         rect: e
@@ -3624,6 +3773,11 @@ fn finish_field(entry: &mut Entry, storage: &mut Storage) {
         log::error!("widget storage: {e:#}");
     }
 }
+fn studio_raw(path: &std::path::Path) -> Value {
+    std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_else(|| serde_json::json!({}))
+}
+
 /// A glass widget's plate material in physical px, or `None` in a style without glass (the view
 /// draws the body). The user's style (`theme::material`) at the widget's own default (Liquid's
 /// from the wallpaper's skin), under the user's controls (`config.json` › `look.widgets`, else
@@ -3751,7 +3905,7 @@ fn usable_for(monitor: &Monitor, bars: &BarsConfig) -> RectF {
         monitor.primary,
     )
 }
-fn usable_screen(monitor: &Monitor, bars: &BarsConfig) -> Rect {
+pub(crate) fn usable_screen(monitor: &Monitor, bars: &BarsConfig) -> Rect {
     let r = usable_for(monitor, bars);
     let s = monitor.dpi as f32 / 96.0;
     Rect::new(

@@ -281,6 +281,8 @@ pub fn text_field(
     let k = field_key(&id);
     let shown = if shown.is_empty() { app.text(&id) } else { shown };
     b.field(k, rect, glyph, placeholder, shown.is_empty() && live.is_none(), live.is_some(), label, Action::Field(id.clone()));
+    let value = live.and_then(|field| field.field.text().ok()).unwrap_or_else(|| shown.to_owned());
+    b.semantics(k, mypaper_ui::Semantics::Text(value.into()));
     let inner = b.field_inner(rect, glyph.is_some());
     match live {
         Some(f) => {
@@ -420,6 +422,10 @@ pub fn swatches(
     from_wallpaper: Option<Rgba>,
     presets: &[[u8; 3]],
 ) {
+    if app.panel.is_some() {
+        crate::panel::swatches(app, b, col, edit, current, from_wallpaper.is_some(), false, presets);
+        return;
+    }
     let p = *b.p;
     let d = b.px(24.0);
     let gap = b.px(8.0);

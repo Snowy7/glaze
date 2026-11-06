@@ -215,7 +215,7 @@ fn desktop(app: &App, b: &mut B, col: &mut Col) {
 }
 
 /// The icon packs: none (the style's), the bundled ones and your own folders.
-fn icon_pack(app: &App, b: &mut B, c: &mut Col) {
+pub(crate) fn icon_pack(app: &App, b: &mut B, c: &mut Col) {
     let current = app.get(DocId::Config, "/look/text/icon_pack").and_then(Value::as_str).map(str::to_owned);
     let mut options = vec![(Value::Null, "The style's icons".to_owned())];
     if let Ok(dir) = mypaper_config::dir() {
@@ -487,7 +487,7 @@ fn pointer_tile(b: &mut B, i: usize, pic: Rect) {
 }
 
 /// Look scoped to the wallpaper: the look the active wallpaper brings, edited in its own file.
-fn theme_scope(app: &App, b: &mut B, col: &mut Col) {
+pub(crate) fn theme_scope(app: &App, b: &mut B, col: &mut Col) {
     let Some(w) = app.library.active().map(|i| app.library.items[i].clone()) else { return };
     if !w.editable() {
         section(b, col, "", |b, c| {
@@ -616,12 +616,7 @@ pub fn run(app: &mut App, action: Action) {
         }
         Action::StageReal(real) => app.nav.stage_real = real,
         Action::SetStyle(style) => {
-            // A new style starts from its own material: the sliders' values reset.
-            let mut ops = vec![Op { doc: DocId::Config, path: "/look/style".into(), value: style.map(|s| json!(s)) }];
-            for field in ["clarity", "blur", "refraction", "highlight"] {
-                ops.push(Op { doc: DocId::Config, path: format!("/look/material/{field}"), value: None });
-            }
-            app.apply(&format!("{} style", style.map_or("Default", style_name)), ops);
+            app.apply(&format!("{} style", style.map_or("Default", style_name)), style_ops(style));
         }
         Action::WindowsLook(i) => {
             let preset: Value = serde_json::from_str(WINDOWS_LOOKS[i].1).unwrap_or_default();
@@ -641,6 +636,18 @@ pub fn run(app: &mut App, action: Action) {
         }
         _ => {}
     }
+}
+
+/// What picking a style writes. A new style starts from its own material and corners: the
+/// sliders and the corner radius reset, so the wallpaper's glass (or the style's) shows. The
+/// panel's desktop preview sends these same ops, so hovering a style shows what a click saves.
+pub(crate) fn style_ops(style: Option<Style>) -> Vec<Op> {
+    let mut ops = vec![Op { doc: DocId::Config, path: "/look/style".into(), value: style.map(|s| json!(s)) }];
+    for field in ["clarity", "blur", "refraction", "highlight"] {
+        ops.push(Op { doc: DocId::Config, path: format!("/look/material/{field}"), value: None });
+    }
+    ops.push(Op { doc: DocId::Config, path: "/look/shape/corners".into(), value: None });
+    ops
 }
 
 /// `null` for a Windows field means "As is" (keep Windows' own), which a plain Set can't say

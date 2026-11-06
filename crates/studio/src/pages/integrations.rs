@@ -94,7 +94,7 @@ pub static LIST: &[Integration] = &[
     },
 ];
 
-fn enabled(app: &App, i: &Integration) -> bool {
+pub(crate) fn enabled(app: &App, i: &Integration) -> bool {
     match i.section {
         Some(s) => app.get(DocId::Integrations, &format!("/{s}/enabled")).and_then(Value::as_bool).unwrap_or(i.builtin && s != "notifications"),
         None => true,

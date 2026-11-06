@@ -14,4 +14,5 @@ pub mod integrations;
 pub mod look;
 pub mod overlay_client;
 pub mod preview;
+pub mod studio_pick;
 pub mod widgets;

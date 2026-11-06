@@ -83,6 +83,7 @@
     },
     {
       "key": "drives",
+      "when": {"disk": [true]},
       "type": "string",
       "label": "Only these drives, e.g. C, D (empty: all)",
       "group": "Show",

@@ -10,7 +10,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 // The shell's modules are a library (`lib.rs`) so Studio can draw previews with them.
-use mypaper_shell::{bars, desktop_menu, flyouts, inbox, integrations, look, overlay_client, widgets};
+use mypaper_shell::{bars, desktop_menu, flyouts, inbox, integrations, look, overlay_client, studio_pick, widgets};
 
 mod wakes;
 mod game;
@@ -85,6 +85,7 @@ fn run() -> Result<()> {
         pending_widget_facts: Vec::new(),
         game_active: false,
         game_enabled: true,
+        studio: studio_pick::StudioPick::new()?,
     };
     shell.follow_config(&ui);
     shell.bars.tick(&mut ui);
@@ -140,6 +141,7 @@ fn run() -> Result<()> {
                 coalesced.map_or(INFINITE, |at| {
                     wait_ms(at.saturating_duration_since(Instant::now()))
                 }),
+                shell.studio.timeout_ms(),
             ]
             .into_iter()
             .zip(0..)
@@ -245,6 +247,7 @@ fn run() -> Result<()> {
             widgets_polled = at;
         }
         at = shell.drain(&mut ui, &mut wakes, at, poll_widgets);
+        shell.studio_tick(&mut ui);
         shell.bars.tick(&mut ui);
         wakes.spent("bars.tick", at);
         if widgets_pending {
@@ -318,6 +321,7 @@ fn wait_ms(duration: std::time::Duration) -> u32 {
 
 /// What the shell hosts.
 struct Shell {
+    studio: studio_pick::StudioPick,
     bars: bars::Bars,
     inbox: windows::Win32::Foundation::HWND,
     /// The desktop right-click menu, while `desktop_menu.enabled`.
@@ -344,6 +348,34 @@ impl Shell {
         // The desktop menu's low-level mouse hook need not see a game's input stream.
         self.follow_config(ui);
     }
+
+    fn studio_tick(&mut self, ui: &mut Ui) {
+        let mut targets = Vec::new();
+        if self.studio.active() {
+            targets = self.bars.studio_targets();
+            if let Some(widgets) = &self.widgets { targets.extend(widgets.studio_targets()); }
+        }
+        let revision = self.studio.active().then(|| self.widgets.as_ref().map(widgets::Widgets::studio_revision)).flatten();
+        let zones = if self.studio.active() {
+            self.bars.studio_zones()
+        } else {
+            Vec::new()
+        };
+        self.studio
+            .tick(ui, &targets, self.bars.config(), revision, zones);
+        let warm = self.studio.take_preview_warm();
+        if warm { self.bars.warm_studio_preview(); }
+        let (preview, module) = self.studio.bar_previews();
+        self.bars.studio_preview(preview, module);
+        self.bars.studio_session(self.studio.active());
+        if let Some(widgets) = &mut self.widgets {
+            let (preview, resize) = self.studio.previews();
+            widgets.studio_preview(ui, preview, resize, warm);
+            widgets.studio_session(ui, self.studio.active(), self.studio.lifted());
+        }
+        self.studio.wallpaper_preview(ui);
+    }
+
     /// Handles everything queued: inbox messages and input, in order, until both are empty.
     /// Handling one may call into Explorer and so let more arrive; they are handled here too.
     /// Adds the time each part took to `wakes`, from `at`; returns when it finished.
@@ -370,6 +402,23 @@ impl Shell {
                     }
                 }
             } else if let Some((id, event)) = next_event() {
+                if self.studio.active() {
+                    let point = match event {
+                        mypaper_ui::Event::Move(p) | mypaper_ui::Event::Press(p, _) => {
+                            Some(mypaper_ui::Point::new(p.screen.0 as f32, p.screen.1 as f32))
+                        }
+                        _ => None,
+                    };
+                    let target = self.widgets.as_ref()
+                        .and_then(|w| w.studio_targets().into_iter().find(|t| t.surface == id))
+                        .or_else(|| point.and_then(|p| self.bars.studio_hit(id, p)));
+                    let move_surface = match &event {
+                        mypaper_ui::Event::Press(p, mypaper_ui::Button::Left) => self.widgets.as_ref()
+                            .and_then(|w| w.studio_move_surface(id, p.at)),
+                        _ => None,
+                    };
+                    if self.studio.event(id, &event, target, move_surface) { continue; }
+                }
                 if self.flyouts.owns(id) {
                     self.flyouts.event(ui, &mut self.bars, id, &event);
                     continue;

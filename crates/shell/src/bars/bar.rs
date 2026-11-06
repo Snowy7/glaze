@@ -51,6 +51,12 @@ pub(super) fn total_repaints() -> u64 {
 }
 
 pub struct Bar {
+    studio_active: bool,
+    studio_base: Option<BarsConfig>,
+    studio_band: Option<DesktopRect>,
+    studio_reveal: Option<(Value, Option<Instant>)>,
+    /// A preview may show a normally disabled bar; it never owns a reservation.
+    pub(super) studio_only: bool,
     pub surface: Surface,
     pub kind: BarKind,
     pub config: BarsConfig,
@@ -174,6 +180,11 @@ impl Bar {
         let mut slide = Value::new(if autohide { 1.0 } else { 0.0 });
         slide.settings = slide_settings;
         let mut bar = Self {
+            studio_active: false,
+            studio_base: None,
+            studio_band: None,
+            studio_reveal: None,
+            studio_only: false,
             surface,
             kind,
             config,
@@ -253,6 +264,13 @@ impl Bar {
 
     pub fn scale(&self) -> f32 {
         self.monitor.dpi as f32 / 96.0 * self.tokens.scale
+    }
+
+    pub fn studio_session(&mut self, active: bool) {
+        self.studio_active = active;
+        self.surface.set_no_activate(active);
+        for island in &self.islands { island.set_no_activate(active); }
+        if let Some(edge) = &self.edge_surface { edge.set_no_activate(active); }
     }
     pub fn owns(&self, id: SurfaceId) -> bool {
         self.surface.id() == id || self.islands.iter().any(|s| s.id() == id)
@@ -362,6 +380,9 @@ impl Bar {
     /// reservation, repainted with the new content and material (the engine fades a plate's
     /// material change, since its id, the window, stays the same).
     pub fn restyle(&mut self, config: BarsConfig, tokens: Tokens, animate: bool) {
+        self.studio_base = None;
+        if let Some(band) = self.studio_band.take() { self.band = band; }
+        if let Some((slide, hide_at)) = self.studio_reveal.take() { self.slide = slide; self.hide_at = hide_at; }
         let motion = if self.kind == BarKind::Dock {
             &config.dock.animation
         } else {
@@ -397,11 +418,47 @@ impl Bar {
     pub fn horizontal(&self) -> bool {
         matches!(edge(self.kind, &self.config), Edge::Top | Edge::Bottom)
     }
+
+    /// Repaint transient geometry without changing the appbar reservation or saved config.
+    pub(super) fn durable_config(&self) -> &BarsConfig { self.studio_base.as_ref().unwrap_or(&self.config) }
+
+    pub(super) fn studio_appearance(&mut self, config: BarsConfig, tokens: Tokens, transient: bool) {
+        if transient {
+            self.studio_base.get_or_insert_with(|| self.config.clone());
+            self.studio_band.get_or_insert(self.band);
+            if self.studio_reveal.is_none() {
+                let mut shown = Value::new(0.0);
+                shown.settings = self.slide.settings;
+                self.studio_reveal = Some((std::mem::replace(&mut self.slide, shown), self.hide_at.take()));
+            }
+            let thickness = if self.kind == BarKind::Top { config.top.band() } else { config.dock.band() };
+            self.band = appbar::settle(self.monitor.rect, edge(self.kind, &config),
+                (thickness as f32 * self.monitor.dpi as f32 / 96.0 * tokens.scale).round() as i32);
+        } else {
+            self.studio_base = None;
+            if let Some(band) = self.studio_band.take() { self.band = band; }
+            if let Some((slide, hide_at)) = self.studio_reveal.take() { self.slide = slide; self.hide_at = hide_at; }
+        }
+        self.config = config;
+        self.tokens = tokens;
+        self.dirty = true;
+        self.presentation_dirty = true;
+        self.zoom_due = true;
+    }
     pub fn shows_content(&self) -> bool {
-        !self.hidden && self.slide.value < 0.999
+        !self.hidden && self.enabled() && self.slide.value < 0.999
+    }
+    fn enabled(&self) -> bool {
+        self.studio_base.is_none() && !self.studio_only
+            || if self.kind == BarKind::Top { self.config.top.enabled } else { self.config.dock.enabled }
     }
     pub fn topics(&self) -> std::collections::BTreeSet<mypaper_bars::actions::Topic> {
-        bar_topics(self.kind, &self.config)
+        let mut topics = bar_topics(self.kind, &self.config);
+        topics.extend(
+            super::visible_modules(self.kind, &self.config)
+                .filter_map(mypaper_bars::actions::module_topic),
+        );
+        topics
     }
     pub fn hide_when_maximized(&self) -> bool {
         match self.kind {
@@ -415,6 +472,7 @@ impl Bar {
     /// A visibility transition changes only this reservation. Explorer resizes maximized apps;
     /// restored windows keep their positions (no global work-area setter or window enumeration).
     pub fn tick_maximized(&mut self, now: Instant) -> Result<()> {
+        if self.studio_only || self.studio_base.is_some() { return Ok(()); }
         if let Some(hidden) = self.maximized.take_due(now) {
             if hidden && self.edge_surface.is_none() {
                 self.edge_surface = Some(Surface::new_deferred_accessibility(
@@ -435,6 +493,7 @@ impl Bar {
         Ok(())
     }
     pub fn reserve(&mut self) {
+        if self.studio_only || self.studio_base.is_some() { return; }
         if self.reservation.is_none() && !self.auto_hides() {
             self.reservation = Reservation::new(edge(self.kind, &self.config))
                 .inspect_err(|e| log::error!("app-bar reservation: {e:#}"))
@@ -587,7 +646,7 @@ impl Bar {
         now: Instant,
         keep_open: bool,
     ) -> Result<bool> {
-        if self.hidden {
+        if self.hidden || !self.enabled() {
             if self.reveal_snapshots.iter().any(Option::is_some) {
                 self.surface.release();
                 for island in &mut self.islands {
@@ -606,6 +665,9 @@ impl Bar {
             return Ok(false);
         }
         let first_paint = self.redraws == 0;
+        if self.studio_base.is_some() {
+            self.slide.target(0.0, false, now);
+        }
         if self.hide_at.is_some_and(|t| t <= now) {
             self.hide_at = if keep_open {
                 Some(now + Duration::from_secs(1))
@@ -815,6 +877,7 @@ impl Bar {
             } else {
                 &mut self.islands[i - 1]
             };
+            surface.set_no_activate(self.studio_active);
             surface.set_click_activates(
                 self.frame
                     .list
@@ -975,7 +1038,7 @@ impl Bar {
     }
 
     pub fn plates(&self) -> Vec<Plate> {
-        if self.hidden || self.slide.value >= 0.999 {
+        if !self.shows_content() {
             return vec![];
         }
         let Some(material) = self.material() else {
@@ -1027,6 +1090,30 @@ mod tests {
     use mypaper_ui::glass::{Backdrop, Shape};
     use windows::Win32::Foundation::HWND;
     struct Available;
+
+    #[test]
+    fn studio_preview_restores_auto_hide_and_keeps_reservations_untouched() {
+        let config = BarsConfig::parse(r#"{"preset":"macos","dock":{"enabled":true,"autohide":true}}"#).unwrap();
+        let tokens = Tokens::resolve(&config.dock.look, &Default::default(), &mypaper_bars::accent::read());
+        let monitor = Monitor {
+            device: "test".into(), dpi: 96, primary: true,
+            rect: DesktopRect { x: 0, y: 0, width: 1280, height: 720 },
+            work: DesktopRect { x: 0, y: 32, width: 1280, height: 688 },
+        };
+        let mut bar = Bar::new(BarKind::Dock, config.clone(), monitor, tokens.clone(), false).unwrap();
+        let original_band = bar.band;
+        assert_eq!(bar.slide.value, 1.0);
+        let preview = BarsConfig::parse(r#"{"preset":"windows11"}"#).unwrap();
+        bar.studio_appearance(preview, tokens.clone(), true);
+        assert_eq!(bar.slide.value, 0.0);
+        bar.reserve();
+        assert!(bar.reservation.is_none());
+        assert!(bar.studio_reveal.is_some());
+        bar.studio_appearance(config, tokens, false);
+        assert_eq!(bar.band, original_band);
+        assert_eq!(bar.slide.value, 1.0);
+        assert!(bar.reservation.is_none());
+    }
     impl Backdrop for Available {
         fn available(&self) -> bool {
             true

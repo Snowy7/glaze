@@ -1,7 +1,5 @@
-//! First run (D6): "Make this desktop yours" — four starters, each a whole desktop (a style, a
-//! wallpaper, a bars preset and a few widgets), applied to the real desktop as you pick; then
-//! the taskbar choice; then Start with Windows and the emergency keys. Every step can be
-//! skipped, and each pick is one undo step. Also reachable later from the palette.
+//! First run: taskbar first, then a starter desktop drawn with that choice, then startup
+//! and the emergency keys. Each pick applies live as one undo step. Reachable from the palette.
 
 use mypaper_ui::controls::{Align, ButtonKind, Font, key};
 use mypaper_ui::{Rect, Rgba, Role};
@@ -28,6 +26,17 @@ const STARTERS: [Starter; 4] = [
     Starter { name: "Quiet", line: "Mono, just a top bar", style: "mono", wallpaper: "snowfall", preset: "monochrome", widgets: &[] },
 ];
 
+/// Share starter metadata and the native desktop drawing with the compact panel.
+pub(crate) fn panel_starters() -> Vec<(&'static str, &'static str)> { STARTERS.iter().map(|s| (s.name, s.line)).collect() }
+pub(crate) fn panel_starter_tile(app: &App, b: &mut B, index: usize, rect: Rect) {
+    if let Some(starter) = STARTERS.get(index) { starter_tile(app, b, starter, rect, b.p.panel); }
+}
+
+/// Read-only starter data for the panel's software desktop specimens.
+pub(crate) fn panel_starter(index: usize) -> Option<(&'static str, &'static str, &'static [(&'static str, [u32; 2])])> {
+    STARTERS.get(index).map(|s| (s.wallpaper, s.preset, s.widgets))
+}
+
 pub fn view(app: &App, b: &mut B) {
     let p = *b.p;
     let Some(Overlay::FirstRun { step, starter, taskbar }) = app.overlay else { return };
@@ -49,8 +58,8 @@ pub fn view(app: &App, b: &mut B) {
     let display = b.font(Font::Display);
     let body = b.font(Font::Body);
     let (title, line) = match step {
-        0 => ("Make this desktop yours", "Pick a starting point. It shows on your desktop as you choose, and you can change everything later."),
-        1 => ("Your taskbar", "mypaper's bars can replace it, sit beside it, or stay out of the way."),
+        1 => ("Make this desktop yours", "Pick a starting point. It shows on your desktop as you choose, and you can change everything later."),
+        0 => ("Your taskbar", "mypaper's bars can replace it, sit beside it, or stay out of the way."),
         _ => ("You're set", "mypaper is running. Studio is where everything changes."),
     };
     b.text_in(Rect::new(0.0, y, w, b.px(40.0)), title, &display, p.ink1, Align::Center);
@@ -58,7 +67,7 @@ pub fn view(app: &App, b: &mut B) {
     b.text_in(Rect::new(0.0, y, w, b.px(20.0)), line, &body, p.ink3, Align::Center);
     y += b.px(42.0);
     match step {
-        0 => {
+        1 => {
             let gap = b.px(14.0);
             let tw = (content_w - gap * 3.0) / 4.0;
             let th = tw * 10.0 / 16.0;
@@ -87,7 +96,7 @@ pub fn view(app: &App, b: &mut B) {
             });
             y += th + b.px(76.0);
         }
-        1 => {
+        0 => {
             let options = [
                 ("Replace it with mypaper's bars", "The Windows taskbar hides; your bars take its place"),
                 ("Keep Windows' taskbar", "Add widgets only"),
@@ -171,7 +180,8 @@ fn starter_tile(app: &App, b: &mut B, s: &Starter, pic: Rect, behind: Rgba) {
             b.stroke(r, radius, 1.0, rim);
         }
     };
-    match s.preset {
+    let taskbar = match app.overlay { Some(Overlay::FirstRun { taskbar, .. }) => taskbar, _ => 0 };
+    if taskbar == 0 { match s.preset {
         "windows11" => glass(Rect::new(pic.left, pic.bottom - h * 0.11, w, h * 0.11), 0.0),
         _ => {
             glass(Rect::new(pic.left + w * 0.04, pic.top + h * 0.05, w * 0.92, h * 0.08), 4.0);
@@ -180,6 +190,10 @@ fn starter_tile(app: &App, b: &mut B, s: &Starter, pic: Rect, behind: Rgba) {
             }
         }
     }
+    } else if taskbar == 1 {
+        glass(Rect::new(pic.left, pic.bottom - h * 0.12, w, h * 0.12), 0.0);
+    }
+    if taskbar == 2 || s.widgets.is_empty() { return; }
     let card = Rect::new(pic.left + w * 0.06, pic.top + h * 0.2, w * 0.28, h * 0.24);
     glass(card, 6.0);
     let mut font = b.font(Font::Body).scaled(15.0 / 14.0);
@@ -191,6 +205,10 @@ fn starter_tile(app: &App, b: &mut B, s: &Starter, pic: Rect, behind: Rgba) {
 }
 
 pub fn run(app: &mut App, action: Action) {
+    if app.panel.is_some() {
+        crate::panel::run_first_run(app, action);
+        return;
+    }
     let Some(Overlay::FirstRun { step, starter, taskbar }) = app.overlay.clone() else {
         if let Action::FirstRunPick(_) = action {
             app.overlay = Some(Overlay::FirstRun { step: 0, starter: 0, taskbar: 0 });
@@ -200,29 +218,15 @@ pub fn run(app: &mut App, action: Action) {
     match action {
         Action::FirstRunPick(i) if i < STARTERS.len() => {
             app.overlay = Some(Overlay::FirstRun { step, starter: i, taskbar });
-            apply(app, &STARTERS[i]);
+            apply(app, &STARTERS[i], taskbar);
         }
-        Action::FirstRunTaskbar(i) => {
+        Action::FirstRunTaskbar(i) if i < 3 => {
             app.overlay = Some(Overlay::FirstRun { step, starter, taskbar: i });
-            let ops = match i {
-                0 => vec![Op { doc: DocId::Bars, path: "/taskbar/mode".into(), value: Some(json!("hide")) }],
-                1 => vec![
-                    Op { doc: DocId::Bars, path: "/taskbar/mode".into(), value: Some(json!("keep")) },
-                    Op { doc: DocId::Bars, path: "/top/enabled".into(), value: Some(json!(false)) },
-                    Op { doc: DocId::Bars, path: "/dock/enabled".into(), value: Some(json!(false)) },
-                ],
-                _ => vec![
-                    Op { doc: DocId::Bars, path: "/taskbar/mode".into(), value: Some(json!("hide")) },
-                    Op { doc: DocId::Bars, path: "/top/enabled".into(), value: Some(json!(false)) },
-                    Op { doc: DocId::Bars, path: "/dock/enabled".into(), value: Some(json!(false)) },
-                    Op { doc: DocId::Widgets, path: "/instances".into(), value: Some(json!([])) },
-                ],
-            };
-            app.apply("Your taskbar", ops);
+            apply(app, &STARTERS[starter], i);
         }
         Action::FirstRunNext => {
-            if step == 0 && !app.docs.can_undo() {
-                apply(app, &STARTERS[starter]);
+            if step == 1 {
+                apply(app, &STARTERS[starter], taskbar);
             }
             if step >= 2 {
                 finish(app);
@@ -241,13 +245,14 @@ fn finish(app: &mut App) {
 }
 
 /// Applies a starter to the real desktop: one undoable step.
-fn apply(app: &mut App, s: &Starter) {
+fn apply(app: &mut App, s: &Starter, taskbar: usize) {
     let monitor = app.display().map_or_else(String::new, |m| m.device.clone());
     let widgets: Vec<Value> = {
         let mut row = 0u32;
         s.widgets
             .iter()
             .enumerate()
+            .filter(|_| taskbar != 2)
             .map(|(i, (id, size))| {
                 let v = json!({ "instance": format!("{id}-{}", i + 1), "widget": id, "monitor": monitor, "cell": [20, row], "size": size });
                 row += size[1];
@@ -269,6 +274,12 @@ fn apply(app: &mut App, s: &Starter) {
     if s.preset == "macos" || s.preset == "islands" {
         ops.push(Op { doc: DocId::Bars, path: "/dock/enabled".into(), value: Some(json!(true)) });
     }
+    if taskbar != 0 {
+        for bar in ["top", "dock"] {
+            ops.push(Op { doc: DocId::Bars, path: format!("/{bar}/enabled"), value: Some(json!(false)) });
+        }
+    }
+    ops.push(Op { doc: DocId::Bars, path: "/taskbar/mode".into(), value: Some(json!(if taskbar == 1 { "keep" } else { "hide" })) });
     if let Some(theme) = theme {
         ops.push(Op { doc: DocId::Config, path: "/theme".into(), value: Some(json!(theme)) });
     }

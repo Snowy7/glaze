@@ -53,6 +53,7 @@
     },
     {
       "key": "weekNumbers",
+      "faces": ["month"],
       "type": "boolean",
       "label": "Week numbers",
       "group": "Calendar",

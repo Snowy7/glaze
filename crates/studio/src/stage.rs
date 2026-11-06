@@ -108,6 +108,32 @@ pub struct Cache {
 }
 
 impl Cache {
+    /// Release page pictures while keeping the process-lived native icon worker.
+    /// Recreating its COM apartment on every page also recreates shell provider resources.
+    pub(crate) fn clear_pictures(&mut self) {
+        self.key = 0;
+        self.content = Content::default();
+        self.designs = Designs::default();
+        self.images = None;
+    }
+
+    /// Share the existing asynchronous shell icon worker with the panel's app lists.
+    pub(crate) fn app_icon(&mut self, thread: u32, source: mypaper_bars::icons::Source) -> Option<PathBuf> {
+        // Studio only needs the picture here, not a shell item's display name or launch
+        // metadata. A warm PNG must not load a native shell provider just to rediscover it.
+        if let mypaper_bars::icons::Source::Path(path) = &source {
+            let cached = mypaper_bars::files::local("icons").ok()?
+                .join(mypaper_bars::icons::cache_name(&path.to_lowercase()));
+            if cached.is_file() { return Some(cached); }
+        }
+        if self.icons.is_none() && thread != 0 {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let dir = mypaper_bars::files::local("icons").ok()?;
+            self.icons = Some((mypaper_bars::icons::Icons::new(mypaper_bars::wake::Waker::new(tx, thread), dir), rx));
+        }
+        self.icons.as_mut()?.0.get(&source)?.icon.as_ref().map(PathBuf::from)
+    }
+
     /// Takes what the icon service found; returns whether the stage must be rebuilt.
     pub fn icons_arrived(&mut self) -> bool {
         let Some((icons, rx)) = &mut self.icons else { return false };

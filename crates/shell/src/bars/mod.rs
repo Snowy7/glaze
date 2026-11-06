@@ -10,6 +10,7 @@ mod preview;
 pub(crate) mod services;
 mod sprites;
 mod styling;
+mod studio_labels;
 #[cfg(test)]
 mod tests;
 mod tray_menu;
@@ -41,6 +42,14 @@ use std::{
     time::{Duration, Instant},
 };
 use view::Target;
+
+/// Floating docks expose only explicitly configured modules, sharing the view's rule.
+fn visible_modules(kind: BarKind, config: &BarsConfig) -> impl Iterator<Item = &ModuleRef> {
+    let top = (kind == BarKind::Top).then(|| config.top.modules());
+    let dock =
+        (kind == BarKind::Dock).then(|| view::dock_module_lists(config).into_iter().flatten());
+    top.into_iter().flatten().chain(dock.into_iter().flatten())
+}
 use windows::Win32::{
     Foundation::HANDLE,
     UI::{
@@ -68,6 +77,14 @@ struct Press {
 }
 
 pub struct Bars {
+    studio_active: bool,
+    studio_config: Option<BarsConfig>,
+    studio_theme: Option<Option<LoadedTheme>>,
+    studio_image_root: Option<std::path::PathBuf>,
+    studio_stamp: (Option<u64>, u64, Option<u64>),
+    studio_dock_pending: bool,
+    studio_dock_applied: Instant,
+    studio_frame: Duration,
     bars: Vec<Bar>,
     monitors: Vec<Monitor>,
     services: Services,
@@ -140,6 +157,14 @@ impl Bars {
         let services = Services::new()?;
         startup::ready("shell", "services_ms");
         let mut bars = Self {
+            studio_active: false,
+            studio_config: None,
+            studio_theme: None,
+            studio_image_root: None,
+            studio_stamp: (None, 0, None),
+            studio_dock_pending: false,
+            studio_dock_applied: Instant::now(),
+            studio_frame: mypaper_ui::display_frame(),
             bars: vec![],
             monitors: vec![],
             services,
@@ -606,6 +631,7 @@ impl Bars {
             self.show_preview(ui, index, &key);
         }
         at = tick_spent("preview", at);
+        for bar in &mut self.bars { bar.studio_session(self.studio_active); }
         if let Err(e) = self.paint(ui, now) {
             log::error!("painting bars: {e:#}");
         }
@@ -755,6 +781,57 @@ impl Bars {
     }
 
     fn paint(&mut self, ui: &mut Ui, now: Instant) -> Result<()> {
+        if self.studio_dock_pending && now.saturating_duration_since(self.studio_dock_applied) >= self.studio_frame {
+            if self.studio_config.is_none() {
+                self.bars.retain(|bar| !bar.studio_only);
+            }
+            let effective = self.studio_config.as_ref().unwrap_or(&self.config);
+            let appearance = self.studio_theme.as_ref().map(|theme| look::theme_appearance(theme.as_ref()))
+                .unwrap_or_else(|| self.appearance.clone());
+            let theme_glass = self.studio_theme.as_ref().map(|theme| theme.as_ref()
+                .and_then(|t| t.theme.bars.as_ref()).and_then(|s| s.glass)).unwrap_or(self.theme_glass);
+            if self.studio_config.is_some() {
+                for monitor in &self.monitors {
+                    let mut config = effective.for_monitor(&monitor.device, monitor.primary)?;
+                    config.resolve(services::default_pins);
+                    for kind in [BarKind::Top, BarKind::Dock] {
+                        let (enabled, included) = match kind {
+                            BarKind::Top => (config.top.enabled, config.top.monitors.includes(&monitor.device, monitor.primary)),
+                            BarKind::Dock => (config.dock.enabled, config.dock.monitors.includes(&monitor.device, monitor.primary)),
+                        };
+                        if !enabled || !included || self.bars.iter().any(|b| b.kind == kind && b.monitor.device == monitor.device) { continue; }
+                        let mut bar = Bar::new(kind, config.clone(), monitor.clone(), look::Tokens::resolve(
+                            if kind == BarKind::Top { &config.top.look } else { &config.dock.look },
+                            &config.appearance.over(&appearance), &self.system), false)?;
+                        bar.studio_only = true;
+                        bar.studio_session(self.studio_active);
+                        bar.hidden = self.asleep || self.fullscreen.as_deref() == Some(&monitor.device);
+                        if kind == BarKind::Dock {
+                            bar.items = self.services.dock_items(&config, providers::apps::window_monitor(bar.surface.hwnd()));
+                        }
+                        self.bars.push(bar);
+                    }
+                }
+            }
+            for bar in &mut self.bars {
+                let mut config = effective.for_monitor(&bar.monitor.device, bar.monitor.primary)?;
+                config.resolve(services::default_pins);
+                let key = if bar.kind == BarKind::Top { "top" } else { "dock" };
+                let mut appearance = config.appearance.over(&appearance);
+                let mut look = if bar.kind == BarKind::Top { config.top.look.clone() } else { config.dock.look.clone() };
+                look::appearance_layer(&config, key, &mut look, &appearance);
+                look::glass_layer(&config, key, &mut look, theme_glass);
+                let colors = plugin_style::patch_look(if bar.kind == BarKind::Top { "top-bar" } else { "dock" }, key, effective.raw(), &mut look, &mut appearance);
+                let mut tokens = look::Tokens::resolve(&look, &appearance, &self.system);
+                plugin_style::colors(&colors, effective.raw(), &mut tokens.theme.color);
+                tokens.cache_config(&look, &config);
+                if config.performance.active(mypaper_desktop::on_battery()) { tokens.material = None; }
+                bar.studio_appearance(config, tokens, self.studio_config.is_some());
+            }
+            // No reservation or config file changes during preview; only shell-owned pixels.
+            self.studio_dock_pending = false;
+            self.studio_dock_applied = now;
+        }
         let menu = self.menu.as_ref().is_some_and(Menu::is_open) || self.preview.is_some();
         let before: std::collections::HashSet<_> = self
             .bars
@@ -762,14 +839,14 @@ impl Bars {
             .filter(|b| b.shows_content())
             .map(|b| b.surface.id())
             .collect();
-        let mut moving = false;
+        let mut moving = self.studio_dock_pending;
         for b in &mut self.bars {
             moving |= b.paint(
                 ui,
                 &self.services.model,
                 &mut self.images,
                 now,
-                menu || self.press.is_some(),
+                menu || self.press.is_some() || self.studio_config.is_some(),
             )?;
         }
         if let Some(at) = self.tooltip_fade
@@ -848,6 +925,197 @@ impl Bars {
             .filter(|b| b.monitor.device == monitor.device)
             .flat_map(Bar::plates)
             .collect()
+    }
+
+    pub fn studio_session(&mut self, active: bool) {
+        self.studio_active = active;
+        for bar in &mut self.bars { bar.studio_session(active); }
+    }
+
+    pub fn studio_preview(
+        &mut self,
+        preview: &mut crate::studio_pick::preview::Preview,
+        module: Option<&crate::studio_pick::module_drag::Preview>,
+    ) {
+        use crate::studio_pick::wire::{self, Document};
+        if !preview.has(Document::Bars)
+            && module.is_none()
+            && self.studio_stamp.0.is_none()
+            && self.studio_stamp.2.is_none()
+        {
+            return;
+        }
+        let raw = serde_json::Value::Object(self.config.raw().clone());
+        let revision = wire::revision(&raw);
+        let value = preview.effective(Document::Bars, revision);
+        let module = module.filter(|p| p.current(revision));
+        let stamp = (
+            value.map(|v| v.0),
+            revision,
+            module.map(|p| wire::revision(&p.ops)),
+        );
+        if self.studio_stamp == stamp { return; }
+        self.studio_stamp = stamp;
+        self.studio_config = module
+            .map(|p| p.ops.as_slice())
+            .or_else(|| value.map(|(_, ops)| ops))
+            .and_then(|ops| Self::studio_preview_config(&self.config, ops));
+        self.studio_theme = preview.snapshot_theme().map(|theme| theme.cloned());
+        if let Some(theme) = &self.studio_theme {
+            self.studio_image_root.get_or_insert_with(|| self.images.theme.clone());
+            let config = self.studio_config.as_ref().unwrap_or(&self.config);
+            self.images.configure(config.icons.as_deref(), theme.as_ref().map(|t| t.dir.clone()).unwrap_or_default());
+        } else if let Some(dir) = self.studio_image_root.take() {
+            self.images.configure(self.config.icons.as_deref(), dir);
+        }
+        self.studio_dock_pending = true;
+    }
+
+    /// Exercise parsing, projection and painting before the first slider sample arrives.
+    pub fn warm_studio_preview(&mut self) {
+        let _ = Self::studio_preview_config(&self.config, &[]);
+        self.studio_dock_pending = true;
+    }
+
+    /// Resolve the same layers and per-display overrides as the eventual durable save.
+    fn studio_preview_config(config: &BarsConfig, ops: &[crate::studio_pick::wire::PreviewOp]) -> Option<BarsConfig> {
+        let raw = crate::studio_pick::wire::patched(&serde_json::Value::Object(config.raw().clone()), ops)?;
+        let mut config = BarsConfig::parse(&serde_json::to_string(&raw).ok()?).ok()?;
+        config.resolve(services::default_pins);
+        Some(config)
+    }
+
+    pub fn studio_targets(&self) -> Vec<crate::studio_pick::Target> {
+        use crate::studio_pick::{Target as PickTarget, wire::{Kind, Selection}};
+        let mut result = Vec::new();
+        for bar in self.bars.iter().filter(|b| b.shows_content()) {
+            let key = if bar.kind == BarKind::Top { "top" } else { "dock" };
+            let origin = bar.origin();
+            let make = |kind, id, label, rect, radius, body_selects| PickTarget {
+                selection: Selection { kind, id, display: bar.monitor.device.clone() },
+                label, rect, radius, topmost: true, surface: bar.surface.id(), body_selects, resize: None,
+            };
+            for (rect, radius) in &bar.frame.shapes {
+                result.push(make(Kind::Bar, key.into(), if key == "top" { "Top bar" } else { "Dock" }.into(),
+                    rect.offset(origin.0 as f32, origin.1 as f32), *radius, true));
+            }
+            for hit in &bar.frame.list.hits {
+                let Some(target) = bar.frame.targets.get(hit.id as usize - 1) else { continue };
+                let module = match target {
+                    Target::Module(module) => Some(module.clone()),
+                    Target::Workspace(_) => Some(ModuleRef::Builtin(Module::Workspaces)),
+                    Target::Tray(_) => Some(ModuleRef::Builtin(Module::Tray)),
+                    _ => None,
+                };
+                let Some(module) = module else { continue };
+                let lists: Vec<(&str, &[ModuleRef])> = if bar.kind == BarKind::Top {
+                    vec![("left", &bar.config.top.left), ("center", &bar.config.top.center), ("right", &bar.config.top.right)]
+                } else { vec![("left", &bar.config.dock.left), ("right", &bar.config.dock.right)] };
+                let occurrence = bar.frame.targets[..(hit.id as usize - 1)].iter()
+                    .filter(|t| matches!(t, Target::Module(m) if *m == module)).count();
+                let Some((list, index)) = lists.into_iter().flat_map(|(list, modules)| {
+                    modules.iter().enumerate().filter(|(_, m)| **m == module).map(move |(i, _)| (list, i))
+                }).nth(occurrence) else { continue };
+                let label = studio_labels::label(&module, &bar.config, bar.tokens.family == Family::Fluent);
+                result.push(make(Kind::Module, format!("{key}/{list}/{index}"), label,
+                    hit.rect.offset(origin.0 as f32, origin.1 as f32), 4.0 * bar.scale(), false));
+            }
+        }
+        result
+    }
+
+    /// Frozen hit regions keep insertion targets stable while the module itself previews.
+    pub fn studio_zones(&self) -> Vec<crate::studio_pick::module_drag::Zone> {
+        use crate::studio_pick::{
+            module_drag::{Slot, Zone},
+            wire::Kind,
+        };
+        let targets = self.studio_targets();
+        let mut result = Vec::new();
+        for bar in self.bars.iter().filter(|b| b.shows_content()) {
+            let key = if bar.kind == BarKind::Top {
+                "top"
+            } else {
+                "dock"
+            };
+            let horizontal = bar.horizontal();
+            let origin = bar.origin();
+            let size = bar.surface.client_size();
+            let full = mypaper_ui::Rect::new(
+                origin.0 as f32,
+                origin.1 as f32,
+                size.0 as f32,
+                size.1 as f32,
+            );
+            let names: &[&str] = if key == "top" {
+                &["left", "center", "right"]
+            } else {
+                &["left", "right"]
+            };
+            for (i, name) in names.iter().enumerate() {
+                let rect = if horizontal {
+                    mypaper_ui::Rect::new(
+                        full.left + full.width() * i as f32 / names.len() as f32,
+                        full.top,
+                        full.width() / names.len() as f32,
+                        full.height(),
+                    )
+                } else {
+                    mypaper_ui::Rect::new(
+                        full.left,
+                        full.top + full.height() * i as f32 / names.len() as f32,
+                        full.width(),
+                        full.height() / names.len() as f32,
+                    )
+                };
+                let mut items: Vec<_> = targets
+                    .iter()
+                    .filter(|t| {
+                        t.selection.kind == Kind::Module
+                            && t.selection.display == bar.monitor.device
+                    })
+                    .filter_map(|t| {
+                        let slot = Slot::parse(&t.selection.id)?;
+                        (slot.bar == key && slot.zone == *name).then_some((slot.index, t.rect))
+                    })
+                    .collect();
+                items.sort_by_key(|(index, _)| *index);
+                items.dedup_by_key(|(index, _)| *index);
+                let len = if key == "top" {
+                    match *name {
+                        "left" => bar.config.top.left.len(),
+                        "center" => bar.config.top.center.len(),
+                        _ => bar.config.top.right.len(),
+                    }
+                } else {
+                    view::dock_module_lists(&bar.config)[i].len()
+                };
+                result.push(Zone {
+                    display: bar.monitor.device.clone(),
+                    bar: key.into(),
+                    zone: (*name).into(),
+                    rect,
+                    horizontal,
+                    items,
+                    len,
+                });
+            }
+        }
+        result
+    }
+
+    /// Screen hit geometry also covers separate island HWNDs.
+    pub fn studio_hit(&self, surface: SurfaceId, point: Point) -> Option<crate::studio_pick::Target> {
+        let bar = self.bars.iter().find(|bar| bar.owns(surface))?;
+        let targets = self.studio_targets();
+        let mut target = targets.into_iter().rev().find(|t| t.surface == bar.surface.id() && t.rect.contains(point))?;
+        let origin = bar.origin();
+        if target.selection.kind == crate::studio_pick::wire::Kind::Bar
+            && bar.frame.target(Point::new(point.x - origin.0 as f32, point.y - origin.1 as f32)).is_some() {
+            target.body_selects = false;
+        }
+        target.surface = surface;
+        Some(target)
     }
 
     pub fn event(&mut self, ui: &mut Ui, id: SurfaceId, event: &Event) {
@@ -1628,6 +1896,7 @@ impl Bars {
     /// flash. Only bars whose geometry changed are dropped (first, freeing their band) and built
     /// again, and only then do the bars reserve again.
     fn reconcile(&mut self, ui: &mut Ui) -> Result<()> {
+        self.bars.retain(|bar| !bar.studio_only);
         plugin_modules::place(&self.config);
         self.press = None;
         self.preview = None;
@@ -1755,7 +2024,7 @@ impl Bars {
                 let geometry = Bar::geometry(*kind, config, monitor);
                 old.iter()
                     .position(|b| {
-                        Bar::geometry(b.kind, &b.config, &b.monitor) == geometry
+                        Bar::geometry(b.kind, b.durable_config(), &b.monitor) == geometry
                             && b.tokens.scale == tokens.scale
                     })
                     .map(|i| old.swap_remove(i))
@@ -1811,10 +2080,12 @@ impl Bars {
             self.schedule_reservations();
         }
         self.update_items();
+        // Reconciliation always reserves durable geometry, then previews only owned pixels.
+        self.studio_dock_pending |= self.studio_config.is_some();
         Ok(())
     }
     fn schedule_reservations(&mut self) {
-        if self.bars.iter().any(|bar| !bar.reserved) {
+        if self.bars.iter().any(|bar| !bar.studio_only && !bar.reserved) {
             self.reservation_due
                 .get_or_insert_with(|| Instant::now() + Duration::from_secs(1));
         } else {
@@ -1888,7 +2159,7 @@ impl Bars {
                 .iter()
                 .filter(|b| b.shows_content())
                 .filter(|_| !self.game_active)
-                .flat_map(|b| providers::actions::bar_modules(b.kind, &b.config)),
+                .flat_map(|b| visible_modules(b.kind, &b.config)),
             self.bars
                 .iter()
                 .any(|b| !self.game_active && b.shows_content() && b.kind == BarKind::Dock),

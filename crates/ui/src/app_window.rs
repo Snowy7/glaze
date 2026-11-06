@@ -97,6 +97,11 @@ pub(crate) struct AppShared {
 }
 
 impl AppShared {
+    /// Drop retained software pixels while Windows keeps the last presented frame visible.
+    pub(crate) fn release_canvas(&self) {
+        self.canvas.borrow_mut().take();
+    }
+
     pub(crate) fn new(min: (u32, u32)) -> Self {
         Self {
             min,
@@ -444,44 +449,41 @@ fn colorref(c: Rgba) -> COLORREF {
 
 /// Copies `area` of the canvas to the window (opaque: the alpha byte is ignored).
 fn blit(hwnd: HWND, canvas: &Canvas, area: PixelRect) -> Result<()> {
-    let mut pixels = vec![0u8; area.width as usize * area.height as usize * 4];
-    let row_bytes = area.width as usize * 4;
-    canvas.read(area, |row, bytes| {
-        let at = row as usize * row_bytes;
-        pixels[at..at + bytes.len()].copy_from_slice(bytes);
-    })?;
-    let info = BITMAPINFO {
-        bmiHeader: BITMAPINFOHEADER {
-            biSize: size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: area.width as i32,
-            biHeight: -(area.height as i32),
-            biPlanes: 1,
-            biBitCount: 32,
-            biCompression: BI_RGB.0,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    // SAFETY: a DC of our own window, released below; `pixels` matches `info`.
+    // SAFETY: this is our window's DC. Each band supplies a complete top-down DIB;
+    // the WIC read lock and its bounded packing buffer stay live through the call.
     unsafe {
         let dc = GetDC(Some(hwnd));
-        SetDIBitsToDevice(
-            dc,
-            area.x as i32,
-            area.y as i32,
-            area.width,
-            area.height,
-            0,
-            0,
-            0,
-            area.height,
-            pixels.as_ptr().cast(),
-            &info,
-            DIB_RGB_COLORS,
-        );
+        let result = canvas.read_bands(area, 64 << 10, |area, pixels| {
+            let info = BITMAPINFO {
+                bmiHeader: BITMAPINFOHEADER {
+                    biSize: size_of::<BITMAPINFOHEADER>() as u32,
+                    biWidth: area.width as i32,
+                    biHeight: -(area.height as i32),
+                    biPlanes: 1,
+                    biBitCount: 32,
+                    biCompression: BI_RGB.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            SetDIBitsToDevice(
+                dc,
+                area.x as i32,
+                area.y as i32,
+                area.width,
+                area.height,
+                0,
+                0,
+                0,
+                area.height,
+                pixels.as_ptr().cast(),
+                &info,
+                DIB_RGB_COLORS,
+            );
+        });
         ReleaseDC(Some(hwnd), dc);
+        result
     }
-    Ok(())
 }
 
 /// `WM_PAINT`: what Windows uncovered, from the kept pixels (the background past them).

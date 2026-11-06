@@ -20,7 +20,7 @@ use crate::ui::{B, Col, inspector, label, section, swatches, text_field};
 use crate::view::split;
 
 /// The layout as the file says.
-fn layout(app: &App) -> Layout {
+pub(crate) fn layout(app: &App) -> Layout {
     let text = serde_json::to_string(&app.docs.doc(DocId::Widgets).raw).unwrap_or_default();
     Layout::parse(&text).unwrap_or_default()
 }
@@ -30,7 +30,7 @@ fn device(app: &App) -> String {
 }
 
 /// The instances showing on the stage's display.
-fn here(app: &App, layout: &Layout) -> Vec<Instance> {
+pub(crate) fn here(app: &App, layout: &Layout) -> Vec<Instance> {
     let devices: Vec<String> = app.monitors.iter().map(|m| m.device.clone()).collect();
     let primary = app.monitors.iter().position(|m| m.primary).unwrap_or(0);
     let device = device(app);
@@ -277,7 +277,7 @@ fn own_look(app: &App, b: &mut B, c: &mut Col, base: &str, instance: &Instance) 
     }
 }
 
-fn group_of(s: &WidgetSetting) -> Option<&str> {
+pub(crate) fn group_of(s: &WidgetSetting) -> Option<&str> {
     match s {
         WidgetSetting::Boolean { group, .. }
         | WidgetSetting::Number { group, .. }
@@ -307,7 +307,7 @@ fn capitalize(s: &str) -> String {
 
 /// One manifest setting as a row.
 #[allow(clippy::too_many_arguments)]
-fn widget_setting(app: &App, b: &mut B, c: &mut Col, base: &str, resolved: &Map<String, Value>, s: &WidgetSetting, instance: &Instance, manifest: &WidgetManifest) {
+pub(crate) fn widget_setting(app: &App, b: &mut B, c: &mut Col, base: &str, resolved: &Map<String, Value>, s: &WidgetSetting, instance: &Instance, manifest: &WidgetManifest) {
     let key_of = |k: &str| format!("{base}/settings/{}", token(k));
     match s {
         WidgetSetting::Boolean { key: k, label: l, .. } => {
@@ -423,7 +423,7 @@ fn trim(v: f64) -> String {
 }
 
 /// A − value + stepper.
-fn stepper(b: &mut B, rect: Rect, name: &str, value: u32, minus: Action, plus: Action) {
+pub(crate) fn stepper(b: &mut B, rect: Rect, name: &str, value: u32, minus: Action, plus: Action) {
     let p = *b.p;
     b.fill(rect, b.px(8.0), p.well);
     let caption = b.font(Font::Caption);
@@ -724,7 +724,7 @@ fn add(app: &mut App, id: &str) {
 }
 
 /// Moves (dx, dy cells) or resizes (dw, dh) the selected widget, if the new place is free.
-fn nudge(app: &mut App, dx: i32, dy: i32, dw: i32, dh: i32) {
+pub(crate) fn nudge(app: &mut App, dx: i32, dy: i32, dw: i32, dh: i32) {
     let Some(id) = app.nav.widget.clone() else { return };
     let l = layout(app);
     let Some(n) = l.instances.iter().position(|i| i.instance == id) else { return };

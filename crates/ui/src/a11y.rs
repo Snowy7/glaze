@@ -2,8 +2,9 @@
 //! surfaces can defer the adapter itself until WM_GETOBJECT. Neither constructor builds a tree
 //! before a client asks, and updates do no UIA work while the adapter is inactive or deferred.
 
+use std::collections::VecDeque;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use accesskit::{
     Action, ActionHandler, ActionRequest, ActivationHandler, Node, NodeId, Role, Toggled, TreeId,
@@ -15,11 +16,47 @@ use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_APP};
 
 use crate::scene::{Hit, HitId};
 
+/// Values and operations that a name alone cannot describe to assistive technology.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Semantics {
+    Range {
+        value: f64,
+        min: f64,
+        max: f64,
+        step: f64,
+    },
+    Text(Arc<str>),
+    Reorder,
+    Status(Arc<str>),
+}
+
+/// Rich actions remain owned data until the surface's UI thread consumes them.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AccessibilityAction {
+    SetNumber(f64),
+    SetText(String),
+    Increment,
+    Decrement,
+    Custom(i32),
+}
+
+type Pending = Arc<Mutex<VecDeque<(HitId, AccessibilityAction)>>>;
+
 /// Posted to a surface when assistive technology acts on one of its hit items:
 /// `wParam` is 0 for click (invoke) and 1 for focus, `lParam` the hit id.
 pub(crate) const WM_A11Y_ACTION: u32 = WM_APP + 0x3a11;
 
 const ROOT: NodeId = NodeId(0);
+const REORDER_BASE: u64 = 1 << 40;
+const STATUS_BASE: u64 = 1 << 48;
+
+fn status_node(id: HitId) -> NodeId {
+    NodeId(STATUS_BASE + u64::from(id))
+}
+
+fn reorder_node(hit: HitId, direction: u64) -> NodeId {
+    NodeId(REORDER_BASE + u64::from(hit) * 4 + direction)
+}
 
 fn node_id(hit: HitId) -> NodeId {
     NodeId(u64::from(hit) + 1)
@@ -32,6 +69,7 @@ pub(crate) struct Snapshot {
     pub name: Arc<str>,
     pub hits: Vec<Hit>,
     pub focus: Option<HitId>,
+    pub semantics: Vec<(HitId, Semantics)>,
 }
 
 impl Snapshot {
@@ -52,7 +90,11 @@ impl Snapshot {
         }
         let mut root = Node::new(self.role);
         root.set_label(&*self.name);
-        root.set_children(hits.iter().map(|h| node_id(h.id)).collect::<Vec<_>>());
+        let mut children: Vec<_> = hits.iter().map(|h| node_id(h.id)).collect();
+        children.extend(self.semantics.iter().filter_map(|(id, semantic)| {
+            matches!(semantic, Semantics::Status(_)).then_some(status_node(*id))
+        }));
+        root.set_children(children);
         let mut nodes = vec![(ROOT, root)];
         nodes.extend(hits.iter().map(|hit| {
             let mut node = Node::new(hit.role);
@@ -72,7 +114,75 @@ impl Snapshot {
             if let Some(on) = hit.checked {
                 node.set_toggled(if on { Toggled::True } else { Toggled::False });
             }
+            if let Some((_, semantic)) = self.semantics.iter().find(|(id, _)| *id == hit.id) {
+                match semantic {
+                    Semantics::Range {
+                        value,
+                        min,
+                        max,
+                        step,
+                    } => {
+                        node.set_numeric_value(*value);
+                        node.set_min_numeric_value(*min);
+                        node.set_max_numeric_value(*max);
+                        node.set_numeric_value_step(*step);
+                        if hit.enabled {
+                            for action in [Action::SetValue, Action::Increment, Action::Decrement] {
+                                node.add_action(action);
+                            }
+                        }
+                    }
+                    Semantics::Text(value) => {
+                        node.set_value(&**value);
+                        if hit.enabled {
+                            node.add_action(Action::SetValue);
+                        }
+                    }
+                    Semantics::Reorder if hit.enabled => {
+                        node.add_action(Action::CustomAction);
+                        node.set_custom_actions(vec![
+                            accesskit::CustomAction {
+                                id: 1,
+                                description: "Move up".into(),
+                            },
+                            accesskit::CustomAction {
+                                id: 2,
+                                description: "Move down".into(),
+                            },
+                        ]);
+                        // UIA has no generic custom-action pattern. Named Invoke children give
+                        // Windows clients the same operations without inventing keyboard input.
+                        node.set_children(vec![reorder_node(hit.id, 1), reorder_node(hit.id, 2)]);
+                    }
+                    _ => {}
+                }
+            }
             (node_id(hit.id), node)
+        }));
+        for hit in &hits {
+            if !hit.enabled
+                || !self
+                    .semantics
+                    .iter()
+                    .any(|(id, semantic)| *id == hit.id && *semantic == Semantics::Reorder)
+            {
+                continue;
+            }
+            for (direction, label) in [(1, "Move up"), (2, "Move down")] {
+                let mut node = Node::new(Role::Button);
+                node.set_label(label);
+                node.add_action(Action::Click);
+                nodes.push((reorder_node(hit.id, direction), node));
+            }
+        }
+        nodes.extend(self.semantics.iter().filter_map(|(id, semantic)| {
+            let Semantics::Status(message) = semantic else {
+                return None;
+            };
+            let mut node = Node::new(Role::Status);
+            node.set_label(&**message);
+            node.set_live(accesskit::Live::Polite);
+            Some((status_node(*id), node))
         }));
         TreeUpdate {
             nodes,
@@ -91,6 +201,7 @@ pub(crate) struct A11y {
     adapter: Option<Adapter>,
     hwnd: HWND,
     snapshot: Rc<Snapshot>,
+    pending: Pending,
 }
 
 impl A11y {
@@ -101,6 +212,7 @@ impl A11y {
             false,
             Actions {
                 hwnd: hwnd.0 as isize,
+                pending: a11y.pending.clone(),
             },
         ));
         a11y
@@ -116,23 +228,45 @@ impl A11y {
                 name,
                 hits: Vec::new(),
                 focus: None,
+                semantics: Vec::new(),
             }),
+            pending: Arc::default(),
         }
     }
 
     /// New hit items or focus; the tree follows only once a client has asked for it. Raise the
     /// returned events after letting go of any borrow.
+    #[cfg(test)]
     pub(crate) fn update(&mut self, hits: &[Hit], focus: Option<HitId>) -> Option<QueuedEvents> {
-        if self.snapshot.hits == hits && self.snapshot.focus == focus {
+        self.update_full(hits, focus, &[])
+    }
+
+    pub(crate) fn update_full(
+        &mut self,
+        hits: &[Hit],
+        focus: Option<HitId>,
+        semantics: &[(HitId, Semantics)],
+    ) -> Option<QueuedEvents> {
+        if self.snapshot.hits == hits
+            && self.snapshot.focus == focus
+            && self.snapshot.semantics == semantics
+        {
             return None;
         }
         let next = Rc::new(Snapshot {
             hits: hits.to_vec(),
             focus,
+            semantics: semantics.to_vec(),
             ..(*self.snapshot).clone()
         });
         self.snapshot = next.clone();
         self.adapter.as_mut()?.update_if_active(|| next.tree())
+    }
+
+    pub(crate) fn take_action(&self, hit: HitId) -> Option<AccessibilityAction> {
+        let mut pending = self.pending.lock().ok()?;
+        let at = pending.iter().position(|(id, _)| *id == hit)?;
+        pending.remove(at).map(|(_, action)| action)
     }
 
     pub(crate) fn focus_changed(&mut self, focused: bool) -> Option<QueuedEvents> {
@@ -148,6 +282,7 @@ impl A11y {
     ) -> Option<impl Into<LRESULT> + use<>> {
         let mut initial = Initial(self.snapshot.clone());
         let hwnd = self.hwnd;
+        let pending = self.pending.clone();
         self.adapter
             .get_or_insert_with(|| {
                 Adapter::new(
@@ -155,6 +290,7 @@ impl A11y {
                     false,
                     Actions {
                         hwnd: hwnd.0 as isize,
+                        pending,
                     },
                 )
             })
@@ -174,17 +310,75 @@ impl ActivationHandler for Initial {
 /// Forwards assistive technology's requests to the surface's thread as [`WM_A11Y_ACTION`].
 struct Actions {
     hwnd: isize,
+    pending: Pending,
 }
 
 impl ActionHandler for Actions {
     fn do_action(&mut self, request: ActionRequest) {
+        if let Some(encoded) = request.target_node.0.checked_sub(REORDER_BASE) {
+            if request.action != Action::Click || !matches!(encoded % 4, 1 | 2) {
+                return;
+            }
+            let Ok(hit) = u32::try_from(encoded / 4) else {
+                return;
+            };
+            if let Ok(mut pending) = self.pending.lock() {
+                if pending.len() >= 128 {
+                    pending.pop_front();
+                }
+                pending.push_back((hit, AccessibilityAction::Custom((encoded % 4) as i32)));
+            } else {
+                return;
+            }
+            // SAFETY: posts only to the surface that owns this adapter.
+            let _ = unsafe {
+                PostMessageW(
+                    Some(HWND(self.hwnd as *mut _)),
+                    WM_A11Y_ACTION,
+                    WPARAM(0),
+                    LPARAM(hit as isize),
+                )
+            };
+            return;
+        }
+        let Some(hit) = request
+            .target_node
+            .0
+            .checked_sub(1)
+            .and_then(|id| u32::try_from(id).ok())
+        else {
+            return;
+        };
+        let rich = match (request.action, request.data) {
+            (Action::SetValue, Some(accesskit::ActionData::NumericValue(value))) => {
+                Some(AccessibilityAction::SetNumber(value))
+            }
+            (Action::SetValue, Some(accesskit::ActionData::Value(value))) => {
+                Some(AccessibilityAction::SetText(value.into()))
+            }
+            (Action::Increment, _) => Some(AccessibilityAction::Increment),
+            (Action::Decrement, _) => Some(AccessibilityAction::Decrement),
+            (Action::CustomAction, Some(accesskit::ActionData::CustomAction(id))) => {
+                Some(AccessibilityAction::Custom(id))
+            }
+            _ => None,
+        };
+        if let Some(action) = rich {
+            if let Ok(mut pending) = self.pending.lock() {
+                // Bound abandoned requests when a client targets a closing surface.
+                if pending.len() >= 128 {
+                    pending.pop_front();
+                }
+                pending.push_back((hit, action));
+            } else {
+                return;
+            }
+        }
         let kind = match request.action {
             Action::Click => 0,
             Action::Focus => 1,
+            Action::SetValue | Action::Increment | Action::Decrement | Action::CustomAction => 0,
             _ => return,
-        };
-        let Some(hit) = request.target_node.0.checked_sub(1) else {
-            return;
         };
         // SAFETY: posting to a window handle is always safe; failure means it is gone.
         let _ = unsafe {
@@ -243,6 +437,7 @@ mod tests {
             name: "menu".into(),
             hits: vec![hit(0, true, Some(true)), hit(2, false, None)],
             focus: Some(2),
+            semantics: vec![],
         };
         let tree = snapshot.tree();
         assert_eq!(tree.focus, NodeId(3));
@@ -272,6 +467,7 @@ mod tests {
             name: "calendar".into(),
             hits: vec![hit(6, "field"), hit(2, "save"), hit(6, "title")],
             focus: Some(6),
+            semantics: vec![],
         };
         let tree = snapshot.tree();
         assert_eq!(tree.nodes[0].1.children(), [node_id(6), node_id(2)]);
@@ -323,5 +519,93 @@ mod tests {
         a11y.update(&[hit(2)], Some(6));
         // SAFETY: the window created above, on this thread.
         let _ = unsafe { DestroyWindow(hwnd) };
+    }
+}
+
+#[cfg(test)]
+mod semantic_tests {
+    use super::*;
+    #[test]
+    fn ranges_fields_reordering_and_live_feedback_expose_semantic_contracts() {
+        let hit = |id, role| Hit {
+            id,
+            rect: crate::Rect::new(0.0, 0.0, 100.0, 30.0),
+            role,
+            label: "control".into(),
+            enabled: true,
+            checked: None,
+        };
+        let snapshot = Snapshot {
+            role: Role::Window,
+            name: "Studio".into(),
+            hits: vec![
+                hit(1, Role::Slider),
+                hit(2, Role::TextInput),
+                hit(3, Role::ListItem),
+            ],
+            focus: None,
+            semantics: vec![
+                (
+                    1,
+                    Semantics::Range {
+                        value: 0.5,
+                        min: 0.0,
+                        max: 1.0,
+                        step: 0.01,
+                    },
+                ),
+                (2, Semantics::Text("hello".into())),
+                (3, Semantics::Reorder),
+                (u32::MAX - 1, Semantics::Status("Saved".into())),
+            ],
+        };
+        let tree = snapshot.tree();
+        let node = |id| {
+            &tree
+                .nodes
+                .iter()
+                .find(|(node, _)| *node == node_id(id))
+                .unwrap()
+                .1
+        };
+        assert_eq!(node(1).numeric_value(), Some(0.5));
+        assert_eq!(node(1).min_numeric_value(), Some(0.0));
+        assert_eq!(node(1).max_numeric_value(), Some(1.0));
+        assert!(node(1).supports_action(Action::SetValue));
+        assert_eq!(node(2).value(), Some("hello"));
+        assert!(node(2).supports_action(Action::SetValue));
+        assert_eq!(node(3).custom_actions().len(), 2);
+        let status = &tree
+            .nodes
+            .iter()
+            .find(|(id, _)| *id == status_node(u32::MAX - 1))
+            .unwrap()
+            .1;
+        assert_eq!(status.live(), Some(accesskit::Live::Polite));
+    }
+
+    #[test]
+    fn status_nodes_cannot_collide_with_disabled_controls() {
+        let id = u32::MAX - 2;
+        let tree = Snapshot {
+            role: Role::Window,
+            name: "Studio".into(),
+            hits: vec![Hit {
+                id,
+                rect: crate::Rect::default(),
+                role: Role::Button,
+                label: "Undo".into(),
+                enabled: false,
+                checked: None,
+            }],
+            focus: None,
+            semantics: vec![(id, Semantics::Status("Saved".into()))],
+        }
+        .tree();
+        let children = tree.nodes[0].1.children();
+        assert_eq!(children.len(), 2);
+        assert_ne!(children[0], children[1]);
+        let unique: std::collections::HashSet<_> = tree.nodes.iter().map(|(id, _)| *id).collect();
+        assert_eq!(unique.len(), tree.nodes.len());
     }
 }

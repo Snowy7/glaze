@@ -141,6 +141,12 @@ fn first_action(view: &View) -> Option<String> {
     }
 }
 
+pub(super) fn action_name(id: &str) -> Option<String> {
+    with(|s| s.placed.contains(id).then(|| {
+        s.views.get(id).and_then(|face| first_action(&face.body)).unwrap_or_else(|| "click".into())
+    }))
+}
+
 /// A click on module `id`; whether it is a plugin module (and so handled).
 pub fn click(id: &str) -> bool {
     with(|s| {

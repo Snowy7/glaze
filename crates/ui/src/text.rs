@@ -10,7 +10,8 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use windows::Win32::Graphics::DirectWrite::{
-    DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_AXIS_TAG_OPTICAL_SIZE, DWRITE_FONT_AXIS_TAG_WEIGHT,
+    DWRITE_FACTORY_TYPE, DWRITE_FACTORY_TYPE_ISOLATED, DWRITE_FACTORY_TYPE_SHARED,
+    DWRITE_FONT_AXIS_TAG_OPTICAL_SIZE, DWRITE_FONT_AXIS_TAG_WEIGHT,
     DWRITE_FONT_AXIS_VALUE, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
     DWRITE_FONT_WEIGHT, DWRITE_HIT_TEST_METRICS, DWRITE_LINE_METRICS, DWRITE_TEXT_METRICS,
     DWRITE_TEXT_RANGE, DWRITE_WORD_WRAPPING_NO_WRAP, DWRITE_WORD_WRAPPING_WRAP,
@@ -109,10 +110,26 @@ pub struct Text {
 const MAX_LAYOUTS: usize = 64;
 
 impl Text {
+    /// Release a page's layouts and formats while keeping this thread's DirectWrite factory.
+    pub fn clear_cache(&mut self) {
+        self.layouts.clear();
+        self.formats.clear();
+        self.clock = 0;
+    }
+
     pub(crate) fn new() -> Result<Self> {
+        Self::with_factory(DWRITE_FACTORY_TYPE_SHARED)
+    }
+
+    /// A private factory whose native font resources are released with this text context.
+    pub(crate) fn isolated() -> Result<Self> {
+        Self::with_factory(DWRITE_FACTORY_TYPE_ISOLATED)
+    }
+
+    fn with_factory(kind: DWRITE_FACTORY_TYPE) -> Result<Self> {
         // SAFETY: a documented factory call.
         let factory: IDWriteFactory =
-            unsafe { DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED) }.context("DirectWrite")?;
+            unsafe { DWriteCreateFactory(kind) }.context("DirectWrite")?;
         Ok(Self {
             factory,
             formats: HashMap::new(),
@@ -242,6 +259,33 @@ impl Text {
                         && exists.as_bool()
                 })
         }
+    }
+
+    /// Installed system families, for native font pickers. The caller may cache this list.
+    pub fn families(&self) -> Vec<String> {
+        let mut collection = None;
+        let mut names = Vec::new();
+        // SAFETY: DirectWrite owns the collection and localized strings; all output buffers
+        // are sized by GetStringLength and remain live for the corresponding call.
+        unsafe {
+            if self.factory.GetSystemFontCollection(&mut collection, false).is_err() { return names; }
+            let Some(collection) = collection else { return names };
+            for i in 0..collection.GetFontFamilyCount() {
+                let Ok(family) = collection.GetFontFamily(i) else { continue };
+                let Ok(strings) = family.GetFamilyNames() else { continue };
+                let (mut index, mut found) = (0, BOOL(0));
+                let _ = strings.FindLocaleName(w!("en-us"), &mut index, &mut found);
+                if !found.as_bool() { index = 0; }
+                let Ok(len) = strings.GetStringLength(index) else { continue };
+                let mut buffer = vec![0u16; len as usize + 1];
+                if strings.GetString(index, &mut buffer).is_ok() {
+                    names.push(String::from_utf16_lossy(&buffer[..len as usize]));
+                }
+            }
+        }
+        names.sort_by_cached_key(|s| s.to_lowercase());
+        names.dedup();
+        names
     }
 
     fn laid(&mut self, text: &str, style: &TextStyle) -> Option<&Laid> {

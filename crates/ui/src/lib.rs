@@ -7,9 +7,11 @@
 //! window messages. [`Menu`] is the first component built on it.
 
 mod a11y;
+pub use a11y::{AccessibilityAction, Semantics};
 pub mod app_window;
 pub mod calendar;
 pub mod chart;
+pub mod color_row;
 pub mod compose;
 pub mod controls;
 pub mod focus;
@@ -22,21 +24,22 @@ pub mod icons;
 pub mod interact;
 pub mod interaction_motion;
 pub mod kit;
-pub mod layout;
 pub mod layered_app;
+pub mod layout;
 pub mod menu;
 pub mod modules;
 pub mod motion;
-pub mod reveal;
-pub mod transition;
 mod render;
+pub mod reveal;
 mod scene;
 pub mod scroll;
+pub mod sortable;
 mod surface;
 mod text;
-pub mod theme;
 pub mod text_field;
+pub mod theme;
 mod tokens;
+pub mod transition;
 mod watch;
 
 pub use app_window::{Chrome, Cursor, set_modal_hook};
@@ -45,15 +48,16 @@ pub use glass::{Glass, GlassMaterial};
 pub use interact::Interaction;
 pub use kit::{Accessory, ButtonKind, Frame, Lead, Row as ListRow, Tile};
 pub use layout::{Align, Insets, SizeClass, Stack};
-pub use scroll::Scroll;
 pub use menu::{Entry, Menu, MenuIcon, Outcome, Screen, screen_at};
 pub use motion::{Spring, Ticker, Tween, display_frame};
 pub use render::{Image, TextMode, TextQuality, Ui, render};
 pub use scene::{DisplayList, Hit, HitId, Op};
-pub use surface::{Button, Event, Kind, Pointer, Surface, SurfaceId, next_event};
+pub use scroll::Scroll;
+pub use surface::AnimationFrames;
+pub use surface::{Button, Event, Kind, Pointer, Surface, SurfaceId, next_event, queue_event};
 pub use text::{Text, TextStyle, VARIABLE};
-pub use theme::{Palette, Scheme, Style, TextRole, Theme};
 pub use text_field::TextField;
+pub use theme::{Palette, Scheme, Style, TextRole, Theme};
 pub use tokens::{Colors, Ink, Material, MenuMetrics, Step, Tokens, Typeface};
 pub use watch::FileWatch;
 

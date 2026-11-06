@@ -185,6 +185,12 @@ pub enum Setting {
         label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         group: Option<String>,
+        /// Faces on which this option applies; absent means every face.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        faces: Option<Vec<String>>,
+        /// Other option values required for this control to apply.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        when: std::collections::BTreeMap<String, Vec<Value>>,
         default: bool,
     },
     Number {
@@ -192,6 +198,12 @@ pub enum Setting {
         label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         group: Option<String>,
+        /// Faces on which this option applies; absent means every face.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        faces: Option<Vec<String>>,
+        /// Other option values required for this control to apply.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        when: std::collections::BTreeMap<String, Vec<Value>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         min: Option<f64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -206,6 +218,12 @@ pub enum Setting {
         label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         group: Option<String>,
+        /// Faces on which this option applies; absent means every face.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        faces: Option<Vec<String>>,
+        /// Other option values required for this control to apply.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        when: std::collections::BTreeMap<String, Vec<Value>>,
         min: f64,
         max: f64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -220,6 +238,12 @@ pub enum Setting {
         label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         group: Option<String>,
+        /// Faces on which this option applies; absent means every face.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        faces: Option<Vec<String>>,
+        /// Other option values required for this control to apply.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        when: std::collections::BTreeMap<String, Vec<Value>>,
         default: String,
     },
     Select {
@@ -227,6 +251,12 @@ pub enum Setting {
         label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         group: Option<String>,
+        /// Faces on which this option applies; absent means every face.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        faces: Option<Vec<String>>,
+        /// Other option values required for this control to apply.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        when: std::collections::BTreeMap<String, Vec<Value>>,
         options: Vec<SelectOption>,
         default: String,
     },
@@ -236,6 +266,12 @@ pub enum Setting {
         label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         group: Option<String>,
+        /// Faces on which this option applies; absent means every face.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        faces: Option<Vec<String>>,
+        /// Other option values required for this control to apply.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        when: std::collections::BTreeMap<String, Vec<Value>>,
         #[serde(default, skip_serializing_if = "is_false")]
         alpha: bool,
         default: String,
@@ -246,6 +282,12 @@ pub enum Setting {
         label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         group: Option<String>,
+        /// Faces on which this option applies; absent means every face.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        faces: Option<Vec<String>>,
+        /// Other option values required for this control to apply.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        when: std::collections::BTreeMap<String, Vec<Value>>,
         /// Allowed extensions, without dots.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         extensions: Option<Vec<String>>,
@@ -257,6 +299,12 @@ pub enum Setting {
         label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         group: Option<String>,
+        /// Faces on which this option applies; absent means every face.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        faces: Option<Vec<String>>,
+        /// Other option values required for this control to apply.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        when: std::collections::BTreeMap<String, Vec<Value>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         extensions: Option<Vec<String>>,
         default: String,
@@ -267,6 +315,12 @@ pub enum Setting {
         label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         group: Option<String>,
+        /// Faces on which this option applies; absent means every face.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        faces: Option<Vec<String>>,
+        /// Other option values required for this control to apply.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        when: std::collections::BTreeMap<String, Vec<Value>>,
         default: String,
     },
     /// An editable list of records, one value per field.
@@ -275,6 +329,12 @@ pub enum Setting {
         label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         group: Option<String>,
+        /// Faces on which this option applies; absent means every face.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        faces: Option<Vec<String>>,
+        /// Other option values required for this control to apply.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        when: std::collections::BTreeMap<String, Vec<Value>>,
         fields: Vec<ListField>,
         #[serde(rename = "maxItems", default, skip_serializing_if = "Option::is_none")]
         max_items: Option<usize>,
@@ -288,6 +348,12 @@ pub enum Setting {
         label: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         group: Option<String>,
+        /// Faces on which this option applies; absent means every face.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        faces: Option<Vec<String>>,
+        /// Other option values required for this control to apply.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        when: std::collections::BTreeMap<String, Vec<Value>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         search: Option<PlaceSearch>,
         default: Option<Place>,
@@ -441,6 +507,8 @@ impl ListField {
                 key,
                 label,
                 group: None,
+                faces: None,
+                when: Default::default(),
                 default: default.unwrap_or(false),
             },
             Self::Number {
@@ -454,6 +522,8 @@ impl ListField {
                 key,
                 label,
                 group: None,
+                faces: None,
+                when: Default::default(),
                 min,
                 max,
                 step,
@@ -471,6 +541,8 @@ impl ListField {
                 key,
                 label,
                 group: None,
+                faces: None,
+                when: Default::default(),
                 min,
                 max,
                 step,
@@ -485,6 +557,8 @@ impl ListField {
                 key,
                 label,
                 group: None,
+                faces: None,
+                when: Default::default(),
                 default: default.unwrap_or_default(),
             },
             Self::Select {
@@ -496,6 +570,8 @@ impl ListField {
                 key,
                 label,
                 group: None,
+                faces: None,
+                when: Default::default(),
                 default: default
                     .or_else(|| options.first().map(|o| o.value().to_owned()))
                     .unwrap_or_default(),
@@ -510,6 +586,8 @@ impl ListField {
                 key,
                 label,
                 group: None,
+                faces: None,
+                when: Default::default(),
                 alpha,
                 default: default.unwrap_or_else(|| "#ffffff".into()),
             },
@@ -521,6 +599,8 @@ impl ListField {
                 key,
                 label,
                 group: None,
+                faces: None,
+                when: Default::default(),
                 default: default.unwrap_or_default(),
             },
         }
@@ -550,6 +630,26 @@ fn in_range(value: &Value, min: Option<f64>, max: Option<f64>) -> bool {
 }
 
 impl Setting {
+    /// Presentation metadata never changes the option's stored value or its default.
+    /// `face` is the manifest's face selector value (`variant`, `face`, `style`, etc.).
+    pub fn visible_on(&self, face: Option<&str>, values: &Map<String, Value>) -> bool {
+        let (faces, when) = match self {
+            Self::Boolean { faces, when, .. }
+            | Self::Number { faces, when, .. }
+            | Self::Slider { faces, when, .. }
+            | Self::String { faces, when, .. }
+            | Self::Select { faces, when, .. }
+            | Self::Color { faces, when, .. }
+            | Self::File { faces, when, .. }
+            | Self::Image { faces, when, .. }
+            | Self::Font { faces, when, .. }
+            | Self::List { faces, when, .. }
+            | Self::Place { faces, when, .. } => (faces, when),
+        };
+        faces.as_ref().is_none_or(|faces| face.is_some_and(|face| faces.iter().any(|f| f == face)))
+            && when.iter().all(|(key, allowed)| values.get(key).is_some_and(|v| allowed.contains(v)))
+    }
+
     pub fn key(&self) -> &str {
         match self {
             Self::Boolean { key, .. }
@@ -1166,6 +1266,24 @@ mod tests {
 
     fn clock() -> WidgetManifest {
         WidgetManifest::parse(CLOCK, "clock").unwrap()
+    }
+
+    #[test]
+    fn option_faces_are_optional_presentation_metadata_and_keep_values() {
+        let mut raw: Value = serde_json::from_str(CLOCK).unwrap();
+        let before = clock().resolve_settings(&Map::new());
+        raw["settings"][0]["faces"] = json!(["compact"]);
+        raw["settings"][0]["when"] = json!({"enabled":[true]});
+        let manifest = WidgetManifest::parse(&raw.to_string(), "clock").unwrap();
+        assert_eq!(manifest.resolve_settings(&Map::new()), before);
+        let option = manifest.setting("format24").unwrap();
+        let enabled = serde_json::from_value(json!({"enabled":true})).unwrap();
+        assert!(option.visible_on(Some("compact"), &enabled));
+        assert!(!option.visible_on(Some("wide"), &enabled));
+        assert!(!option.visible_on(Some("compact"), &Map::new()));
+        assert!(clock().setting("format24").unwrap().visible_on(None, &Map::new()));
+        let round_trip: Setting = serde_json::from_value(serde_json::to_value(option).unwrap()).unwrap();
+        assert_eq!(&round_trip, option);
     }
 
     #[test]

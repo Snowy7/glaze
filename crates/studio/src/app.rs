@@ -136,6 +136,8 @@ pub enum Msg {
 pub const WM_STUDIO: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 41;
 
 pub struct App {
+    /// Present only for the opt-in desktop panel; legacy Studio keeps its own navigation.
+    pub panel: Option<crate::panel::State>,
     pub plugins: crate::pages::plugins::State,
     pub docs: Docs,
     pub theme: Theme,
@@ -184,7 +186,10 @@ impl App {
     /// Studio as it opens: the files, the wallpapers, the machine.
     pub fn new(text: &mypaper_ui::Text, scale: f32, size: (u32, u32)) -> Self {
         let mut docs = Docs::load();
-        migrate(&mut docs);
+        let panel = crate::panel::enabled();
+        if !panel {
+            migrate(&mut docs);
+        }
         let appearance = Appearance::parse(
             docs.get(DocId::Studio, "/appearance")
                 .and_then(Value::as_str)
@@ -195,13 +200,23 @@ impl App {
         let mut app = Self::with(docs, theme, library, scale, size, false);
         app.monitors = mypaper_desktop::monitor_infos();
         app.system = System::probe();
-        app.restore_place();
-        if first_run_due(&app.docs) {
+        if panel {
+            app.panel = Some(crate::panel::State::default());
+            app.nav.display = app.monitors.iter().position(|m| m.primary).unwrap_or(0);
+            app.system.gpus();
+        } else {
+            app.restore_place();
+        }
+        if !panel && first_run_due(&app.docs) {
             app.overlay = Some(Overlay::FirstRun {
                 step: 0,
                 starter: 0,
                 taskbar: 0,
             });
+        }
+        if panel && first_run_due(&app.docs) {
+            app.panel.as_mut().unwrap().page = crate::panel::Page::FirstRun;
+            app.overlay = Some(Overlay::FirstRun { step: 0, starter: 0, taskbar: 0 });
         }
         app
     }
@@ -252,6 +267,7 @@ impl App {
 
     fn with(docs: Docs, theme: Theme, library: Library, scale: f32, size: (u32, u32), fixture: bool) -> Self {
         Self {
+            panel: None,
             plugins: Default::default(),
             docs,
             theme,
@@ -350,6 +366,7 @@ impl App {
 
     /// Handles one window event. Sets `dirty` when the next frame differs.
     pub fn event(&mut self, event: Event) {
+        if crate::panel::event(self, &event) { return; }
         match event {
             Event::Move(p) => self.pointer_move(p.at),
             Event::Leave => {
@@ -612,12 +629,21 @@ impl App {
 
     fn end_drag(&mut self) {
         let drag = self.drag.take();
+        let history_label = match &drag {
+            Some(Drag::Slider { edit, .. }) => Some(edit.label.to_string()),
+            Some(Drag::Widget { resize, .. }) => Some(if *resize { "Resize widget" } else { "Move widget" }.into()),
+            Some(Drag::Module { .. }) => Some("Move module".into()),
+            _ => None,
+        };
         self.capture(false);
         self.input.pressed = None;
         self.dirty = true;
         match drag {
             Some(Drag::Slider { edit, .. }) => {
                 if let Some((edit, value)) = self.pending_value.take() {
+                    // Release is its own drag transaction, even after another drag of this
+                    // wallpaper knob; only consecutive list picks coalesce.
+                    if let Some(panel) = &self.panel { panel.history.borrow_mut().end_picks(); }
                     self.set(&edit, value);
                     return;
                 }
@@ -631,6 +657,7 @@ impl App {
             }
             _ => {}
         }
+        if let Some(label) = history_label { crate::panel::record_drag(self, &label); }
     }
 
     // --- Keyboard -----------------------------------------------------------------------------
@@ -645,6 +672,9 @@ impl App {
     /// One key press with its modifiers (Ctrl, Shift, Alt).
     pub fn key_with(&mut self, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) {
         self.dirty = true;
+        if self.panel.is_some() && crate::panel::on_key(self, vk, (ctrl, shift, alt)) {
+            return;
+        }
         match (ctrl, vk) {
             (true, 0x4B) => return self.run(Action::Palette), // K
             (true, 0x5A) if !shift => return self.run(Action::Undo), // Z
@@ -903,7 +933,8 @@ impl App {
             return;
         };
         let initial = self.field_initial(&id);
-        let size = self.theme.ty.style(mypaper_ui::controls::Font::Body, self.scale).size;
+        let size = self.theme.ty.style(mypaper_ui::controls::Font::Body, self.scale).size
+            * if self.panel.is_some() { 13.0 / 14.0 } else { 1.0 };
         let color = self.theme.palette.ink1;
         match mypaper_ui::TextField::new(hwnd, Rect::new(-1000.0, -1000.0, 10.0, 10.0), false, size, color) {
             Ok(field) => {
@@ -918,6 +949,7 @@ impl App {
     }
 
     fn field_initial(&self, id: &FieldId) -> String {
+        if let Some(value) = crate::panel::field_initial(self, id) { return value; }
         if let FieldId::Text(DocId::Studio, path) = id
             && let Some(rest) = path.strip_prefix("/plugins/setting/")
             && let Some((plugin, key)) = rest.split_once('/') {
@@ -971,7 +1003,9 @@ impl App {
         let text = f.field.text().unwrap_or_default();
         let id = f.id.clone();
         if self.texts.get(&id) != Some(&text) {
-            if matches!(id, FieldId::Palette) {
+            if self.panel.is_some() && matches!(id, FieldId::Palette) {
+                self.panel.as_mut().unwrap().page = crate::panel::Page::Search;
+            } else if matches!(id, FieldId::Palette) {
                 self.overlay = Some(Overlay::Palette { selected: 0 });
             }
             if matches!(id, FieldId::PlaceSearch) {
@@ -1057,6 +1091,7 @@ impl App {
 
     /// Sets a value as one undoable step (a click, a key).
     pub fn set(&mut self, edit: &Edit, value: Value) {
+        if crate::panel::intercept_set(self, edit, &value) { return; }
         let value = (!value.is_null()).then_some(value);
         if edit.doc == DocId::Studio && crate::pages::intercept(self, &edit.path, value.clone()) {
             self.dirty = true;
@@ -1071,6 +1106,10 @@ impl App {
 
     /// Sets a value during a drag (written once, at the end).
     fn set_live(&mut self, edit: &Edit, value: Value) {
+        if self.panel.is_some() && let Some((edit, value)) = crate::panel::slider_edit(edit, &value) {
+            self.set_live(&edit, value);
+            return;
+        }
         if edit.doc == DocId::Studio {
             // A wallpaper's own file: written when the drag ends.
             self.pending_value = Some((edit.clone(), value));
@@ -1094,6 +1133,24 @@ impl App {
     /// Applies edits as one step, keeping the shell's look files in step with the user's
     /// look (`look.rs`).
     pub fn apply(&mut self, label: &str, mut ops: Vec<Op>) {
+        // Legacy theme controls use a folder-qualified pseudo pointer. Resolve it before
+        // editing, so picks, resets and typed values share the same document transaction.
+        let mut resolved = Vec::new();
+        for op in ops {
+            if op.doc == DocId::Studio && let Some(rest) = op.path.strip_prefix("/theme:") {
+                if self.fixture { return; }
+                let (folder, pointer) = rest.split_once('/').unwrap_or((rest, ""));
+                let folder = std::path::PathBuf::from(folder.replace("~1", "/").replace("~0", "~"));
+                match self.docs.theme_ops(&folder, &format!("/{pointer}"), op.value) {
+                    Ok(theme_ops) => resolved.extend(theme_ops),
+                    Err(error) => {
+                        crate::panel::theme_failed(self, &folder, &format!("{error:#}"));
+                        return;
+                    }
+                }
+            } else { resolved.push(op); }
+        }
+        ops = resolved;
         if ops
             .iter()
             .any(|op| op.doc == DocId::Config && op.path.starts_with("/look"))
@@ -1102,20 +1159,56 @@ impl App {
             ops.extend(projected);
         }
         let docs: Vec<DocId> = ops.iter().map(|o| o.doc).collect();
+        let checkpoint = self.docs.undo_count();
         match self.docs.edit(label, &ops) {
-            Ok(()) => self.after_edit(&docs),
-            Err(e) => self.alert(format!("{e:#}")),
+            Ok(()) => {
+                self.after_edit(&docs);
+                crate::panel::record_edit(self, label, &ops, checkpoint);
+            }
+            Err(e) => {
+                crate::panel::save_failed(self, docs.first().copied(), &format!("{e:#}"));
+                if self.panel.is_none() { self.alert(format!("{e:#}")); }
+            }
         }
         self.dirty = true;
     }
 
     /// What follows an edit: Studio's own look, the wallpapers' active state.
     fn after_edit(&mut self, docs: &[DocId]) {
+        let themes: Vec<_> = docs.iter().filter(|id| matches!(id, DocId::Theme(_)))
+            .filter_map(|id| self.docs.doc(*id).path.as_deref()?.parent().map(std::path::Path::to_path_buf))
+            .collect();
+        if !themes.is_empty() {
+            if let Some(panel) = &self.panel { *panel.theme_data.borrow_mut() = Default::default(); }
+            for dir in themes { crate::panel::theme_saved(self, &dir); }
+            self.library = Library::scan(theme_name(&self.docs).as_deref());
+        }
+        if docs.contains(&DocId::Plugins) { crate::panel::sync_connections(self); }
         if docs.contains(&DocId::Studio) {
             self.retheme();
         }
         if docs.contains(&DocId::Config) {
             self.library.set_active(theme_name(&self.docs).as_deref());
+        }
+    }
+
+    /// An existing wallpaper manifest is an ordinary undoable document, with its owner's
+    /// parser and ownership check; the on-disk format remains exactly the same.
+    pub fn edit_theme(&mut self, label: &str, dir: &std::path::Path, pointer: &str, value: Option<Value>) {
+        if self.fixture { return; }
+        match self.docs.theme_ops(dir, pointer, value) {
+            Ok(ops) => {
+                self.apply(label, ops);
+                if let crate::docs::Saved::Failed(error) = &self.docs.saved {
+                    crate::panel::theme_failed(self, dir, &error.clone());
+                } else {
+                    crate::panel::theme_saved(self, dir);
+                }
+            }
+            Err(error) => {
+                crate::panel::theme_failed(self, dir, &format!("{error:#}"));
+                if self.panel.is_none() { self.alert(format!("{error:#}")); }
+            }
         }
     }
 
@@ -1220,7 +1313,7 @@ impl App {
     }
 
     fn remember_place(&mut self) {
-        if self.fixture {
+        if self.fixture || self.panel.is_some() {
             return;
         }
         let page = self.nav.page().key();
@@ -1340,6 +1433,7 @@ impl App {
     // --- Actions ------------------------------------------------------------------------------
 
     pub fn run(&mut self, action: Action) {
+        crate::panel::before_action(self, &action);
         self.dirty = true;
         match action {
             Action::None => {}
@@ -1357,6 +1451,8 @@ impl App {
                     self.system.gpus();
                 }
             }
+            Action::Panel(command) => crate::panel::run(self, command),
+            Action::Back if self.panel.is_some() => crate::panel::run(self, crate::panel::Command::Back),
             Action::Back => crate::pages::back(self),
             Action::Palette => {
                 self.texts.remove(&FieldId::Palette);
@@ -1365,7 +1461,8 @@ impl App {
             }
             Action::Undo => match self.docs.undo() {
                 Ok(Some(label)) => {
-                    self.after_edit(&DocId::ALL);
+                    self.after_edit(&self.docs.ids().collect::<Vec<_>>());
+                    crate::panel::record_drag(self, &format!("Undo {label}"));
                     self.toast(format!("Undid {}", label.to_lowercase()), Some(("Redo".into(), Action::Redo)));
                 }
                 Ok(None) => {}
@@ -1373,7 +1470,8 @@ impl App {
             },
             Action::Redo => match self.docs.redo() {
                 Ok(Some(label)) => {
-                    self.after_edit(&DocId::ALL);
+                    self.after_edit(&self.docs.ids().collect::<Vec<_>>());
+                    crate::panel::record_drag(self, &format!("Redo {label}"));
                     self.toast(format!("Redid {}", label.to_lowercase()), Some(("Undo".into(), Action::Undo)));
                 }
                 Ok(None) => {}
@@ -1441,6 +1539,7 @@ impl App {
             Action::Reveal(path) => crate::system::reveal(&path),
             other => crate::pages::run(self, other),
         }
+        crate::panel::after_action(self);
     }
 
     fn window_command(&mut self, action: Action) {

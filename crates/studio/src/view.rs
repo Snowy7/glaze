@@ -50,6 +50,7 @@ pub fn inspector_width(app: &App) -> f32 {
 /// What one frame produced.
 pub struct Built {
     pub list: DisplayList,
+    pub semantics: Vec<(mypaper_ui::HitId, mypaper_ui::Semantics)>,
     pub targets: Vec<Target<Action>>,
     pub scrolls: Vec<ScrollArea>,
     pub chrome: Vec<(Rect, Chrome)>,
@@ -105,6 +106,7 @@ pub fn build(app: &App, text: &mut Text) -> Built {
 fn finish(b: Builder<'_, Action>, chrome: Vec<(Rect, Chrome)>, regions: Vec<Rect>, overlay_from: usize) -> Built {
     Built {
         list: b.list,
+        semantics: b.semantics,
         targets: b.targets,
         scrolls: b.scrolls,
         chrome,
