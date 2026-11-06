@@ -1205,6 +1205,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn undo_and_redo_end_snapshot_preview_and_keep_now_current() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        observe(&app);
+        app.run(crate::actions::Action::Preset("islands"));
+        app.panel.as_mut().unwrap().page = super::super::Page::History;
+        select(&app, 0);
+        for action in [crate::actions::Action::Undo, crate::actions::Action::Redo] {
+            app.run(action);
+            let history = app.panel.as_ref().unwrap().history.borrow();
+            assert!(history.selected.is_none());
+            let current = Desktop::read(&app);
+            assert_eq!(history.last.as_ref(), Some(&current));
+            assert_eq!(&history.entries.last().unwrap().desktop, &current);
+            drop(history);
+            select(&app, 0);
+        }
+    }
+
+    #[test]
     fn snapshots_resolve_wallpaper_folder_paths_as_well_as_library_ids() {
         let ui = mypaper_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);

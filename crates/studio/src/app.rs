@@ -1462,6 +1462,7 @@ impl App {
             Action::Undo => match self.docs.undo() {
                 Ok(Some(label)) => {
                     self.after_edit(&self.docs.ids().collect::<Vec<_>>());
+                    crate::panel::record_drag(self, &format!("Undo {label}"));
                     self.toast(format!("Undid {}", label.to_lowercase()), Some(("Redo".into(), Action::Redo)));
                 }
                 Ok(None) => {}
@@ -1470,6 +1471,7 @@ impl App {
             Action::Redo => match self.docs.redo() {
                 Ok(Some(label)) => {
                     self.after_edit(&self.docs.ids().collect::<Vec<_>>());
+                    crate::panel::record_drag(self, &format!("Redo {label}"));
                     self.toast(format!("Redid {}", label.to_lowercase()), Some(("Undo".into(), Action::Undo)));
                 }
                 Ok(None) => {}
