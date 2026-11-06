@@ -1511,6 +1511,7 @@ impl Bars {
             let mut bar_look = config.dock.look.clone();
             let appearance = config.appearance.over(&self.appearance);
             look::appearance_layer(config, "dock", &mut bar_look, &appearance);
+            look::popup_font(config, "dock", &mut bar_look);
             look::glass_layer(config, "dock", &mut bar_look, self.theme_glass);
             let knobs = Config::load()
                 .map(|c| crate::glass::knobs(&c.look, crate::glass::Family::Menus))

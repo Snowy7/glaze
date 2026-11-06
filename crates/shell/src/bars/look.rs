@@ -475,6 +475,13 @@ fn explicit_look(config: &mypaper_bars::BarsConfig, bar: &str, path: &str) -> bo
         .is_some_and(|v| !v.is_null())
 }
 
+/// A bar design's 13 px / 400 label is a bar metric. Popup roles retain their own type ramp
+/// unless the user explicitly overrides the shared/per-bar font size or weight.
+pub fn popup_font(config: &mypaper_bars::BarsConfig, bar: &str, look: &mut Look) {
+    if !explicit_look(config, bar, "/font/size") { look.font.size = None; }
+    if !explicit_look(config, bar, "/font/weight") { look.font.weight = None; }
+}
+
 pub fn glass_layer(
     config: &mypaper_bars::BarsConfig,
     bar: &str,

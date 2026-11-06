@@ -68,6 +68,7 @@ impl Look {
         let (mut bar_look, mut appearance) =
             (bars.top.look.clone(), bars.appearance.over(&appearance));
         crate::bars::look::appearance_layer(&bars, "top", &mut bar_look, &appearance);
+        crate::bars::look::popup_font(&bars, "top", &mut bar_look);
         crate::bars::look::glass_layer(
             &bars,
             "top",
