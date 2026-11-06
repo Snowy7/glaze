@@ -34,7 +34,7 @@ fn fixture(ui: &Ui, dark: bool, page: Page) -> App {
 }
 
 fn shot(app: &mut App, ui: &mut Ui, name: &str, hovered: Option<Action>, dark: bool) {
-    let out = std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r8");
+    let out = std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r9");
     let built = crate::panel::build(app, &mut ui.text);
     app.size.1 = (built.scrolls.last().unwrap().content + 48.0).ceil() as u32;
     let built = crate::panel::build(app, &mut ui.text);
@@ -42,7 +42,7 @@ fn shot(app: &mut App, ui: &mut Ui, name: &str, hovered: Option<Action>, dark: b
         let target = built
             .targets
             .iter()
-            .find(|target| target.action == action)
+            .rfind(|target| target.action == action)
             .expect("hovered action must be present on the review page");
         app.input.pointer = Some(Point::new(target.rect.left + 30.0, target.rect.top + 10.0));
         app.input.hover = Some(target.key);
@@ -59,10 +59,52 @@ fn shot(app: &mut App, ui: &mut Ui, name: &str, hovered: Option<Action>, dark: b
     .unwrap();
 }
 
+fn viewport_shot(app: &App, ui: &mut Ui, name: &str, dark: bool) {
+    let built = crate::panel::build(app, &mut ui.text);
+    let image = render(ui, &built.list, app.size.0, app.size.1).unwrap();
+    golden::write(
+        &image,
+        &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r9").join(format!(
+            "{name}-{}.png",
+            if dark { "dark" } else { "light" }
+        )),
+    )
+    .unwrap();
+}
+
 #[test]
 fn render_chooser_review() {
     let mut ui = Ui::new().unwrap();
     for dark in [true, false] {
+        let mut app = fixture(&ui, dark, Page::Look);
+        app.size = (480, 800);
+        viewport_shot(&app, &mut ui, "look-first-screen", dark);
+        let frame = crate::panel::build(&app, &mut ui.text);
+        let row = frame
+            .targets
+            .iter()
+            .find(|target| target.action == Action::SetStyle(Some(Style::Fluent)))
+            .unwrap();
+        app.input.pointer = Some(Point::new(row.rect.left + 20.0, row.rect.top + 10.0));
+        viewport_shot(&app, &mut ui, "look-first-screen-hover", dark);
+        let mut gallery = fixture(&ui, dark, Page::AddWidget);
+        gallery.size = (480, 800);
+        viewport_shot(&gallery, &mut ui, "gallery-top", dark);
+        let frame = crate::panel::build(&gallery, &mut ui.text);
+        let scroll = frame.scrolls.last().unwrap();
+        gallery.nav.scroll.insert(
+            scroll.key,
+            (scroll.content - scroll.viewport.height()).max(0.0),
+        );
+        viewport_shot(&gallery, &mut ui, "gallery-plugins", dark);
+        let mut photo = fixture(&ui, dark, Page::Widget);
+        photo.run(Action::AddWidget("photo".into()));
+        photo.nav.widget = crate::pages::widgets::layout(&photo)
+            .instances
+            .iter()
+            .find(|instance| instance.widget == "photo")
+            .map(|instance| instance.instance.clone());
+        shot(&mut photo, &mut ui, "photos-full", None, dark);
         for style in Style::ALL {
             let mut app = fixture(&ui, dark, Page::Look);
             app.run(Action::Set(
@@ -241,7 +283,7 @@ fn render_chooser_review() {
         let image = render(&mut ui, &built.list, 360, 620).unwrap();
         golden::write(
             &image,
-            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r8").join(format!(
+            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r9").join(format!(
                 "color-360-{}.png",
                 if dark { "dark" } else { "light" }
             )),
