@@ -698,11 +698,12 @@ mod tests {
         let mut store = Store::new();
         let root = store.insert(0, "X:", DIRECTORY, 0, 0);
         store.insert(root, "é.txt", 128, 1, 0);
+        let record = store.record(2);
         store.save(&path).unwrap();
         let mut bytes = std::fs::read(&path).unwrap();
         let at = HEADER + 2 * size_of::<Record>();
-        bytes[at..at + 4].copy_from_slice(&3u32.to_le_bytes());
-        bytes[at + 4..at + 6].copy_from_slice(&5u16.to_le_bytes());
+        bytes[at..at + 4].copy_from_slice(&(record.name + 1).to_le_bytes());
+        bytes[at + 4..at + 6].copy_from_slice(&(record.name_len - 1).to_le_bytes());
         std::fs::write(&path, bytes).unwrap();
         assert!(Store::open(&path).is_err());
         std::fs::remove_file(&path).unwrap();
