@@ -1,0 +1,12 @@
+{
+    "index_pid":  78592,
+    "command_line":  "\"D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-index.exe\" --parent 41180",
+    "binary_sha256":  "4E70DA4E6E80E8A529C7FDEF63BA98830E5CB4BEBF271D8CF940FCDD37BC513F",
+    "working_set_bytes":  10100736,
+    "private_bytes":  28119040,
+    "peak_working_set_bytes":  759324672,
+    "cpu_seconds":  330.140625,
+    "recorded_at":  "2026-11-06T11:36:00.8650979+03:00",
+    "latest_source_commit":  "3bbf01687960bbdd44066f0cd50d530000426322",
+    "late_runtime_fix":  "6ebad2c (not deployed; one-deployment limit)"
+}

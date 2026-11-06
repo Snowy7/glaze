@@ -1,5 +1,9 @@
 # Native file index (experimental)
 
+**Repair handoff:** the source includes follow-up `6ebad2c`, but the running 10:54 build
+precedes it. The initial rebuild passed the RAM gate; a later broad game replay did not.
+See the independent-review section for the measured failure and the verified, undeployed fix.
+
 `mypaper-index` is an optional native process, enabled with
 `"experimental": { "file_index": true }` in `%APPDATA%\mypaper\config.json`.
 The default is **false**. Core starts it when enabled, stops it on disable/quit/panic,
@@ -28,7 +32,7 @@ but an 11M-entry query after resident-page trimming was measured above 100 ms.
   Above 50,000 overlay records or 4 MiB new names, a checkpoint compacts tombstones and
   superseded names, syncs and replaces the snapshot, validates its mapping, and swaps it
   under a short exclusive lock. Queries continue during disk I/O and validation.
-- Full-volume scan scratch records/names use sparse temporary file mappings under
+- Full-volume and large-subtree scan scratch records/names use sparse temporary file mappings under
   `index/scan/`, instead of large private buffers. A four-byte ID map streams the fresh
   volume beside the other cached volumes into the next snapshot. Scan mappings are
   removed after use; recognizable leftovers from a killed service are removed only after
@@ -91,7 +95,10 @@ Built-in exclusions prune `node_modules`, `.git`, `__pycache__`, `.venv`, `venv`
 `Windows/Installer`, `AppData/Local/Temp`, `AppData/Local/**/Cache*`, `npm-cache`,
 `pnpm-store`, `.cargo/registry`, `.rustup/toolchains`, and `C:/mypaper-targets`.
 `target` is excluded only when it contains `CACHEDIR.TAG` or `.rustc_info.json`;
-`bin` and `obj` only when their parent contains a `.csproj` file. A plain folder called
+`bin` and `obj` only when their parent contains a `.csproj` file. Scans decide those
+markers once per directory and pass the decision to their children; `.csproj` presence
+comes from the parent's existing enumeration. Notification batches reuse a bounded
+directory-decision cache. A plain folder called
 `target` or `bin` remains searchable. Reparse traversal remains disabled.
 
 User rules layer onto these defaults in `%APPDATA%/mypaper/config.json`:
@@ -121,22 +128,28 @@ restores a known parent size. The launcher displays “Size unknown” for incom
 Notification readers discard changes below static exclusions while preserving boundary
 create/delete events; Rust/.NET marker changes re-evaluate the affected subtree.
 
-The helper also consumes `mypaper_tweaks::game_activity::Snapshot`: scan workers and
+The helper also consumes `mypaper_tweaks::game_activity::Snapshot`: scan workers,
 generation streams and cache validators block at work boundaries while `pause_background`
-is true. Watch readers stop rearming native directory reads and retain the completed raw
-batch without decoding it. Windows retains subsequent notifications in its bounded native
-buffer. Resume applies the exact retained paths through the normal final-state update
-path; only genuine buffer/queue overflow requests a root reconciliation. This avoids
-both sustained notification churn and speculative rescans of broad parent directories.
-Queries stay available once a cache is loaded.
+is true. Native notification readers keep draining and rearming their 2 MiB buffers during
+the game. They decode names into a bounded set of dirty **parent directories**, without
+rule/store lookups, metadata I/O or store writes. Delivery and the service coalesce those
+directories; resume scans only those subtrees, pruning descendants of an already-replayed
+parent. A directory move dirties both its old and new parent. Queries remain available.
+This does perform event-driven CPU work during background disk writes; a quiet watch
+still blocks indefinitely. It does not promise zero CPU during a synthetic write burst.
+A genuine native-buffer overflow, or exceeding 8,192 distinct dirty directories, requests
+reconciliation of the affected volume(s). A dirty directory that is itself a drive root
+also requires a root replay. Huge/distributed bursts can therefore still cause full scans.
+
 On the pause transition, the path cache is freed and a one-shot working-set trim pages
 out mapped data and query summaries after workers park. The path-cache allocator may
-retain freed capacity; resident RAM and private commit are reported separately. Reconciliation/checkpoint/trim
-deadlines use a clock stopped for the entire pause. A directory notification wakes the
-reader, and the checked publisher process handle joins its blocking wait set; missing,
-corrupt, disabled or dead publication resumes work. Index scheduling adds no polling timer. Initial
-or paused notification accumulation is bounded to 128,000 unique paths, then falls back
-to volume reconciliation rather than retaining an unbounded list.
+retain freed capacity; resident RAM and private commit are reported separately.
+Reconciliation/checkpoint/trim deadlines use a clock stopped for the entire pause. A
+directory notification wakes the game reader, and the checked publisher process handle
+joins its blocking wait set; missing, corrupt, disabled or dead publication resumes work.
+Index scheduling adds no polling timer. Initial-scan replay retains at most 128,000 exact
+paths; paused replay retains at most 8,192 dirty directories, falling back to affected
+volume reconciliation instead of retaining an unbounded list.
 
 Search is **names and paths only**, not document contents. Sizes count every accessible
 file's logical length, including each directory entry of a hard link. They do not
@@ -145,7 +158,18 @@ reparse points (junctions, symlinks and cloud placeholders marked reparse) are o
 
 ## Enumeration and updates
 
-Fixed NTFS/ReFS drive-letter volumes are enumerated without elevation, through
+Fixed NTFS/ReFS drive-letter volumes are discovered at startup and on `WM_DEVICECHANGE`
+arrival/removal/device-tree broadcasts, using a hidden top-level window and no polling.
+A failed watch stops only its root, immediately hides its search and Sizes hits, and keeps
+other roots available. One root overlay record marks it offline; the next streamed
+snapshot drops it without allocating a tombstone for every descendant. Missing cached
+roots are hidden before the pipe opens. On a later device broadcast, available roots
+without a healthy watch are rearmed and reconciled. A scan finishing concurrently with a
+failure reapplies offline state when swapping its store, so it cannot revive stale hits.
+Drive-letter aliases exercise this path in the live fixture; physical USB/VHD/BitLocker
+hardware is not required for that test and is not claimed as separately verified.
+
+Directory entries are enumerated without elevation, through
 `FindFirstFileExW(FindExInfoBasic)` and `FindNextFileW`,
 with four background-priority directory workers. No file contents are opened.
 `THREAD_MODE_BACKGROUND_BEGIN` lowers CPU and I/O priority for enumeration and
@@ -157,8 +181,9 @@ order. On this machine the best warm registry-tree sample was **0.471 s Basic** 
 **0.565 s Large** for 136,889 entries; Basic is selected. Concurrent disk/build activity
 made wall times variable, so both modes remain available for remeasurement.
 
-A recursive, blocking `ReadDirectoryChangesExW` watch with a 2 MiB aligned buffer is
-armed on each root before scanning. ReFS uses `ReadDirectoryChangesW` when the extended
+A recursive, overlapped `ReadDirectoryChangesExW` watch with a 2 MiB aligned buffer is
+armed on each root before scanning. Its reader blocks indefinitely on completion/stop
+events; cancellation is drained before the watch storage is freed. ReFS uses `ReadDirectoryChangesW` when the extended
 API reports unsupported. Changes are deduplicated and applied as final filesystem
 state; adds, resizes, removals and directory moves update ancestor sizes/counts.
 New/moved-in directories are scanned as subtrees. Readers run at normal CPU priority
@@ -195,7 +220,20 @@ recovery and narrower overflow repair depend on that future work.
 SID DACL and remote clients rejected. First-instance creation rejects an existing pipe.
 Each transaction is one UTF-8 JSON request message and one UTF-8 JSON response message,
 without a newline or length prefix. Requests are limited to 8 KiB and replies to 1 MiB.
-Four listeners serve concurrent clients. I/O has cancellation deadlines.
+Four listeners serve concurrent clients. I/O has cancellation deadlines. Each transaction
+is guarded by `catch_unwind`, then the listener disconnects and accepts another client.
+Sizes walks folded path components, so Unicode lowercase changes in UTF-8 byte length
+(for example the Kelvin sign) never slice the original string at a folded byte offset.
+
+**Release build requirement:** this workspace normally sets `panic = "abort"`. After its
+workspace release build, run `powershell -NoProfile -File crates/index/tools/build-release.ps1`
+to rebuild the index with `CARGO_PROFILE_RELEASE_PANIC=unwind` into
+`C:/mypaper-targets/main/release`, then deploy only through `scripts/deploy-local.ps1`.
+The wrapper does not change other workspace binaries or the shared Cargo profile.
+A later ordinary workspace build overwrites the index with abort semantics, bypassing
+transaction panic containment; repeat the wrapper before deploying it. The injected-panic
+regression runs with `cargo test --release -p mypaper-index`; Windows' Cranelift debug
+backend cannot unwind and the containment test is compiled only for release tests.
 
 The Rust library's bounded client is the preferred integration:
 
@@ -224,7 +262,7 @@ error: Option<String> }`. `Hit { name: String, path: String, directory: bool,
 size: u64, files: u32, modified: u32, size_unknown: bool, excluded: bool }`.
 The two booleans default to false when deserializing older replies. Search returns up to 100 results.
 `entries` counts record slots, including tombstones until compaction; query hits and
-folder sizes exclude deleted records. Fresh scan and compacted snapshot counts are live.
+folder sizes exclude deleted records and offline roots. Fresh scan and compacted snapshot counts are live.
 Sizes returns the requested path **first**, followed by up to `limit` immediate children
 (files and directories), biggest first, capped at 1,000 children. Missing paths give no
 hits. `scanning` describes initial reconciliation; cached data can be stale during it.
@@ -242,6 +280,173 @@ mypaper-index --bench-scan 'D:\some-representative-tree'
 
 `--root PATH [CACHE]` runs a standalone service for an isolated fixture. Core passes
 `--parent PID` in production. Only one server may own the pipe at a time.
+
+## Independent-review repairs (2026-11-06, 10:54 deployment)
+
+The repair series is `6abcf67` (orphan/Unicode paths), `f42ac5a` (directory marker
+contexts), `3a70176` and `816d1cc` (offline roots, device events, paused-directory replay
+and shadowed cached roots), `3428d22` (listener containment/unwinding release), and
+`f6d0899` (infrequent lifecycle/recovery log). Only `crates/index` and this document
+were changed. `service.rs` already had a formatting-only edit, which was retained.
+
+**Deployment status:** `6ebad2c` adds bounded large-subtree replay, a bounded offline
+visibility cache and two diagnostic CLI benchmarks after live stress exposed additional
+failures. It is committed and verified in the private target, **not deployed**: this turn
+used its one permitted deployment at 10:54. The running helper therefore still has the
+broad-subtree memory failure described below. Complete live certification requires the
+orchestrator's next deployment (workspace build, then the index unwinding wrapper, then
+`deploy-local.ps1`) and a new resume/rebuild observation. No second deployment was attempted.
+
+| Finding | Repair and focused regression |
+|---|---|
+| Failed/vanished volumes exit or retain stale hits | One offline-root overlay record hides descendants; streamed checkpoints prune that root. Device broadcasts re-enumerate/rearm roots. Native watch deletion leaves a second watch delivering; startup missing/shadowed roots and racing scan swaps stay hidden; cached-prefix/ordinary searches, Sizes, overlay reload and next-generation pruning are covered. |
+| Marker below an unindexed parent imports a phantom root | `merge` returns when neither an old root nor its parent exists. Real marker reconciliation below `node_modules/project/target` preserves the original root chain and record count. |
+| Folded Unicode byte offsets panic in Sizes and lose a listener | Walk folded components. Kelvin-sign drive/component Sizes returns correct bytes. A release-test transaction panic drops its read guard and the same listener path accepts the next transaction. Deployment must use the unwinding wrapper described above. |
+| Per-entry marker filesystem probes | Scans pass inherited marker decisions through the directory queue, taking `.csproj` presence from enumeration. Notification batches cache directory decisions. A regression removes marker files after resolving the directory and verifies 2,000 children reuse the decision; a fresh batch observes removal. Existing include/unknown-size scan coverage remains. |
+| Game buffer can overflow | Native reads continue during pause; only bounded parent-directory sets are retained. A real paused watch delivers a dirty directory before resume and cancels cleanly while paused; 200,000 same-directory paths remain one directory, and 8,193 directories request bounded overflow recovery. The offline 20,000-file regression also verifies unchanged paused Sizes and exact resumed search/bytes/counts after one subtree replay. |
+
+Validation: **32 debug tests**, **33 LLVM release tests**, and index Clippy on all targets
+with warnings denied. The normal workspace release build passed, followed by the
+index-only unwinding release build into the shared main target. The injected-panic test
+is release-only because this workspace's Windows Cranelift debug backend cannot unwind.
+
+The same E: volume was measured before and after with the alternating
+Basic/Large/Large/Basic `--bench-scan` sequence:
+
+| Sample | Before (364,157 entries) | After (364,160 entries) |
+|---|---:|---:|
+| Basic, first sample | 25.432 s | 21.644 s |
+| Large, second | 15.334 s | 3.058 s |
+| Large, third | 12.130 s | 1.888 s |
+| Basic, final warm sample | 12.918 s | 1.909 s |
+
+Both runs had zero inaccessible directories. Three new entries and concurrent agent/build
+activity mean this is a live before/after observation, not an isolated causal speedup
+estimate. Evidence: `review-scan-before.jsonl` and `review-scan-after.jsonl`.
+
+Before repair, a real fullscreen signal remained true throughout a **30.36-second**
+paused sample while the fixture created **20,000 files** (2,560,000 logical bytes).
+Index CPU/context switches remained zero because its readers were parked. Immediately
+after resume, fresh scan scratch named **C:** appeared, although initial reconciliation
+had completed before the fixture. This establishes the pre-fix volume fallback after
+the native buffer lost names. Another agent deployed during catch-up and replaced that
+index process, so no baseline catch-up latency is certified. The enlarged fixture's
+search probe was also corrected to query a unique filename instead of the shared suffix.
+Evidence: `review-game-before*.json`, PNGs and the interrupted-run log. The fullscreen
+and restored captures were inspected; the fixture covered the primary (right) display.
+
+The single deployment completed at **10:54 local** via `scripts/deploy-local.ps1`, from
+`C:/mypaper-targets/main/release`. The core-owned helper, PID **78592**, logged
+`start; panic=unwind`; its deployed SHA-256 matched the build evidence:
+`4E70DA4E6E80E8A529C7FDEF63BA98830E5CB4BEBF271D8CF940FCDD37BC513F`.
+It completed all C:/D:/E: generations and buffered replay in **142.95 s**, without
+restarting. Its OS lifetime working-set peak during that rebuild was **137.00 MiB**,
+including spikes between the one-second samples, below the 256 MiB target. Private
+high-water was **141.93 MiB**. Subsequent live query/volume fixtures raised the same
+process's lifetime working-set peak to **199.85 MiB**. A later broad resume raised it
+again to **724.15 MiB**; the overall live RAM goal consequently **failed**, despite the
+initial rebuild passing. The peak was not reset or hidden.
+
+| Final production enumeration | Entries | Seconds | Inaccessible directories |
+|---|---:|---:|---:|
+| C: | 2,533,074 | 40.526 | 566 |
+| D: | 3,090,806 | 61.016 | 2 |
+| E: | 364,194 | 4.623 | 0 |
+
+The live 2,000-file fixture converged in **1,010.40 ms** (812.50 ms index CPU).
+Move/resize/rename/delete converged in **22.48 ms**; final Sizes returned **1,999 files /
+256,768 bytes**, and renamed-file search returned the correct path. Evidence:
+`review-final-live.json`.
+
+Two temporary fixed-drive aliases exercised discovery and failure/recovery without
+mounting, unlocking or changing a physical device. The K: fixture took **9.60 s** to
+import its initial generation and **23.26 s** to replace it after return. Deleting its
+owned backing directory produced a real native watch failure (or a racing removal
+broadcast), hid K: search/Sizes in **80.65 ms**, and left C: answering in the same process.
+A recreated K: returned the new **456-byte** file instead of its old **123-byte** record.
+Removing the alias and delivering its volume-removal notification hid it in **1.79 ms**.
+The earlier Z: test's log explicitly recorded `watch Z: offline: Access is denied` and
+hid it in **65.98 ms**. These are alias/device-message tests, not physical USB/VHD or
+BitLocker certification. Evidence: `review-final-volumes.json`,
+`review-final-volumes-z.json` and `review-final-service.log`.
+
+On that live K: alias, **20 crafted Sizes requests using `?:\`** returned correct
+sizes. Four transactions held open concurrently then received valid responses, proving
+all **four listeners** still served clients. No process restart occurred.
+
+The user resumed using the machine before the final game check. The foreground guard
+found **T3 Code (Nightly)** and skipped fullscreen launch/input; see
+`review-game-after-skipped.json`. No post-repair production fullscreen-game latency,
+CPU or wake-rate result is claimed. Instead, the release regression used the real native
+watcher and the same Quiet/store/reconcile code in an isolated fixture. While its gate
+was paused, **20,000 file creations / 2,560,000 bytes** took **6,832.87 ms**. Two dirty
+directories (including a directory last-write event's parent) coalesced to **one subtree
+replay in 67.55 ms**, with **zero root reconciliations**. Sizes stayed at zero files while
+paused, then search and Sizes returned all 20,000 files and exactly 2,560,000 bytes.
+This is an offline pause/resume proof, not a live foreground-game result. Evidence:
+`review-paused-offline.json` and `.log`. The fixture lives under the excluded private
+Cargo target and cleans up its own tree. The final native burst regression and foreground
+safeguards were added after deployment. The later bounded-replay/visibility correction
+below is production code and remains undeployed.
+
+### Late stress failures and bounded-replay correction (not deployed)
+
+A larger **30,000-file** background fixture overlapped an independently triggered real
+game pause after the user resumed using the machine. We did not launch a fullscreen
+fixture or take their foreground. The fixture timed out waiting for Sizes after 60 s
+and cleaned up; it is **not** a successful 30,000-file convergence result.
+On resume, the deployed recovery log included broad parents such as
+`C:/Users/you/AppData/Local`. The then-unbounded in-memory subtree scan/import raised
+PID 78592's OS lifetime working-set high-water to **759,324,672 bytes / 724.15 MiB**.
+The main 256 MiB goal fails for this deployed broad-replay case. Evidence is the final
+lifetime record, the failed-fixture record and `review-final-service.log`.
+
+`6ebad2c` now abandons a small subtree's private scan above **25,000 records or 8 MiB
+of record/name capacity**, then re-enumerates that subtree into sparse scan mappings.
+It streams the new subtree beside unchanged records in a new generation, using the
+same bounded writer/validator as volume replacement. It preserves the basename,
+parent/sibling links, ancestor bytes/counts and unknown-size state, with old query views
+remaining readable throughout. It does not enumerate other volumes. The 26,000-file
+regression verifies this becomes a mapped generation with zero retained overlay records;
+a separate streamed-subtree test covers replacements, new siblings, unknown-size
+propagation/clearing, unchanged volumes, old readers and orphan rejection.
+
+A read-only private process then loaded the full production snapshot and reconciled
+that same **AppData/Local** subtree into its own scratch cache: **474,248 enumerated
+records in 9.427 s**, **24.61 s** total through generation replacement/validation.
+Its OS working-set peak was **140,189,696 bytes / 133.70 MiB**, private high-water
+**127.55 MiB**, and final private commit **8.06 MiB**. Sizes returned 439,179 known files
+and `size_unknown: true` for excluded aggregates. The live helper, user files and
+production snapshot were not modified by this isolated replay. Scratch was removed.
+This verifies the corrected broad-subtree path under 256 MiB **offline**, and does not
+certify that correction in the still-running older binary. Evidence:
+`review-bounded-replay.json`.
+
+The live broad-query sample taken while an offline root was retained had **p95
+1,031.47 ms**, p50 4.52 ms, across 220 full-pipe requests. That is a material latency
+regression; search correctness alone did not reveal it. `6ebad2c` checks volume visibility
+only after top-k rejection, reuses adjacent siblings' status and retains at most 8,192
+cached directory visibility decisions, invalidated when roots/parents change.
+A private full-snapshot benchmark with E: marked offline then measured **p95 21.54 ms**,
+p50 0.247 ms (220 direct queries); the preceding uncached follow-up measured p95
+80.70 ms. These are direct-query samples with a different offline root from the live
+K: fixture, so they are not a controlled IPC speedup comparison. The inherited 20 ms
+latency goal still narrowly misses. After the deployed helper settled/compacted, a
+separate 55-request pipe run measured p95 **22.61 ms**, p50 0.703 ms, with the same
+process and its full 724.15 MiB lifetime high-water retained in the evidence.
+
+Diagnostic commands (read-only input snapshot, isolated output scratch):
+
+```powershell
+C:/mypaper-targets/index/release/mypaper-index.exe --bench-offline-query SNAPSHOT 'E:\'
+C:/mypaper-targets/index/release/mypaper-index.exe --bench-replay SNAPSHOT $env:LOCALAPPDATA C:/mypaper-targets/index/measurements
+```
+
+Evidence: `review-final-search.json`, `review-offline-query-followup*.json`,
+`review-final-settled-search.json`. Timings vary with the concurrent desktop workload.
+No post-repair foreground-game CPU/wake-rate result or all-scenario RAM guarantee is
+claimed. Per-directory enumeration still materializes a directory's entries, so an
+arbitrarily enormous single directory is a remaining separate bound.
 
 ## Final Round 2 result (2026-11-06, 09:38 build)
 
@@ -535,7 +740,7 @@ build/temp-file activity. These are workload observations, not controlled idle c
 
 - Studio toggle in Experimental (Studio is owned by its redesign thread).
 - Elevated MFT/USN path and recovery of offline changes without a background full reconciliation.
-- Mounted volumes without drive letters, device hotplug and a user include/exclude UI.
+- Mounted volumes without drive letters and a user include/exclude UI.
 - The Files window is a separate native process delivered by its own workstream. Its
   search/folder-size integration can consume this pipe; the index should remain independent.
 - Scan scratch currently caps one volume at 64 million entries and 2 GiB name bytes;

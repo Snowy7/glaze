@@ -1,0 +1,13 @@
+{
+  "burst_ms": 6832.8656,
+  "bytes": 2560000,
+  "dirty_directories": 2,
+  "files": 20000,
+  "fixture": "offline-real-native-watch",
+  "paused_sizes_files": 0,
+  "replay_ms": 67.5484,
+  "resumed_sizes_bytes": 2560000,
+  "resumed_sizes_files": 20000,
+  "root_reconciliations": 0,
+  "subtree_replays": 1
+}
