@@ -49,6 +49,14 @@ pub fn stop_marker(dir: &std::path::Path, rules: &str) -> PathBuf {
     dir.join(rules).with_extension("off")
 }
 
+/// `<rules file>.<pid>.off`: the same as [`stop_marker`] for one process only. The helper
+/// writes it when an Explorer folder process has no folder window left: while a session follows
+/// its tree, XAML Diagnostics keeps the closed windows alive, and with them the process, which
+/// otherwise exits on its own.
+pub fn process_stop_marker(dir: &std::path::Path, rules: &str, pid: u32) -> PathBuf {
+    dir.join(rules).with_extension(format!("{pid}.off"))
+}
+
 /// What the helper tells the TAP when it attaches. XAML Diagnostics silently drops initialization
 /// data much longer than 256 characters, so this names one folder and short file names in it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,6 +87,11 @@ impl Attach {
     /// The marker that makes this session put its app back and detach (see [`stop_marker`]).
     pub fn stop_path(&self) -> PathBuf {
         stop_marker(&self.dir, &self.rules)
+    }
+
+    /// The marker that makes this process's session alone detach (see [`process_stop_marker`]).
+    pub fn process_stop_path(&self, pid: u32) -> PathBuf {
+        process_stop_marker(&self.dir, &self.rules, pid)
     }
 
     /// One `key=value` per line.
@@ -153,6 +166,10 @@ mod tests {
     fn the_stop_marker_sits_next_to_the_rules() {
         let dir = std::path::Path::new(r"C:\styler");
         assert_eq!(stop_marker(dir, "explorer.json"), dir.join("explorer.off"));
+        assert_eq!(
+            process_stop_marker(dir, "explorer.json", 42),
+            dir.join("explorer.42.off")
+        );
         assert_eq!(
             stop_marker(dir, r"D:\rules\try.json"),
             std::path::Path::new(r"D:\rules\try.off")

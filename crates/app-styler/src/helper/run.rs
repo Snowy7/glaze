@@ -5,7 +5,7 @@
 //! the attached processes and its message queue, which a window-shown WinEvent hook and the
 //! config/palette file watches feed.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use mypaper_app_styler::presets::{self, Colors};
-use mypaper_app_styler::{Attach, Framework, stop_marker};
+use mypaper_app_styler::{Attach, Framework, process_stop_marker, stop_marker};
 use mypaper_config::Config;
 use mypaper_theme::LoadedTheme;
 use windows::Win32::Foundation::{
@@ -27,7 +27,8 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, EVENT_OBJECT_SHOW, EnumChildWindows, EnumWindows, GA_ROOT, GetAncestor,
+    CHILDID_SELF, DispatchMessageW, EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, EnumChildWindows,
+    EnumWindows, FindWindowExW, GA_ROOT, GetAncestor,
     GetClassNameW, GetWindowThreadProcessId, IsWindowVisible, MSG, MsgWaitForMultipleObjects,
     OBJID_WINDOW, PM_REMOVE, PeekMessageW, PostThreadMessageW, QS_ALLINPUT, TranslateMessage,
     WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_APP, WM_QUIT,
@@ -50,6 +51,8 @@ const INCIDENT: Duration = Duration::from_secs(5);
 thread_local! {
     /// Windows shown since the last pass (filled by the WinEvent callback).
     static SHOWN: RefCell<Vec<HWND>> = const { RefCell::new(Vec::new()) };
+    /// A window of an attached Explorer was destroyed since the last pass.
+    static DESTROYED: Cell<bool> = const { Cell::new(false) };
 }
 
 /// How long a new helper waits for the previous one to finish exiting (core restarted).
@@ -198,14 +201,32 @@ struct Attached {
     /// When the last attach started.
     at: Instant,
     frameworks: Vec<Framework>,
+    /// Explorer: its windows being destroyed, to see when the last folder window is gone.
+    destroy_hook: Option<Hook>,
+    /// Explorer: let go of after its last folder window closed (its process stop marker is
+    /// down); never attached again, only watched until it exits.
+    released: bool,
+}
+
+/// A WinEvent hook, removed on drop.
+struct Hook(HWINEVENTHOOK);
+
+impl Drop for Hook {
+    fn drop(&mut self) {
+        // SAFETY: a hook we set on this thread.
+        let _ = unsafe { UnhookWinEvent(self.0) };
+    }
 }
 
 impl Helper {
     fn new(preview: Option<String>, parent: Option<Process>) -> Result<Self> {
         let dir = data_dir()?;
-        // A fresh session starts clean: stop markers from an earlier one's crash guard go.
-        for app in mypaper_config::apps::APPS {
-            let _ = std::fs::remove_file(stop_marker(&dir, &rules_name(app)));
+        // A fresh session starts clean: stop markers from an earlier one (its crash guard, apps
+        // switched off, processes let go of) go.
+        for entry in std::fs::read_dir(&dir)?.flatten() {
+            if entry.file_name().to_string_lossy().ends_with(".off") {
+                let _ = std::fs::remove_file(entry.path());
+            }
         }
         Ok(Self {
             tap: tap_path()?,
@@ -386,6 +407,31 @@ impl Helper {
                 }
             }
             self.consider_shown();
+            self.consider_destroyed();
+        }
+    }
+
+    /// Lets go of every attached Explorer folder process with no folder window left: while a
+    /// session follows its tree, XAML Diagnostics keeps the closed windows, and with them the
+    /// process, alive; detached, the process exits on its own (in about a minute). There is no
+    /// live XAML left in it to disturb, unlike ending a session in a process that goes on. It is
+    /// never attached again (a window that still opens in it stays stock).
+    fn consider_destroyed(&mut self) {
+        if !DESTROYED.take() {
+            return;
+        }
+        for (&pid, entry) in &mut self.attached {
+            if entry.released || entry.destroy_hook.is_none() || has_folder_window(pid) {
+                continue;
+            }
+            let marker = process_stop_marker(&self.dir, &rules_name(entry.process.app), pid);
+            if let Err(e) = std::fs::write(&marker, b"no folder window left\n") {
+                log::warn!("writing {}: {e}", marker.display());
+                continue;
+            }
+            log::info!("explorer ({pid}) has no folder window left: letting go so it can exit");
+            entry.released = true;
+            entry.destroy_hook = None;
         }
     }
 
@@ -464,6 +510,8 @@ impl Helper {
                         process,
                         at: Instant::now(),
                         frameworks: Vec::new(),
+                        destroy_hook: None,
+                        released: false,
                     });
                 }
                 _ => {
@@ -491,6 +539,11 @@ impl Helper {
             Ok(()) => {
                 log::info!("styling {app} ({pid}, {framework})");
                 entry.frameworks.push(framework);
+                if app == "explorer" && entry.destroy_hook.is_none() {
+                    entry.destroy_hook = destroy_hook(pid);
+                    // Its window may have closed while we attached.
+                    DESTROYED.set(true);
+                }
             }
             Err(e) => {
                 // WinUI not loaded yet in a fresh Explorer: a later window will try again.
@@ -512,6 +565,10 @@ impl Helper {
             return;
         };
         let app = entry.process.app;
+        let _ = std::fs::remove_file(process_stop_marker(&self.dir, &rules_name(app), pid));
+        if entry.released {
+            log::info!("{app} ({pid}) exited after we let go");
+        }
         let mut code = 0;
         // SAFETY: a live handle and a valid out pointer.
         let _ = unsafe { GetExitCodeProcess(entry.process.handle(), &mut code) };
@@ -629,6 +686,58 @@ fn sweep() {
     // SAFETY: the callbacks only touch a thread-local on this thread.
     let _ = unsafe { EnumWindows(Some(visit), LPARAM(0)) };
 }
+/// Window-destroyed events from `pid` alone, for [`on_destroy`]. Without it the process is
+/// never let go of (it then lives until the helper exits).
+fn destroy_hook(pid: u32) -> Option<Hook> {
+    // SAFETY: an out-of-context hook with a 'static callback, removed by `Hook`.
+    let hook = unsafe {
+        SetWinEventHook(
+            EVENT_OBJECT_DESTROY,
+            EVENT_OBJECT_DESTROY,
+            None,
+            Some(on_destroy),
+            pid,
+            0,
+            WINEVENT_OUTOFCONTEXT,
+        )
+    };
+    if hook.is_invalid() {
+        log::warn!("explorer ({pid}): no window-destroyed hook; it is let go of only when we exit");
+        return None;
+    }
+    Some(Hook(hook))
+}
+
+/// Whether `pid` still has a folder window (`CabinetWClass`).
+fn has_folder_window(pid: u32) -> bool {
+    let mut after = None;
+    // SAFETY: plain lookups; `after` is the previous match (or none for the first).
+    while let Ok(found) = unsafe { FindWindowExW(None, after, w!("CabinetWClass"), None) } {
+        let mut owner = 0;
+        // SAFETY: a valid out pointer.
+        unsafe { GetWindowThreadProcessId(found, Some(&mut owner)) };
+        if owner == pid {
+            return true;
+        }
+        after = Some(found);
+    }
+    false
+}
+
+unsafe extern "system" fn on_destroy(
+    _: HWINEVENTHOOK,
+    _: u32,
+    hwnd: HWND,
+    object: i32,
+    child: i32,
+    _: u32,
+    _: u32,
+) {
+    if object == OBJID_WINDOW.0 && child == CHILDID_SELF as i32 && !hwnd.is_invalid() {
+        DESTROYED.set(true);
+    }
+}
+
 unsafe extern "system" fn on_show(
     _: HWINEVENTHOOK,
     _: u32,

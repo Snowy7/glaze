@@ -14,8 +14,9 @@
 //! applied when its first element appears. A removed element gets its values back first (it may
 //! come back), a rules change re-styles every thread and element, and when the helper exits for
 //! any reason (flag off, quit, panic hotkey, crash) or writes this app's stop marker (its crash
-//! guard), every recorded value and brush is put back and the session ends: no thread, hook or
-//! timer of ours is left in the app. The DLL itself stays mapped (a TAP can't unload safely).
+//! guard, or the app switched off) or this process's (an Explorer folder process whose last
+//! window closed), every recorded value and brush is put back and the session ends: no thread,
+//! hook or timer of ours is left in the app. The DLL itself stays mapped (a TAP can't unload safely).
 //!
 //! XAML Diagnostics' handles don't keep objects alive (see [`Original`]): anything kept is held
 //! by a strong reference and re-resolved to a fresh handle before use. Work for a UI thread is
@@ -436,7 +437,9 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
         Err(e) => return log(&format!("no IVisualTreeService3: {e}")),
     };
     let stop = attach.stop_path();
-    if stop.exists() {
+    // SAFETY: no preconditions.
+    let own_stop = attach.process_stop_path(unsafe { GetCurrentProcessId() });
+    if stop.exists() || own_stop.exists() {
         return log("the helper stopped styling this app; not attaching");
     }
     let session = Arc::new(Session {
@@ -508,7 +511,11 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
             // SAFETY: the notification handle from above.
             let _ = unsafe { FindNextChangeNotification(changes) };
             if stop.exists() {
-                log("the helper stopped styling this app (crash guard)");
+                log("the helper stopped styling this app (crash guard or config)");
+                break;
+            }
+            if own_stop.exists() {
+                log("the helper let go of this process (its last folder window closed)");
                 break;
             }
             if session.reload_rules() {
