@@ -39,27 +39,23 @@ impl Sort {
 
 /// Natural, case-insensitive comparison without allocating a lowercased name per comparison.
 pub fn natural(a: &str, b: &str) -> Ordering {
-    let (mut left, mut right) = (a.chars().peekable(), b.chars().peekable());
-    loop {
-        match (left.peek(), right.peek()) {
-            (Some(a), Some(b)) if a.is_ascii_digit() && b.is_ascii_digit() => {
-                let mut la = String::new();
-                let mut rb = String::new();
-                while left.peek().is_some_and(char::is_ascii_digit) { la.push(left.next().unwrap()); }
-                while right.peek().is_some_and(char::is_ascii_digit) { rb.push(right.next().unwrap()); }
-                let (av, bv) = (la.trim_start_matches('0'), rb.trim_start_matches('0'));
-                let order = av.len().cmp(&bv.len()).then_with(|| av.cmp(bv)).then(la.len().cmp(&rb.len()));
-                if order != Ordering::Equal { return order; }
-            }
-            (Some(_), Some(_)) => {
-                let order = left.next().unwrap().to_lowercase().cmp(right.next().unwrap().to_lowercase());
-                if order != Ordering::Equal { return order; }
-            }
-            (None, None) => return Ordering::Equal,
-            (None, _) => return Ordering::Less,
-            (_, None) => return Ordering::Greater,
+    let (mut left, mut right) = (a, b);
+    while !left.is_empty() && !right.is_empty() {
+        let (ac, bc) = (left.chars().next().unwrap(), right.chars().next().unwrap());
+        if ac.is_ascii_digit() && bc.is_ascii_digit() {
+            let al = left.bytes().take_while(u8::is_ascii_digit).count();
+            let bl = right.bytes().take_while(u8::is_ascii_digit).count();
+            let (av, bv) = (left[..al].trim_start_matches('0'), right[..bl].trim_start_matches('0'));
+            let order = av.len().cmp(&bv.len()).then_with(|| av.cmp(bv)).then(al.cmp(&bl));
+            if order != Ordering::Equal { return order; }
+            left = &left[al..]; right = &right[bl..];
+        } else {
+            let order = ac.to_lowercase().cmp(bc.to_lowercase());
+            if order != Ordering::Equal { return order; }
+            left = &left[ac.len_utf8()..]; right = &right[bc.len_utf8()..];
         }
     }
+    left.len().cmp(&right.len())
 }
 
 #[derive(Default)]

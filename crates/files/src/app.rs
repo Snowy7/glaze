@@ -110,6 +110,8 @@ impl App {
         native::install(surface.hwnd())?;
         let theme = crate::look::load(scheme_override);
         let s = surface.scale();
+        surface.set_background(theme.color.surface);
+        surface.set_frame(theme.scheme == Scheme::Dark, theme.color.surface);
         let field = || TextField::new(surface.hwnd(), Rect::new(0.0, 0.0, 200.0, 24.0), false, theme.font.font(TextRole::Body).size * s, theme.color.label);
         let (address, search, editor) = (field()?, field()?, field()?);
         let backend = Backend::new(surface.hwnd())?;
@@ -132,7 +134,7 @@ impl App {
 
     pub fn rebuild_sidebar(&mut self) {
         use windows::Win32::UI::Shell::*;
-        let mut sidebar = vec![("Home".into(), "shell:profile".into(), Icon::Home)];
+        let mut sidebar = vec![("Home".into(), shell::known_folder(&FOLDERID_Profile).unwrap_or_else(|| "shell:profile".into()), Icon::Home)];
         for (name, id, icon) in [
             ("Desktop", FOLDERID_Desktop, Icon::Desktop), ("Downloads", FOLDERID_Downloads, Icon::Download),
             ("Documents", FOLDERID_Documents, Icon::File), ("Pictures", FOLDERID_Pictures, Icon::Photo),
@@ -299,7 +301,7 @@ impl App {
             PASTE => self.command(Command::Paste)?, RENAME => self.command(Command::Rename)?, DELETE => self.command(Command::Delete)?,
             DETAILS => self.command(Command::Details)?, ICONS => self.command(Command::Icons)?, REFRESH => self.refresh()?,
             MORE => { let rect = self.surface.shown().hits.iter().find(|h| h.id == MORE).map(|h| h.rect).unwrap_or_default();
-                let origin = self.surface.origin(); self.context(ui, (origin.0 + rect.left as i32, origin.1 + rect.bottom as i32))?; }
+                let origin = native::origin(self.surface.hwnd()); self.context(ui, (origin.0 + rect.left as i32, origin.1 + rect.bottom as i32))?; }
             SUBMIT => self.submit()?, CANCEL => self.focus(Field::None)?,
             MINIMIZE => self.surface.minimize(), MAXIMIZE => self.surface.toggle_maximize(), CLOSE => self.closing = true,
             id if (HEADER..HEADER + 4).contains(&id) => {
@@ -320,7 +322,7 @@ impl App {
             match key { 0x25 => self.activate(ui, BACK)?, 0x27 => self.activate(ui, FORWARD)?, 0x26 => self.activate(ui, UP)?, _ => {} }
             return Ok(());
         }
-        if control() {
+        if control() && !matches!(key, 0x21..=0x28) {
             match key {
                 0x4c => self.focus(Field::Address)?, 0x45 | 0x46 => { self.focus(Field::Search)?; self.search.select_all(); }
                 0x41 if self.field == Field::None => { self.selection.items = (0..self.shown.len()).collect(); }
@@ -339,7 +341,7 @@ impl App {
             0x71 if self.field == Field::None => self.command(Command::Rename)?,
             0x74 => self.refresh()?,
             0x2e if self.field == Field::None => self.command(Command::Delete)?,
-            0x5d => { let origin = self.surface.origin(); self.context(ui, (origin.0 + self.geometry.viewport.left as i32 + 60, origin.1 + self.geometry.viewport.top as i32 + 40))?; }
+            0x5d => { let origin = native::origin(self.surface.hwnd()); self.context(ui, (origin.0 + self.geometry.viewport.left as i32 + 60, origin.1 + self.geometry.viewport.top as i32 + 40))?; }
             0x09 => { self.focus(match self.field { Field::None => Field::Address, Field::Address => Field::Search, _ => Field::None })?; }
             0x20 if self.field == Field::None => if let Some(index) = self.selection.focus { self.selection.choose(index, true, false); },
             0x21 | 0x22 | 0x23 | 0x24 | 0x25 | 0x26 | 0x27 | 0x28 if !self.shown.is_empty() && matches!(self.field, Field::None | Field::Search) => {
@@ -351,6 +353,8 @@ impl App {
                     0x25 => current.saturating_sub(1), 0x27 => current + 1, 0x26 => current.saturating_sub(columns), _ => if self.selection.focus.is_none() { 0 } else { current + columns },
                 }.min(self.shown.len() - 1);
                 if control() { self.selection.focus = Some(next); } else { self.selection.choose(next, false, shift()); }
+                self.interaction.focus = Some(ITEM + next as u32);
+                self.interaction.focus_visible = true;
                 let top = (next / columns) as f32 * self.geometry.row;
                 self.scroll.reveal(top, top + self.geometry.row, Instant::now());
             }
@@ -369,6 +373,8 @@ impl App {
         let start = if cycle { self.selection.focus.map_or(0, |n| n + 1) } else { 0 };
         if let Some(index) = (0..self.shown.len()).map(|n| (start + n) % self.shown.len()).find(|i| self.shown[*i].name.to_lowercase().starts_with(&prefix)) {
             self.selection.choose(index, false, false);
+            self.interaction.focus = Some(ITEM + index as u32);
+            self.interaction.focus_visible = true;
             let row = (index / self.geometry.grid_columns.max(1)) as f32 * self.geometry.row;
             self.scroll.reveal(row, row + self.geometry.row, Instant::now());
         }
@@ -463,7 +469,8 @@ impl App {
                     let index = (id - ITEM) as usize;
                     if !self.selection.items.contains(&index) { self.selection.choose(index, false, false); }
                 } else if self.geometry.viewport.contains(pointer.at) { self.selection.clear(); }
-                self.context(ui, pointer.screen)?;
+                let origin = native::origin(self.surface.hwnd());
+                self.context(ui, (origin.0 + pointer.at.x as i32, origin.1 + pointer.at.y as i32))?;
             }
             Event::DoubleClick(pointer, Button::Left) => if let Some(id) = hit(self, pointer.at).filter(|id| *id >= ITEM) {
                 self.selection.choose((id - ITEM) as usize, false, false); self.open_selection()?;
@@ -477,6 +484,8 @@ impl App {
 
     pub fn reload_look(&mut self) -> Result<()> {
         self.theme = crate::look::load(self.scheme_override);
+        self.surface.set_background(self.theme.color.surface);
+        self.surface.set_frame(self.theme.scheme == Scheme::Dark, self.theme.color.surface);
         let field = self.field.clone();
         let text = self.search.text().unwrap_or_default();
         self.focus(Field::None)?;
@@ -509,9 +518,12 @@ impl App {
                     if complete { log::info!("folder: {} entries in {elapsed_ms} ms", self.entries.len()); }
                 }
                 Reply::Search { epoch, query, entries, indexed } if epoch == self.epoch && query == self.query => {
+                    let selected: HashSet<_> = self.selected_paths().into_iter().collect();
                     self.shown = entries;
                     self.indexed = indexed;
                     self.selection.clear();
+                    self.selection.items = self.shown.iter().enumerate().filter_map(|(i, e)| selected.contains(&e.path).then_some(i)).collect();
+                    self.selection.focus = self.selection.items.first().copied();
                     if self.query_text.is_empty() { self.entries = self.shown.clone(); }
                 }
                 Reply::Sizes { epoch, sizes } if epoch == self.epoch => { self.sizes = sizes; }

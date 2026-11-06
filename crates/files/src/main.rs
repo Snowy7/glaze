@@ -9,9 +9,12 @@ mod look;
 mod app;
 mod view;
 
-fn main() {
+fn main() -> std::process::ExitCode {
     env_logger::init();
-    if let Err(error) = run() { log::error!("Files: {error:#}"); }
+    match run() {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => { log::error!("Files: {error:#}"); std::process::ExitCode::FAILURE }
+    }
 }
 
 fn run() -> anyhow::Result<()> {
@@ -26,6 +29,9 @@ fn run() -> anyhow::Result<()> {
         match arg.as_str() {
             "--light" => scheme = Some(Scheme::Light), "--dark" => scheme = Some(Scheme::Dark),
             "--restore-routing" => {
+                let mut config = mypaper_config::Config::load()?;
+                config.experimental.files_default = false;
+                config.save()?;
                 mypaper_tweaks::folder_routing::FolderRouting::new()?.set(false, &std::env::current_exe()?)?;
                 unsafe { OleUninitialize(); } return Ok(());
             }

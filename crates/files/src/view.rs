@@ -110,7 +110,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
         for index in model::visible_range(app.sidebar.len(), side_offset, side_list.height(), side_h) {
             let (name, path, icon) = &app.sidebar[index];
             let rect = Rect::new(origin.x, origin.y + index as f32 * side_h, side_list.width(), side_h - px(2.0));
-            let selected = app.location.as_ref().is_some_and(|l| l.path.eq_ignore_ascii_case(path)) || (index == 0 && app.location.as_ref().is_some_and(|l| shell::known_folder(&windows::Win32::UI::Shell::FOLDERID_Profile).as_ref() == Some(&l.path)));
+            let selected = app.location.as_ref().is_some_and(|l| l.path.eq_ignore_ascii_case(path));
             f.row(&ListRow { id: SIDEBAR + index as u32, lead: Lead::Icon(*icon), title: name, subtitle: None, accessory: Accessory::None, selected, enabled: true }, rect);
         }
         app.sidebar.len() as f32 * side_h
@@ -247,8 +247,6 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     }
     app.geometry = Geometry { viewport: content, address: address_inner, search: search_inner, edit,
         columns: boundaries, rows, crumbs, row: row_height, grid_columns: columns };
-    app.surface.set_background(color.surface);
-    app.surface.set_frame(theme.scheme == Scheme::Dark, color.surface);
     let list = f.list;
     app.surface.present(ui, app.surface.origin(), (width, height), list)?;
     app.request_images();

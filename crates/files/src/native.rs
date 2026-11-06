@@ -13,6 +13,12 @@ pub enum Input { Character(char), Back(bool), Key(u16) }
 pub fn next() -> Option<Input> { INPUT.with_borrow_mut(VecDeque::pop_front) }
 pub fn field(active: bool) { FIELD.set(active); }
 
+pub fn origin(hwnd: HWND) -> (i32, i32) {
+    let mut point = POINT::default();
+    let _ = unsafe { windows::Win32::Graphics::Gdi::ClientToScreen(hwnd, &mut point) };
+    (point.x, point.y)
+}
+
 pub fn install(hwnd: HWND) -> Result<()> {
     ensure!(unsafe { SetWindowSubclass(hwnd, Some(subclass), 1, 0) }.as_bool(), "Installing Files input adapter");
     Ok(())

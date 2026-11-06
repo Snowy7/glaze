@@ -1,6 +1,6 @@
 //! Shell names, namespace enumeration and image extraction. All slow shell calls run on STAs
 //! owned by the browser's workers, never on the drawing thread.
-use std::{path::{Path, PathBuf}, sync::Arc};
+use std::{path::Path, sync::Arc};
 use anyhow::{Context, Result, ensure};
 use mypaper_ui::Image;
 use windows::{core::{HSTRING, PCWSTR, PWSTR}, Win32::{
@@ -252,4 +252,3 @@ pub fn validate_name(name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn executable() -> Result<PathBuf> { Ok(std::env::current_exe()?) }
