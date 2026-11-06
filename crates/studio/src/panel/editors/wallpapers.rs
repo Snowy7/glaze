@@ -375,11 +375,12 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                 .unwrap_or("cover");
             if w.editable() {
                 group(b, c, "", |b, c| {
-                    let source = (w.kind == Some(Kind::Image))
-                        .then(|| theme.pointer("/wallpaper/source").and_then(Value::as_str))
-                        .flatten()
-                        .map(|source| w.dir.join(source))
-                        .filter(|path| path.is_file());
+                    let source = (theme.pointer("/wallpaper/kind").and_then(Value::as_str)
+                        == Some("image"))
+                    .then(|| theme.pointer("/wallpaper/source").and_then(Value::as_str))
+                    .flatten()
+                    .map(|source| w.dir.join(source))
+                    .filter(|path| path.is_file());
                     let image = source
                         .as_ref()
                         .or(w.preview.as_ref().or(w.video.as_ref()))
