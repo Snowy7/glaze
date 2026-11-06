@@ -185,7 +185,12 @@ struct Helper {
     seen: HashMap<u32, &'static str>,
     /// Incidents of deaths soon after attaching, per app, and when the last one was.
     strikes: HashMap<&'static str, (usize, Instant)>,
+    /// Apps the crash guard gave up on for this session.
     disabled: HashSet<&'static str>,
+    /// Apps the config doesn't want styled right now (`look.apps.<app>.enabled`, or Explorer
+    /// without `system.separate_process`): their stop marker is down, and they come back when
+    /// the config does.
+    blocked: HashSet<&'static str>,
 }
 
 struct Attached {
@@ -212,7 +217,33 @@ impl Helper {
             seen: HashMap::new(),
             strikes: HashMap::new(),
             disabled: HashSet::new(),
+            blocked: HashSet::new(),
         })
+    }
+
+    /// Follows whether the config wants `app` styled: `why_not` is the reason it doesn't (logged
+    /// once per change). A blocked app's live sessions put it back and detach (its stop marker),
+    /// and none starts; unblocked, its next window attaches again.
+    fn block(&mut self, app: &'static str, why_not: Option<&str>) {
+        let marker = stop_marker(&self.dir, &rules_name(app));
+        match why_not {
+            Some(why) => {
+                if !self.blocked.insert(app) {
+                    return;
+                }
+                log::info!("not styling {app}: {why}");
+                if let Err(e) = std::fs::write(&marker, b"off in config.json\n") {
+                    log::warn!("writing {}: {e}", marker.display());
+                }
+                self.attached.retain(|_, a| a.process.app != app);
+            }
+            None => {
+                if self.blocked.remove(app) {
+                    log::info!("styling {app} again");
+                    let _ = std::fs::remove_file(&marker);
+                }
+            }
+        }
     }
 
     /// Re-reads the config, theme and palette and rewrites each app's rules file if it changed.
@@ -248,11 +279,32 @@ impl Helper {
             dominant: shared.dominant.map(|c| c.0),
         };
         let theme_apps = theme.as_ref().and_then(|t| t.theme.apps.as_ref());
+        let switches = config
+            .look
+            .apps
+            .over(&theme_apps.cloned().unwrap_or_default());
         for app in mypaper_config::apps::APPS {
             // The crash guard gave up on it: its rules aren't published any more.
             if self.disabled.contains(app) {
                 continue;
             }
+            let enabled = switches.app(app).and_then(|r| r.enabled).unwrap_or(true);
+            let why_not = if !enabled {
+                Some(format!("look.apps.{app}.enabled is false"))
+            } else if app == "explorer" && config.system.separate_process != Some(true) {
+                // XAML Diagnostics keeps every folder window Explorer ever showed until that
+                // process exits: only the separate folder process exits (after its last
+                // window), the shell's never does.
+                Some(
+                    "it needs system.separate_process = true (folder windows in their own \
+                     process, which exits after its last window); the shell's Explorer is never \
+                     styled"
+                        .to_owned(),
+                )
+            } else {
+                None
+            };
+            self.block(app, why_not.as_deref());
             let rules = match &self.preview {
                 Some(name) => {
                     let user = mypaper_config::AppsStyle {
@@ -357,7 +409,7 @@ impl Helper {
                     }
                 },
             };
-            if self.disabled.contains(app) {
+            if self.disabled.contains(app) || self.blocked.contains(app) {
                 continue;
             }
             let framework = match app {
@@ -374,6 +426,19 @@ impl Helper {
                 .is_some_and(|a| a.frameworks.contains(&framework))
             {
                 continue;
+            }
+            if app == "explorer" && !self.attached.contains_key(&pid) {
+                match super::is_shell(pid) {
+                    Some(false) => {}
+                    Some(true) => {
+                        log::info!("explorer ({pid}) is the shell's Explorer: never styled");
+                        self.seen.remove(&pid);
+                        self.refused.insert(pid);
+                        continue;
+                    }
+                    // No shell window right now: ask again with its next window.
+                    None => continue,
+                }
             }
             self.attach_to(pid, app, framework);
         }

@@ -10,14 +10,17 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use mypaper_inject::signature::microsoft_signed;
 use mypaper_inject::{Target, Verdict, evaluate};
-use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_TIMEOUT};
+use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, WAIT_TIMEOUT};
 use windows::Win32::Storage::Packaging::Appx::GetPackageFamilyName;
 use windows::Win32::System::SystemInformation::GetWindowsDirectoryW;
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
     QueryFullProcessImageNameW, WaitForSingleObject,
 };
-use windows_core::PWSTR;
+use windows::Win32::UI::WindowsAndMessaging::{
+    FindWindowExW, GetShellWindow, GetWindowThreadProcessId,
+};
+use windows_core::{PWSTR, w};
 
 /// The styled apps, by image path under the Windows directory, and the name their rules use.
 /// Narrower than the injection allowlist on purpose: only these two, and only if that allowlist
@@ -127,7 +130,45 @@ pub fn pin(pid: u32) -> Option<Pinned> {
 }
 
 pub fn check_allowed(pid: u32) -> Result<Pinned> {
-    pin(pid).with_context(|| format!("process {pid} is not Explorer or Settings; refused"))
+    let pinned =
+        pin(pid).with_context(|| format!("process {pid} is not Explorer or Settings; refused"))?;
+    if pinned.app == "explorer" && is_shell(pid) != Some(false) {
+        anyhow::bail!("explorer {pid} is (or may be) the shell's Explorer; never attached");
+    }
+    Ok(pinned)
+}
+
+/// Whether `pid` is the shell's Explorer: it owns the shell window (the desktop), `Progman` or
+/// a taskbar. XAML Diagnostics keeps every window tree it has seen until the process exits, and
+/// the shell's Explorer runs for the whole session, so it is never attached. `None` when there
+/// is no shell window right now (Explorer restarting): nobody can tell, so don't attach either.
+pub fn is_shell(pid: u32) -> Option<bool> {
+    let owner = |hwnd: HWND| {
+        let mut owner = 0;
+        // SAFETY: a valid out pointer; a stale window just yields 0.
+        unsafe { GetWindowThreadProcessId(hwnd, Some(&mut owner)) };
+        owner
+    };
+    // SAFETY: no preconditions.
+    let shell = unsafe { GetShellWindow() };
+    if shell.is_invalid() {
+        return None;
+    }
+    if owner(shell) == pid {
+        return Some(true);
+    }
+    // Every top-level window of these classes (a desktop, a taskbar per screen).
+    for class in [w!("Progman"), w!("Shell_TrayWnd"), w!("Shell_SecondaryTrayWnd")] {
+        let mut after = None;
+        // SAFETY: plain lookups; `after` is the previous match (or none for the first).
+        while let Ok(found) = unsafe { FindWindowExW(None, after, class, None) } {
+            if owner(found) == pid {
+                return Some(true);
+            }
+            after = Some(found);
+        }
+    }
+    Some(false)
 }
 
 struct Process(HANDLE);
