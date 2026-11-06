@@ -275,14 +275,10 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
         });
         if !disabled && !needs_attention && status != "Available" {
             group(b, c, "", |b, c| {
-                row(
+                action_button(
                     b,
                     c,
-                    None,
                     "Disconnect",
-                    "",
-                    "",
-                    None,
                     Action::Panel(Command::Disconnect(plugin.id.clone())),
                 );
             });

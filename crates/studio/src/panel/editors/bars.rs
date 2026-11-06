@@ -201,7 +201,7 @@ fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str, cap
             value.as_bool().unwrap_or(default),
             Action::Toggle(edit, value.as_bool().unwrap_or(default)),
         ),
-        Kind::Choice { options, .. } | Kind::Select { options, .. } => select(
+        Kind::Choice { options, .. } => segments(
             b,
             c,
             label,
@@ -217,6 +217,22 @@ fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str, cap
                 })
                 .collect(),
         ),
+        Kind::Select { options, .. } => select(
+            b,
+            c,
+            label,
+            value,
+            edit,
+            options
+                .iter()
+                .map(|(v, l)| {
+                    (
+                        serde_json::from_str(v).expect("setting option"),
+                        (*l).into(),
+                    )
+                })
+                .collect(),
+        ),
         Kind::Slider {
             min,
             max,
@@ -226,7 +242,11 @@ fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str, cap
             default,
         } => {
             let stacked = app.size.0 as f32 <= b.px(360.0) || b.t.text_scale > 1.0;
-            let label_width = if stacked { c.w } else { b.px(100.0) };
+            let label_width = if stacked {
+                c.w
+            } else {
+                crate::panel::controls::label_width(b, c)
+            };
             text(
                 b,
                 Rect::new(
@@ -256,7 +276,7 @@ fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str, cap
                 r,
                 value,
                 (min, max, step),
-                &format!("{:.0}{unit}", value * factor),
+                &crate::panel::controls::unit(value * factor, unit),
                 b.px(60.0),
                 label,
                 Action::Slider(edit),
@@ -814,13 +834,31 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
                 b.p.ink3,
                 Align::Start,
             );
+            let zone_top = c.y;
             c.y += b.px(28.0);
             let modules = bar_value(app, &format!("/{}/{list}", bar.key()))
                 .and_then(|v| v.as_array().cloned())
                 .unwrap_or_default();
+            crate::panel::lists::zone_target(
+                app,
+                b,
+                Rect::new(c.x, zone_top, c.w, b.px(28.0)),
+                bar,
+                list,
+                modules.len(),
+            );
             module_rows(app, b, c, bar, list, &modules);
             if modules.is_empty() {
+                let top = c.y;
                 notice(b, c, "No modules here");
+                crate::panel::lists::zone_target(
+                    app,
+                    b,
+                    Rect::new(c.x, top, c.w, c.y - top),
+                    bar,
+                    list,
+                    0,
+                );
             }
         }
         action_button(b, c, "Add a module", Action::AddModule(bar));
@@ -897,7 +935,7 @@ fn module_rows(app: &App, b: &mut B, c: &mut Col, bar: Bar, list: &'static str, 
             &if id == "|" {
                 "A gap".into()
             } else {
-                format!("{} \u{b7} {}", name(id), click_label(app, id, bar))
+                format!("{} · Click: {}", name(id), click_label(app, id, bar))
             },
             id == "|",
             Some(crate::panel::icons::module(id)),
@@ -1476,24 +1514,17 @@ fn pinned_apps(app: &App, b: &mut B, c: &mut Col, which: Pins) {
         } else {
             "Dock's pins"
         };
-        let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(30.0));
-        b.segmented(
-            key(("panel-pin-source", which)),
-            r,
-            &[follows, "Your own"],
-            Some(usize::from(own)),
-            "Pinned apps",
-            true,
-            |i| {
-                if i == 0 {
-                    Action::Unset(Edit::new(DocId::Bars, which.path(), "Follow pins"))
-                } else {
-                    Action::PinsOwn(which)
-                }
-            },
-        );
-        b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
-        c.y = r.bottom + b.px(6.0);
+        if own {
+            action_button(
+                b,
+                c,
+                &format!("Follow {follows}"),
+                Action::Unset(Edit::new(DocId::Bars, which.path(), "Follow pins")),
+            );
+        } else {
+            notice(b, c, &format!("Following {follows}"));
+            action_button(b, c, "Start your own", Action::PinsOwn(which));
+        }
         let pins = app
             .get(
                 DocId::Bars,
@@ -1552,12 +1583,6 @@ fn pinned_apps(app: &App, b: &mut B, c: &mut Col, which: Pins) {
         }
         if own {
             action_button(b, c, "Pin an app", Action::PinAdd(which));
-        } else if pins.is_empty() {
-            notice(
-                b,
-                c,
-                &format!("Following {follows}. Choose Your own to edit the list."),
-            );
         }
     });
 }
@@ -1589,44 +1614,10 @@ pub fn move_module(app: &mut App, bar: Bar, zone: &'static str) {
     if slot.bar == bar && slot.list == zone {
         return;
     }
-    let source = format!("/{}/{}", slot.bar.key(), slot.list);
-    let destination = format!("/{}/{zone}", bar.key());
-    let mut from = bar_value(app, &source)
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
-    if slot.index >= from.len() {
-        return;
-    }
-    let module = from.remove(slot.index);
-    let mut to = bar_value(app, &destination)
-        .and_then(|v| v.as_array().cloned())
-        .unwrap_or_default();
-    let index = to.len();
-    to.push(module);
-    let version = app.docs.version;
-    app.apply(
-        "Move module",
-        vec![
-            crate::docs::Op {
-                doc: DocId::Bars,
-                path: bar_path(app, &source),
-                value: Some(json!(from)),
-            },
-            crate::docs::Op {
-                doc: DocId::Bars,
-                path: bar_path(app, &destination),
-                value: Some(json!(to)),
-            },
-        ],
-    );
-    if app.docs.version != version {
-        app.nav.module = Some(Slot {
-            bar,
-            list: zone,
-            index,
-        });
-        app.nav.bar = Some(bar);
-    }
+    let index = bar_value(app, &format!("/{}/{zone}", bar.key()))
+        .and_then(|v| v.as_array().map(Vec::len))
+        .unwrap_or(0);
+    crate::panel::lists::move_module(app, slot, bar, zone, index);
 }
 
 fn click_label(app: &App, id: &str, bar: Bar) -> String {

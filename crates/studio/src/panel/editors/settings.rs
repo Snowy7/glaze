@@ -34,7 +34,7 @@ pub fn frame_cap(app: &App, b: &mut B, c: &mut Col, path: &str, inherit: &str) {
     }
     let known = options.iter().any(|(v, _)| *v == value);
     options.push((serde_json::json!("custom"), "Custom…".into()));
-    select(
+    segments(
         b,
         c,
         "Cap",
@@ -60,7 +60,7 @@ pub fn frame_cap(app: &App, b: &mut B, c: &mut Col, path: &str, inherit: &str) {
             r,
             current,
             (1.0, 360.0, 1.0),
-            &format!("{current:.0} fps"),
+            &crate::panel::controls::unit(current, "fps"),
             b.px(66.0),
             "Custom frame rate, 1 to 360 fps",
             Action::Slider(Edit::new(DocId::Config, path, "Frame rate")),

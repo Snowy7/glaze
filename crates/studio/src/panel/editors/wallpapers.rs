@@ -35,6 +35,20 @@ fn thumbnail(app: &App, b: &mut B, r: Rect, i: usize) {
     }
 }
 
+fn matches_filter(app: &App, wallpaper: &crate::library::Wallpaper, query: &str) -> bool {
+    !wallpaper.hidden
+        && (app.nav.filter != 1 || wallpaper.editable())
+        && (app.nav.filter != 2 || !wallpaper.editable())
+        && format!(
+            "{} {} {}",
+            wallpaper.name,
+            wallpaper.category(),
+            wallpaper.detail()
+        )
+        .to_lowercase()
+        .contains(query)
+}
+
 pub fn list(app: &App, b: &mut B, c: &mut Col) {
     let add_width = b
         .measure("Add", &crate::panel::controls::font(b, 13.0, 500))
@@ -82,6 +96,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
     );
     b.stroke(filter, b.px(7.0), b.px(1.0), b.p.edge);
     c.y = r.bottom + b.px(4.0);
+    let query = app.text(&FieldId::WallpaperSearch).to_lowercase();
     let category = &app.panel.as_ref().unwrap().category;
     let categories_button = Rect::new(c.x, c.y, c.w, b.px(24.0));
     b.button(
@@ -107,7 +122,12 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                 c,
                 None,
                 "All categories",
-                "",
+                &app.library
+                    .items
+                    .iter()
+                    .filter(|w| matches_filter(app, w, &query))
+                    .count()
+                    .to_string(),
                 "",
                 Some(category.is_none()),
                 Action::Panel(Command::Category(None)),
@@ -118,7 +138,12 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                     c,
                     None,
                     name,
-                    "",
+                    &app.library
+                        .items
+                        .iter()
+                        .filter(|w| w.category() == *name && matches_filter(app, w, &query))
+                        .count()
+                        .to_string(),
                     "",
                     Some(category.as_deref() == Some(name)),
                     Action::Panel(Command::Category(Some((*name).into()))),
@@ -126,7 +151,6 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
             }
         });
     }
-    let query = app.text(&FieldId::WallpaperSearch).to_lowercase();
     let mut count = 0;
     for category_name in categories {
         if category
@@ -140,15 +164,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
             .items
             .iter()
             .enumerate()
-            .filter(|(_, w)| {
-                !w.hidden
-                    && w.category() == category_name
-                    && (app.nav.filter != 1 || w.editable())
-                    && (app.nav.filter != 2 || !w.editable())
-                    && format!("{} {} {}", w.name, w.category(), w.detail())
-                        .to_lowercase()
-                        .contains(&query)
-            })
+            .filter(|(_, w)| w.category() == category_name && matches_filter(app, w, &query))
             .collect();
         if shown.is_empty() {
             continue;
@@ -157,7 +173,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
         text(
             b,
             Rect::new(c.x, c.y, c.w, height(b, 24.0)),
-            category_name,
+            &format!("{category_name} · {}", shown.len()),
             13.0,
             600,
             b.p.ink1,
@@ -170,7 +186,8 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
     }
     if count == 0 {
         if app.nav.filter == 1 && query.is_empty() && category.is_none() {
-            notice(b, c, "No wallpapers of your own yet. Add one above.");
+            notice(b, c, "No wallpapers of your own yet.");
+            action_button(b, c, "Add a wallpaper", Action::AddWallpaper);
         } else {
             notice(b, c, "No wallpapers match. Try All or another search.");
         }
@@ -282,15 +299,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
                 text(b, badge, label, 10.0, 500, b.p.ink2, Align::Center);
             }
             if wallpaper.brings_look {
-                text(
-                    b,
-                    Rect::new(x, r.bottom + height(b, 47.0), width, height(b, 20.0)),
-                    "Brings a look",
-                    10.5,
-                    500,
-                    b.p.ink2,
-                    Align::Start,
-                );
+                b.badge(x, r.bottom + height(b, 47.0), "Brings a look", None, false);
             }
         }
         c.y += row_height;
@@ -346,35 +355,28 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
         }
         let theme = crate::panel::saving::theme_value(app, w);
         if w.kind.is_some_and(Kind::uses_fit) {
-            group(b, c, "Fit", |b, c| {
-                let current = theme
-                    .pointer("/wallpaper/fit")
-                    .and_then(Value::as_str)
-                    .unwrap_or("cover");
-                if w.editable() {
-                    let r = Rect::new(c.x, c.y + b.px(4.0), c.w, height(b, 32.0));
-                    b.segmented(
-                        key(("panel-wallpaper-fit", &w.id)),
-                        r,
-                        &["Fill", "Fit", "Stretch", "Center"],
-                        FITS.iter().position(|(value, _)| *value == current),
-                        "Fit",
-                        true,
-                        |i| Action::Set(theme_edit(w, "/wallpaper/fit", "Fit"), json!(FITS[i].0)),
-                    );
-                    c.y = r.bottom + b.px(6.0);
-                } else {
-                    let fit = match current {
-                        "contain" => "Fit",
-                        "stretch" => "Stretch",
-                        "center" => "Center",
-                        _ => "Fill",
-                    };
-                    notice(b, c, &format!("{fit} · Built in"));
-                }
-            });
+            let current = theme
+                .pointer("/wallpaper/fit")
+                .and_then(Value::as_str)
+                .unwrap_or("cover");
+            if w.editable() {
+                group(b, c, "", |b, c| {
+                    fit_tiles(b, c, current, theme_edit(w, "/wallpaper/fit", "Fit"));
+                });
+            } else {
+                let fit = FITS
+                    .iter()
+                    .find(|(value, _)| *value == current)
+                    .map_or("Fill", |(_, label)| *label);
+                notice(b, c, &format!("Fit: {fit} · Built in"));
+            }
         }
-        if let Some(on) = w.interactive {
+        if let Some(on) = w.interactive.map(|fallback| {
+            theme
+                .pointer("/wallpaper/interactive")
+                .and_then(Value::as_bool)
+                .unwrap_or(fallback)
+        }) {
             group(b, c, "Mouse", |b, c| {
                 if w.editable() {
                     toggle(
@@ -447,7 +449,7 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
         }
         group(b, c, "Performance", |b, c| {
             let base = format!("/engine/wallpapers/{}", token(&w.id));
-            select(
+            segments(
                 b,
                 c,
                 "Graphics card",
@@ -520,7 +522,7 @@ const FITS: [(&str, &str); 4] = [
     ("center", "Center"),
 ];
 
-fn fit_tiles(b: &mut B, c: &mut Col, current: &str) {
+fn fit_tiles(b: &mut B, c: &mut Col, current: &str, edit: Edit) {
     text(
         b,
         Rect::new(c.x, c.y, c.w, height(b, 24.0)),
@@ -531,76 +533,15 @@ fn fit_tiles(b: &mut B, c: &mut Col, current: &str) {
         Align::Start,
     );
     c.y += height(b, 28.0);
-    let gap = b.px(8.0);
-    let width = (c.w - gap * 3.0) / 4.0;
-    for (i, (value, label)) in FITS.iter().enumerate() {
-        let tile = Rect::new(c.x + i as f32 * (width + gap), c.y, width, height(b, 82.0));
-        let k = key(("panel-add-fit", value));
-        b.plate(k, tile, b.px(7.0), *value == current);
-        let screen = Rect::new(
-            tile.left + b.px(7.0),
-            tile.top + b.px(8.0),
-            width - b.px(14.0),
-            b.px(34.0),
-        );
-        b.fill(screen, b.px(3.0), b.p.well);
-        let picture = match *value {
-            "contain" => Rect::new(
-                screen.left + screen.width() * 0.22,
-                screen.top,
-                screen.width() * 0.56,
-                screen.height(),
-            ),
-            "center" => Rect::new(
-                screen.left + screen.width() * 0.32,
-                screen.top + b.px(8.0),
-                screen.width() * 0.36,
-                b.px(18.0),
-            ),
-            _ => screen,
-        };
-        b.fill(picture, b.px(2.0), b.p.ink3.with_alpha(0.45));
-        let sun = Rect::new(
-            picture.left + picture.width() * 0.56,
-            picture.top + picture.height() * 0.18,
-            if *value == "stretch" {
-                b.px(12.0)
-            } else {
-                b.px(7.0)
-            },
-            b.px(7.0),
-        );
-        b.fill(sun, b.px(4.0), b.p.ink1);
-        b.line(
-            mypaper_ui::Point::new(picture.left, picture.bottom),
-            mypaper_ui::Point::new(
-                picture.left + picture.width() * 0.45,
-                picture.top + picture.height() * 0.45,
-            ),
-            b.px(2.0),
-            b.p.ink1,
-        );
-        text(
-            b,
-            Rect::new(tile.left, screen.bottom + b.px(5.0), width, height(b, 26.0)),
-            label,
-            12.0,
-            500,
-            b.p.ink1,
-            Align::Center,
-        );
-        b.hit_checked(
-            k,
-            tile,
-            Role::RadioButton,
-            &format!("Fit: {label}"),
-            Some(*value == current),
-            Action::Set(Edit::new(DocId::Studio, "/add_fit", "Fit"), json!(value)),
-            Behavior::Click,
-        );
-        b.focus_ring(k, tile, b.px(7.0));
-    }
-    c.y += height(b, 90.0);
+    let r = b.fit_tiles(
+        key(("panel-fit", edit.path.as_ref())),
+        Rect::new(c.x, c.y, c.w, 0.0),
+        FITS.iter()
+            .position(|(value, _)| *value == current)
+            .unwrap_or(0),
+        |i| Action::Set(edit.clone(), json!(FITS[i].0)),
+    );
+    c.y = r.bottom;
 }
 
 pub fn add(app: &App, b: &mut B, c: &mut Col) {
@@ -737,7 +678,12 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     );
                 } else if matches!(source, Some(Source::File | Source::Folder)) {
                     let value = app.text(&FieldId::Text(DocId::Studio, "/add_fit".into()));
-                    fit_tiles(b, c, if value.is_empty() { "cover" } else { value });
+                    fit_tiles(
+                        b,
+                        c,
+                        if value.is_empty() { "cover" } else { value },
+                        Edit::new(DocId::Studio, "/add_fit", "Fit"),
+                    );
                 }
                 let on = use_now(app);
                 toggle(
