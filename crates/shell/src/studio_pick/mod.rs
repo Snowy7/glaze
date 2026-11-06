@@ -250,6 +250,12 @@ impl StudioPick {
         zones: Vec<module_drag::Zone>,
     ) {
         self.widget_revision = widget_revision;
+        // Lifting a widget can replace its HWND between press and release. The old HWND's
+        // release then never reaches event(); do not let that keep later selections hidden.
+        // SAFETY: read-only physical button state, with no activation or synthesized input.
+        if self.pressed && unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(1) } >= 0 {
+            self.pressed = false;
+        }
         self.module_raw = serde_json::Value::Object(bars.raw().clone());
         if self.module_gesture.is_none() {
             self.module_zones = zones;
