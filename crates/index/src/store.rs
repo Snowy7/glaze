@@ -229,7 +229,7 @@ impl Store {
         let mut blocks = 0;
         let mut bytes = 0;
         for (i, block) in column.blocks.iter().enumerate() {
-            if block.may_match(filter) {
+            if column.may_match(i, filter) {
                 blocks += 1;
                 let next = column.blocks.get(i + 1).map_or(
                     self.mapping.as_ref().expect("column").len() - self.column_start,
@@ -284,7 +284,7 @@ impl Store {
             };
             for index in (start..end).rev() {
                 let block = &column.blocks[index];
-                if !block.may_match(filter) {
+                if !column.may_match(index, filter) {
                     continue;
                 }
                 let offset = block.offset;
@@ -1339,6 +1339,7 @@ impl Store {
                 &map[start..],
                 count,
                 store.quiet.as_deref(),
+                path.parent(),
                 |offset, length| {
                     windows.touch(map.as_ptr(), map.len(), start + offset, length);
                 },

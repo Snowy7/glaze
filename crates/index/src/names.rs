@@ -1,10 +1,13 @@
 //! Persisted names-only blocks. A 1024-bit trigram union rejects impossible blocks before
 //! paging their names. False positives are harmless: every surviving name is checked exactly.
 
+use crate::backing::Backing;
 use anyhow::{Result, ensure};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
 use std::io::Write;
+use std::ops::Range;
+use std::path::Path;
 
 pub(crate) const BLOCK_NAMES: usize = 32;
 const BLOOM_WORDS: usize = 16;
@@ -206,11 +209,14 @@ impl Filter {
     }
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Directory {
-    id: u32,
     mask: [u64; 2],
+    id: u32,
     tail: [u8; 2],
     tail_len: u8,
+    _padding: u8,
 }
 
 impl Directory {
@@ -249,13 +255,9 @@ impl Directory {
             mask,
             tail,
             tail_len,
+            _padding: 0,
         }
     }
-}
-
-enum Signature {
-    Small(Bloom),
-    Wide(Box<[u64; 64]>),
 }
 
 /// One bit is enough for an extension summary: a block usually has only one or two
@@ -267,37 +269,65 @@ pub(crate) fn extension_mask(extension: &[u8]) -> u64 {
     1 << (hash % 64)
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct Block {
     pub offset: usize,
-    filter: Signature,
+    filter: Bloom,
     extensions: u64,
-    kinds: u8,
+    wide: u32,
+    kinds: u32,
 }
 
 impl Block {
-    pub fn may_match(&self, filter: &Filter) -> bool {
+    fn may_match(&self, filter: &Filter, wide: &[[u64; 64]]) -> bool {
         (filter.extensions == 0 || self.extensions & filter.extensions != 0)
             && filter
                 .directory
                 .is_none_or(|directory| self.kinds & if directory { 2 } else { 1 } != 0)
-            && match &self.filter {
-                Signature::Small(bits) => filter
+            && if self.wide == u32::MAX {
+                filter
                     .small
                     .iter()
-                    .all(|(i, required)| bits[*i] & required == *required),
-                Signature::Wide(bits) => filter
+                    .all(|(i, required)| self.filter[*i] & required == *required)
+            } else {
+                filter
                     .wide
                     .iter()
-                    .all(|(i, required)| bits[*i] & required == *required),
+                    .all(|(i, required)| wide[self.wide as usize][*i] & required == *required)
             }
     }
 }
 
 #[derive(Default)]
 pub(crate) struct Column {
-    pub blocks: Vec<Block>,
-    directories: Box<[Directory]>,
-    prefixes: HashMap<Vec<u8>, [Vec<Candidate>; 2]>,
+    pub blocks: Backing<Block>,
+    wide: Backing<[u64; 64]>,
+    directories: Backing<Directory>,
+    prefixes: HashMap<Vec<u8>, [Range<usize>; 2]>,
+    prefix_rows: Backing<PrefixRow>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct PrefixRow {
+    modified: u32,
+    id: u32,
+    score: u8,
+    _padding: [u8; 3],
+}
+impl PrefixRow {
+    fn new(value: Candidate) -> Self {
+        Self {
+            modified: value.1,
+            id: value.2.0,
+            score: value.0,
+            _padding: [0; 3],
+        }
+    }
+    fn candidate(&self) -> Candidate {
+        (self.score, self.modified, Reverse(self.id))
+    }
 }
 
 fn u32_at(bytes: &[u8], at: usize) -> u32 {
@@ -309,10 +339,12 @@ impl Column {
         bytes: &[u8],
         count: usize,
         quiet: Option<&crate::quiet::Quiet>,
+        backing: Option<&Path>,
         mut touch: impl FnMut(usize, usize),
     ) -> Result<Self> {
         let mut blocks = Vec::with_capacity(count.div_ceil(BLOCK_NAMES));
         let mut directories: Vec<Directory> = Vec::new();
+        let mut wide = Vec::new();
         let mut prefix_heaps = PrefixHeaps::new();
         let mut sketch = PrefixSketch::new();
         let mut at = 0;
@@ -399,18 +431,21 @@ impl Column {
                 cursor == block.len() && Self::filter(block) == actual,
                 "bad name block filter"
             );
-            let filter = if actual.iter().map(|word| word.count_ones()).sum::<u32>() > 512 {
+            let wide_index = if actual.iter().map(|word| word.count_ones()).sum::<u32>() > 512 {
                 let mut bits = [0; 64];
                 Self::visit(block, |_, _, _, _, name| union(&mut bits, &bloom(name)));
-                Signature::Wide(Box::new(bits))
+                let index = wide.len() as u32;
+                wide.push(bits);
+                index
             } else {
-                Signature::Small(actual)
+                u32::MAX
             };
             blocks.push(Block {
                 offset: at,
-                filter,
+                filter: actual,
                 extensions,
                 kinds,
+                wide: wide_index,
             });
             at += length;
         }
@@ -446,24 +481,32 @@ impl Column {
                 }
             });
         }
+        drop(sketch);
+        let mut prefix_rows = Vec::new();
+        let prefixes = prefix_heaps
+            .into_iter()
+            .map(|(key, heaps)| {
+                let ranges = heaps.map(|heap| {
+                    let mut values: Vec<_> = heap.into_iter().map(|value| value.0).collect();
+                    values.sort_unstable_by(|a, b| b.cmp(a));
+                    let start = prefix_rows.len();
+                    prefix_rows.extend(values.into_iter().map(PrefixRow::new));
+                    start..prefix_rows.len()
+                });
+                (key, ranges)
+            })
+            .collect();
         Ok(Self {
-            blocks,
-            directories: directories.into_boxed_slice(),
-            prefixes: prefix_heaps
-                .into_iter()
-                .map(|(key, heaps)| {
-                    (
-                        key,
-                        heaps.map(|heap| {
-                            let mut values: Vec<_> =
-                                heap.into_iter().map(|value| value.0).collect();
-                            values.sort_unstable_by(|a, b| b.cmp(a));
-                            values
-                        }),
-                    )
-                })
-                .collect(),
+            blocks: Backing::freeze(blocks, backing, quiet)?,
+            wide: Backing::freeze(wide, backing, quiet)?,
+            directories: Backing::freeze(directories, backing, quiet)?,
+            prefix_rows: Backing::freeze(prefix_rows, backing, quiet)?,
+            prefixes,
         })
+    }
+
+    pub fn may_match(&self, index: usize, filter: &Filter) -> bool {
+        self.blocks[index].may_match(filter, &self.wide)
     }
 
     /// Prefix matches outrank every word/substring match. Use this small top-k only when
@@ -482,18 +525,19 @@ impl Column {
         let kinds = self.prefixes.get(name)?;
         let mut values = Vec::new();
         let mut bounds = Vec::new();
-        for (kind, candidates) in kinds.iter().enumerate() {
+        for (kind, range) in kinds.iter().enumerate() {
             if directory.is_some_and(|d| usize::from(d) != kind) {
                 continue;
             }
+            let candidates = &self.prefix_rows[range.clone()];
             if candidates.len() == PREFIX_LIMIT {
-                bounds.push(*candidates.last().expect("full prefix list"));
+                bounds.push(candidates.last().expect("full prefix list").candidate());
             }
             values.extend(
                 candidates
                     .iter()
-                    .filter(|candidate| !replaced(candidate.2.0))
-                    .copied(),
+                    .filter(|candidate| !replaced(candidate.id))
+                    .map(PrefixRow::candidate),
             );
         }
         values.extend_from_slice(extra);
@@ -599,9 +643,9 @@ mod tests {
                 .unwrap();
         }
         builder.flush(&mut bytes).unwrap();
-        let column = Column::open(&bytes, 75, None, |_, _| {}).unwrap();
+        let column = Column::open(&bytes, 75, None, None, |_, _| {}).unwrap();
         assert_eq!(column.blocks.len(), 3);
         bytes[8] ^= 1;
-        assert!(Column::open(&bytes, 75, None, |_, _| {}).is_err());
+        assert!(Column::open(&bytes, 75, None, None, |_, _| {}).is_err());
     }
 }

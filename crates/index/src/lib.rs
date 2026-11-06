@@ -1,6 +1,7 @@
 //! File-backed name search. The shell uses only the bounded named-pipe client; scanning and
 //! watches live in the opt-in `mypaper-index` process. See `docs/index.md`.
 
+mod backing;
 mod names;
 pub mod pipe;
 pub mod query;
