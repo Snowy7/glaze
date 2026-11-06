@@ -21,16 +21,19 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
     if page == Page::FirstRun {
         return;
     }
+    let committing = matches!(page, Page::AddWidget | Page::AddModule | Page::AddWallpaper);
     if !app.system.running() {
-        button(
-            b,
-            Rect::new(r.right - b.px(68.0), b.px(10.0), b.px(60.0), b.px(28.0)),
-            "Done",
-            None,
-            true,
-            true,
-            Action::Panel(Command::Done),
-        );
+        if !committing {
+            button(
+                b,
+                Rect::new(r.right - b.px(68.0), b.px(10.0), b.px(60.0), b.px(28.0)),
+                "Done",
+                None,
+                true,
+                true,
+                Action::Panel(Command::Done),
+            );
+        }
         if page != Page::Root {
             icon_button(
                 b,
@@ -43,7 +46,6 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         }
         return;
     }
-    let committing = matches!(page, Page::AddWidget | Page::AddModule | Page::AddWallpaper);
     let done_label = "Done";
     let done_style = ui::font(b, 13.0, 500);
     let done_width = (b.measure(done_label, &done_style).0 + b.px(20.0)).max(b.px(52.0));
@@ -1018,6 +1020,13 @@ mod tests {
                         .any(|hit| hit.label.starts_with("Back to "))
                 );
             }
+            app.system.parts[0].running = false;
+            let off = super::super::build(&app, &mut ui.text);
+            assert!(
+                !off.list.hits.iter().any(|hit| hit.label.as_ref() == "Done"),
+                "{page:?} while off"
+            );
+            app.system.parts[0].running = true;
         }
         app.panel.as_mut().unwrap().page = Page::Root;
         super::super::history::observe(&app);
