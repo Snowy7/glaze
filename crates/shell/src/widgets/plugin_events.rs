@@ -234,6 +234,7 @@ impl Events {
                     let event = window_event(event, &mut known.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
                     if let Some(event) = event {
                         queue.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(event);
+                        mypaper_desktop::win_events::notify();
                     }
                 }));
             }

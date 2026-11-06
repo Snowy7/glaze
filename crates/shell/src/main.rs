@@ -67,7 +67,9 @@ fn run() -> Result<()> {
     startup::ready("shell", "prepared_ms");
     let _com = Com::init();
     let mut ui = Ui::new()?;
-    let mut win_events = mypaper_desktop::win_events::WinEvents::install();
+    // Window events arrive on a thread of their own; a batch that changed something posts
+    // WM_NULL here (a posted message, so it runs the loop's work at once).
+    let win_events = mypaper_desktop::win_events::WinEvents::install();
     startup::ready("shell", "factories_ms");
     overlay_client::install();
     let bars = bars::Bars::new(&mut ui, bars_start)?;
@@ -193,7 +195,6 @@ fn run() -> Result<()> {
                 DispatchMessageW(&msg);
             }
         }
-        win_events.refresh();
         at = wakes.spent("pump", at);
         let sent_only = cause.is_none();
         wakes.wake(cause.unwrap_or(Cause::Sent));
@@ -277,11 +278,10 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-/// How long the loop's work may wait after a wake that only ran sent messages and WinEvent
-/// callbacks. The bars' and widgets' location hooks follow the app under the pointer, so every
-/// cursor move calls back (about 125 a second while the mouse moves); what those callbacks set
-/// is debounced 50 ms further on anyway. Posted messages (input), handles and deadlines still run
-/// the work at once.
+/// How long the loop's work may wait after a wake that only ran sent messages (other processes'
+/// messages to the shell's windows). Window events no longer arrive here (see
+/// `mypaper_desktop::win_events`). Posted messages (input), handles and deadlines still run the
+/// work at once.
 const COALESCE: std::time::Duration = std::time::Duration::from_millis(25);
 
 /// How often the widgets poll while the only input is the pointer over the bars or the dock.

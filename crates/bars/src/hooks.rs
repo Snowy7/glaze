@@ -1,16 +1,18 @@
 //! WinEvent hooks on top-level windows: how the bars hear about new, closed, renamed, minimized
 //! and focused windows, and about moves (a window going fullscreen). Nothing polls.
 //!
-//! Events arrive through the installing thread's message loop; the callback only sets bits that
-//! the main loop takes with [`Hooks::take`].
+//! Events arrive on the shared WinEvent source's thread; the callback only sets bits that the
+//! main loop takes with [`Hooks::take`], and wakes it ([`win_events::notify`]) when it set any.
 
 use std::{
-    cell::RefCell,
     collections::HashSet,
-    sync::atomic::{AtomicBool, AtomicU32, Ordering},
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, AtomicU32, Ordering},
+    },
 };
 
-use mypaper_desktop::win_events::Subscription;
+use mypaper_desktop::win_events::{self, Subscription};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Accessibility::HWINEVENTHOOK;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -35,11 +37,9 @@ pub const TASKBAR_SHOWN: u32 = 8;
 /// build): the app list's titles are stale, but no window moved, appeared or changed z-order.
 pub const TITLE: u32 = 16;
 
-thread_local! {
-    // WinEvent callbacks run on the installing thread. A dead child/control window must not
-    // trigger an enumeration of every application; only known app windows affect that list.
-    static WINDOWS_SEEN: RefCell<HashSet<isize>> = RefCell::default();
-}
+/// The app windows of the last app snapshot. A dead child/control window must not trigger an
+/// enumeration of every application; only known app windows affect that list.
+static WINDOWS_SEEN: Mutex<Option<HashSet<isize>>> = Mutex::new(None);
 static PENDING: AtomicU32 = AtomicU32::new(0);
 /// Whether taskbar moves count as [`TASKBAR_SHOWN`]: only while the taskbar should be hidden, so
 /// other moves cost no class lookup.
@@ -59,7 +59,7 @@ impl Hooks {
         PENDING.fetch_or(WINDOWS | FOREGROUND | MOVED, Ordering::Relaxed);
         Self {
             _subscription: Subscription::new(|event| {
-                // SAFETY: the source delivers whole-window events on the shell UI thread.
+                // SAFETY: the source delivers whole-window events; on_event only reads them.
                 unsafe {
                     on_event(
                         HWINEVENTHOOK::default(),
@@ -77,7 +77,8 @@ impl Hooks {
 
     /// The app snapshot identifies destroyed handles after Windows can no longer classify them.
     pub fn track(&mut self, windows: impl IntoIterator<Item = isize>) {
-        WINDOWS_SEEN.with(|seen| *seen.borrow_mut() = windows.into_iter().collect());
+        *WINDOWS_SEEN.lock().unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Some(windows.into_iter().collect());
     }
 
     /// What happened since the last call (a set of the constants above).
@@ -132,9 +133,11 @@ unsafe extern "system" fn on_event(
         return;
     }
     let top = match event {
-        EVENT_OBJECT_DESTROY => {
-            WINDOWS_SEEN.with(|seen| seen.borrow_mut().remove(&(hwnd.0 as isize)))
-        }
+        EVENT_OBJECT_DESTROY => WINDOWS_SEEN
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_mut()
+            .is_some_and(|seen| seen.remove(&(hwnd.0 as isize))),
         EVENT_SYSTEM_FOREGROUND => false,
         // An invisible window's birth or title can't change the bars: every short-lived
         // console process makes hidden console and IME windows and retitles them, many times a
@@ -150,6 +153,7 @@ unsafe extern "system" fn on_event(
     let bits = classify(event, top, watching, taskbar);
     if bits != 0 {
         PENDING.fetch_or(bits, Ordering::Relaxed);
+        win_events::notify();
     }
 }
 
