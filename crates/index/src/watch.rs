@@ -24,7 +24,6 @@ pub enum Change {
         root: PathBuf,
         paths: Vec<PathBuf>,
     },
-    Subtrees(Vec<PathBuf>),
     /// Lost names cannot identify a narrower subtree than the watched root.
     Overflow(PathBuf),
     Failed {
@@ -39,22 +38,11 @@ const BUFFER_BYTES: usize = 2 * 1024 * 1024;
 #[derive(Default)]
 struct Pending {
     paths: HashSet<PathBuf>,
-    directories: HashSet<PathBuf>,
     overflow: bool,
     stopped: Option<String>,
 }
 
 impl Pending {
-    fn dirty_directory(&mut self, path: PathBuf) {
-        if self.overflow {
-            return;
-        }
-        self.directories.insert(path);
-        if self.directories.len() > 4096 {
-            self.directories.clear();
-            self.overflow = true;
-        }
-    }
     fn add(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
         self.paths.extend(paths);
         if self.paths.len() > MAX_PENDING {
@@ -93,10 +81,9 @@ pub(crate) fn start(
         .spawn(move || {
             let _background = Background::enter();
             loop {
-                let (paths, directories, overflow, stopped) = {
+                let (paths, overflow, stopped) = {
                     let mut state = delivery.0.lock().expect("watch handoff");
                     while state.paths.is_empty()
-                        && state.directories.is_empty()
                         && !state.overflow
                         && state.stopped.is_none()
                     {
@@ -106,9 +93,6 @@ pub(crate) fn start(
                         std::mem::take(&mut state.paths)
                             .into_iter()
                             .collect::<Vec<_>>(),
-                        std::mem::take(&mut state.directories)
-                            .into_iter()
-                            .collect::<Vec<_>>(),
                         std::mem::take(&mut state.overflow),
                         state.stopped.take(),
                     )
@@ -116,9 +100,6 @@ pub(crate) fn start(
                 // Only delivery can wait on the bounded queue. Its reader keeps coalescing paths
                 // while enumeration or checkpointing is busy.
                 if overflow && tx.send(Change::Overflow(watched.clone())).is_err() {
-                    break;
-                }
-                if !directories.is_empty() && tx.send(Change::Subtrees(directories)).is_err() {
                     break;
                 }
                 if !paths.is_empty()
@@ -152,7 +133,6 @@ pub(crate) fn start(
                 | FILE_NOTIFY_CHANGE_LAST_WRITE
                 | FILE_NOTIFY_CHANGE_ATTRIBUTES;
             loop {
-                let before_pause = quiet.paused();
                 quiet.wait();
                 let mut bytes = 0;
                 // SAFETY: aligned 2 MiB output remains alive throughout synchronous I/O.
@@ -182,11 +162,9 @@ pub(crate) fn start(
                         )
                     }
                 };
-                let read_pause = quiet.paused();
                 // Retain the completed raw batch while parked. Windows keeps its bounded
                 // native notification buffer; only an actual overflow requires a root scan.
                 quiet.wait();
-                let resumed = before_pause || read_pause;
                 if let Err(error) = &read {
                     if extended
                         && (error.code() == ERROR_INVALID_FUNCTION.to_hresult()
@@ -236,15 +214,7 @@ pub(crate) fn start(
                     at += next;
                 }
                 let mut state = pending.0.lock().expect("watch handoff");
-                if resumed {
-                    for path in paths {
-                        if let Some(parent) = path.parent() {
-                            state.dirty_directory(parent.to_path_buf());
-                        }
-                    }
-                } else {
-                    state.add(paths);
-                }
+                state.add(paths);
                 drop(state);
                 pending.1.notify_one();
             }
@@ -268,19 +238,5 @@ mod tests {
         pending.add((0..MAX_PENDING).map(|i| PathBuf::from(format!(r"C:\build\{i}.obj"))));
         assert!(pending.overflow);
         assert!(pending.paths.is_empty());
-    }
-    #[test]
-    fn resumed_directories_are_deduplicated_and_bounded() {
-        let mut pending = Pending::default();
-        for _ in 0..1000 {
-            pending.dirty_directory(PathBuf::from(r"C:\project"));
-        }
-        assert_eq!(pending.directories.len(), 1);
-        assert!(!pending.overflow);
-        for i in 0..4096 {
-            pending.dirty_directory(PathBuf::from(format!(r"C:\project{i}")));
-        }
-        assert!(pending.overflow);
-        assert!(pending.directories.is_empty());
     }
 }
