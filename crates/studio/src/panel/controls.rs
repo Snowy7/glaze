@@ -1,3 +1,5 @@
+\\?\C:\Users\you\.t3\worktrees\wallpaper\t3-d748810f\crates\studio\src\panel\controls.rs:
+
 //! Panel row anatomy on the existing kit's drawing, focus, accessibility and hit machinery.
 
 use mypaper_ui::controls::{Align, Behavior, Font, Glyph, key};
@@ -28,6 +30,27 @@ pub fn height(b: &B, base: f32) -> f32 {
 
 pub use mypaper_ui::controls::format_value as unit;
 
+/// Distance between two boundaries, used for a flexible gap rather than a separator.
+pub fn spacing_glyph(b: &mut B, rect: Rect) {
+    let x = rect.left + (rect.width() - b.px(16.0)) / 2.0;
+    let y = rect.top + rect.height() / 2.0;
+    let scale = b.s;
+    let point = |dx, dy| Point::new(x + dx * scale, y + dy * scale);
+    let ink = b.p.ink2;
+    let lines = [
+        ((1.0, -5.0), (1.0, 5.0)),
+        ((15.0, -5.0), (15.0, 5.0)),
+        ((4.0, 0.0), (12.0, 0.0)),
+        ((4.0, 0.0), (6.0, -2.0)),
+        ((4.0, 0.0), (6.0, 2.0)),
+        ((12.0, 0.0), (10.0, -2.0)),
+        ((12.0, 0.0), (10.0, 2.0)),
+    ];
+    for (from, to) in lines {
+        b.line(point(from.0, from.1), point(to.0, to.1), b.px(1.0), ink);
+    }
+}
+
 /// All inline sliders reserve the kit's common label column.
 pub fn label_width(b: &B, c: &Col) -> f32 {
     b.label_width(c.w)
@@ -37,16 +60,29 @@ pub fn displays(app: &App, b: &mut B, c: &mut Col) {
     if app.monitors.len() < 2 {
         return;
     }
-    let labels: Vec<_> = (1..=app.monitors.len())
-        .map(|i| format!("Display {i}"))
-        .collect();
+    let order = display_order(app);
+    let labels: Vec<_> = order.iter().map(|&i| display_name(app, i)).collect();
     let labels: Vec<_> = labels.iter().map(String::as_str).collect();
     let style = b.font(Font::Caption);
-    let needed: f32 = labels.iter().map(|label| b.measure(label, &style).0 + b.px(20.0)).sum();
+    let needed: f32 = labels
+        .iter()
+        .map(|label| b.measure(label, &style).0 + b.px(20.0))
+        .sum();
     if labels.len() > 4 || needed > c.w - b.px(4.0) {
-        group(b, c, "", |b, c| super::editors::select(b, c, "Display", serde_json::json!(app.nav.display),
-            Edit::new(crate::docs::DocId::Studio, "/panel/display", "Display"),
-            labels.iter().enumerate().map(|(index, label)| (serde_json::json!(index), (*label).to_owned())).collect()));
+        group(b, c, "", |b, c| {
+            super::editors::select(
+                b,
+                c,
+                "Display",
+                serde_json::json!(app.nav.display),
+                Edit::new(crate::docs::DocId::Studio, "/panel/display", "Display"),
+                labels
+                    .iter()
+                    .zip(&order)
+                    .map(|(label, index)| (serde_json::json!(index), (*label).to_owned()))
+                    .collect(),
+            )
+        });
         return;
     }
     let r = Rect::new(c.x, c.y + b.px(6.0), c.w, height(b, 30.0));
@@ -54,13 +90,175 @@ pub fn displays(app: &App, b: &mut B, c: &mut Col) {
         key(("panel-displays", c.view)),
         r,
         &labels,
-        Some(app.nav.display),
+        order.iter().position(|&i| i == app.nav.display),
         "Display",
         true,
-        |i| Action::Panel(super::Command::Display(i)),
+        |i| Action::Panel(super::Command::Display(order[i])),
     );
     b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
     c.y = r.bottom + b.px(4.0);
+}
+
+pub fn display_order(app: &App) -> Vec<usize> {
+    let mut order: Vec<_> = (0..app.monitors.len()).collect();
+    order.sort_by_key(|&i| (app.monitors[i].rect.x, app.monitors[i].rect.y));
+    order
+}
+
+/// Place names remain stable when Windows enumerates the monitors in another order.
+pub fn display_name(app: &App, index: usize) -> String {
+    let order = display_order(app);
+    let rank = order.iter().position(|&i| i == index).unwrap_or(0);
+    if order.len() < 2 {
+        return "Main".into();
+    }
+    if order.len() == 2 {
+        return if rank == 0 { "Left" } else { "Right" }.into();
+    }
+    if app.monitors.get(index).is_some_and(|m| m.primary) {
+        return "Main".into();
+    }
+    let main = order
+        .iter()
+        .position(|&i| app.monitors[i].primary)
+        .unwrap_or(0);
+    if rank < main {
+        format!("Left {}", main - rank)
+    } else {
+        format!("Right {}", rank - main)
+    }
+}
+
+pub fn flash_hovered_display(app: &App, b: &B) {
+    let hovered = app.input.pointer.and_then(|point| {
+        b.targets.iter().rev().find_map(|target| {
+            if !target.visible.is_some_and(|rect| rect.contains(point)) {
+                return None;
+            }
+            match &target.action {
+                Action::Panel(super::Command::Display(index)) => Some(*index),
+                _ => None,
+            }
+        })
+    });
+    super::pick_client::flash_display(app, hovered);
+}
+
+/// Hints stay until dismissed; only that explicit action writes Studio's own settings.
+pub fn first_use_hint(app: &App, b: &mut B, c: &mut Col, page: super::Page) {
+    use super::Page;
+    let (id, message) = match page {
+        Page::Root => ("home", "Click anything on your desktop to edit it"),
+        Page::Widget => (
+            "widget",
+            "Drag to move · Drag the corner brackets to resize",
+        ),
+        Page::Top | Page::Dock | Page::Module => {
+            ("bar", "Drag modules by their names to move them")
+        }
+        _ => return,
+    };
+    let path = format!("/panel_hints/{id}");
+    if app
+        .get(crate::docs::DocId::Studio, &path)
+        .and_then(serde_json::Value::as_bool)
+        == Some(true)
+    {
+        return;
+    }
+    let top = c.y + b.px(4.0);
+    let w = c.w - b.px(32.0);
+    let style = font(b, 12.0, 400);
+    let h = b
+        .paragraph(c.x, top, w, message, &style, height(b, 18.0), b.p.ink2)
+        .max(b.px(24.0));
+    icon_button(
+        b,
+        Rect::new(c.right() - b.px(24.0), top, b.px(24.0), b.px(24.0)),
+        mypaper_ui::icons::Icon::Close.into(),
+        &format!("Dismiss {id} hint"),
+        true,
+        Action::Set(
+            Edit::new(crate::docs::DocId::Studio, path, "Dismiss hint"),
+            serde_json::json!(true),
+        ),
+    );
+    c.y = top + h + b.px(8.0);
+}
+
+#[cfg(test)]
+mod display_hint_tests {
+    use super::*;
+
+    #[test]
+    fn place_names_and_display_actions_follow_physical_order() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        app.monitors[0].rect.x = 1920;
+        app.monitors[1].rect.x = 0;
+        assert_eq!(display_order(&app), [1, 0]);
+        assert_eq!(display_name(&app, 1), "Left");
+        assert_eq!(display_name(&app, 0), "Right");
+        let built = super::super::build(&app, &mut ui.text);
+        let actions: Vec<_> = built
+            .targets
+            .iter()
+            .filter_map(|target| match target.action {
+                Action::Panel(super::super::Command::Display(index)) => Some(index),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(actions, [1, 0]);
+    }
+
+    #[test]
+    fn dismissing_one_hint_changes_only_studio_settings_and_survives_a_rebuild() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        let before = [
+            crate::docs::DocId::Config,
+            crate::docs::DocId::Bars,
+            crate::docs::DocId::Widgets,
+        ]
+        .map(|id| app.docs.doc(id).raw.clone());
+        let built = super::super::build(&app, &mut ui.text);
+        let dismiss = built
+            .targets
+            .iter()
+            .find(|target| {
+                matches!(&target.action,
+            Action::Set(edit,_) if edit.path.as_ref() == "/panel_hints/home")
+            })
+            .unwrap()
+            .action
+            .clone();
+        app.run(dismiss);
+        let built = super::super::build(&app, &mut ui.text);
+        assert!(
+            !built
+                .list
+                .hits
+                .iter()
+                .any(|hit| hit.label.as_ref() == "Dismiss home hint")
+        );
+        assert_eq!(
+            app.get(crate::docs::DocId::Studio, "/panel_hints/home"),
+            Some(&serde_json::json!(true))
+        );
+        for (id, before) in [
+            crate::docs::DocId::Config,
+            crate::docs::DocId::Bars,
+            crate::docs::DocId::Widgets,
+        ]
+        .into_iter()
+        .zip(before)
+        {
+            assert_eq!(app.docs.doc(id).raw, before);
+        }
+        assert_eq!(app.docs.undo_count(), 0);
+    }
 }
 
 /// Read failures stay beside their editors; write failures remain visible on every page.

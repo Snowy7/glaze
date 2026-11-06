@@ -5,6 +5,7 @@ mod colors;
 pub(crate) mod choosers;
 pub(crate) mod material;
 mod controls;
+pub use controls::display_name;
 mod editors;
 mod first_run;
 pub(crate) use first_run::run as run_first_run;

@@ -158,8 +158,8 @@ fn all(app: &App) -> Vec<Entry> {
                 .position(|m| m.device == instance.monitor)
                 .unwrap_or(0);
             let location = format!(
-                "Display {} \u{b7} {} \u{d7} {} \u{b7} column {}, row {}",
-                monitor + 1,
+                "{} \u{b7} {} \u{d7} {} \u{b7} column {}, row {}",
+                crate::panel::display_name(app, monitor),
                 instance.size[0],
                 instance.size[1],
                 instance.cell[0] + 1,
