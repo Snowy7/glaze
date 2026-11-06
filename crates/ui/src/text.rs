@@ -122,7 +122,7 @@ impl Text {
     }
 
     /// A private factory whose native font resources are released with this text context.
-    pub fn isolated() -> Result<Self> {
+    pub(crate) fn isolated() -> Result<Self> {
         Self::with_factory(DWRITE_FACTORY_TYPE_ISOLATED)
     }
 
