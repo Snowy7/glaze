@@ -472,7 +472,7 @@ pub struct Flyouts {
     foreground: HWND,
     menu: Option<mypaper_ui::Menu<PanelCommand>>,
     index_due: Option<Instant>,
-    _index_watch: Option<notify::RecommendedWatcher>,
+    _index_watch: Vec<mypaper_fswatch::Watch>,
     /// The flyout a deactivation just closed, and when: a click on its own bar module
     /// deactivates it before that click's request arrives, and the request must close it (it
     /// did), not open it again.
@@ -523,23 +523,17 @@ impl Flyouts {
             foreground: HWND::default(),
             menu: Some(mypaper_ui::Menu::new("App commands")?),
             index_due: Some(Instant::now() + Duration::from_secs(8)),
-            _index_watch: None,
+            _index_watch: Vec::new(),
             dismissed: None,
         };
         flyouts.follow_win_key(main);
-        use notify::Watcher;
-        let waker = flyouts.lanes.waker.clone();
-        if let Ok(mut watcher) =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                if event.is_ok_and(|e| !matches!(e.kind, notify::EventKind::Access(_))) {
-                    waker.send(Msg::Flyout(Done::Changed(Watched::Apps)));
-                }
-            })
-        {
-            for dir in providers::index::start_menu_dirs() {
-                let _ = watcher.watch(&dir, notify::RecursiveMode::Recursive);
+        for dir in providers::index::start_menu_dirs() {
+            let waker = flyouts.lanes.waker.clone();
+            if let Ok(watcher) = mypaper_fswatch::Watch::directory(&dir, true, move |_| {
+                waker.send(Msg::Flyout(Done::Changed(Watched::Apps)));
+            }) {
+                flyouts._index_watch.push(watcher);
             }
-            flyouts._index_watch = Some(watcher);
         }
         Ok(flyouts)
     }

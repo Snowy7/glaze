@@ -35,7 +35,6 @@ use mypaper_theme::{Appearance, LoadedTheme};
 use mypaper_ui::{
     Button, Entry, Event, Menu, Outcome, Point, Rect, SurfaceId, Ticker, Ui, screen_at,
 };
-use notify::Watcher;
 use services::Services;
 use std::{
     collections::BTreeMap,
@@ -83,8 +82,8 @@ pub struct Bars {
     menu: Option<Menu<Command>>,
     tray_menu: Option<tray_menu::Host>,
     press: Option<Press>,
-    watches: Vec<notify::RecommendedWatcher>,
-    theme_watch: Option<notify::RecommendedWatcher>,
+    watches: Vec<mypaper_fswatch::Watch>,
+    theme_watch: Option<mypaper_fswatch::Watch>,
     appearance: Appearance,
     theme_glass: Option<mypaper_theme::Liquid>,
     system: providers::accent::System,
@@ -1950,25 +1949,10 @@ impl Bars {
             look::warn_dropped(&value);
         }
         if let Some(theme) = &loaded {
-            self.theme_watch =
-                notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                    if event.is_ok_and(|e| {
-                        !matches!(e.kind, notify::EventKind::Access(_))
-                            && e.paths.iter().any(|p| {
-                                p.file_name()
-                                    .is_some_and(|f| f.eq_ignore_ascii_case("theme.json"))
-                            })
-                    }) {
-                        crate::inbox::post(crate::inbox::WM_CONFIG, 0);
-                    }
-                })
-                .ok()
-                .and_then(|mut watcher| {
-                    watcher
-                        .watch(&theme.dir, notify::RecursiveMode::NonRecursive)
-                        .ok()?;
-                    Some(watcher)
-                });
+            self.theme_watch = mypaper_fswatch::Watch::files(&theme.dir, &["theme.json"], || {
+                crate::inbox::post(crate::inbox::WM_CONFIG, 0);
+            })
+            .ok();
         }
     }
     fn watch(&mut self) {
@@ -1976,21 +1960,9 @@ impl Bars {
             return;
         };
         let waker = self.services.waker.clone();
-        if let Ok(mut watcher) =
-            notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
-                if let Ok(event) = result
-                    && (event.kind.is_modify() || event.kind.is_create() || event.kind.is_remove())
-                    && event
-                        .paths
-                        .iter()
-                        .any(|p| p.file_name().is_some_and(|f| f == "bars.json"))
-                {
-                    waker.send(providers::wake::Msg::Config);
-                }
-            })
-            && watcher
-                .watch(&dir, notify::RecursiveMode::NonRecursive)
-                .is_ok()
+        if let Ok(watcher) = mypaper_fswatch::Watch::files(&dir, &["bars.json"], move || {
+            waker.send(providers::wake::Msg::Config);
+        })
         {
             self.watches.push(watcher);
         }
