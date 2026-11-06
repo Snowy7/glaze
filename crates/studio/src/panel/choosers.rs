@@ -30,6 +30,7 @@ pub struct State {
     rasters_left: Option<u8>,
     pub(super) drawings: std::collections::HashMap<String, super::specimens::Drawing>,
     drawing_live: std::collections::HashSet<String>,
+    pub(super) image_live: std::collections::HashSet<String>,
     drawing_page: Option<super::Page>,
 }
 
@@ -39,6 +40,7 @@ pub fn begin(app: &App) {
     state.requested = None;
     state.groups.clear();
     state.drawing_live.clear();
+    state.image_live.clear();
     if state.drawing_page.replace(panel.page) != Some(panel.page) {
         state.drawings.clear();
     }
@@ -56,6 +58,12 @@ pub fn presented(app: &App) {
     } = &mut *state;
     drawings.retain(|key, _| drawing_live.contains(key));
     if drawings.len() != before {
+        panel.reclaim_heap.set(true);
+    }
+    let mut images = panel.specimens.borrow_mut();
+    let before = images.len();
+    images.retain(|key, _| state.image_live.contains(key));
+    if images.len() != before {
         panel.reclaim_heap.set(true);
     }
 }

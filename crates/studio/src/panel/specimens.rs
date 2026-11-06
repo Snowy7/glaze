@@ -28,6 +28,7 @@ pub fn remember(app: &App, key: String, image: &Arc<Image>) {
         return;
     }
     let state = app.panel.as_ref().unwrap();
+    state.chooser.borrow_mut().image_live.insert(key.clone());
     let mut cache = state.specimens.borrow_mut();
     let bytes: usize = cache.values().map(|image| image.pixels.len()).sum();
     if cache.len() >= 48 || bytes + image.pixels.len() > 2 << 20 {
@@ -35,6 +36,13 @@ pub fn remember(app: &App, key: String, image: &Arc<Image>) {
         state.reclaim_heap.set(true);
     }
     cache.insert(key, image.clone());
+}
+
+/// Retire crops superseded by an arriving still, or by a row scrolling out of view.
+fn cached_image(app: &App, key: &str) -> Option<Arc<Image>> {
+    let state = app.panel.as_ref().unwrap();
+    state.chooser.borrow_mut().image_live.insert(key.to_owned());
+    state.specimens.borrow().get(key).cloned()
 }
 
 pub fn wallpaper(app: &App) -> Option<Arc<Image>> {
@@ -328,9 +336,8 @@ fn softened(app: &App, image: &Arc<Image>, radius: usize, size: (u32, u32)) -> A
             .map_or("", |i| app.library.items[i].id.as_str()),
         Arc::as_ptr(image)
     );
-    let state = app.panel.as_ref().unwrap();
-    if let Some(image) = state.specimens.borrow().get(&cache_key) {
-        return image.clone();
+    if let Some(image) = cached_image(app, &cache_key) {
+        return image;
     }
     let aspect = size.0 as f32 / size.1.max(1) as f32;
     let sw = (image.height as f32 * aspect).min(image.width as f32);
@@ -385,15 +392,8 @@ fn material_backdrop_from(app: &App, size: (u32, u32), source: Option<Arc<Image>
         desktop_dark(app),
         source.as_ref().map_or(std::ptr::null(), Arc::as_ptr)
     );
-    if let Some(image) = app
-        .panel
-        .as_ref()
-        .unwrap()
-        .specimens
-        .borrow()
-        .get(&cache_key)
-    {
-        return image.clone();
+    if let Some(image) = cached_image(app, &cache_key) {
+        return image;
     }
     let (width, height) = (size.0.max(1) as usize, size.1.max(1) as usize);
     let pixels = if let Some(source) = source {
@@ -591,14 +591,7 @@ pub fn material_sample(
         b.s,
         Arc::as_ptr(&background)
     );
-    let cached = app
-        .panel
-        .as_ref()
-        .unwrap()
-        .specimens
-        .borrow()
-        .get(&cache_key)
-        .cloned();
+    let cached = cached_image(app, &cache_key);
     let image = cached.unwrap_or_else(|| {
         let (width, height) = (background.width as usize, background.height as usize);
         let scale = b.s
@@ -1324,6 +1317,49 @@ fn real_pinned_icons(app: &App, frame: &mut mypaper_shell::preview::bars::Frame)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn superseded_crops_retire_after_the_replacement_frame_is_presented() {
+        let ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        let make = || {
+            Arc::new(Image {
+                width: 4,
+                height: 4,
+                pixels: vec![255; 64],
+            })
+        };
+        let old = make();
+        let current = make();
+        super::super::choosers::begin(&app);
+        remember(&app, "material:pending".into(), &old);
+        super::super::choosers::presented(&app);
+        super::super::choosers::begin(&app);
+        remember(&app, "material:decoded".into(), &current);
+        assert_eq!(
+            Arc::strong_count(&old),
+            2,
+            "keep the shown frame until presentation"
+        );
+        super::super::choosers::presented(&app);
+        assert_eq!(Arc::strong_count(&old), 1);
+        super::super::choosers::begin(&app);
+        assert!(cached_image(&app, "material:decoded").is_some());
+        super::super::choosers::presented(&app);
+        assert_eq!(
+            Arc::strong_count(&current),
+            2,
+            "a visible cache hit stays cached"
+        );
+        super::super::choosers::begin(&app);
+        super::super::choosers::presented(&app);
+        assert_eq!(
+            Arc::strong_count(&current),
+            1,
+            "a departed row keeps no crop"
+        );
+    }
 
     #[test]
     fn individual_bar_previews_keep_compact_native_drawings_without_raster_copies() {
