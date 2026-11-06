@@ -1,3 +1,4 @@
+use crate::panel::tokens::radius;
 use mypaper_ui::Rect;
 use mypaper_ui::controls::Align;
 use serde_json::{Value, json};
@@ -982,7 +983,7 @@ fn module_rows(app: &App, b: &mut B, c: &mut Col, bar: Bar, list: &'static str, 
             Some(Action::SelectModule(Some(Slot { bar, list, index }))),
         );
         if let Some(image) = crate::panel::icons::plugin_image(app, id) {
-            b.fill(pic, b.px(4.0), b.p.panel);
+            b.fill(pic, b.px(radius::XS), b.p.panel);
             crate::stage::image_round(b, pic, &image, 1.0, b.px(4.0));
         }
     }
@@ -1717,7 +1718,7 @@ fn pinned_apps(app: &App, b: &mut B, c: &mut Col, which: Pins) {
             if let Some(path) = pin["path"].as_str()
                 && let Some(image) = crate::panel::icons::image(app, path)
             {
-                b.fill(pic, b.px(4.0), b.p.panel);
+                b.fill(pic, b.px(radius::XS), b.p.panel);
                 crate::stage::image_round(b, pic, &image, 1.0, b.px(4.0));
             }
         }

@@ -597,8 +597,8 @@ pub fn material_sample(
     let cached = cached_image(app, &cache_key);
     let image = cached.unwrap_or_else(|| {
         let (width, height) = (background.width as usize, background.height as usize);
-        // A close crop of one surface keeps the corner and edge at a readable scale.
-        let scale = r.width() / 220.0;
+        // Compose a whole weather widget, leaving room around every edge.
+        let scale = (r.width() / 280.0).min(r.height() / 180.0);
         let alpha = 1.0 - sample.clarity;
         let frosted = blur_crop(
             background.as_ref().clone(),
@@ -608,7 +608,7 @@ pub fn material_sample(
         let tint = sample.tint;
         for y in 0..height {
             for x in 0..width {
-                let (cx, cy, hw, hh) = (0.70, 1.15, 0.55, 0.95);
+                let (cx, cy, hw, hh) = (0.5, 0.5, 0.42, 0.40);
                 let radius = (sample.radius * scale)
                     .min(height as f32 * hh)
                     .min(width as f32 * hw);
@@ -669,10 +669,10 @@ pub fn material_sample(
         radius: b.px(7.0),
     });
     let surface = Rect::new(
-        r.left + r.width() * 0.23,
-        r.top + r.height() * 0.38,
-        r.width() * 0.82,
-        r.height() * 1.38,
+        r.left + r.width() * 0.08,
+        r.top + r.height() * 0.10,
+        r.width() * 0.84,
+        r.height() * 0.80,
     );
     let content_start = b.list.ops.len();
     if let Some(widget) = app.registry.get("weather") {

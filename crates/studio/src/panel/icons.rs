@@ -1,4 +1,5 @@
 //! Real installed app artwork comes from the shell's icon service; built-ins use kit icons.
+use crate::panel::tokens::radius;
 use crate::{
     actions::Action,
     app::App,
@@ -250,9 +251,9 @@ pub fn row(
     let k = mypaper_ui::controls::key(("catalog-row", c.view, id));
     let area = b.list_row_area(r);
     if checked {
-        b.fill(area, b.px(8.0), b.p.selected);
+        b.fill(area, b.px(radius::CONTROL), b.p.selected);
     } else {
-        b.wash(k, area, b.px(8.0));
+        b.wash(k, area, b.px(radius::CONTROL));
     }
     let icon = Rect::new(r.left, r.top + b.px(10.0), b.px(28.0), b.px(28.0));
     if let Some(image) = image {
@@ -294,7 +295,7 @@ pub fn row(
         action,
         mypaper_ui::controls::Behavior::Click,
     );
-    b.focus_ring(k, area, b.px(8.0));
+    b.focus_ring(k, area, b.px(radius::CONTROL));
     c.y = r.bottom;
 }
 

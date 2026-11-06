@@ -1,3 +1,4 @@
+use crate::panel::tokens::radius;
 use mypaper_ui::controls::{Align, Behavior, key};
 use mypaper_ui::{Rect, Role};
 use serde_json::{Value, json};
@@ -264,11 +265,11 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
             Action::Panel(Command::Back),
             Behavior::Click,
         );
-        b.focus_ring(k, back, b.px(6.0));
+        b.focus_ring(k, back, b.px(radius::SMALL));
         back.right
     } else {
         let mark = Rect::new(left, b.px(16.0), b.px(16.0), b.px(16.0));
-        b.fill(mark, b.px(4.0), b.p.ink1);
+        b.fill(mark, b.px(radius::XS), b.p.ink1);
         b.icon(mark, glyph::WALLPAPERS, 12.0, b.p.chrome);
         let style = ui::font(b, 13.0, 600);
         let name_width = b.measure("Studio", &style).0 + b.px(4.0);
@@ -342,7 +343,7 @@ fn wallpaper_name(app: &App) -> &str {
 
 fn image(app: &App, b: &mut B, r: Rect, index: usize) {
     let wallpaper = &app.library.items[index];
-    b.fill(r, b.px(6.0), b.p.fill);
+    b.fill(r, b.px(radius::SMALL), b.p.fill);
     let still = wallpaper.preview.as_ref().or(wallpaper.video.as_ref());
     if let Some(still) = still
         && let Some(image) = app
@@ -524,7 +525,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
         action,
     );
     c.y += h + b.px(12.0);
-    ui::displays(app, b, c);
+    if !windowed { ui::displays(app, b, c); }
     if !windowed {
         ui::search(app, b, c);
     }
@@ -563,7 +564,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
                         b.px(14.0),
                         b.px(14.0),
                     );
-                    b.fill(check, b.px(7.0), b.p.solid);
+                    b.fill(check, b.px(radius::CONTROL), b.p.solid);
                     b.icon(check, glyph::CHECK, 10.0, b.p.on_solid);
                 }
                 // Wallpaper trying is deferred: the strip opens its panel editor.
@@ -576,7 +577,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
                     Action::UseWallpaper(i),
                     Behavior::Click,
                 );
-                b.focus_ring(k, r, b.px(6.0));
+                b.focus_ring(k, r, b.px(radius::SMALL));
             }
             c.y += b.px(58.0);
             b.hline(c.x, c.right(), c.y - 1.0, b.p.line);
@@ -754,7 +755,7 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
                 c,
                 Some(glyph::LOOK),
                 "How widgets look",
-                "From Look",
+                super::editors::style_name(super::widget_look::inherited_style(app)),
                 "",
                 None,
                 open(Page::Look),
@@ -885,7 +886,7 @@ pub fn toast(app: &App, b: &mut B, window: Rect) {
         window.width() - b.px(32.0),
         b.px(44.0),
     );
-    b.fill(r, b.px(10.0), b.p.fill);
+    b.fill(r, b.px(radius::MEDIUM), b.p.fill);
     let action_width = if toast.action.is_some() {
         b.px(68.0)
     } else {

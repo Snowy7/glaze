@@ -3,6 +3,15 @@
 use mypaper_ui::Rgba;
 use mypaper_ui::controls::Palette;
 
+/// Studio's radius scale, independent of the desktop style being edited.
+pub mod radius {
+    pub const XS: f32 = 4.0;
+    pub const SMALL: f32 = 6.0;
+    pub const CONTROL: f32 = 8.0;
+    pub const MEDIUM: f32 = 12.0;
+    pub const CARD: f32 = 16.0;
+}
+
 pub fn hex(v: u32) -> Rgba {
     Rgba::rgb8([(v >> 16) as u8, (v >> 8) as u8, v as u8], 1.0)
 }

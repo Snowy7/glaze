@@ -1,3 +1,4 @@
+use crate::panel::tokens::radius;
 use mypaper_ui::Rect;
 use mypaper_ui::controls::{Align, key};
 use mypaper_widgets::layout::Instance;
@@ -125,7 +126,7 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
             b,
             c,
             "Its own look",
-            if own { "Only this widget" } else { "From Look" },
+            if own { "Only this widget" } else { "" },
             own,
             if own {
                 reset.clone()
@@ -750,7 +751,7 @@ fn manifest_control(
         Setting::Place { .. } => {
             let mode = Rect::new(c.x, c.y, c.w, b.px(32.0));
             legacy::widget_setting(app, b, c, base, resolved, setting, instance, manifest);
-            b.stroke(mode, b.px(7.0), b.px(1.0), b.p.edge);
+            b.stroke(mode, b.px(radius::CONTROL), b.px(1.0), b.p.edge);
         }
         _ => legacy::widget_setting(app, b, c, base, resolved, setting, instance, manifest),
     }
@@ -783,7 +784,7 @@ fn number_unit(name: &str, schema: &Value) -> String {
 use crate::panel::controls::unit as number_readout;
 
 /// Read the shell's retained kit trees once per gallery visit, without starting plugins.
-fn plugin_data(app: &App, widget: &str) -> Option<Value> {
+pub(crate) fn plugin_data(app: &App, widget: &str) -> Option<Value> {
     let mut chooser = app.panel.as_ref()?.chooser.borrow_mut();
     let faces = chooser.plugin_faces.get_or_insert_with(|| {
         mypaper_widgets::files::local("plugins/studio-faces.json")
@@ -853,13 +854,13 @@ pub(crate) fn face(
     }
     let appearance = mypaper_widgets::look::json_of(&resolved_appearance);
     if !standalone && resolved_appearance.surface != Some(mypaper_theme::Surface::None) {
-        b.fill(pic, b.px(8.0), b.p.well);
+        b.fill(pic, b.px(radius::CONTROL), b.p.well);
     } else if !standalone {
         // Context belongs to the desktop; the widget itself keeps its background absent.
         if let Some(image) = crate::panel::specimens::wallpaper(app) {
             crate::stage::image_round(b, pic, &image, 1.0, b.px(8.0));
         } else {
-            b.fill(pic, b.px(8.0), crate::panel::tokens::hex(
+            b.fill(pic, b.px(radius::CONTROL), crate::panel::tokens::hex(
                 if crate::panel::specimens::desktop_dark(app) { 0x303033 } else { 0xe8e8ed }
             ));
         }
@@ -1106,7 +1107,7 @@ pub(crate) fn face(
 
 /// No retained plugin face is available in this isolated model: use its own artwork.
 fn unavailable_face(app: &App, b: &mut B, manifest: &WidgetManifest, pic: Rect) {
-    b.fill(pic, b.px(7.0), b.p.well);
+    b.fill(pic, b.px(radius::CONTROL), b.p.well);
     let size = (pic.height() * 0.58).min(b.px(72.0));
     let icon = Rect::new(
         pic.left + (pic.width() - size) / 2.0,
@@ -1127,11 +1128,14 @@ fn unavailable_face(app: &App, b: &mut B, manifest: &WidgetManifest, pic: Rect) 
 }
 
 /// Representative inputs for pictures only. Never queries or starts a service or writes data.
-fn sample_content(
+pub(crate) fn sample_content(
     model: &mut mypaper_shell::preview::widgets::Model,
     now: mypaper_shell::preview::widgets::Stamp,
 ) {
     match model.placed.widget.as_str() {
+        "weather" => {
+            model.data = json!({"current":{"temperature":22,"condition":"Partly cloudy","code":2,"isDay":true,"location":{"name":"Hong Kong"}},"forecast":{"days":[{"date":"2026-11-06","max":24,"min":19,"code":2},{"date":"2026-11-07","max":23,"min":18,"code":3}]}});
+        }
         "now-playing" | "media-pill" => {
             model.data = json!({"title":"Night Drive", "artist":"Kairo", "app":"Music", "playing":true, "position":83, "duration":246, "_at":now.ms});
             model.artwork = Some(sample_artwork());
@@ -1627,7 +1631,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
             let rect = Rect::new(x, c.y, width, h);
             let k = key(("widget-category", value));
             let on = category == value;
-            b.plate(k, rect, b.px(6.0), on);
+            b.plate(k, rect, b.px(radius::SMALL), on);
             text(b, rect, &label, 11.0, 500, b.p.ink1, Align::Center);
             b.hit_checked(
                 k,
@@ -1640,7 +1644,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                 )),
                 mypaper_ui::controls::Behavior::Click,
             );
-            b.focus_ring(k, rect, b.px(6.0));
+            b.focus_ring(k, rect, b.px(radius::SMALL));
             x += width + b.px(6.0);
         }
         c.y += h + b.px(8.0);
@@ -1727,7 +1731,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     }) {
                         continue;
                     }
-                    b.plate(k, rect.inflate(b.px(3.0)), b.px(10.0), on);
+                    crate::panel::controls::card(b, rect, b.hovered(k));
                     let instance = Instance {
                         instance: format!("catalog-{id}"),
                         widget: (*id).clone(),
@@ -1746,15 +1750,15 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     .find(|key| resolved.get(*key).is_some_and(Value::is_string))
                     .unwrap_or("variant");
                     let value = resolved.get(face_key).and_then(Value::as_str).unwrap_or("");
-                    face(
+                    crate::panel::controls::card_picture(b, rect, Rect::new(rect.left, rect.top, width, picture_height), |b, pic| face(
                         app,
                         b,
                         &instance,
                         manifest,
                         face_key,
                         value,
-                        Rect::new(rect.left, rect.top, width, picture_height),
-                    );
+                        pic,
+                    ));
                     text(
                         b,
                         Rect::new(
@@ -1790,17 +1794,17 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                         );
                     }
                     if on {
-                        b.stroke(rect.inflate(b.px(2.0)), b.px(9.0), b.px(2.0), b.p.ink1);
+                        crate::panel::controls::card_selection(b, rect);
                         let check = Rect::new(
                             rect.right - b.px(25.0),
                             rect.top + b.px(5.0),
                             b.px(20.0),
                             b.px(20.0),
                         );
-                        b.fill(check, b.px(10.0), b.p.ink1);
+                        b.fill(check, b.px(radius::MEDIUM), b.p.ink1);
                         b.icon(check, glyph::CHECK, 12.0, b.p.chrome);
                     }
-                    b.focus_ring(k, rect, b.px(10.0));
+                    b.focus_ring(k, rect, b.px(radius::CARD));
                 }
             });
             c.y += widgets.len().div_ceil(columns) as f32 * row_height;

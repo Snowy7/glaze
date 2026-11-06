@@ -1,3 +1,4 @@
+use crate::panel::tokens::radius;
 use mypaper_ui::controls::{Align, Behavior, key};
 use mypaper_ui::{Rect, Role};
 use serde_json::{Value, json};
@@ -10,7 +11,7 @@ use crate::library::Kind;
 
 fn thumbnail(app: &App, b: &mut B, r: Rect, i: usize) {
     let wallpaper = &app.library.items[i];
-    b.fill(r, b.px(8.0), b.p.fill);
+    b.fill(r, b.px(radius::CONTROL), b.p.fill);
     if wallpaper.error.is_some() {
         b.icon(r, glyph::ALERT, 22.0, b.p.ink3);
         return;
@@ -219,8 +220,9 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
             let x = c.x + column as f32 * (width + gap);
             let r = Rect::new(x, c.y, width, width * 0.56);
             let card = Rect::new(x, c.y, width, row_height - b.px(8.0));
-            thumbnail(app, b, r, i);
             let k = key(("panel-wallpaper", i));
+            super::super::controls::card(b, card, b.hovered(k));
+            super::super::controls::card_picture(b, card, r, |b, r| thumbnail(app, b, r, i));
             let apply = if wallpaper.error.is_some() {
                 Action::Panel(Command::Wallpaper(i))
             } else {
@@ -234,20 +236,21 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
                 apply,
                 Behavior::Click,
             );
-            b.focus_ring(k, card, b.px(8.0));
+            b.focus_ring(k, card, b.px(super::radius::CARD));
             if wallpaper.active {
+                super::super::controls::card_selection(b, card);
                 let check = Rect::new(
                     r.left + b.px(6.0),
                     r.top + b.px(6.0),
                     b.px(16.0),
                     b.px(16.0),
                 );
-                b.fill(check, b.px(8.0), b.p.solid);
+                b.fill(check, b.px(radius::CONTROL), b.p.solid);
                 b.icon(check, glyph::CHECK, 11.0, b.p.on_solid);
             }
             text(
                 b,
-                Rect::new(x, r.bottom + b.px(4.0), width, height(b, 22.0)),
+                Rect::new(x + b.px(8.0), r.bottom + b.px(4.0), width - b.px(16.0), height(b, 22.0)),
                 &wallpaper.name,
                 13.0,
                 500,
@@ -265,7 +268,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
                 || app.input.focus == Some(k)
                 || app.input.focus == Some(details_key)
             {
-                b.fill(detail, b.px(6.0), b.p.chrome);
+                b.fill(detail, b.px(radius::SMALL), b.p.chrome);
                 text(b, detail, "\u{22ef}", 20.0, 600, b.p.ink1, Align::Center);
             }
             b.hit(
@@ -276,7 +279,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
                 Action::Panel(Command::Wallpaper(i)),
                 Behavior::Click,
             );
-            b.focus_ring(details_key, detail, b.px(6.0));
+            b.focus_ring(details_key, detail, b.px(radius::SMALL));
             let caption = if wallpaper.error.is_some() {
                 "Can't load · open for details"
             } else if wallpaper.active {
@@ -286,7 +289,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
             };
             text(
                 b,
-                Rect::new(x, r.bottom + height(b, 26.0), width, height(b, 18.0)),
+                Rect::new(x + b.px(8.0), r.bottom + height(b, 26.0), width - b.px(16.0), height(b, 18.0)),
                 caption,
                 12.0,
                 400,
@@ -309,7 +312,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
                     badge_w,
                     height(b, 22.0),
                 );
-                b.fill(badge, b.px(5.0), b.p.chrome);
+                b.fill(badge, b.px(radius::SMALL), b.p.chrome);
                 text(b, badge, label, 10.0, 500, b.p.ink2, Align::Center);
             }
             if wallpaper.brings_look {
@@ -730,7 +733,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
 }
 
 fn source_preview(app: &App, b: &mut B, r: Rect, source: Source, value: &str) {
-    b.fill(r, b.px(8.0), b.p.fill);
+    b.fill(r, b.px(radius::CONTROL), b.p.fill);
     let image = source_image(app, source, value, (r.width() as u32, r.height() as u32));
     if let Some(image) = image {
         if source == Source::App {

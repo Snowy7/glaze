@@ -133,7 +133,9 @@ impl Studio {
             .hover
             .and_then(|k| app.frame.targets.iter().find(|t| t.key == k))
             .is_some_and(|t| matches!(t.behavior, mypaper_ui::controls::Behavior::Field));
-        surface.set_cursor(if over_field { mypaper_ui::Cursor::Text } else { mypaper_ui::Cursor::Arrow });
+        let resize = matches!(app.drag, Some(crate::app::Drag::Inspector { .. }))
+            || app.input.hover == Some(mypaper_ui::controls::key("inspector-resize"));
+        surface.set_cursor(if resize { mypaper_ui::Cursor::ResizeHorizontal } else if over_field { mypaper_ui::Cursor::Text } else { mypaper_ui::Cursor::Arrow });
     }
 
     /// The window's border and caption follow the palette (light/dark, contrast) live. DWM

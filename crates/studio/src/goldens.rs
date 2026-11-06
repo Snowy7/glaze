@@ -133,6 +133,103 @@ fn keyboard_reaches_window_pages_search_and_history() {
 }
 
 #[test]
+fn sidebar_preferences_survive_reopening_and_narrow_windows_do_not_change_them() {
+    use crate::{
+        docs::DocId,
+        panel::{Command, Page},
+    };
+    let mut ui = Ui::new().unwrap();
+    let mut app = window_app(true, &ui, (1280, 800));
+    let unchanged =
+        [DocId::Config, DocId::Bars, DocId::Widgets].map(|id| app.docs.doc(id).raw.clone());
+    app.key_with(0x42, (true, false, false));
+    assert_eq!(crate::view::regions(&app).sidebar.width(), 56.0);
+    app.run(Action::Panel(Command::Open(Page::Look)));
+    let built = crate::view::build(&app, &mut ui);
+    assert!(
+        built
+            .list
+            .hits
+            .iter()
+            .any(|hit| hit.label.as_ref() == "Look" && hit.checked == Some(true))
+    );
+    app.input.hover = Some(mypaper_ui::controls::key(("nav-page", Page::Look)));
+    let built = crate::view::build(&app, &mut ui);
+    assert!(
+        built
+            .list
+            .ops
+            .iter()
+            .any(|op| matches!(op, mypaper_ui::Op::Text { text, .. } if text.as_ref() == "Look"))
+    );
+    let studio = app.docs.doc(DocId::Studio).raw.to_string();
+    let documents =
+        [DocId::Config, DocId::Bars, DocId::Widgets].map(|id| app.docs.doc(id).raw.to_string());
+    let mut reopened = window_app(true, &ui, (1280, 800));
+    reopened.docs = Docs::fixture([&documents[0], &documents[1], &documents[2], &studio]);
+    assert_eq!(crate::view::regions(&reopened).sidebar.width(), 56.0);
+    reopened.key_with(0x42, (true, false, false));
+    assert_eq!(crate::view::regions(&reopened).sidebar.width(), 208.0);
+    reopened.size = (960, 640);
+    assert_eq!(crate::view::regions(&reopened).sidebar.width(), 56.0);
+    reopened.size = (1280, 800);
+    assert_eq!(crate::view::regions(&reopened).sidebar.width(), 208.0);
+    assert_eq!(
+        unchanged,
+        [DocId::Config, DocId::Bars, DocId::Widgets].map(|id| reopened.docs.doc(id).raw.clone())
+    );
+    assert!(
+        !reopened.docs.can_undo(),
+        "window preferences are outside desktop undo"
+    );
+}
+
+#[test]
+fn inspector_drag_is_bounded_remembered_and_does_not_edit_the_desktop() {
+    use mypaper_ui::{Button, Event, Point, Pointer};
+    let mut ui = Ui::new().unwrap();
+    let mut app = window_app(true, &ui, (1280, 800));
+    let before = [
+        crate::docs::DocId::Config,
+        crate::docs::DocId::Bars,
+        crate::docs::DocId::Widgets,
+    ]
+    .map(|id| app.docs.doc(id).raw.clone());
+    shot(&mut app, &mut ui);
+    let left = crate::view::regions(&app).inspector.unwrap().left;
+    let pointer = |x| Pointer {
+        at: Point::new(x, 200.0),
+        screen: (0, 0),
+    };
+    app.event(Event::Press(pointer(left), Button::Left));
+    app.event(Event::Move(pointer(left - 80.0)));
+    assert_eq!(crate::view::inspector_width(&app), 420.0);
+    app.event(Event::Release(pointer(left - 80.0), Button::Left));
+    assert_eq!(
+        app.get(crate::docs::DocId::Studio, crate::view::INSPECTOR_SETTING)
+            .and_then(serde_json::Value::as_f64),
+        Some(420.0)
+    );
+    app.panel.as_mut().unwrap().window = Default::default();
+    assert_eq!(crate::view::inspector_width(&app), 420.0);
+    app.size = (960, 640);
+    assert_eq!(
+        crate::view::inspector_width(&app),
+        520.0_f32.min(960.0 - 56.0 - 360.0).min(420.0)
+    );
+    assert_eq!(
+        before,
+        [
+            crate::docs::DocId::Config,
+            crate::docs::DocId::Bars,
+            crate::docs::DocId::Widgets
+        ]
+        .map(|id| app.docs.doc(id).raw.clone())
+    );
+    assert!(!app.docs.can_undo());
+}
+
+#[test]
 fn render_window_pages() {
     use crate::panel::{Command, Page};
     let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
@@ -142,54 +239,61 @@ fn render_window_pages() {
     let mut ui = Ui::new().unwrap();
     for size in [(1280, 800), (1920, 1080)] {
         for dark in [true, false] {
-            for (page, name) in [
-                (Page::Root, "home"),
-                (Page::Wallpapers, "wallpapers"),
-                (Page::Look, "look"),
-                (Page::Bars, "bars"),
-                (Page::Widget, "widget"),
-                (Page::Settings, "settings"),
-                (Page::History, "history"),
-                (Page::FirstRun, "first-run"),
-                (Page::Look, "off"),
-            ] {
-                let mut app = window_app(dark, &ui, size);
-                app.run(Action::Panel(Command::Open(page)));
-                if page == Page::Widget {
-                    app.nav.widget = Some("clock-1".into());
-                }
-                if page == Page::History {
-                    app.run(Action::SetStyle(Some(mypaper_config::look::Style::Fluent)));
-                    app.run(Action::Preset("islands"));
-                    for (i, entry) in app
-                        .panel
-                        .as_ref()
-                        .unwrap()
-                        .history
-                        .borrow_mut()
-                        .entries
-                        .iter_mut()
-                        .enumerate()
-                    {
-                        entry.at = 1793958138 + i as u64 * 60;
+            for collapsed in [false, true] {
+                for (page, name) in [
+                    (Page::Root, "home"),
+                    (Page::Wallpapers, "wallpapers"),
+                    (Page::Look, "look"),
+                    (Page::Bars, "bars"),
+                    (Page::Widget, "widget"),
+                    (Page::Settings, "settings"),
+                    (Page::History, "history"),
+                    (Page::FirstRun, "first-run"),
+                    (Page::Look, "off"),
+                ] {
+                    let mut app = window_app(dark, &ui, size);
+                    if collapsed {
+                        crate::view::toggle_sidebar(&mut app);
+                        app.toast = None;
                     }
-                    app.toast = None;
+                    app.run(Action::Panel(Command::Open(page)));
+                    if page == Page::Widget {
+                        app.nav.widget = Some("clock-1".into());
+                    }
+                    if page == Page::History {
+                        app.run(Action::SetStyle(Some(mypaper_config::look::Style::Fluent)));
+                        app.run(Action::Preset("islands"));
+                        for (i, entry) in app
+                            .panel
+                            .as_ref()
+                            .unwrap()
+                            .history
+                            .borrow_mut()
+                            .entries
+                            .iter_mut()
+                            .enumerate()
+                        {
+                            entry.at = 1793958138 + i as u64 * 60;
+                        }
+                        app.toast = None;
+                    }
+                    if name == "off" {
+                        app.system
+                            .parts
+                            .iter_mut()
+                            .for_each(|part| part.running = false);
+                    }
+                    let image = shot(&mut app, &mut ui);
+                    let file = format!(
+                        "{name}{}-{}x{}-{}.png",
+                        if collapsed { "-collapsed" } else { "" },
+                        size.0,
+                        size.1,
+                        if dark { "dark" } else { "light" }
+                    );
+                    golden::write(&image, &out.join(&file)).unwrap();
+                    golden::check(&image, &baseline.join(&file)).unwrap();
                 }
-                if name == "off" {
-                    app.system
-                        .parts
-                        .iter_mut()
-                        .for_each(|part| part.running = false);
-                }
-                let image = shot(&mut app, &mut ui);
-                let file = format!(
-                    "{name}-{}x{}-{}.png",
-                    size.0,
-                    size.1,
-                    if dark { "dark" } else { "light" }
-                );
-                golden::write(&image, &out.join(&file)).unwrap();
-                golden::check(&image, &baseline.join(&file)).unwrap();
             }
         }
     }
@@ -362,12 +466,24 @@ fn render_window_interaction_states() {
             (Page::General, "large-text", (1280, 800), false),
             (Page::DesktopMenu, "desktop-menu", (1280, 800), false),
             (Page::AddWidget, "add-widget-rail", (960, 640), false),
+            (Page::AddWidget, "gallery-weather", (1280, 800), false),
+            (Page::Widget, "faces", (1280, 800), false),
+            (Page::BarDesign, "bar-presets", (1280, 800), false),
             (Page::History, "history-restore", (1280, 800), false),
         ] {
             let mut app = window_app(dark, &ui, size);
             app.run(Action::Panel(Command::Open(page)));
             app.panel.as_mut().unwrap().stage_actual = actual;
             app.nav.widget = Some("clock-1".into());
+            if name == "gallery-weather" {
+                app.texts.insert(crate::actions::FieldId::WidgetSearch, "weather".into());
+            }
+            if name == "faces" {
+                // The world-clock review owns the native timezone factory on its own test
+                // thread. Weather exercises card geometry without sharing that WinRT cache.
+                app.nav.widget = Some("weather-1".into());
+                app.nav.more.insert(mypaper_ui::controls::key(("panel-faces", "weather-1", "variant")));
+            }
             if name == "large-text" {
                 app.theme.ty.text_scale = 1.5;
             }

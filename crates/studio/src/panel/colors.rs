@@ -1,3 +1,4 @@
+use crate::panel::tokens::radius;
 use super::{Command, controls::text, specimens};
 use crate::{
     actions::{Action, Edit, FieldId},
@@ -207,7 +208,7 @@ pub fn swatches(
             &mypaper_config::Color(hsv.rgb()).hex(),
             &format!("{} hex", edit.label),
         );
-        b.stroke(field, b.px(6.0), b.px(1.0), b.p.control);
+        b.stroke(field, b.px(radius::SMALL), b.px(1.0), b.p.control);
         if !flipped {
             c.y = rect.bottom + b.px(10.0);
         }

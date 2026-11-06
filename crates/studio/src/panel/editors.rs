@@ -1,5 +1,6 @@
 mod bars;
 mod connections;
+use crate::panel::tokens::radius;
 pub use bars::{
     bar_path, bar_value, design_name as bar_design_name, insert_module, move_module,
     overview as bars_overview, same_bars, selected_module_name,
@@ -10,10 +11,11 @@ pub use connections::{
 mod look;
 mod settings;
 pub use look::windows_summary;
+pub(super) use look::style_name;
 pub use settings::add_menu_item;
 pub use settings::frame_cap;
 mod wallpapers;
-pub(super) mod widgets;
+pub(crate) mod widgets;
 pub use widgets::{can_add_widget, pick_asset};
 
 use mypaper_ui::controls::{Align, Behavior, key};
@@ -238,7 +240,7 @@ pub fn select(
         let area = b.list_row_area(r);
         let k = key(("panel-select", c.view, label));
         let wash_at = b.list.ops.len();
-        b.wash(k, area, b.px(8.0));
+        b.wash(k, area, b.px(radius::CONTROL));
         let wash = b.list.ops.split_off(wash_at);
         b.list.ops.splice(content_at..content_at, wash);
         b.icon(
@@ -260,8 +262,8 @@ pub fn select(
             action,
             Behavior::Click,
         );
-        b.focus_ring(k, area, b.px(8.0));
-        b.hline(c.x, c.right(), c.y - 1.0, b.p.line);
+        b.focus_ring(k, area, b.px(radius::CONTROL));
+        b.hline(c.x, c.right(), c.y - 1.0, b.p.line.with_alpha(0.45));
         return;
     }
     row(b, c, None, label, &shown, "", None, action);
@@ -338,7 +340,7 @@ pub fn toggle(b: &mut B, c: &mut Col, label: &str, caption: &str, on: bool, acti
         label,
         action,
     );
-    b.hline(c.x, c.right(), c.y + h - 1.0, b.p.line);
+    b.hline(c.x, c.right(), c.y + h - 1.0, b.p.line.with_alpha(0.45));
     c.y += h;
 }
 
@@ -408,7 +410,7 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
         return;
     }
     b.fill(r, 0.0, b.p.chrome);
-    b.hline(r.left, r.right, r.top, b.p.line);
+    b.hline(r.left, r.right, r.top, b.p.line.with_alpha(0.45));
     let state = app.panel.as_ref().unwrap();
     let (secondary, cancel, primary, commit, enabled) = match state.page {
         Page::FirstRun => (
@@ -539,16 +541,16 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
                     Align::Start,
                 );
                 c.y += line;
-                b.hline(c.x, c.right(), c.y, b.p.line);
+                b.hline(c.x, c.right(), c.y, b.p.line.with_alpha(0.45));
                 continue;
             }
             let row_h = height(b, 84.0);
             let r = b.list_row_area(Rect::new(c.x, c.y, c.w, row_h));
             let k = key(("panel-history", i));
             if history.selected == Some(i) {
-                b.fill(r, b.px(8.0), b.p.selected);
+                b.fill(r, b.px(radius::CONTROL), b.p.selected);
             } else {
-                b.wash(k, r, b.px(8.0));
+                b.wash(k, r, b.px(radius::CONTROL));
             }
             let pic = Rect::new(c.x, c.y + b.px(10.0), b.px(108.0), b.px(61.0));
             desktop_preview(app, b, pic, i, entry, &mut visible_pictures);
@@ -594,7 +596,7 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
                 Action::Panel(Command::History(i)),
                 Behavior::Click,
             );
-            b.focus_ring(k, r, b.px(8.0));
+            b.focus_ring(k, r, b.px(radius::CONTROL));
             c.y += row_h;
         }
     });
@@ -635,7 +637,7 @@ fn desktop_preview(
         }
         Some(picture)
     });
-    b.fill(r, b.px(6.0), b.p.fill);
+    b.fill(r, b.px(radius::SMALL), b.p.fill);
     if let Some(picture) = picture {
         crate::stage::image_round(b, r, &picture, 1.0, b.px(6.0));
     }
@@ -880,7 +882,7 @@ pub fn reveal_search(app: &App, b: &mut B, page: Page, first_target: usize) {
             .flash
             .is_some_and(|(id, at)| id == "panel-search-match" && at.elapsed().as_secs_f32() < 2.0)
         {
-            b.stroke(rect.inflate(b.px(2.0)), b.px(7.0), b.px(2.0), b.p.ink2);
+            b.stroke(rect.inflate(b.px(2.0)), b.px(radius::CONTROL), b.px(2.0), b.p.ink2);
         }
     }
 }

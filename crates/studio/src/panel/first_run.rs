@@ -1,3 +1,4 @@
+use crate::panel::tokens::radius;
 use super::{
     controls::{group, notice, row, title},
     editors::toggle,
@@ -259,7 +260,7 @@ fn starter_preview(app: &App, b: &mut B, index: usize, rect: Rect, taskbar: usiz
         mypaper_config::look::Style::Oneui,
         mypaper_config::look::Style::Mono,
     ][index];
-    b.fill(rect, b.px(6.0), b.p.well);
+    b.fill(rect, b.px(radius::SMALL), b.p.well);
     super::specimens::backdrop(app, b, rect);
     if let Some(image) = app
         .library
@@ -434,8 +435,8 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                 c.y += b.px(32.0);
             }
             let r = Rect::new(x, c.y + b.px(4.0), width, b.px(26.0));
-            b.fill(r, b.px(5.0), b.p.fill);
-            b.stroke(r, b.px(5.0), b.px(1.0), b.p.edge);
+            b.fill(r, b.px(radius::SMALL), b.p.fill);
+            b.stroke(r, b.px(radius::SMALL), b.px(1.0), b.p.edge);
             super::controls::text(b, r, label, 12.0, 500, b.p.ink1, Align::Center);
             x += width + b.px(6.0);
         }

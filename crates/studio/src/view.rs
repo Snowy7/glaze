@@ -1,6 +1,7 @@
 //! The standalone Studio frame: sidebar, fixed band, interactive stage and docked inspector.
 //! All editors are the shared panel pages. Navigation and stage zoom never edit documents.
 
+use crate::panel::tokens::radius;
 use mypaper_ui::controls::{
     Align, Behavior, ButtonKind, Font, Glyph, ScrollArea, Target, key,
 };
@@ -14,6 +15,102 @@ use crate::panel::{Command, Page};
 use crate::stage::{Item, Show, What};
 use crate::theme::glyph;
 use crate::ui::B;
+
+const SIDEBAR_SETTING: &str = "/window/sidebar_collapsed";
+const SETTINGS_SECTION: &str = "/window/settings_collapsed";
+pub const INSPECTOR_SETTING: &str = "/window/inspector_width";
+const COLLAPSE_TIME: std::time::Duration = std::time::Duration::from_millis(160);
+
+#[derive(Debug, Default)]
+pub struct State {
+    sidebar: Option<Transition>,
+    pub inspector_drag: Option<f32>,
+}
+
+#[derive(Debug)]
+struct Transition {
+    start: std::time::Instant,
+    from: f32,
+    to: f32,
+}
+
+fn collapsed(app: &App) -> bool {
+    app.get(DocId::Studio, SIDEBAR_SETTING)
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+fn sidebar_width(app: &App) -> f32 {
+    if (app.size.0 as f32) < app.px(1100.0) {
+        return 56.0;
+    }
+    if let Some(animation) = app.panel.as_ref().and_then(|s| s.window.sidebar.as_ref()) {
+        let t = (animation.start.elapsed().as_secs_f32() / COLLAPSE_TIME.as_secs_f32()).min(1.0);
+        return animation.from + (animation.to - animation.from) * (1.0 - (1.0 - t).powi(3));
+    }
+    if collapsed(app) { 56.0 } else { 208.0 }
+}
+
+pub fn toggle_sidebar(app: &mut App) {
+    let from = sidebar_width(app);
+    let collapse = !collapsed(app);
+    app.apply(
+        "Sidebar",
+        vec![crate::docs::Op {
+            doc: DocId::Studio,
+            path: SIDEBAR_SETTING.into(),
+            value: Some(serde_json::json!(collapse)),
+        }],
+    );
+    if collapsed(app) != collapse {
+        return;
+    }
+    let animate = !app.fixture
+        && app
+            .get(DocId::Bars, "/animation/reduceMotion")
+            .and_then(Value::as_str)
+            != Some("always");
+    app.panel.as_mut().unwrap().window.sidebar = animate.then(|| Transition {
+        start: std::time::Instant::now(),
+        from,
+        to: if collapse { 56.0 } else { 208.0 },
+    });
+    app.dirty = true;
+}
+
+pub fn animation_deadline(app: &App) -> Option<std::time::Instant> {
+    let animation = app.panel.as_ref()?.window.sidebar.as_ref()?;
+    Some(
+        (std::time::Instant::now() + std::time::Duration::from_millis(16))
+            .min(animation.start + COLLAPSE_TIME),
+    )
+}
+
+pub fn tick(app: &mut App) {
+    if let Some(state) = app.panel.as_mut()
+        && let Some(animation) = &state.window.sidebar
+    {
+        if animation.start.elapsed() >= COLLAPSE_TIME {
+            state.window.sidebar = None;
+        }
+        app.dirty = true;
+    }
+}
+
+pub fn toggle_settings(app: &mut App) {
+    let collapse = app
+        .get(DocId::Studio, SETTINGS_SECTION)
+        .and_then(Value::as_bool)
+        != Some(true);
+    app.apply(
+        "Settings section",
+        vec![crate::docs::Op {
+            doc: DocId::Studio,
+            path: SETTINGS_SECTION.into(),
+            value: Some(serde_json::json!(collapse)),
+        }],
+    );
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Regions {
@@ -44,17 +141,22 @@ pub fn has_stage(page: Page) -> bool {
 }
 
 pub fn inspector_width(app: &App) -> f32 {
-    app.px(if app.size.0 as f32 / app.scale >= 1600.0 {
+    let default = if app.size.0 as f32 / app.scale >= 1600.0 {
         380.0
     } else {
         340.0
-    })
+    };
+    let width = app.panel.as_ref().and_then(|s| s.window.inspector_drag)
+        .or_else(|| app.get(DocId::Studio, INSPECTOR_SETTING).and_then(Value::as_f64).map(|v| v as f32))
+        .filter(|width| width.is_finite()).unwrap_or(default);
+    let max = (app.size.0 as f32 / app.scale - sidebar_width(app) - 360.0).clamp(300.0, 520.0);
+    app.px(width.clamp(300.0, max))
 }
 
 pub fn regions(app: &App) -> Regions {
     let (w, h) = (app.size.0 as f32, app.size.1 as f32);
-    let rail = w < app.px(1100.0);
-    let side = app.px(if rail { 56.0 } else { 208.0 });
+    let side = app.px(sidebar_width(app));
+    let rail = side < app.px(180.0);
     let main = Rect::new(
         side,
         app.px(8.0),
@@ -237,14 +339,14 @@ pub fn build(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
         p.chrome,
     );
     b.fill(r.sidebar, 0.0, p.chrome);
-    b.fill(r.main, app.px(28.0), p.bg);
+    b.fill(r.main, app.px(radius::CARD), p.bg);
     // Only the top edge is rounded; the sheet continues to the window's bottom.
     b.fill(
         Rect::new(
             r.main.left,
-            r.main.top + app.px(28.0),
+            r.main.top + app.px(radius::CARD),
             r.main.width(),
-            r.main.height() - app.px(28.0),
+            r.main.height() - app.px(radius::CARD),
         ),
         0.0,
         p.bg,
@@ -297,6 +399,14 @@ pub fn build(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
         b.fill(inspector, 0.0, p.bg);
     }
     crate::panel::content(app, &mut b, host, page);
+    if let Some(inspector) = r.inspector {
+        let handle = Rect::new(inspector.left - b.px(4.0), inspector.top, b.px(8.0), inspector.height());
+        let k = key("inspector-resize");
+        if b.hovered(k) || app.panel.as_ref().unwrap().window.inspector_drag.is_some() {
+            b.fill(Rect::new(inspector.left, inspector.top + b.px(16.0), b.px(1.0), inspector.height() - b.px(32.0)), 0.0, p.edge);
+        }
+        b.hit(k, handle, Role::Button, "Resize inspector", Action::Panel(Command::ResizeInspector), Behavior::Drag);
+    }
     focus_regions.push(host);
     crate::panel::pages::toast(
         app,
@@ -320,6 +430,7 @@ pub fn build(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
         }
         _ => {}
     }
+    if r.rail && app.overlay.is_none() { sidebar_tooltip(app, &mut b, r); }
     crate::panel::choosers::finish(app);
     Built {
         list: b.list,
@@ -384,7 +495,7 @@ fn sidebar(app: &App, b: &mut B, r: Regions) {
         b.px(20.0),
         b.px(20.0),
     );
-    b.fill(mark, b.px(6.0), p.solid);
+    b.fill(mark, b.px(radius::SMALL), p.solid);
     b.icon(mark, glyph::WALLPAPERS, 12.0, p.on_solid);
     if !r.rail {
         let font = b.font(Font::Strong);
@@ -427,7 +538,8 @@ fn sidebar(app: &App, b: &mut B, r: Regions) {
         Behavior::Click,
     );
     b.focus_ring(key("sidebar-search"), search, b.control_radius(search));
-    let status = Rect::new(x, r.sidebar.bottom - b.px(58.0), width, b.px(46.0));
+    let status_height = b.px(if r.rail { 46.0 } else { 34.0 * b.t.text_scale + 12.0 });
+    let status = Rect::new(x, r.sidebar.bottom - status_height - b.px(12.0), width, status_height);
     let nav = Rect::new(x, b.px(96.0), width, status.top - b.px(108.0));
     let nav_key = key("window-sidebar-links");
     b.scroll(
@@ -443,16 +555,30 @@ fn sidebar(app: &App, b: &mut B, r: Regions) {
                 nav_item(app, b, Rect::new(x, y, width, row_height), page, r.rail);
                 y += step;
             }
+            let settings_collapsed = app.get(DocId::Studio, SETTINGS_SECTION).and_then(Value::as_bool) == Some(true);
             if r.rail {
                 y += b.px(12.0);
             } else {
+                let header = Rect::new(x, y + b.px(6.0), width, b.px(30.0 * b.t.text_scale));
+                let k = key("sidebar-settings");
+                if settings_collapsed && SETTINGS.contains(&nav_place(app)) {
+                    b.fill(header, b.px(radius::CONTROL), p.selected);
+                } else {
+                    b.wash(k, header, b.px(radius::CONTROL));
+                }
                 let font = b.font(Font::Caption);
-                b.text_at(x + b.px(10.0), y + b.px(11.0), "Settings", &font, p.ink3);
-                y += b.px(36.0 * b.t.text_scale);
+                let ink = if b.hovered(k) { p.ink1 } else { p.ink3 };
+                b.text_in(Rect::new(x + b.px(10.0), header.top, width - b.px(36.0), header.height()), "Settings", &font, ink, Align::Start);
+                b.icon(Rect::new(header.right - b.px(26.0), header.top, b.px(16.0), header.height()), if settings_collapsed { glyph::CHEVRON_RIGHT } else { glyph::CHEVRON_DOWN }, 13.0, ink);
+                b.hit_checked(k, header, Role::Button, "Settings section", Some(!settings_collapsed), Action::Panel(Command::SidebarSettings), Behavior::Click);
+                b.focus_ring(k, header, b.px(radius::CONTROL));
+                y = header.bottom;
             }
-            for page in SETTINGS {
-                nav_item(app, b, Rect::new(x, y, width, row_height), page, r.rail);
-                y += step;
+            if r.rail || !settings_collapsed {
+                for page in SETTINGS {
+                    nav_item(app, b, Rect::new(x, y, width, row_height), page, r.rail);
+                    y += step;
+                }
             }
             y
         },
@@ -460,8 +586,7 @@ fn sidebar(app: &App, b: &mut B, r: Regions) {
     status_block(app, b, status, r.rail);
 }
 
-fn nav_item(app: &App, b: &mut B, rect: Rect, page: Page, rail: bool) {
-    let p = *b.p;
+fn nav_place(app: &App) -> Page {
     let mut active = crate::panel::current_page(app);
     if active == Page::Windows {
         active = Page::Look;
@@ -472,7 +597,12 @@ fn nav_item(app: &App, b: &mut B, rect: Rect, page: Page, rail: bool) {
     while !PLACES.contains(&active) && !SETTINGS.contains(&active) {
         active = active.parent().unwrap_or(Page::Root);
     }
-    let current = active == page;
+    active
+}
+
+fn nav_item(app: &App, b: &mut B, rect: Rect, page: Page, rail: bool) {
+    let p = *b.p;
+    let current = nav_place(app) == page;
     let k = key(("nav-page", page));
     if current {
         b.fill(rect, b.control_radius(rect), p.selected);
@@ -484,14 +614,15 @@ fn nav_item(app: &App, b: &mut B, rect: Rect, page: Page, rail: bool) {
     } else {
         p.ink2
     };
+    let icon_ink = if current || b.hovered(k) { p.ink1 } else { p.ink3 };
     if rail {
-        b.icon(rect, page_glyph(page), 16.0, ink);
+        b.icon(rect, page_glyph(page), 16.0, icon_ink);
     } else {
         b.icon(
             Rect::new(rect.left + b.px(10.0), rect.top, b.px(16.0), rect.height()),
             page_glyph(page),
             15.0,
-            ink,
+            icon_ink,
         );
         let font = crate::panel::controls::font(b, 13.0, if current { 600 } else { 500 });
         b.text_in(
@@ -517,6 +648,35 @@ fn nav_item(app: &App, b: &mut B, rect: Rect, page: Page, rail: bool) {
         Behavior::Click,
     );
     b.focus_ring(k, rect, b.control_radius(rect));
+}
+
+fn sidebar_tooltip(app: &App, b: &mut B, r: Regions) {
+    let Some((index, target)) = app
+        .input
+        .hover
+        .and_then(|k| b.targets.iter().enumerate().find(|(_, t)| t.key == k))
+    else {
+        return;
+    };
+    if target.rect.right > r.sidebar.right || target.rect.top < b.px(48.0) {
+        return;
+    }
+    let Some(label) = b
+        .list
+        .hits
+        .iter()
+        .find(|h| h.id == index as u32 + 1)
+        .map(|h| h.label.to_string())
+    else {
+        return;
+    };
+    let top = target.rect.top;
+    let font = b.font(Font::Caption);
+    let width = b.measure(&label, &font).0 + b.px(20.0);
+    let rect = Rect::new(r.sidebar.right + b.px(8.0), top, width, b.px(30.0));
+    b.fill(rect, b.px(radius::CONTROL), b.p.fill);
+    b.stroke(rect, b.px(radius::CONTROL), b.px(1.0), b.p.line);
+    b.text_in(rect, &label, &font, b.p.ink1, Align::Center);
 }
 
 fn status_block(app: &App, b: &mut B, rect: Rect, rail: bool) {
@@ -561,7 +721,7 @@ fn status_block(app: &App, b: &mut B, rect: Rect, rail: bool) {
     };
     b.fill(
         rect,
-        b.px(10.0),
+        b.px(radius::MEDIUM),
         if stopped_part.is_some() {
             p.selected
         } else {
@@ -595,7 +755,7 @@ fn status_block(app: &App, b: &mut B, rect: Rect, rail: bool) {
         let caption = b.font(Font::Caption);
         let tw = button_rect.left - rect.left - b.px(34.0);
         b.text_in(
-            Rect::new(rect.left + b.px(30.0), rect.top + b.px(6.0), tw, b.px(16.0)),
+            Rect::new(rect.left + b.px(30.0), rect.top + b.px(6.0), tw, b.px(18.0 * b.t.text_scale)),
             title,
             &strong,
             p.ink1,
@@ -604,9 +764,9 @@ fn status_block(app: &App, b: &mut B, rect: Rect, rail: bool) {
         b.text_in(
             Rect::new(
                 rect.left + b.px(30.0),
-                rect.top + b.px(23.0),
+                rect.top + b.px(6.0 + 18.0 * b.t.text_scale),
                 tw,
-                b.px(16.0),
+                b.px(16.0 * b.t.text_scale),
             ),
             detail,
             &caption,
@@ -766,6 +926,16 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
         }
     }
     let mut x = bar.left + b.px(12.0);
+    let toggle = Rect::new(x, y, b.px(28.0), b.px(28.0));
+    let k = key("sidebar-toggle");
+    b.wash(k, toggle, b.px(radius::CONTROL));
+    let icon = Rect::new(x + b.px(6.0), y + b.px(7.0), b.px(16.0), b.px(14.0));
+    let ink = if b.hovered(k) { p.ink1 } else { p.ink3 };
+    b.stroke(icon, b.px(2.0), b.px(1.75), ink);
+    b.vline(icon.left + b.px(5.0), icon.top, icon.bottom, ink);
+    b.hit(k, toggle, Role::Button, if collapsed(app) { "Expand sidebar (Ctrl+B)" } else { "Collapse sidebar (Ctrl+B)" }, Action::Panel(Command::Sidebar), Behavior::Click);
+    b.focus_ring(k, toggle, b.px(radius::CONTROL));
+    x += b.px(36.0);
     let top_level = PLACES.contains(&page) || SETTINGS.contains(&page) || page == Page::Settings;
     if !top_level {
         b.icon_button(
@@ -796,7 +966,7 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
             b.text_in(rect, &title, &font, p.ink1, Align::Start);
         } else {
             let k = key(("breadcrumb", level));
-            b.wash(k, rect, b.px(6.0));
+            b.wash(k, rect, b.px(radius::SMALL));
             b.text_in(rect, &title, &font, p.ink3, Align::Start);
             b.hit(
                 k,
@@ -806,7 +976,7 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
                 Action::Panel(Command::Open(*level)),
                 Behavior::Click,
             );
-            b.focus_ring(k, rect, b.px(6.0));
+            b.focus_ring(k, rect, b.px(radius::SMALL));
         }
         x += width;
         if !current {
@@ -852,7 +1022,7 @@ fn caption_buttons(app: &App, b: &mut B, bar: Rect, chrome: &mut Vec<(Rect, Chro
     ] {
         let r = Rect::new(x, y, w, h);
         let k = key(("caption", label));
-        b.wash(k, r, b.px(6.0));
+        b.wash(k, r, b.px(radius::SMALL));
         b.icon(r, g, 10.0, if b.hovered(k) { p.ink1 } else { p.ink2 });
         b.hit(
             k,
@@ -862,7 +1032,7 @@ fn caption_buttons(app: &App, b: &mut B, bar: Rect, chrome: &mut Vec<(Rect, Chro
             action,
             mypaper_ui::controls::Behavior::Click,
         );
-        b.focus_ring(k, r, b.px(6.0));
+        b.focus_ring(k, r, b.px(radius::SMALL));
         chrome.push((r, part));
         x += w + b.px(2.0);
     }
@@ -951,7 +1121,7 @@ fn stage_tag(b: &mut B, item: &Item, viewport: Rect) {
     let rect = Rect::new(x, y, width, b.px(24.0));
     b.fill(
         rect,
-        b.px(6.0),
+        b.px(radius::SMALL),
         mypaper_ui::Rgba::new(0.04, 0.04, 0.04, 0.9),
     );
     b.text_in(

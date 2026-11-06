@@ -1,5 +1,6 @@
 //! Shared Studio columns, manifest fields, picture tiles and list rows.
 
+use crate::panel::tokens::radius;
 use mypaper_ui::controls::{Align, Builder, Font, Glyph, Key, key};
 use mypaper_ui::{Accessory, Lead, Rect, Rgba, Role};
 use serde_json::Value;
@@ -21,7 +22,12 @@ pub fn builder<'a>(
     let mut b = Builder::new(text, palette, ty, scale, input).with_style(mypaper_ui::Style::OneUi);
     b.kit.metrics.pad = 18.0;
     b.kit.metrics.row_single = b.kit.metrics.row;
-    b.kit.radius.card = 26.0;
+    b.kit.radius.surface = radius::CARD;
+    b.kit.radius.card = radius::CARD;
+    b.kit.radius.control = Some(radius::CONTROL);
+    b.kit.radius.small = radius::SMALL;
+    // Kit icons use a 24-unit grid: 2.625 becomes 1.75 at 16 DIP.
+    b.kit.icon_weight = 2.625;
     b
 }
 
@@ -55,7 +61,7 @@ pub fn label(b: &mut B, rect: Rect, label: &str, hint: &str, chip: Option<&str>)
         let style = b.font(Font::Micro);
         let (cw, _) = b.measure(chip, &style);
         let r = Rect::new(end + b.px(8.0), top + b.px(1.0), cw + b.px(12.0), b.px(18.0));
-        b.fill(r, b.px(5.0), p.fill);
+        b.fill(r, b.px(radius::SMALL), p.fill);
         b.text_in(r, chip, &style, p.ink2, Align::Center);
         end = r.right;
     }
@@ -148,7 +154,7 @@ pub fn tiles(
                 Align::Center,
             );
             b.hit_checked(k, Rect::new(x, y, w, h + b.px(24.0)), Role::RadioButton, label, Some(*selected), action.clone(), mypaper_ui::controls::Behavior::Click);
-            b.focus_ring(k, pic, b.px(8.0));
+            b.focus_ring(k, pic, b.px(radius::CONTROL));
         }
     });
     col.y += rows as f32 * (h + b.px(32.0));
@@ -269,7 +275,7 @@ pub fn list_row(
     let p = *b.p;
     let hot = b.hovered(k) || b.input.pointer.is_some_and(|pt| rect.contains(pt));
     if hot {
-        b.fill(rect.inflate(-b.px(3.0)), b.px(7.0), p.hover);
+        b.fill(rect.inflate(-b.px(3.0)), b.px(radius::CONTROL), p.hover);
     }
     b.icon(Rect::new(rect.left + b.px(4.0), rect.top, b.px(16.0), rect.height()), glyph::GRIP, 12.0, if hot { p.ink3 } else { p.ink4 });
     let mut x = rect.left + b.px(24.0);
@@ -283,7 +289,7 @@ pub fn list_row(
     let style = b.font(Font::Body);
     b.text_in(Rect::new(x, rect.top, rect.right - x - b.px(36.0), rect.height()), label, &style, p.ink1, Align::Start);
     b.hit(k, Rect::new(rect.left, rect.top, rect.width() - b.px(34.0), rect.height()), Role::ListItem, label, select, mypaper_ui::controls::Behavior::Drag);
-    b.focus_ring(k, rect.inflate(-b.px(2.0)), b.px(6.0));
+    b.focus_ring(k, rect.inflate(-b.px(2.0)), b.px(radius::SMALL));
     if let Some(remove) = remove
         && hot
     {

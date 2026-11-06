@@ -34,7 +34,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CS_DBLCLKS, CreateIconFromResourceEx, CreateWindowExW, DefWindowProcW, GetClientRect, HCURSOR,
     HTCAPTION, HTCLIENT, HTCLOSE, HTMAXBUTTON, HTMINBUTTON, HTTOP, HTTOPLEFT, HTTOPRIGHT, ICON_BIG,
-    ICON_SMALL, IDC_ARROW, IDC_HAND, IDC_IBEAM, IDC_SIZEALL, IDC_SIZENWSE, IsZoomed,
+    ICON_SMALL, IDC_ARROW, IDC_HAND, IDC_IBEAM, IDC_SIZEALL, IDC_SIZENWSE, IDC_SIZEWE, IsZoomed,
     LR_DEFAULTCOLOR, LoadCursorW, MINMAXINFO, NCCALCSIZE_PARAMS, PostMessageW, RegisterClassExW,
     SC_MINIMIZE, SM_CXPADDEDBORDER, SM_CYFRAME, SW_MAXIMIZE, SW_RESTORE, SW_SHOWMAXIMIZED,
     SW_SHOWNORMAL, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
@@ -75,6 +75,7 @@ pub enum Cursor {
     Hand,
     Move,
     Resize,
+    ResizeHorizontal,
 }
 
 /// What the window procedure of an app window shares with its [`Surface`].
@@ -345,6 +346,7 @@ pub(crate) fn message(
                 Cursor::Hand => IDC_HAND,
                 Cursor::Move => IDC_SIZEALL,
                 Cursor::Resize => IDC_SIZENWSE,
+                Cursor::ResizeHorizontal => IDC_SIZEWE,
             };
             // SAFETY: a shared system cursor.
             unsafe {

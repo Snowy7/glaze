@@ -70,6 +70,7 @@ pub struct Frame {
 /// A drag in progress.
 #[derive(Debug, Clone)]
 pub enum Drag {
+    Inspector { from: f32, width: f32 },
     Slider {
         edit: Edit,
         track: Rect,
@@ -558,6 +559,9 @@ impl App {
 
     fn drag_to(&mut self, drag: Drag, p: Point) {
         match drag {
+            Drag::Inspector { from, width } => {
+                self.panel.as_mut().unwrap().window.inspector_drag = Some(width + (from - p.x) / self.scale);
+            }
             Drag::Slider {
                 edit,
                 track,
@@ -590,6 +594,12 @@ impl App {
 
     fn start_drag(&mut self, action: &Action, p: Point) {
         match action {
+            Action::Panel(crate::panel::Command::ResizeInspector) => {
+                let width = crate::view::inspector_width(self) / self.scale;
+                self.capture(true);
+                self.panel.as_mut().unwrap().window.inspector_drag = Some(width);
+                self.drag = Some(Drag::Inspector { from: p.x, width });
+            }
             Action::SelectWidget(Some(instance)) => {
                 let resize = matches!(self.target_at(p).map(|t| t.key), Some(k) if k == key(("resize", instance.as_str())));
                 self.capture(true);
@@ -627,6 +637,13 @@ impl App {
         self.input.pressed = None;
         self.dirty = true;
         match drag {
+            Some(Drag::Inspector { .. }) => {
+                let width = crate::view::inspector_width(self) / self.scale;
+                self.panel.as_mut().unwrap().window.inspector_drag = None;
+                self.apply("Inspector width", vec![Op {
+                    doc: DocId::Studio, path: crate::view::INSPECTOR_SETTING.into(), value: Some(json!(width)),
+                }]);
+            }
             Some(Drag::Slider { edit, .. }) => {
                 if let Some((edit, value)) = self.pending_value.take() {
                     // Release is its own drag transaction, even after another drag of this
@@ -1330,7 +1347,7 @@ impl App {
             _ => None,
         };
         let status = self.system.next_poll(self.watching_status());
-        [flash, toast, saved, status].into_iter().flatten().min()
+        [flash, toast, saved, status, crate::view::animation_deadline(self)].into_iter().flatten().min()
     }
 
     /// Live numbers only while someone can see them: Studio in front, on a page showing them.
@@ -1346,6 +1363,7 @@ impl App {
 
     /// Timers: expire the toast and flash, refresh live status.
     pub fn tick(&mut self) {
+        crate::view::tick(self);
         let now = Instant::now();
         if self.toast.as_ref().is_some_and(|t| t.until <= now) {
             self.toast = None;

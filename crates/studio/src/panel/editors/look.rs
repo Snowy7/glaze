@@ -260,7 +260,7 @@ pub(super) fn style_tiles(
     shown.map(|index| STYLES[index].0)
 }
 
-pub(super) fn style_name(style: Style) -> &'static str {
+pub(crate) fn style_name(style: Style) -> &'static str {
     STYLES
         .iter()
         .find(|(value, _, _)| *value == style)

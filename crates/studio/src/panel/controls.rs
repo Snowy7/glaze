@@ -1,5 +1,6 @@
 //! Panel row anatomy on the existing kit's drawing, focus, accessibility and hit machinery.
 
+use crate::panel::tokens::radius;
 use mypaper_ui::controls::{Align, Behavior, Font, Glyph, key};
 use mypaper_ui::{Point, Rect, Rgba, Role, TextStyle};
 
@@ -32,6 +33,62 @@ pub fn row_height(b: &B, caption: &str) -> f32 {
 
 pub use mypaper_ui::controls::format_value as unit;
 
+/// One picture-card body. Selection never changes its fill.
+pub fn card(b: &mut B, rect: Rect, hot: bool) {
+    let hover = mypaper_ui::theme::over(
+        Rgba::new(1.0, 1.0, 1.0, if b.p.dark { 0.06 } else { 0.35 }),
+        b.p.fill,
+    );
+    b.fill(rect, b.px(radius::CARD), if hot { hover } else { b.p.fill });
+}
+
+/// A 2 DIP ring, with a 2 DIP clear gap and a concentric centerline.
+pub fn card_selection(b: &mut B, rect: Rect) {
+    b.stroke(
+        rect.inflate(b.px(3.0)),
+        b.px(radius::CARD + 3.0),
+        b.px(2.0),
+        b.p.ink1,
+    );
+}
+
+/// The picture shares the card's top corners and has a straight edge above its label.
+pub fn card_picture(b: &mut B, card: Rect, picture: Rect, draw: impl FnOnce(&mut B, Rect)) {
+    let start = b.list.ops.len();
+    b.fill(picture, 0.0, b.p.well);
+    draw(b, picture);
+    let mut ops = b.list.ops.split_off(start);
+    fn square_canvas(ops: &mut [mypaper_ui::Op], picture: Rect) {
+        for op in ops {
+            match op {
+                mypaper_ui::Op::RoundedImage { rect, radius, .. }
+                | mypaper_ui::Op::Fill { rect, radius, .. }
+                    if (rect.left - picture.left).abs() < 1.0
+                        && (rect.top - picture.top).abs() < 1.0
+                        && (rect.right - picture.right).abs() < 1.0
+                        && (rect.bottom - picture.bottom).abs() < 1.0 =>
+                {
+                    *radius = 0.0
+                }
+                mypaper_ui::Op::Clipped { ops, .. } => {
+                    square_canvas(std::sync::Arc::make_mut(ops), picture)
+                }
+                _ => {}
+            }
+        }
+    }
+    square_canvas(&mut ops, picture);
+    b.list.ops.push(mypaper_ui::Op::RoundedClipped {
+        rect: card,
+        radius: b.px(radius::CARD),
+        ops: vec![mypaper_ui::Op::Clipped {
+            rect: picture,
+            ops: ops.into(),
+        }]
+        .into(),
+    });
+}
+
 /// Distance between two boundaries, used for a flexible gap rather than a separator.
 pub fn spacing_glyph(b: &mut B, rect: Rect) {
     let x = rect.left + (rect.width() - b.px(16.0)) / 2.0;
@@ -59,6 +116,11 @@ pub fn label_width(b: &B, c: &Col) -> f32 {
 }
 
 pub fn displays(app: &App, b: &mut B, c: &mut Col) {
+    // In the standalone frame the display picker belongs to its stage.
+    if app.panel.as_ref().is_some_and(|state| state.windowed)
+        && crate::view::has_stage(super::current_page(app)) {
+        return;
+    }
     if app.monitors.len() < 2 {
         return;
     }
@@ -412,7 +474,7 @@ pub fn group(b: &mut B, c: &mut Col, heading: &str, content: impl FnOnce(&mut B,
             b,
             Rect::new(c.x, c.y, c.w, h),
             heading,
-            13.0,
+            16.0,
             600,
             b.p.ink1,
             Align::Start,
@@ -532,7 +594,7 @@ pub fn icon_button(b: &mut B, r: Rect, icon: Glyph, label: &str, enabled: bool, 
         icon,
         16.0,
         if enabled {
-            b.p.ink2
+            if b.hovered(k) { b.p.ink1 } else { b.p.ink3 }
         } else {
             b.p.ink3.with_alpha(0.6)
         },
@@ -570,18 +632,15 @@ pub fn row(
     let on = checked == Some(true);
     let area = b.list_row_area(r);
     if on {
-        b.fill(area, b.px(8.0), b.p.selected);
+        b.fill(area, b.px(radius::CONTROL), b.p.selected);
     } else {
-        b.wash(k, area, b.px(8.0));
+        b.wash(k, area, b.px(radius::CONTROL));
     }
     let mut x = r.left;
     if let Some(g) = icon {
-        let gw = b.px(if caption.is_empty() { 18.0 } else { 28.0 });
+        let gw = b.px(18.0);
         let tile = Rect::new(x, c.y + (h - gw) / 2.0, gw, gw);
-        if !caption.is_empty() {
-            b.fill(tile, b.px(7.0), b.p.fill);
-        }
-        b.icon(tile, g, 16.0, b.p.ink2);
+        b.icon(tile, g, 16.0, if on || b.hovered(k) { b.p.ink1 } else { b.p.ink3 });
         x += gw + b.px(10.0);
     }
     let tail_w = height(b, 16.0);
@@ -660,8 +719,8 @@ pub fn row(
         action,
         Behavior::Click,
     );
-    b.focus_ring(k, area, b.px(8.0));
-    b.hline(c.x, c.right(), r.bottom - 1.0, b.p.line);
+    b.focus_ring(k, area, b.px(radius::CONTROL));
+    b.hline(c.x, c.right(), r.bottom - 1.0, b.p.line.with_alpha(0.45));
     c.y += h;
 }
 
@@ -801,7 +860,7 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
         }
         Kind::Custom => c.y += h,
     }
-    b.hline(c.x, c.right(), c.y - 1.0, b.p.line);
+    b.hline(c.x, c.right(), c.y - 1.0, b.p.line.with_alpha(0.45));
 }
 
 pub fn search(app: &App, b: &mut B, c: &mut Col) {
@@ -869,7 +928,7 @@ pub fn search(app: &App, b: &mut B, c: &mut Col) {
         .and_then(|field| field.field.text().ok())
         .unwrap_or_else(|| app.text(&id).to_owned());
     b.semantics(k, mypaper_ui::Semantics::Text(value.into()));
-    b.focus_ring(k, r, b.px(7.0));
+    b.focus_ring(k, r, b.px(radius::CONTROL));
     c.y += r.height();
 }
 
@@ -913,7 +972,7 @@ pub fn more(app: &App, b: &mut B, c: &mut Col, hint: &str) -> bool {
         Action::More(k),
         Behavior::Click,
     );
-    b.focus_ring(k, r, b.px(7.0));
+    b.focus_ring(k, r, b.px(radius::CONTROL));
     c.y += r.height();
     open
 }
@@ -951,7 +1010,7 @@ pub fn boundaries(b: &mut B) {
             }
             Behavior::Toggle => b.stroke(
                 target.rect.inflate(-b.px(4.0)),
-                b.px(12.0),
+                b.px(radius::MEDIUM),
                 b.px(1.0),
                 b.p.edge,
             ),

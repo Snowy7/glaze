@@ -1,3 +1,4 @@
+use crate::panel::tokens::radius;
 use serde_json::{Value, json};
 
 use super::*;
@@ -133,7 +134,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                         b.px(28.0),
                         b.px(28.0),
                     );
-                    b.fill(pic, b.px(7.0), b.p.fill);
+                    b.fill(pic, b.px(radius::CONTROL), b.p.fill);
                     crate::stage::image_round(b, pic, &image, 1.0, b.px(7.0));
                 }
             }

@@ -26,7 +26,7 @@ pub(crate) use widget_look::slider_edit;
 pub use colors::swatches;
 pub use lists::List as SortList;
 pub use saving::{theme_failed, theme_saved};
-mod tokens;
+pub(crate) mod tokens;
 
 #[path = "../pick_client.rs"]
 pub(crate) mod pick_client;
@@ -139,6 +139,7 @@ impl Page {
 
 #[derive(Debug, Default)]
 pub struct State {
+    pub window: crate::view::State,
     /// The standalone frame hosts these same pages without any desktop picking session.
     pub windowed: bool,
     pub stage_actual: bool,
@@ -177,6 +178,9 @@ pub fn after_present(app: &App) {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
+    Sidebar,
+    SidebarSettings,
+    ResizeInspector,
     Open(Page),
     StageZoom(bool),
     Back,
@@ -241,6 +245,9 @@ pub fn run(app: &mut App, command: Command) {
             | Command::SortHandle(_, _)
     );
     match command {
+        Command::Sidebar => crate::view::toggle_sidebar(app),
+        Command::SidebarSettings => crate::view::toggle_settings(app),
+        Command::ResizeInspector => {}, // Pointer drags are handled by App; no click action.
         Command::StageZoom(actual) => app.panel.as_mut().unwrap().stage_actual = actual,
         Command::PickFont(edit, current) => pickers::open_font(app, edit, current),
         Command::Design(bar) => {
@@ -544,6 +551,7 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
         return false;
     }
     match vk {
+        0x42 if !shift && !alt && app.panel.as_ref().unwrap().windowed => run(app, Command::Sidebar),
         0x30 | 0x24 => run(app, Command::Open(Page::Root)),
         0x5A if !shift => app.run(Action::Undo),
         0x5A | 0x59 => app.run(Action::Redo),

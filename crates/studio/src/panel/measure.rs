@@ -114,6 +114,11 @@ pub fn scale_picture(ops: &mut [mypaper_ui::Op], scale: f32) {
                 rect(r);
                 scale_picture(std::sync::Arc::make_mut(ops), scale);
             }
+            Op::RoundedClipped { rect: r, radius, ops } => {
+                rect(r);
+                *radius *= scale;
+                scale_picture(std::sync::Arc::make_mut(ops), scale);
+            }
             Op::Unclip => {}
         }
     }

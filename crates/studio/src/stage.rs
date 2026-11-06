@@ -428,7 +428,8 @@ fn widgets(
         let rect = Rect::new(r.x as f32 * scale, r.y as f32 * scale, r.width as f32 * scale, r.height as f32 * scale);
         let label = manifest.name.clone();
         let instance_id = placed.instance.clone();
-        widget(ui, out, placed, &mut storage, rect, scale, &skin, None, app.fixture);
+        let data = crate::panel::editors::widgets::plugin_data(app, &placed.widget);
+        widget(ui, out, placed, &mut storage, rect, scale, &skin, data, app.fixture);
         out.items.push(Item {
             what: What::Widget(instance_id),
             rect,
@@ -457,7 +458,11 @@ fn widget(
         return;
     };
     model.visible = true;
+    crate::panel::editors::widgets::sample_content(&mut model, now);
     if let Some(data) = data {
+        if model.placed.widget.contains("--") {
+            model.kind = shell::widgets::Widget::Plugin;
+        }
         model.data = data;
     }
     let tokens = shell::widgets::tokens(&appearance);
@@ -659,6 +664,7 @@ pub fn offset(ops: &[Op], dx: f32, dy: f32) -> impl Iterator<Item = Op> + '_ {
             Op::Text { rect, text, style, color } => Op::Text { rect: r(rect), text, style, color },
             Op::Emphasis {rect,text,style,color,italic,strike} => Op::Emphasis {rect:r(rect),text,style,color,italic,strike},
             Op::Clipped {rect,ops}=>Op::Clipped {rect:r(rect),ops:offset(&ops,dx,dy).collect::<Vec<_>>().into()},
+            Op::RoundedClipped {rect,radius,ops}=>Op::RoundedClipped {rect:r(rect),radius,ops:offset(&ops,dx,dy).collect::<Vec<_>>().into()},
             Op::Shadow { rect, radius, spread, drop, color } => Op::Shadow { rect: r(rect), radius, spread, drop, color },
             Op::Clip { rect } => Op::Clip { rect: r(rect) },
             Op::Unclip => Op::Unclip,
@@ -772,6 +778,7 @@ fn dim(op: Op, by: f32) -> Op {
         Op::Text { rect, text, style, color } => Op::Text { rect, text, style, color: fade(color) },
         Op::Emphasis {rect,text,style,color,italic,strike}=>Op::Emphasis {rect,text,style,color:fade(color),italic,strike},
         Op::Clipped {rect,ops}=>Op::Clipped {rect,ops:ops.iter().cloned().map(|op|dim(op,by)).collect::<Vec<_>>().into()},
+        Op::RoundedClipped {rect,radius,ops}=>Op::RoundedClipped {rect,radius,ops:ops.iter().cloned().map(|op|dim(op,by)).collect::<Vec<_>>().into()},
         Op::Line { from, to, width, color } => Op::Line { from, to, width, color: fade(color) },
         Op::Image { rect, image, opacity, source } => Op::Image { rect, image, opacity: opacity * by, source },
         Op::RoundedImage { rect, image, opacity, source, radius } => Op::RoundedImage { rect, image, opacity: opacity * by, source, radius },

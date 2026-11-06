@@ -1,4 +1,5 @@
 //! Picture cards. Hover/focus is transient; only clicks commit.
+use crate::panel::tokens::radius;
 use std::time::{Duration, Instant};
 
 use super::controls::{height, text};
@@ -262,25 +263,17 @@ fn cards(
             let rect = row_rect(index);
             let area = rect;
             let hovered = highlighted == Some(index);
-            if hovered {
-                b.fill(area, b.px(16.0), b.p.hover);
-            } else if *applied {
-                b.fill(area, b.px(16.0), b.p.selected);
-            }
+            super::controls::card(b, area, hovered);
             if b.clip_rect().is_none_or(|clip| rect.intersects(&clip)) {
                 // Bound every specimen to its picture; captions own the space below it.
                 let pic = Rect::new(
-                    rect.left + b.px(4.0),
-                    rect.top + b.px(4.0),
-                    width - b.px(8.0),
+                    rect.left,
+                    rect.top,
+                    width,
                     picture_height,
                 );
-                let at = b.list.ops.len();
-                picture(b, (index < choices.len()).then_some(index), pic);
-                let ops = b.list.ops.split_off(at);
-                b.list.ops.push(mypaper_ui::Op::Clipped {
-                    rect: pic,
-                    ops: ops.into(),
+                super::controls::card_picture(b, area, pic, |b, pic| {
+                    picture(b, (index < choices.len()).then_some(index), pic);
                 });
                 let label = Rect::new(
                     rect.left + b.px(8.0),
@@ -366,7 +359,7 @@ fn cards(
                 }
             }
             if *applied {
-                b.stroke(area, b.px(16.0), b.px(1.5), b.p.ink1);
+                super::controls::card_selection(b, area);
             }
             b.hit_checked(
                 k,
@@ -377,7 +370,7 @@ fn cards(
                 action.clone(),
                 Behavior::Click,
             );
-            b.focus_ring(k, area, b.px(16.0));
+            b.focus_ring(k, area, b.px(radius::CARD));
         }
     });
     c.y = top + count.div_ceil(columns) as f32 * row_height + b.px(6.0);
@@ -442,7 +435,7 @@ pub fn current(
         Action::More(id),
         Behavior::Click,
     );
-    b.focus_ring(k, rect, b.px(7.0));
+    b.focus_ring(k, rect, b.px(radius::CONTROL));
     c.y = rect.bottom + b.px(6.0);
     if expanded {
         let start = b.targets.len();
@@ -507,13 +500,8 @@ pub fn tiles(
                 pointer.is_some_and(|point| rect.contains(point))
             };
             let hot = hot && app.panel.as_ref().unwrap().chooser.borrow().suppressed != Some(k);
-            if *applied {
-                b.fill(rect, b.px(7.0), b.p.selected);
-            }
-            if hot {
-                b.fill(rect, b.px(7.0), b.p.hover);
-            }
-            picture(b, i, Rect::new(rect.left, rect.top, width, picture_height));
+            super::controls::card(b, rect, hot);
+            super::controls::card_picture(b, rect, Rect::new(rect.left, rect.top, width, picture_height), |b, pic| picture(b, i, pic));
             if let Some(detail) = details.get(i) {
                 text(
                     b,
@@ -545,7 +533,7 @@ pub fn tiles(
                 Align::Start,
             );
             if *applied {
-                b.stroke(rect, b.px(7.0), b.px(1.5), b.p.ink1);
+                super::controls::card_selection(b, rect);
                 b.icon(
                     Rect::new(
                         rect.right - b.px(24.0),
@@ -569,7 +557,7 @@ pub fn tiles(
                 action.clone(),
                 Behavior::Click,
             );
-            b.focus_ring(k, rect, b.px(7.0));
+            b.focus_ring(k, rect, b.px(radius::CARD));
             if hot {
                 app.panel.as_ref().unwrap().chooser.borrow_mut().requested =
                     Some((k, action.clone()));
@@ -909,7 +897,8 @@ mod tests {
             |op| matches!(op, mypaper_ui::Op::Fill { rect: drawn, color, .. }
             if drawn.contains(app.input.pointer.unwrap())
                 && drawn.top >= rect.top && drawn.bottom <= rect.bottom
-                && *color == crate::panel::palette_for(&app).hover)
+                && mypaper_ui::theme::luminance(*color)
+                    > mypaper_ui::theme::luminance(crate::panel::palette_for(&app).fill))
         ));
         assert!(frame.semantics.iter().any(
             |(_, semantic)| matches!(semantic, mypaper_ui::Semantics::Status(message)
