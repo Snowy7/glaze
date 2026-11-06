@@ -295,6 +295,8 @@ pub struct Plugins {
     /// Style patches from component plugins, by `(plugin, surface)` (docs/plugins.md, "Styling").
     styles: BTreeMap<(String, String), wire::StylePatch>,
     repeats: RepeatGuard,
+    /// When the last action went to the helper, to time the launch it may cause.
+    acted: Option<Instant>,
 }
 
 /// Drops an action identical to the last one (same instance, action and value) that comes
@@ -425,6 +427,7 @@ impl Plugins {
             component_status: HashMap::new(),
             styles: BTreeMap::new(),
             repeats: RepeatGuard::default(),
+            acted: None,
         }
     }
 
@@ -645,7 +648,7 @@ impl Plugins {
                 }
                 wire::HelperMsg::Launched { plugin, target } => {
                     log::debug!("plugin {plugin}: opening {target}");
-                    open_and_raise(plugin, target);
+                    open_and_raise(plugin, target, self.acted.take());
                 }
             }
         }
@@ -846,6 +849,7 @@ impl Plugins {
                 )
             };
             log::debug!("plugin {}: action {action:?} on {instance} -> helper (foreground right passed on: {allowed:?})", slot.plugin);
+            self.acted = Some(Instant::now());
             if helper.frames.send(wire::HostMsg::Action { instance: instance.into(), action: action.into(), value }).is_err() {
                 log::warn!("plugin {}: action {action:?} on {instance} lost: the runtime's pipe closed", slot.plugin);
             }
@@ -1346,90 +1350,113 @@ fn scheme(target: &str) -> Option<&str> {
     valid.then_some(scheme)
 }
 
-/// Opens a plugin's `launch.open` target from the shell, off its thread (ShellExecute starts the
-/// app and can take a while), then raises the app that handles it. The shell got the click, so
-/// what it starts runs in the user's context and may come forward; opened from the hidden helper,
-/// T3 Code's second instance never handed the thread link to the running one.
-fn open_and_raise(plugin: String, target: String) {
+/// Opens a plugin's `launch.open` target from the shell, off its thread, then raises the app
+/// that handles it. The shell got the click, so the app may come forward (opened from the hidden
+/// helper, T3 Code's second instance never handed the thread link to the running one). A URL whose
+/// handler is already running as a Chromium-based app (T3 Code) goes straight to it
+/// ([`crate::handoff`], ~1 ms); otherwise, or if that fails, ShellExecute opens it, which for such
+/// an app starts a second process only to pass the URL on (~0.4 s). `clicked` is when the action
+/// went to the helper, for the log.
+fn open_and_raise(plugin: String, target: String, clicked: Option<Instant>) {
     let spawned = std::thread::Builder::new().name("launch".into()).stack_size(256 << 10).spawn(move || {
-        use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoInitializeEx};
-        use windows::Win32::UI::Shell::ShellExecuteW;
-        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-        use windows::core::{HSTRING, w};
-        // SAFETY: COM for this thread (ShellExecute may use it); the strings outlive the call.
-        let code = unsafe {
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-            ShellExecuteW(None, w!("open"), &HSTRING::from(target.as_str()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL)
+        let started = Instant::now();
+        let handler = scheme(&target).and_then(handler_of);
+        let handed = match &handler {
+            Some(handler) => crate::handoff::hand_off(&handler.exe, &handler.command, &target).map(|pid| format!("handed to the running {} (pid {pid})", handler.exe)),
+            None => Err("no registered handler"),
         };
-        if code.0 as usize <= 32 {
-            log::warn!("plugin {plugin}: opening {target} failed (ShellExecute {})", code.0 as usize);
-            return;
+        let how = match handed {
+            Ok(how) => how,
+            Err(why) => match shell_open(&target) {
+                Ok(()) => format!("started with ShellExecute ({why})"),
+                Err(code) => {
+                    log::warn!("plugin {plugin}: opening {target} failed (ShellExecute {code})");
+                    return;
+                }
+            },
+        };
+        let after = clicked.map(|at| format!(" {} ms after the click", started.duration_since(at).as_millis())).unwrap_or_default();
+        log::info!("plugin {plugin}: opened {target}{after}, {how} in {} ms", started.elapsed().as_millis());
+        if let Some(handler) = handler {
+            raise_handler(&handler.exe);
         }
-        log::debug!("plugin {plugin}: opened {target}");
-        raise_handler(&target);
     });
     if let Err(e) = spawned {
         log::warn!("no launch thread: {e}");
     }
 }
 
-/// Brings the app that handles a launched target to the front, from the shell (the process that
-/// got the click, so Windows lets it set the foreground). One that is starting is waited for up
-/// to 5 s. Stops as soon as the foreground changes otherwise (the user moved on, or the app came
-/// forward by itself).
-fn raise_handler(target: &str) {
-    use windows::Win32::UI::Shell::{ASSOCF_IS_PROTOCOL, ASSOCSTR_EXECUTABLE, AssocQueryStringW};
-    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+/// The app registered for a URL scheme: its exe and its `open` command (`"C:\…\app.exe" "%1"`).
+struct Handler {
+    exe: String,
+    command: String,
+}
+
+fn handler_of(scheme: &str) -> Option<Handler> {
+    use windows::Win32::UI::Shell::{ASSOCF_IS_PROTOCOL, ASSOCSTR, ASSOCSTR_COMMAND, ASSOCSTR_EXECUTABLE, AssocQueryStringW};
     use windows::core::{HSTRING, PWSTR};
-    let Some(scheme) = scheme(target) else { return };
-    let mut buffer = [0u16; 1024];
-    let mut len = buffer.len() as u32;
-    // SAFETY: a buffer of the length we pass.
-    let found = unsafe { AssocQueryStringW(ASSOCF_IS_PROTOCOL, ASSOCSTR_EXECUTABLE, &HSTRING::from(scheme), PCWSTR::null(), Some(PWSTR(buffer.as_mut_ptr())), &mut len) };
-    let end = buffer.iter().position(|&c| c == 0).unwrap_or(0);
-    if found.is_err() || end == 0 {
-        log::debug!("launch {scheme}: no registered app to raise");
-        return;
-    }
-    let exe = String::from_utf16_lossy(&buffer[..end]);
+    let scheme = HSTRING::from(scheme);
+    let query = |what: ASSOCSTR| {
+        let mut buffer = [0u16; 1024];
+        let mut len = buffer.len() as u32;
+        // SAFETY: a buffer of the length we pass.
+        let found = unsafe { AssocQueryStringW(ASSOCF_IS_PROTOCOL, what, &scheme, PCWSTR::null(), Some(PWSTR(buffer.as_mut_ptr())), &mut len) };
+        let end = buffer.iter().position(|&c| c == 0).unwrap_or(0);
+        (found.is_ok() && end > 0).then(|| String::from_utf16_lossy(&buffer[..end]))
+    };
+    Some(Handler { exe: query(ASSOCSTR_EXECUTABLE)?, command: query(ASSOCSTR_COMMAND)? })
+}
+
+/// `ShellExecute("open", target)`, or its error code.
+fn shell_open(target: &str) -> Result<(), usize> {
+    use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoInitializeEx};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use windows::core::{HSTRING, w};
+    // SAFETY: COM for this thread (ShellExecute may use it); the strings outlive the call.
+    let code = unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        ShellExecuteW(None, w!("open"), &HSTRING::from(target), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL)
+    };
+    if code.0 as usize > 32 { Ok(()) } else { Err(code.0 as usize) }
+}
+
+/// Brings the app running `exe` to the front, from the shell (the process that got the click, so
+/// Windows lets it set the foreground). One that is starting is waited for up to 5 s. Stops as
+/// soon as the foreground changes otherwise (the user moved on, or the app came forward itself).
+fn raise_handler(exe: &str) {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
     // SAFETY: read-only query.
     let before = unsafe { GetForegroundWindow() }.0 as isize;
-    let spawned = std::thread::Builder::new().name("raise".into()).stack_size(128 << 10).spawn(move || {
-        for _ in 0..50 {
-            // SAFETY: read-only query.
-            let now = unsafe { GetForegroundWindow() }.0 as isize;
-            if now != before {
-                log::debug!("raise {exe}: the foreground changed; leaving it");
-                return;
-            }
-            if let Some(window) = window_of(&exe) {
-                let raised = bring_forward(window);
-                log::debug!("raise {exe}: {}", if raised { "brought to the front" } else { "Windows refused the foreground" });
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(100));
+    for _ in 0..50 {
+        // SAFETY: read-only query.
+        let now = unsafe { GetForegroundWindow() }.0 as isize;
+        if now != before {
+            log::debug!("raise {exe}: the foreground changed; leaving it");
+            return;
         }
-        log::debug!("raise {exe}: no window within 5 s");
-    });
-    if let Err(e) = spawned {
-        log::warn!("no raise thread: {e}");
+        if let Some(window) = window_of(exe) {
+            let raised = bring_forward(window);
+            log::debug!("raise {exe}: {}", if raised { "brought to the front" } else { "Windows refused the foreground" });
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
+    log::debug!("raise {exe}: no window within 5 s");
 }
 
 /// The topmost visible, unowned, titled top-level window of the process running `exe`.
 fn window_of(exe: &str) -> Option<windows::Win32::Foundation::HWND> {
     use windows::Win32::Foundation::{HWND, LPARAM};
-    use windows::Win32::System::Threading::{OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW};
     use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GW_OWNER, GetWindow, GetWindowTextLengthW, GetWindowThreadProcessId, IsWindowVisible};
-    use windows::core::{BOOL, PWSTR};
+    use windows::core::BOOL;
     struct Search<'a> {
         exe: &'a str,
         found: Option<HWND>,
     }
     unsafe extern "system" fn visit(hwnd: HWND, search: LPARAM) -> BOOL {
         // SAFETY: `search` is the `Search` passed below, alive for the whole EnumWindows call;
-        // the rest are read-only queries on a handle from EnumWindows, and the process handle is
-        // closed before returning.
+        // the rest are read-only queries on a handle from EnumWindows.
         unsafe {
             let search = &mut *(search.0 as *mut Search);
             if !IsWindowVisible(hwnd).as_bool() || GetWindow(hwnd, GW_OWNER).is_ok_and(|o| !o.is_invalid()) || GetWindowTextLengthW(hwnd) == 0 {
@@ -1437,12 +1464,7 @@ fn window_of(exe: &str) -> Option<windows::Win32::Foundation::HWND> {
             }
             let mut pid = 0;
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
-            let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else { return true.into() };
-            let mut path = [0u16; 1024];
-            let mut len = path.len() as u32;
-            let ok = QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, PWSTR(path.as_mut_ptr()), &mut len).is_ok();
-            let _ = CloseHandle(process);
-            if ok && String::from_utf16_lossy(&path[..len as usize]).eq_ignore_ascii_case(search.exe) {
+            if crate::handoff::image_path(pid).is_some_and(|image| image.eq_ignore_ascii_case(search.exe)) {
                 search.found = Some(hwnd);
                 return false.into();
             }
