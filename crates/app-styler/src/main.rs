@@ -5,8 +5,9 @@
 //! ```text
 //! mypaper-styler                       follow the config and style Explorer and Settings
 //! mypaper-styler --preview PRESET      the same with that preset, whatever the flag and theme
-//! mypaper-styler --dump PID [--winui] [--out FILE]
-//!                                      write that app's live XAML tree (for writing rules)
+//! mypaper-styler --dump PID [--winui] [--out FILE] [--props SELECTOR]
+//!                                      write that app's live XAML tree (for writing rules),
+//!                                      and the property values of what SELECTOR picks
 //! mypaper-styler --attach PID [--winui] --rules FILE [--seconds N]
 //!                                      style one process with one rules file for N seconds
 //! ```
@@ -42,14 +43,8 @@ fn run() -> Result<()> {
     };
     let (pid, dump) = match (value("--attach"), value("--dump")) {
         (None, None) => return helper::run::run(value("--preview")),
-        (Some(pid), _) => (pid, None),
-        (None, Some(pid)) => {
-            let out = value("--out").map_or_else(
-                || helper::data_dir().map(|d| d.join(format!("tree-{pid}.txt"))),
-                |p| Ok(PathBuf::from(p)),
-            )?;
-            (pid, Some(out))
-        }
+        (Some(pid), _) => (pid, false),
+        (None, Some(pid)) => (pid, true),
     };
     let pid: u32 = pid.parse().context("expected a process id")?;
     let framework = if flag("--winui") {
@@ -58,28 +53,44 @@ fn run() -> Result<()> {
         Framework::System
     };
     let app = helper::check_allowed(pid)?;
+    let dir = helper::data_dir()?;
     // A dump styles nothing: its rules file never exists.
-    let rules = match &dump {
-        Some(_) => helper::data_dir()?.join("dump-no-rules.json"),
-        None => value("--rules")
-            .map(PathBuf::from)
-            .context("--attach needs --rules")?,
+    let rules = if dump {
+        let props = dir.join("props.txt");
+        match value("--props") {
+            Some(selector) => std::fs::write(&props, selector)?,
+            None => {
+                let _ = std::fs::remove_file(&props);
+            }
+        }
+        "dump-no-rules.json".to_owned()
+    } else {
+        let rules = value("--rules").context("--attach needs --rules")?;
+        std::path::absolute(rules)?.display().to_string()
     };
     let data = Attach {
         helper: std::process::id(),
         framework,
+        dir: dir.clone(),
         rules,
-        log: Some(helper::log_path()?),
-        dump: dump.clone(),
+        dump,
     };
     helper::attach::attach(pid, framework, &helper::tap_path()?, &data)?;
     let seconds = value("--seconds")
         .and_then(|s| s.parse().ok())
         .unwrap_or(30);
-    let wait = if dump.is_some() { 5 } else { seconds };
+    let wait = if dump { 5 } else { seconds };
     log::info!("attached to {app} ({pid}); detaching in {wait} s");
     std::thread::sleep(Duration::from_secs(wait));
-    if let Some(out) = dump {
+    if dump {
+        let tree = dir.join(format!("tree-{pid}.txt"));
+        let out = match value("--out") {
+            Some(out) => {
+                std::fs::copy(&tree, &out)?;
+                PathBuf::from(out)
+            }
+            None => tree,
+        };
         println!("{}", out.display());
     }
     Ok(())

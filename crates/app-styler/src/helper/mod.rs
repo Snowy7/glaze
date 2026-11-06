@@ -34,10 +34,6 @@ pub fn data_dir() -> Result<PathBuf> {
     Ok(dir)
 }
 
-pub fn log_path() -> Result<PathBuf> {
-    Ok(data_dir()?.join("styler.log"))
-}
-
 /// The TAP DLL to attach: a copy of the one next to this exe, named by its content hash.
 ///
 /// An app keeps a loaded TAP until it exits, and loading the same path again hands back that

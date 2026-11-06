@@ -19,6 +19,9 @@
 //! Nothing here may panic: release builds abort on panic, which would take the app down with
 //! us. Every COM failure is logged and skipped.
 
+mod inspect;
+mod resources;
+
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
 use std::io::Write;
@@ -52,7 +55,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, HWND_MESSAGE, PostMessageW, RegisterClassW,
     WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WNDCLASSW,
 };
-use windows_core::{BOOL, BSTR, GUID, HRESULT, IUnknown, Interface, PCWSTR, Ref, implement, w};
+use windows_core::{
+    BOOL, BSTR, GUID, HRESULT, IInspectable, IUnknown, Interface, PCWSTR, Ref, implement, w,
+};
 
 use crate::selector::{Node, Selector};
 use crate::xamlom::{
@@ -61,7 +66,7 @@ use crate::xamlom::{
     InstanceHandle, MUTATION_ADD, ParentChildRelation, PropertyChainSource, PropertyChainValue,
     SOURCE_LOCAL, VisualElement, free, free_chain, text,
 };
-use crate::{Attach, CLSID_TAP};
+use crate::{Attach, CLSID_TAP, Framework};
 
 /// COM entry point: XAML Diagnostics asks for our class factory.
 ///
@@ -136,7 +141,7 @@ impl IObjectWithSite_Impl for Tap_Impl {
         let Some(attach) = Attach::decode(&data) else {
             return Err(E_INVALIDARG.into());
         };
-        set_log(attach.log.clone());
+        set_log(Some(attach.log_path()));
         log(&format!("attached ({})", attach.framework));
         let diagnostics = Sendable(diagnostics);
         // `AdviseVisualTreeChange` from this thread hangs (it waits on the UI thread we are on),
@@ -182,7 +187,9 @@ fn log(message: &str) {
 
 /// One attached XAML framework in this process.
 struct Session {
+    diagnostics: IXamlDiagnostics,
     tree: IVisualTreeService3,
+    framework: Framework,
     rules_path: PathBuf,
     /// Set once the helper is gone: callbacks stop styling.
     closing: AtomicBool,
@@ -202,14 +209,23 @@ struct State {
     nodes: HashMap<InstanceHandle, Element>,
     /// What we changed, per element.
     styled: HashMap<InstanceHandle, Vec<Applied>>,
-    /// Values created from rule strings, by (property type, text): shared between elements.
-    values: HashMap<(String, String), InstanceHandle>,
+    /// Values created from rule strings, by (UI thread, property type, text): shared between
+    /// the elements of one thread (XAML objects belong to the thread that made them).
+    values: HashMap<(u32, String, String), (InstanceHandle, Held)>,
     /// One message-only window per UI thread, to run work there.
     threads: HashMap<u32, isize>,
     /// (element type, property) pairs already reported missing, so each is logged once.
     reported: HashSet<(String, String)>,
+    /// Other messages already logged once.
+    reported_messages: HashSet<String>,
     /// Type names, shared by every element of a type.
     kinds: HashSet<Arc<str>>,
+    /// The resource overrides the rules want: (key, value).
+    resource_rules: Vec<(String, String)>,
+    /// Resource overrides in effect, per UI thread.
+    resources: HashMap<u32, resources::ThreadResources>,
+    /// Brushes whose colour we set (one override per brush).
+    recolored: HashSet<InstanceHandle>,
 }
 
 struct Element {
@@ -240,13 +256,32 @@ struct Applied {
     original: Original,
 }
 
-#[derive(Clone, Copy)]
+/// What a property had before we set it.
+///
+/// XAML Diagnostics' handle table doesn't keep objects alive: a handle whose object has died
+/// fails, or worse, names a newer object. So an original object is held (a strong reference)
+/// until it goes back, and a value type (a colour, a number) is kept as text and made again
+/// right before it goes back.
+#[derive(Clone)]
 enum Original {
     /// No local value: clearing the property brings back the style's.
     Unset,
-    /// A value set on the element itself (by the app's code or markup).
-    Local(InstanceHandle),
+    /// A local value type, as text.
+    Text(String),
+    /// A local object (a brush...), held alive.
+    Object(InstanceHandle, Held),
 }
+
+/// A strong reference that keeps a XAML object, and so its handle, alive. Dropped on the
+/// object's UI thread (restores and the per-thread clean-up run there).
+#[derive(Clone)]
+struct Held(IInspectable);
+
+// SAFETY: only moved between threads, never called: it is created and dropped on the object's
+// UI thread (a thread that is gone leaks it instead, see `forget_thread`).
+unsafe impl Send for Held {}
+// SAFETY: as above.
+unsafe impl Sync for Held {}
 
 /// A local value as the property chain reports it.
 enum LocalValue {
@@ -294,8 +329,10 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
         Err(e) => return log(&format!("no IVisualTreeService3: {e}")),
     };
     let session = Arc::new(Session {
+        diagnostics: diagnostics.0,
         tree,
-        rules_path: attach.rules.clone(),
+        framework: attach.framework,
+        rules_path: attach.rules_path(),
         closing: AtomicBool::new(false),
         state: Mutex::new(State::default()),
     });
@@ -306,8 +343,8 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
         Ok(handle) => handle,
         Err(e) => return log(&format!("can't watch the helper ({}): {e}", attach.helper)),
     };
-    let folder = attach
-        .rules
+    let folder = session
+        .rules_path
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_default();
@@ -331,7 +368,11 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
     let advised = unsafe { session.tree.AdviseVisualTreeChange(callback.as_raw()) };
     log(&format!("watching the visual tree: {advised:?}"));
 
-    let mut dump = attach.dump.clone();
+    let mut dump = attach.dump.then(|| {
+        // SAFETY: no preconditions.
+        let pid = unsafe { GetCurrentProcessId() };
+        attach.dir.join(format!("tree-{pid}.txt"))
+    });
     let handles: Vec<HANDLE> = [Some(helper), changes].into_iter().flatten().collect();
     loop {
         let timeout = if dump.is_some() { 3000 } else { INFINITE };
@@ -340,6 +381,9 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
         if woke == WAIT_TIMEOUT {
             if let Some(path) = dump.take() {
                 session.dump(&path);
+                if let Ok(selector) = std::fs::read_to_string(attach.dir.join("props.txt")) {
+                    session.dump_props(&path, selector.trim());
+                }
             }
         } else if woke == WAIT_OBJECT_0 {
             break; // the helper exited
@@ -401,8 +445,17 @@ impl Session {
             }
         };
         state.rules = compile(&parsed);
+        state.resource_rules = parsed
+            .resources
+            .iter()
+            .filter_map(|(k, v)| Some((k.clone(), v.clone()?)))
+            .collect();
         state.source = source;
-        log(&format!("{} rule(s)", state.rules.len()));
+        log(&format!(
+            "{} rule(s), {} resource(s)",
+            state.rules.len(),
+            state.resource_rules.len()
+        ));
         true
     }
 
@@ -410,12 +463,14 @@ impl Session {
     fn on_add(&self, handle: InstanceHandle, parent: InstanceHandle, kind: &str, name: String) {
         // SAFETY: no preconditions.
         let thread = unsafe { GetCurrentThreadId() };
+        let mut new_thread = false;
         let wanted = {
             let mut state = self.lock();
             if !state.threads.contains_key(&thread)
                 && let Some(window) = message_window()
             {
                 state.threads.insert(thread, window.0 as isize);
+                new_thread = true;
             }
             let kind: Arc<str> = match state.kinds.get(kind) {
                 Some(k) => k.clone(),
@@ -450,7 +505,14 @@ impl Session {
             }
             state.wanted(handle)
         };
-        if !wanted.is_empty() && !self.closing.load(Ordering::SeqCst) {
+        if self.closing.load(Ordering::SeqCst) {
+            return;
+        }
+        // The thread's first element: its theme resources first, so rules see them.
+        if new_thread {
+            self.apply_resources(thread);
+        }
+        if !wanted.is_empty() {
             self.style(handle, &wanted);
         }
     }
@@ -523,6 +585,17 @@ impl Session {
                 applied.push(slot);
                 continue;
             }
+            if let Some((kind, key)) = resources::resource_reference(value) {
+                if self.reference(handle, slot.index, kind, key) {
+                    applied.push(Applied {
+                        value: value.clone(),
+                        ..slot
+                    });
+                } else if !slot.value.is_empty() {
+                    self.restore_one(handle, &slot);
+                }
+                continue;
+            }
             match self.value(&slot.kind, value) {
                 Some(v) if self.set(handle, slot.index, v, property) => applied.push(Applied {
                     value: value.clone(),
@@ -541,37 +614,85 @@ impl Session {
         }
     }
 
-    /// What to put back later: the element's own (local) value, or "unset".
+    /// What to put back later: the element's own (local) value, or "unset". `None` when it
+    /// can't be kept (then the property is left alone).
     ///
-    /// A local value is taken from the property chain: the value object's handle, or its text
-    /// recreated as the property's type. (`GetProperty`'s handle for the same value is refused by
-    /// `SetProperty` in WinUI 3.) Only when the chain has neither is `GetProperty` used.
+    /// A local value is taken from the property chain: the value object (held), or its text.
+    /// (`GetProperty`'s handle for the same value is refused by `SetProperty` in WinUI 3.) Only
+    /// when the chain has neither is `GetProperty`'s object held.
     fn original(
         &self,
         handle: InstanceHandle,
         info: &PropertyInfo,
         name: &str,
     ) -> Option<Original> {
-        let Some(local) = &info.local else {
-            return Some(Original::Unset);
-        };
-        let value = match local {
-            LocalValue::Handle(h) => Some(*h),
-            LocalValue::Text(t) if !t.is_empty() => self.value(&info.kind, t),
-            LocalValue::Text(_) => None,
-        };
-        if let Some(value) = value {
-            return Some(Original::Local(value));
+        let held = |h: InstanceHandle| self.hold(h).map(|held| Original::Object(h, held));
+        match &info.local {
+            None => return Some(Original::Unset),
+            Some(LocalValue::Handle(h)) => return held(*h),
+            Some(LocalValue::Text(t)) if !t.is_empty() => return Some(Original::Text(t.clone())),
+            Some(LocalValue::Text(_)) => {}
         }
         let mut current = 0;
         // SAFETY: a live service and a valid out pointer.
         match unsafe { self.tree.GetProperty(handle, info.index, &mut current) }.ok() {
-            Ok(()) => Some(Original::Local(current)),
+            Ok(()) => held(current),
             Err(e) => {
                 log(&format!("reading {name}: {e}; leaving it alone"));
                 None
             }
         }
+    }
+
+    /// A strong reference to the object behind `handle`.
+    fn hold(&self, handle: InstanceHandle) -> Option<Held> {
+        let mut raw: *mut c_void = std::ptr::null_mut();
+        // SAFETY: a valid out pointer; we own the returned reference.
+        unsafe { self.diagnostics.GetIInspectableFromHandle(handle, &mut raw) }
+            .ok()
+            .ok()?;
+        // SAFETY: an owned IInspectable from the call above (null is None).
+        (!raw.is_null()).then(|| Held(unsafe { IInspectable::from_raw(raw) }))
+    }
+
+    /// Puts `original` back into property `index` of `handle`, or clears it.
+    fn put_back(&self, handle: InstanceHandle, index: u32, kind: &str, original: &Original) {
+        let clear = || {
+            // SAFETY: handles from the service; a stale handle only fails.
+            unsafe { self.tree.ClearProperty(handle, index) }.ok()
+        };
+        let set = |value: InstanceHandle| {
+            // SAFETY: as above; `value` is fresh or held.
+            unsafe { self.tree.SetProperty(handle, value, index) }.ok()
+        };
+        let result = match original {
+            Original::Unset => clear(),
+            Original::Text(text) => match self.value(kind, text) {
+                Some(value) => set(value),
+                None => clear(),
+            },
+            Original::Object(value, held) => set(self.handle_of(held).unwrap_or(*value))
+                .or_else(|e| {
+                    log(&format!("putting back a {kind} object: {e}; clearing instead"));
+                    clear()
+                }),
+        };
+        if let Err(e) = result {
+            log(&format!("putting a {kind} back on {handle}: {e}"));
+        }
+    }
+
+    /// The current handle of a held object (a handle can change while we hold it).
+    fn handle_of(&self, held: &Held) -> Option<InstanceHandle> {
+        let mut handle = 0;
+        // SAFETY: a live object and a valid out pointer.
+        unsafe {
+            self.diagnostics
+                .GetHandleFromIInspectable(held.0.as_raw(), &mut handle)
+        }
+        .ok()
+        .ok()?;
+        Some(handle)
     }
 
     fn set(&self, handle: InstanceHandle, index: u32, value: InstanceHandle, name: &str) -> bool {
@@ -580,6 +701,24 @@ impl Session {
             Ok(()) => true,
             Err(e) => {
                 log(&format!("setting {name}: {e}"));
+                false
+            }
+        }
+    }
+
+    /// Points the property at a theme (or static) resource, resolved from the element's place
+    /// in the tree, so it follows light/dark and our resource overrides.
+    fn reference(&self, handle: InstanceHandle, index: u32, kind: i32, key: &str) -> bool {
+        let name = resources::wide(key);
+        // SAFETY: a NUL-terminated name; handles from the service.
+        let resolved = unsafe {
+            self.tree
+                .ResolveResource(handle, PCWSTR(name.as_ptr()), kind, index)
+        };
+        match resolved.ok() {
+            Ok(()) => true,
+            Err(e) => {
+                log(&format!("resolving {key}: {e}"));
                 false
             }
         }
@@ -594,33 +733,24 @@ impl Session {
     /// Puts one property back: the local value it had, or cleared. If the local value can't be
     /// set back, clearing is still better than leaving ours.
     fn restore_one(&self, handle: InstanceHandle, a: &Applied) {
-        let clear = || {
-            // SAFETY: handles from the service; a stale handle only fails.
-            unsafe { self.tree.ClearProperty(handle, a.index) }.ok()
-        };
-        let result = match a.original {
-            // SAFETY: as above.
-            Original::Local(value) => unsafe { self.tree.SetProperty(handle, value, a.index) }
-                .ok()
-                .or_else(|e| {
-                    log(&format!(
-                        "restoring {}: {e}; clearing it instead",
-                        a.property
-                    ));
-                    clear()
-                }),
-            Original::Unset => clear(),
-        };
-        if let Err(e) = result {
-            log(&format!("restoring {}: {e}", a.property));
-        }
+        self.put_back(handle, a.index, &a.kind, &a.original);
     }
 
-    /// A value created from a rule's text as the property's type (cached).
+    /// A value created from a rule's text as the property's type.
+    ///
+    /// Objects (brushes, font families) are held and cached per UI thread, shared between
+    /// elements. A value type (colour, number, thickness, enum...) only lives until it is set,
+    /// so it is made fresh every time: call this right before the `SetProperty`.
     fn value(&self, kind: &str, text_value: &str) -> Option<InstanceHandle> {
-        let key = (kind.to_owned(), text_value.to_owned());
-        if let Some(&v) = self.lock().values.get(&key) {
-            return Some(v);
+        // SAFETY: no preconditions.
+        let thread = unsafe { GetCurrentThreadId() };
+        let shared = kind.ends_with("Brush") || kind.ends_with("FontFamily");
+        let key = (thread, kind.to_owned(), text_value.to_owned());
+        let cached = shared
+            .then(|| self.lock().values.get(&key).cloned())
+            .flatten();
+        if let Some((v, held)) = cached {
+            return Some(self.handle_of(&held).unwrap_or(v));
         }
         let kind_b = BSTR::from(kind);
         let value_b = BSTR::from(text_value);
@@ -634,7 +764,10 @@ impl Session {
             log(&format!("{text_value:?} is not a {kind}: {e}"));
             return None;
         }
-        self.lock().values.insert(key, out);
+        if shared {
+            let held = self.hold(out)?;
+            self.lock().values.insert(key, (out, held));
+        }
         Some(out)
     }
 
@@ -704,9 +837,11 @@ impl Session {
         }
     }
 
-    /// The rules changed: every element gets what the new rules want, on its own UI thread.
+    /// The rules changed: every UI thread brings its resource overrides up to date, then every
+    /// element gets what the new rules want, on its own thread. Threads that are gone (their
+    /// window closed) are forgotten.
     fn restyle(self: &Arc<Self>) {
-        let (plan, windows) = {
+        let (mut plan, windows) = {
             let state = self.lock();
             let mut plan: HashMap<u32, Vec<(InstanceHandle, Wanted)>> = HashMap::new();
             for (&handle, element) in &state.nodes {
@@ -721,12 +856,11 @@ impl Session {
         };
         let count: usize = plan.values().map(Vec::len).sum();
         log(&format!("restyling {count} element(s)"));
-        for (thread, elements) in plan {
-            let Some(&window) = windows.get(&thread) else {
-                continue;
-            };
+        for (thread, window) in windows {
+            let elements = plan.remove(&thread).unwrap_or_default();
             let session = self.clone();
-            post(thread, window, move || {
+            let posted = post(thread, window, move || {
+                session.apply_resources(thread);
                 for (handle, wanted) in elements {
                     if wanted.is_empty() {
                         let applied = session.lock().styled.remove(&handle);
@@ -738,11 +872,37 @@ impl Session {
                     }
                 }
             });
+            if !posted {
+                self.forget_thread(thread);
+            }
         }
     }
 
-    /// Puts every recorded value back (each on its own UI thread) and closes the threads'
-    /// message windows.
+    /// A UI thread that is gone: drop what we knew about it. Its held objects are leaked, not
+    /// released from the wrong thread.
+    fn forget_thread(&self, thread: u32) {
+        let mut state = self.lock();
+        state.threads.remove(&thread);
+        std::mem::forget(state.resources.remove(&thread));
+        let values: Vec<_> = state
+            .values
+            .extract_if(|(t, _, _), _| *t == thread)
+            .collect();
+        std::mem::forget(values);
+        let gone: Vec<InstanceHandle> = state
+            .nodes
+            .iter()
+            .filter(|(_, e)| e.thread == thread)
+            .map(|(&h, _)| h)
+            .collect();
+        for h in gone {
+            state.nodes.remove(&h);
+            std::mem::forget(state.styled.remove(&h));
+        }
+    }
+
+    /// Puts every recorded value and resource back (each on its own UI thread), lets go of
+    /// what we held there, and closes the threads' message windows.
     fn restore_all(self: &Arc<Self>) {
         let (mut by_thread, windows) = {
             let mut state = self.lock();
@@ -763,12 +923,20 @@ impl Session {
                 for (handle, applied) in elements {
                     session.restore(handle, &applied);
                 }
+                session.restore_resources(thread);
+                let values: Vec<_> = session
+                    .lock()
+                    .values
+                    .extract_if(|(t, _, _), _| *t == thread)
+                    .collect();
+                drop(values);
                 // SAFETY: our own message-only window, destroyed on its thread.
                 let _ = unsafe { DestroyWindow(HWND(window as *mut c_void)) };
             });
         }
         if !by_thread.is_empty() {
             log("some elements were on threads without a window; not restored");
+            std::mem::forget(by_thread);
         }
     }
 
@@ -864,11 +1032,12 @@ fn compile(rules: &AppRules) -> Vec<Rule> {
 
 /// Runs `job` on `thread`: right here if that is us, else posted to its message window. A job
 /// owns everything it uses, so it is safe whenever it runs; one for a thread that is gone is
-/// dropped unrun.
-fn post(thread: u32, window: isize, job: impl FnOnce() + Send + 'static) {
+/// dropped unrun (and `false` returned).
+fn post(thread: u32, window: isize, job: impl FnOnce() + Send + 'static) -> bool {
     // SAFETY: no preconditions.
     if thread == unsafe { GetCurrentThreadId() } {
-        return job();
+        job();
+        return true;
     }
     let raw = Box::into_raw(Box::new(Box::new(job) as Box<dyn FnOnce() + Send>));
     // SAFETY: the window runs the job on its thread and frees it (`window_proc`).
@@ -881,9 +1050,11 @@ fn post(thread: u32, window: isize, job: impl FnOnce() + Send + 'static) {
         )
     };
     if posted.is_err() {
-        // SAFETY: not posted, so still ours.
-        drop(unsafe { Box::from_raw(raw) });
+        // Not posted: the thread is gone. Leak the job; it may hold that thread's XAML objects,
+        // which must not be released from here.
+        return false;
     }
+    true
 }
 
 const WM_JOB: u32 = WM_APP + 0x51;

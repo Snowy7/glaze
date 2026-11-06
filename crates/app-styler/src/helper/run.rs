@@ -30,7 +30,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows_core::{BOOL, w};
 
-use super::{app_of, attach, data_dir, log_path, tap_path};
+use super::{app_of, attach, data_dir, tap_path};
 
 /// `config.json` or `palette.json` changed.
 const WM_RESOLVE: u32 = WM_APP + 1;
@@ -292,9 +292,9 @@ impl Helper {
         let data = Attach {
             helper: std::process::id(),
             framework,
-            rules: self.dir.join(format!("{app}.json")),
-            log: log_path().ok(),
-            dump: None,
+            dir: self.dir.clone(),
+            rules: format!("{app}.json"),
+            dump: false,
         };
         if let Err(e) = attach::attach(pid, framework, &self.tap, &data) {
             // WinUI not loaded yet in a fresh Explorer: a later window will try again.
