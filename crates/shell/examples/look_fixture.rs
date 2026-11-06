@@ -88,7 +88,7 @@ fn run(root: PathBuf) -> Result<()> {
         background,
     )?;
     backdrop.show();
-    let mut windows = (0..5)
+    let mut windows = (0..6)
         .map(|i| {
             Surface::new(
                 Kind::Popup { activate: false },
@@ -97,6 +97,8 @@ fn run(root: PathBuf) -> Result<()> {
             )
         })
         .collect::<Result<Vec<_>>>()?;
+    let field = mypaper_ui::TextField::new(windows[5].hwnd(), Rect::new(14.0, 5.0, 590.0, 30.0), false, 14.0, mypaper_ui::Rgba::rgb8([255;3], 1.0))?;
+    field.set_text("Editable text keeps its content")?;
     let mut revisions = 0u64;
     let until = Instant::now() + Duration::from_secs(115);
     let mut dirty = true;
@@ -104,7 +106,7 @@ fn run(root: PathBuf) -> Result<()> {
         if dirty {
             let config = Config::load()?;
             revisions += 1;
-            let report = draw(&mut ui, &mut windows, &config, origin, &root)?;
+            let report = draw(&mut ui, &mut windows, &field, &config, origin, &root)?;
             let mut log = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -150,6 +152,7 @@ fn run(root: PathBuf) -> Result<()> {
 fn draw(
     ui: &mut Ui,
     windows: &mut [Surface],
+    field: &mypaper_ui::TextField,
     config: &Config,
     origin: (i32, i32),
     root: &std::path::Path,
@@ -371,6 +374,12 @@ fn draw(
         "menu",
         &mut report,
     )?;
+    let name = settings::font(user.text.font.as_deref().unwrap_or("Segoe UI"), |f| ui.text.has_family(f));
+    field.set_style(&mypaper_ui::TextStyle::new(&name, 14.0 * user.text.size.unwrap_or(1.0)), mypaper_ui::Rgba::rgb8([255;3],1.0));
+    let mut input = DisplayList::default();
+    input.ops.push(mypaper_ui::Op::Fill {rect:Rect::new(0.0,0.0,620.0,40.0),radius:user.shape.corners.unwrap_or(8.0),color:mypaper_ui::Rgba::rgb8([28,28,30],1.0)});
+    input.ops.push(mypaper_ui::Op::TextField {rect:Rect::new(14.0,5.0,590.0,30.0),field:field.clone(),revision:field.revision()});
+    present(ui,&mut windows[5],input,(620,40),(origin.0,origin.1+745),None,root,"field",&mut report)?;
     Ok(report)
 }
 
