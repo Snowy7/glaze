@@ -201,10 +201,12 @@ fn run() -> Result<()> {
         if wakes.report(|| {
             let bars: Vec<_> = bars::Bars::take_tick_costs()
                 .iter()
-                .map(|(part, d)| format!("{part} {:.1}", d.as_secs_f64() * 1e3))
+                .map(|(part, d, cycles)| {
+                    format!("{part} {:.1}/{:.1}", d.as_secs_f64() * 1e3, *cycles as f64 / 1e6)
+                })
                 .collect();
             format!(
-                "bars.tick ms: {}; bar stats (samples, changes, sample_us, all bar repaints) since start: {:?}; WinEvents (hooks, callbacks, subscribers): {:?}; widgets since start: {:?}",
+                "bars.tick ms/Mcycles: {}; bar stats (samples, changes, sample_us, all bar repaints) since start: {:?}; WinEvents (hooks, callbacks, subscribers): {:?}; widgets since start: {:?}",
                 bars.join(", "),
                 shell.bars.stats_counts(),
                 win_events.counts(),

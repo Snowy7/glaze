@@ -7,8 +7,8 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use windows::Win32::Foundation::{HANDLE, HWND};
-use windows::Win32::System::Threading::GetCurrentThread;
+use mypaper_shell::cycles::{self, thread as thread_cycles};
+use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, MSG, WM_TIMER};
 
 const PERIOD: Duration = Duration::from_secs(60);
@@ -54,6 +54,7 @@ impl Wakes {
     pub fn new() -> Self {
         let always = std::env::var_os("MYPAPER_WAKES").is_some();
         let on = always || switched_on();
+        cycles::set_counting(on);
         Self {
             since: Instant::now(),
             wakes: 0,
@@ -114,6 +115,7 @@ impl Wakes {
         }
         let was_on = self.on;
         self.on = self.always || switched_on();
+        cycles::set_counting(self.on);
         if self.on || self.worked as f32 > AUTO_REPORT_RATE * elapsed.as_secs_f32() {
             let mut causes: Vec<_> = self
                 .causes
@@ -189,18 +191,6 @@ impl Wakes {
         }
         true
     }
-}
-
-/// The calling thread's CPU cycles so far (user and kernel).
-fn thread_cycles() -> u64 {
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn QueryThreadCycleTime(thread: HANDLE, cycles: *mut u64) -> i32;
-    }
-    let mut cycles = 0;
-    // SAFETY: the current thread's pseudo handle and a local out value.
-    unsafe { QueryThreadCycleTime(GetCurrentThread(), &mut cycles) };
-    cycles
 }
 
 /// Whether `%LOCALAPPDATA%\mypaper\wakes.on` exists.

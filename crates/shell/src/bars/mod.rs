@@ -270,8 +270,9 @@ impl Bars {
             services::wait_ms(at.saturating_duration_since(Instant::now()))
         })
     }
-    /// Time spent in each part of [`tick`](Self::tick) since the last call (diagnostics).
-    pub fn take_tick_costs() -> Vec<(&'static str, Duration)> {
+    /// Time (and CPU cycles, while counted) spent in each part of [`tick`](Self::tick) since the
+    /// last call (diagnostics).
+    pub fn take_tick_costs() -> Vec<(&'static str, Duration, u64)> {
         TICK_COSTS.with_borrow_mut(std::mem::take)
     }
     /// Cumulative stats samples, displayed changes, sampler microseconds and all bar repaints.
@@ -403,7 +404,7 @@ impl Bars {
 
     /// All drawing is gated by data changes or active animation. The ticker cancels at rest.
     pub fn tick(&mut self, ui: &mut Ui) {
-        let mut at = Instant::now();
+        let mut at = tick_start();
         if let Some(menu) = &mut self.tray_menu {
             menu.process(ui);
         }
@@ -2036,14 +2037,33 @@ fn builtin_flyout(action: BuiltinAction) -> Option<flyouts::Kind> {
 }
 
 thread_local! {
-    static TICK_COSTS: std::cell::RefCell<Vec<(&'static str, Duration)>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// Wall time and (while the wake report counts them) CPU cycles per part of `tick`.
+    static TICK_COSTS: std::cell::RefCell<Vec<(&'static str, Duration, u64)>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// The thread's cycles at the end of the last part.
+    static TICK_MARK: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
-/// Adds the time since `start` to `part`; returns now.
+/// Starts timing a `tick`; returns now.
+fn tick_start() -> Instant {
+    if crate::cycles::counting() {
+        TICK_MARK.set(crate::cycles::thread());
+    }
+    Instant::now()
+}
+/// Adds the time since `start` (and the cycles since the last part) to `part`; returns now.
 fn tick_spent(part: &'static str, start: Instant) -> Instant {
     let now = Instant::now();
+    let cycles = if crate::cycles::counting() {
+        let cycles = crate::cycles::thread();
+        cycles.saturating_sub(TICK_MARK.replace(cycles))
+    } else {
+        0
+    };
     TICK_COSTS.with_borrow_mut(|costs| match costs.iter_mut().find(|c| c.0 == part) {
-        Some(c) => c.1 += now - start,
-        None => costs.push((part, now - start)),
+        Some(c) => {
+            c.1 += now - start;
+            c.2 += cycles;
+        }
+        None => costs.push((part, now - start, cycles)),
     });
     now
 }
