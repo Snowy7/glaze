@@ -138,5 +138,145 @@ Nothing is changed without a way back.
 - While a theme with `accent` or `dark_mode` is active, changing those in Settings by hand is
   overwritten the next time the theme changes colors, and undone at restore.
 - Apps that set their own title bar color or backdrop may override ours on their next paint.
-- The `styles` field of a theme (XAML/Win32 restyling through the injector) is a separate, later
-  feature; this document only covers `windows`.
+- Restyling the *inside* of File Explorer and Settings is the experimental [app styler](#app-styler-experimental)
+  below; everything above is DWM and registry only.
+
+## App styler (experimental)
+
+Restyles the XAML inside **File Explorer** and **Settings**: backgrounds, corners, padding, fonts,
+sizes, any dependency property, by rules. It runs our own code inside those two apps, so it is
+opt-in and off by default:
+
+```json
+{ "experimental": { "app_styler": true } }
+```
+
+Off costs nothing: no process, no hook, nothing loaded anywhere. On, core runs `mypaper-styler`;
+turning the flag off, quitting mypaper, the panic hotkey or the helper dying for any reason puts
+both apps back as they were. Studio has no switch for it yet (Experimental section, later).
+
+### How it works
+
+- It uses the documented **XAML Diagnostics** API, the one Visual Studio's Live Visual Tree uses.
+  The helper calls `InitializeXamlDiagnosticsEx` for the target process. Windows then loads our TAP
+  DLL (`mypaper_app_styler.dll`) there and hands it `IXamlDiagnostics` and `IVisualTreeService3`.
+  The TAP subscribes to the visual tree. Every element that appears (the existing tree first, then
+  new windows, pages and re-created elements) is matched against the rules on its own UI thread
+  and styled there. No polling.
+- **Which processes**: only `explorer.exe` and `ImmersiveControlPanel\SystemSettings.exe`, and
+  only if the injection allowlist ([`crates/inject`](../crates/inject/src/lib.rs), with the
+  Microsoft-signature check) also accepts the process. That check runs again right before every
+  attach. Settings runs with the inbox package identity
+  `windows.immersivecontrolpanel_cw5n1h2txyewy`, which the allowlist names.
+- **Which framework**: Settings is system XAML (`Windows.UI.Xaml`). Explorer's folder windows are
+  WinUI 3 (`Microsoft.UI.Xaml` from the Windows App SDK). The helper attaches through that SDK's
+  `Microsoft.Internal.FrameworkUdk.dll`, loaded from the same folder Explorer uses, when the
+  first folder window appears. Explorer's *system* XAML is the taskbar, which the styler never
+  attaches to.
+- **Rules reach the TAP** as one file per app, `%LOCALAPPDATA%\mypaper\app-styler\<app>.json`.
+  The helper rewrites it when `config.json`, the theme or the wallpaper's palette changes. The TAP
+  watches that folder, so a change applies live without restarting either app. Elements no rule
+  wants any more get their values back.
+- **The DLL apps load** is a copy named by its content hash (`tap-<hash>.dll`, same folder): an app
+  keeps a loaded TAP until it exits, so a new build loads beside the old one, and deploying never
+  fights a locked file. Copies no process has mapped any more are deleted.
+- **Combine with the DWM layer above**: Settings and Explorer's header already sit on Mica.
+  `look.windows.backdrop: "acrylic"` (or `"mica"`) and rules that make backgrounds `Transparent`
+  let that backdrop show through.
+
+### Rules
+
+A theme's `theme.json` › `apps` is the layer below the user's `config.json` › `look.apps`, field by
+field, like `windows`. Both have the same shape:
+
+```json
+{
+  "preset": "glass",
+  "settings": {
+    "rules": {
+      "Grid#RootPageGrid": { "Background": "Transparent" },
+      "ButtonEntityItem > Button#ContainerButton": { "CornerRadius": "12", "Padding": null }
+    }
+  },
+  "explorer": {
+    "rules": { "Grid#NavigationBarControlGrid": { "Background": "$accent/18" } }
+  }
+}
+```
+
+- **Layers**: preset < theme < user. Each property of each selector is its own field: a value set
+  in a higher layer wins, and `null` takes a lower layer's value away (the property isn't set).
+  `"preset": "none"` drops the preset.
+- **Selectors** pick elements by type, `x:Name` and ancestry, CSS-style:
+
+  | Selector | Matches |
+  |---|---|
+  | `Grid` | type `Grid` by its last segment (system XAML and WinUI 3 alike), or a full name like `Microsoft.UI.Xaml.Controls.Grid` |
+  | `#RootGrid`, `Grid#RootGrid` | by `x:Name`, with or without a type |
+  | `*` | anything |
+  | `A > B` | `B` whose parent is `A` |
+  | `A B` | `B` anywhere below `A` |
+
+  When several rules set the same property on one element, the more specific selector wins (names,
+  then types, then steps).
+- **Properties** are dependency property names as XAML writes them (`Background`, `Foreground`,
+  `CornerRadius`, `Padding`, `Margin`, `FontFamily`, `FontSize`, `Opacity`, `Visibility`,
+  `BorderBrush`, `BorderThickness`, `MinHeight`, `Fill`...). An element without the property is
+  skipped and logged once per type.
+- **Values** are XAML text for the property's type: `"#80202020"`, `"Transparent"`, `"12"`,
+  `"12,4,12,4"`, `"Segoe UI Variable Display"`, `"Collapsed"`. `$accent` and `$dominant` are the
+  look's accent (or the wallpaper's) and the wallpaper's dominant colour; `$accent/40` adds a hex
+  alpha. A token with no colour yet leaves its property unset.
+- `resources` (theme resource overrides by key) is accepted in the format but **not applied yet**.
+  Restyling Explorer's template brushes (hover, pressed) needs it.
+
+### Presets
+
+Data in [`crates/app-styler/presets`](../crates/app-styler/presets):
+
+| Preset | Settings | Explorer |
+|---|---|---|
+| `calm` | flat neutral cards, no borders, grey selection mark | transparent bars, quiet borderless boxes |
+| `glass` | transparent root, frosted round cards, `$accent` selection mark | transparent bars and details pane, frosted round boxes |
+| `compact` | shorter cards and nav rows, smaller nav text | tighter command bar and boxes, smaller breadcrumb text |
+
+### Undo and the crash guard
+
+- Every value is recorded before it is changed: the element's own (local) value, or "none". It
+  goes back when a rule stops wanting it, when the element leaves the tree (it may come back), and
+  when the helper exits. A local value comes back as the property chain reports it (its value
+  object, or its text recreated). WinUI 3 refuses some of those objects; then the property is
+  cleared to its style's value, which in Explorer's header looks the same.
+- **Crash guard**: if a styled app crashes (an NTSTATUS exit code, not a normal close or a Task
+  Manager restart) within 60 s of being attached, that counts once. After two, the helper stops
+  styling that app for the session and logs it. A process the allowlist rejects is never attached.
+- Missing elements across Windows builds are not errors: a selector that matches nothing does
+  nothing.
+- Nothing is persisted in the apps. If anything is ever stuck, closing and reopening the window
+  (or restarting Explorer) shows the stock look again.
+
+### What can and can't be styled
+
+- **Settings**: the whole window is XAML: title bar area, search box, navigation pane, breadcrumb,
+  every page and card.
+- **File Explorer** (folder windows): tabs (`TabView#TabView`), the navigation bar
+  (`Grid#NavigationBarControlGrid` with back/forward/up/refresh, the address bar
+  `Grid#FileExplorerAddressBarGrid`, the search box `AutoSuggestBox#FileExplorerSearchBox`), the
+  command bar (`CommandBar#FileExplorerCommandBar`) and the details pane
+  (`FileExplorerExtensions.DetailsPaneControl`). Home and Gallery are XAML too.
+- **Not reachable**: the file list (DirectUI `DirectUIHWND`), the navigation tree (a Win32 tree
+  view) and the status bar are not XAML, so XAML Diagnostics can't see them. They need a different
+  mechanism (theme classes / `SetWindowTheme` inside the process): a later stretch.
+- **Visual states win**: hover and pressed looks come from template storyboards and theme
+  resources. A local `Background` shows at rest; hover still shows the template's brush.
+
+### Tools
+
+```text
+mypaper-styler --dump PID [--winui] [--out FILE]   the live XAML tree, to write selectors
+mypaper-styler --preview glass                      run with a preset, whatever the flag says
+```
+
+`--dump` attaches with no rules and writes an indented outline (`Type#Name`, with what is styled)
+to `%LOCALAPPDATA%\mypaper\app-styler\tree-<pid>.txt`. Use `--winui` for Explorer's folder process.
+The TAP's own log is `%LOCALAPPDATA%\mypaper\app-styler\styler.log`.
