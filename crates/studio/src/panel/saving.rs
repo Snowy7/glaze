@@ -11,6 +11,31 @@ use crate::{
     ui::{B, Col},
 };
 
+#[derive(Debug)]
+pub struct Failure {
+    reason: String,
+    outcome: &'static str,
+    retry: Action,
+}
+
+pub fn failed(app: &mut App, doc: Option<crate::docs::DocId>, reason: &str) {
+    let doc = app.docs.failed_doc().or(doc);
+    if let Some(panel) = &app.panel {
+        if let Some(doc) = doc {
+            panel.save_doc.set(Some(doc));
+            panel.save_errors.borrow_mut().insert(
+                doc,
+                Failure {
+                    reason: reason.into(),
+                    outcome: app.docs.save_outcome(),
+                    retry: Action::Panel(Command::RetryDoc(doc)),
+                },
+            );
+        }
+        app.docs.saved = crate::docs::Saved::Failed(reason.into());
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct ThemeCache(std::collections::HashMap<PathBuf, ThemeData>);
 
@@ -236,10 +261,17 @@ pub fn reset_part(app: &mut App, doc: crate::docs::DocId, path: Option<&'static 
 pub fn theme_failed(app: &mut App, dir: &Path, error: &str) {
     if let Some(panel) = &app.panel {
         panel.save_doc.set(None);
-        panel
-            .theme_errors
-            .borrow_mut()
-            .insert(dir.to_owned(), error.into());
+        panel.theme_errors.borrow_mut().insert(
+            dir.to_owned(),
+            Failure {
+                reason: error.into(),
+                outcome: "Change did not take effect",
+                retry: panel
+                    .theme_retry
+                    .clone()
+                    .unwrap_or(Action::Panel(Command::RetryTheme)),
+            },
+        );
         app.docs.saved = crate::docs::Saved::Failed(error.into());
     }
 }
@@ -293,22 +325,84 @@ pub fn banner(app: &App, b: &mut B, c: &mut Col, page: Page) {
         }
         super::controls::feedback(b, c, &message, actions);
     }
-    for (dir, _) in app.panel.as_ref().unwrap().theme_errors.borrow().iter() {
-        if selected.is_some_and(|wallpaper| wallpaper.dir == *dir) {
-            super::controls::feedback(
-                b,
-                c,
-                "Couldn't save",
-                vec![
-                    ("Retry", Action::Panel(Command::RetryTheme)),
-                    (
-                        "Show folder",
-                        Action::Panel(Command::ShowThemeFolder(dir.clone())),
-                    ),
-                ],
-            );
-        }
+}
+
+/// Write feedback is pinned above every page's scroll area until that file saves.
+pub fn write_banners(app: &App, b: &mut B, c: &mut Col) {
+    let panel = app.panel.as_ref().unwrap();
+    for (doc, failure) in panel.save_errors.borrow().iter() {
+        failure_banner(
+            app,
+            b,
+            c,
+            doc.filename(),
+            mypaper_ui::controls::key(("panel-save-reason", doc)),
+            failure,
+        );
     }
+    for (dir, failure) in panel.theme_errors.borrow().iter() {
+        let name = dir.file_name().unwrap_or_default().to_string_lossy();
+        failure_banner(
+            app,
+            b,
+            c,
+            &format!("{name}/theme.json"),
+            mypaper_ui::controls::key(("panel-theme-reason", dir)),
+            failure,
+        );
+    }
+}
+
+fn failure_banner(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    file: &str,
+    key: mypaper_ui::controls::Key,
+    failure: &Failure,
+) {
+    use super::controls::{group, height, notice};
+    group(b, c, "", |b, c| {
+        let style = super::controls::font(b, 13.0, 600);
+        c.y += b.paragraph(
+            c.x,
+            c.y,
+            c.w,
+            &format!("Couldn't save {file}"),
+            &style,
+            height(b, 20.0),
+            b.p.ink1,
+        ) + b.px(8.0);
+        notice(b, c, failure.outcome);
+        let width = (c.w - b.px(8.0)) / 2.0;
+        let r = mypaper_ui::Rect::new(c.x, c.y, width, height(b, 30.0));
+        b.button(
+            mypaper_ui::controls::key((key, "retry")),
+            r,
+            "Retry",
+            None,
+            mypaper_ui::controls::ButtonKind::Secondary,
+            true,
+            failure.retry.clone(),
+        );
+        b.button(
+            mypaper_ui::controls::key((key, "reason")),
+            r.offset(width + b.px(8.0), 0.0),
+            if app.is_open(key) {
+                "Hide reason"
+            } else {
+                "Show reason"
+            },
+            None,
+            mypaper_ui::controls::ButtonKind::Secondary,
+            true,
+            Action::More(key),
+        );
+        c.y = r.bottom + b.px(8.0);
+        if app.is_open(key) {
+            notice(b, c, &failure.reason);
+        }
+    });
 }
 
 pub fn reset_theme(app: &mut App, dir: &Path) {
@@ -411,6 +505,35 @@ fn reset_file(dir: &Path, user_root: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_save_failure_stays_pinned_across_pages_and_explains_its_effect() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        app.size = (360, 760);
+        let edit =
+            crate::actions::Edit::new(crate::docs::DocId::Config, "/engine/fps", "Frame rate");
+        app.set(&edit, serde_json::json!("invalid"));
+        for page in [
+            Page::Root,
+            Page::General,
+            Page::Keyboard,
+            Page::Connections,
+            Page::Bars,
+            Page::History,
+        ] {
+            app.panel.as_mut().unwrap().page = page;
+            let built = super::super::build(&app, &mut ui.text);
+            assert!(built.list.ops.iter().any(|op| matches!(op, mypaper_ui::Op::Text { text, .. } if text.as_ref() == "Couldn't save config.json")), "{page:?}");
+            assert!(built.list.ops.iter().any(|op| matches!(op, mypaper_ui::Op::Text { text, .. } if text.as_ref() == "Change did not take effect")));
+            assert!(built.targets.iter().any(|target| target.action
+                == Action::Panel(Command::RetryDoc(crate::docs::DocId::Config))
+                && target.rect.top < 160.0));
+        }
+        app.set(&edit, serde_json::json!(60));
+        assert!(app.panel.as_ref().unwrap().save_errors.borrow().is_empty());
+    }
 
     #[test]
     fn expanded_more_keeps_its_theme_contrast_instead_of_segment_text() {

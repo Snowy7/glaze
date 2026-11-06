@@ -314,6 +314,8 @@ pub struct Docs {
     live: Option<Vec<(DocId, Value)>>,
     pending: Option<Pending>,
     failed_live: Option<String>,
+    failed_doc: Option<DocId>,
+    partial_save: bool,
     pub saved: Saved,
     /// Bumped on every change: previews cache on it.
     pub version: u64,
@@ -361,6 +363,8 @@ impl Docs {
             live: None,
             pending: None,
             failed_live: None,
+            failed_doc: None,
+            partial_save: false,
             saved: Saved::Idle,
             version: 1,
         }
@@ -368,6 +372,21 @@ impl Docs {
 
     pub fn doc(&self, id: DocId) -> &Doc {
         &self.docs[id.index()]
+    }
+
+    /// The owning file is known even when a multi-file edit fails after an earlier write.
+    pub fn failed_doc(&self) -> Option<DocId> {
+        self.failed_doc
+    }
+
+    pub fn save_outcome(&self) -> &'static str {
+        if self.failed_live.is_some() {
+            "Change is active but not saved"
+        } else if self.partial_save {
+            "Some changes took effect; save is incomplete"
+        } else {
+            "Change did not take effect"
+        }
     }
 
     pub fn ids(&self) -> impl Iterator<Item = DocId> + '_ {
@@ -492,10 +511,13 @@ impl Docs {
 
     /// Applies `ops` as one undoable step named `label`, writing every changed file.
     pub fn edit(&mut self, label: &str, ops: &[Op]) -> Result<()> {
+        self.failed_doc = None;
+        self.partial_save = false;
         let result = self.edit_inner(label, ops);
-        if result.is_err() && matches!(self.saved, Saved::Failed(_)) {
+        if let Err(error) = &result {
+            self.saved = Saved::Failed(format!("{error:#}"));
             self.pending = Some(Pending::Edit(label.into(), ops.to_vec()));
-        } else if result.is_ok() {
+        } else {
             self.pending = None;
         }
         result
@@ -604,12 +626,14 @@ impl Docs {
     /// Takes back the last step; returns its label.
     pub fn undo(&mut self) -> Result<Option<String>> {
         self.commit_live("Change")?;
+        self.partial_save = false;
         self.reload_themes();
         let Some(step) = self.undo.last().cloned() else {
             return Ok(None);
         };
-        for (id, before, _) in &step.changes {
+        for (index, (id, before, _)) in step.changes.iter().enumerate() {
             if let Err(error) = self.replace(*id, before.clone()) {
+                self.partial_save = index > 0;
                 self.pending = Some(Pending::Undo);
                 return Err(error);
             }
@@ -622,12 +646,14 @@ impl Docs {
     }
 
     pub fn redo(&mut self) -> Result<Option<String>> {
+        self.partial_save = false;
         self.reload_themes();
         let Some(step) = self.redo.last().cloned() else {
             return Ok(None);
         };
-        for (id, _, after) in &step.changes {
+        for (index, (id, _, after)) in step.changes.iter().enumerate() {
             if let Err(error) = self.replace(*id, after.clone()) {
+                self.partial_save = index > 0;
                 self.pending = Some(Pending::Redo);
                 return Err(error);
             }
@@ -782,13 +808,20 @@ impl Docs {
                 continue;
             }
             let text = render(&after)?;
-            let (raw, effective) = id.parse(&text).context("that change isn't valid")?;
+            let (raw, effective) = id
+                .parse(&text)
+                .context("that change isn't valid")
+                .inspect_err(|_| {
+                    self.failed_doc = Some(id);
+                })?;
             staged.push((id, before, raw, effective, text));
         }
         // Retain the original in-memory snapshots until all writes succeed. A retry of a
         // multi-file edit must still undo files that were written before a later failure.
-        for (id, _, raw, _, _) in &staged {
-            self.write(*id, raw)?;
+        for (index, (id, _, raw, _, _)) in staged.iter().enumerate() {
+            self.write(*id, raw).inspect_err(|_| {
+                self.partial_save = index > 0;
+            })?;
         }
         let mut changes = Vec::new();
         for (id, before, raw, effective, text) in staged {
@@ -818,6 +851,7 @@ impl Docs {
     }
 
     fn write(&mut self, id: DocId, raw: &Value) -> Result<()> {
+        self.failed_doc = Some(id);
         let text = render(raw)?;
         if let Some(path) = &self.docs[id.index()].path {
             match std::fs::read_to_string(path) {
@@ -860,6 +894,7 @@ impl Docs {
             self.saved = Saved::Done(Instant::now());
         }
         self.docs[id.index()].seen = Some(text);
+        self.failed_doc = None;
         Ok(())
     }
 }
@@ -1021,6 +1056,11 @@ mod tests {
             .is_err()
         );
         assert!(std::fs::read_to_string(&config).unwrap().contains("true"));
+        assert_eq!(docs.failed_doc(), Some(DocId::Bars));
+        assert_eq!(
+            docs.save_outcome(),
+            "Some changes took effect; save is incomplete"
+        );
         assert_eq!(docs.doc(DocId::Config).raw, json!({}));
         std::fs::remove_dir(&blocked).unwrap();
         docs.retry().unwrap();
@@ -1069,6 +1109,8 @@ mod tests {
         .unwrap();
         std::fs::create_dir(root.join("config.json.tmp")).unwrap();
         assert!(docs.commit_live("Clarity").is_err());
+        assert_eq!(docs.failed_doc(), Some(DocId::Config));
+        assert_eq!(docs.save_outcome(), "Change is active but not saved");
         assert_eq!(docs.undo_count(), 0);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "{}");
         std::fs::remove_dir(root.join("config.json.tmp")).unwrap();
