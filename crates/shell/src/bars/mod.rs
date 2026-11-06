@@ -108,6 +108,7 @@ pub struct Bars {
     /// When the shown tooltip started fading in.
     tooltip_fade: Option<Instant>,
     warm_due: Option<(Instant, usize, u32)>,
+    game_active: bool,
 }
 
 /// Keeps startup failures reversible before `Bars` owns the journal.
@@ -178,6 +179,7 @@ impl Bars {
             tooltip_due: None,
             tooltip_fade: None,
             warm_due: None,
+            game_active: false,
         };
         bars.read_theme();
         startup::ready("shell", "theme_ms");
@@ -1839,12 +1841,19 @@ impl Bars {
         self.subscribe();
         self.dirty();
     }
+    /// Freeze background providers on every screen during core's conservative game hint.
+    pub fn set_game_activity(&mut self, active: bool) {
+        if self.game_active == active { return; }
+        self.game_active = active;
+        self.subscribe();
+    }
     fn subscribe(&mut self) {
         let topics = self
             .bars
             .iter()
             .filter(|b| b.shows_content())
             .flat_map(Bar::topics)
+            .filter(|_| !self.game_active)
             .filter(|t| self.fullscreen.is_none() || !t.periodic())
             .collect();
         let configs: Vec<_> = self
@@ -1874,10 +1883,11 @@ impl Bars {
             self.bars
                 .iter()
                 .filter(|b| b.shows_content())
+                .filter(|_| !self.game_active)
                 .flat_map(|b| providers::actions::bar_modules(b.kind, &b.config)),
             self.bars
                 .iter()
-                .any(|b| b.shows_content() && b.kind == BarKind::Dock),
+                .any(|b| !self.game_active && b.shows_content() && b.kind == BarKind::Dock),
         );
         let trash = self.bars.iter().any(|b| {
             b.shows_content()

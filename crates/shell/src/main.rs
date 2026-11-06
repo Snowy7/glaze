@@ -13,6 +13,7 @@
 use mypaper_shell::{bars, desktop_menu, flyouts, inbox, integrations, look, overlay_client, widgets};
 
 mod wakes;
+mod game;
 
 use std::process::ExitCode;
 use std::time::Instant;
@@ -82,6 +83,7 @@ fn run() -> Result<()> {
         bars,
         widgets: None,
         pending_widget_facts: Vec::new(),
+        game_active: false,
     };
     shell.follow_config(&ui);
     shell.bars.tick(&mut ui);
@@ -98,10 +100,14 @@ fn run() -> Result<()> {
     let mut coalesced: Option<Instant> = None;
     // When the widgets last polled (see POINTER_POLL).
     let mut widgets_polled = Instant::now();
+    let mut game = game::GameControl::new();
     'run: loop {
+        game.refresh();
+        shell.set_game_activity(&mut ui, game.active);
         let start = Instant::now();
-        // Order matters: the parent, then the widgets' frame timer, then the bars' handles.
+        // The parent's handle is first. Other handles are identified by name below.
         let mut handles: Vec<(HANDLE, &'static str)> = parent.iter().map(|&h| (h, "parent")).collect();
+        handles.extend(game.handle().map(|h| (h, "game.publisher")));
         handles.extend(shell.widgets.as_ref().map(|w| (w.timer_handle(), "widgets.frame")));
         handles.extend(
             shell
@@ -146,12 +152,12 @@ fn run() -> Result<()> {
             log::info!("the process that started the shell exited; stopping");
             break;
         }
+        let signalled = woke.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
         if let Some(widgets) = &mut shell.widgets
-            && woke.0 == WAIT_OBJECT_0.0 + u32::from(parent.is_some())
+            && handles.get(signalled).is_some_and(|h| h.1 == "widgets.frame")
         {
             widgets.frame_ready();
         }
-        let signalled = woke.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
         let mut cause = if woke == WAIT_TIMEOUT {
             Some(Cause::Timeout(match due {
                 0 => "widgets",
@@ -239,6 +245,10 @@ fn run() -> Result<()> {
                     .inspect_err(|e| log::error!("widgets not started: {e:#}"))
                     .ok();
             shell.pending_widget_facts.clear();
+            if let Some(widgets) = &mut shell.widgets {
+                widgets.set_game_activity(shell.game_active);
+                widgets.poll(&mut ui);
+            }
             startup::ready("shell", "widgets_ready_ms");
         }
     }
@@ -306,9 +316,21 @@ struct Shell {
     /// Calendar, quick settings, notifications, launcher and the other panels the bars open.
     flyouts: flyouts::Flyouts,
     pending_widget_facts: Vec<(usize, isize)>,
+    game_active: bool,
 }
 
 impl Shell {
+    fn set_game_activity(&mut self, ui: &mut Ui, active: bool) {
+        if self.game_active == active { return; }
+        self.game_active = active;
+        log::info!("game background pause: {active}");
+        integrations::set_game_activity(active);
+        self.bars.set_game_activity(active);
+        if let Some(widgets) = &mut self.widgets {
+            widgets.set_game_activity(active);
+            widgets.poll(ui);
+        }
+    }
     /// Handles everything queued: inbox messages and input, in order, until both are empty.
     /// Handling one may call into Explorer and so let more arrive; they are handled here too.
     /// Adds the time each part took to `wakes`, from `at`; returns when it finished.

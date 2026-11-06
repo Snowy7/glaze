@@ -46,6 +46,7 @@ struct State {
     generation: u64,
     locked: bool,
     display_off: bool,
+    game_active: bool,
     foreground_id: Option<String>,
     #[cfg(test)]
     fixtures: BTreeMap<Provider, Snapshot>,
@@ -110,6 +111,7 @@ impl State {
             generation: 0,
             locked: false,
             display_off: false,
+            game_active: false,
             foreground_id: None,
             #[cfg(test)]
             fixtures: BTreeMap::new(),
@@ -145,12 +147,24 @@ pub fn shutdown() {
 }
 pub fn acquire(provider: Provider) -> anyhow::Result<Lease> {
     STATE.with_borrow(|s| {
-        anyhow::ensure!(!s.locked && !s.display_off, "integrations suspended");
+        anyhow::ensure!(!s.locked && !s.display_off && !s.game_active, "integrations suspended");
         s.hub.acquire(provider, &s.config)
     })
 }
 pub fn generation() -> u64 {
     STATE.with_borrow(|s| s.generation)
+}
+/// Release background providers for games; visibility reconciliation reacquires on resume.
+pub fn set_game_activity(active: bool) {
+    let changed = STATE.with_borrow_mut(|s| {
+        if s.game_active == active { return false; }
+        s.game_active = active;
+        s.hub.stop_all();
+        s.bars.clear();
+        s.generation += 1;
+        true
+    });
+    if changed { media::changed(true); }
 }
 pub fn fact(wparam: usize, lparam: isize) {
     use mypaper_desktop::hold::Fact;
@@ -252,7 +266,7 @@ pub fn bar_subscriptions<'a>(modules: impl Iterator<Item = &'a ModuleRef>, dock:
             Provider::Notifications => state.config.notifications.live_verified,
             _ => true,
         });
-        if state.locked || state.display_off {
+        if state.locked || state.display_off || state.game_active {
             wanted.clear();
         }
         state.bars.retain(|p, _| wanted.contains(p));

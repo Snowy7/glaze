@@ -198,6 +198,7 @@ pub struct Widgets {
     worker: data::Worker,
     holds: Holds,
     held: bool,
+    game_active: bool,
     hidden: bool,
     reconcile_needed: bool,
     order_due: Option<Instant>,
@@ -324,6 +325,7 @@ impl Widgets {
             worker: data::Worker::new(window),
             holds,
             held: false,
+            game_active: false,
             hidden: false,
             reconcile_needed: true,
             order_due: None,
@@ -585,6 +587,11 @@ impl Widgets {
         }
     }
 
+    pub fn set_game_activity(&mut self, active: bool) {
+        self.game_active = active;
+        self.plugins.set_game_activity(active);
+    }
+
     pub fn poll(&mut self, ui: &mut Ui) {
         self.costs.polls += 1;
         let instant = Instant::now();
@@ -659,7 +666,7 @@ impl Widgets {
         self.costs.coverage_us += measured.elapsed().as_micros() as u64;
         let reasons = self.holds.reasons();
         let hidden = reasons.contains(Reason::Locked) || reasons.contains(Reason::DisplayOff);
-        let held = !reasons.is_empty();
+        let held = self.game_active || !reasons.is_empty();
         if held != self.held || hidden != self.hidden {
             if held && self.editing {
                 self.cancel_drag();
@@ -675,7 +682,9 @@ impl Widgets {
             self.media.set_held(held);
             self.audio.set_held(held);
             self.stats.set_held(held, instant);
-            self.plugins.set_held(held);
+            // Game quiescence has its own helper frame and must not trigger a delayed
+            // suspend/unload when the game ends. Preserve independent user/session holds.
+            self.plugins.set_held(!reasons.is_empty());
             for entry in self.entries.values_mut() {
                 // Services may not have subscribed when the shell started paused. Resume
                 // through the visibility path without discarding cached widget content.
