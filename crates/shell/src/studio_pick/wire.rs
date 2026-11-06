@@ -39,6 +39,21 @@ pub struct Selection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
+    PreviewDock {
+        session: u64,
+        sequence: u64,
+        base_revision: u64,
+        size: f64,
+    },
+    PreviewSaved {
+        session: u64,
+        sequence: u64,
+        revision: u64,
+    },
+    PreviewCancel {
+        session: u64,
+        sequence: u64,
+    },
     Begin {
         panel: isize,
     },
@@ -67,6 +82,39 @@ pub enum Message {
 struct Queue {
     messages: RefCell<VecDeque<(HWND, Message)>>,
     wake: Cell<Option<HWND>>,
+}
+
+impl Queue {
+    fn enqueue(&self, source: HWND, message: Message) -> bool {
+        let mut messages = self.messages.borrow_mut();
+        if let Message::PreviewDock {
+            session, sequence, ..
+        } = &message && let Some((_, pending)) = messages.iter_mut().find(|(from, m)| {
+            *from == source
+                && matches!(m, Message::PreviewDock { session: pending, .. } if pending == session)
+        }) {
+            if matches!(pending, Message::PreviewDock { sequence: previous, .. } if *previous < *sequence)
+            {
+                *pending = message;
+            }
+            return true;
+        }
+        if messages.len() >= 64 {
+            return false;
+        }
+        messages.push_back((source, message));
+        true
+    }
+}
+
+/// Formatting-independent revision of a raw document. Used for equality, never authentication.
+pub fn revision(value: &impl Serialize) -> u64 {
+    serde_json::to_vec(value)
+        .unwrap_or_default()
+        .into_iter()
+        .fold(0xcbf29ce484222325, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3)
+        })
 }
 
 pub struct Endpoint {
@@ -201,14 +249,16 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, wp: WPARAM, lp: LP
             if let Ok(message) = serde_json::from_slice(bytes) {
                 // SAFETY: queue lives until this window is destroyed on this same thread.
                 let queue = unsafe { &*queue };
-                let mut messages = queue.messages.borrow_mut();
-                if messages.len() < 64 {
-                    messages.push_back((HWND(wp.0 as _), message));
+                if queue.enqueue(HWND(wp.0 as _), message) {
                     if let Some(window) = queue.wake.get() {
                         mypaper_ui::queue_event(window, mypaper_ui::Event::Key(PICK_EVENT));
                         // SAFETY: wakes the peer's own UI loop; no keyboard input or activation.
                         let _ =
                             unsafe { PostMessageW(Some(window), WM_NULL, WPARAM(0), LPARAM(0)) };
+                    } else {
+                        // A posted wake bypasses the shell's sent-message coalescing delay.
+                        // SAFETY: the endpoint is owned by this UI thread and is still alive.
+                        let _ = unsafe { PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0)) };
                     }
                     return LRESULT(1);
                 }
@@ -218,4 +268,34 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, wp: WPARAM, lp: LP
     }
     // SAFETY: default processing of the original message.
     unsafe { DefWindowProcW(hwnd, message, wp, lp) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn preview_queue_is_bounded_and_keeps_only_the_latest_value() {
+        let queue = Queue::default();
+        let source = HWND(1 as _);
+        for sequence in 1..1000 {
+            assert!(queue.enqueue(
+                source,
+                Message::PreviewDock {
+                    session: 7,
+                    sequence,
+                    base_revision: 10,
+                    size: 48.0
+                }
+            ));
+        }
+        assert_eq!(queue.messages.borrow().len(), 1);
+        assert!(matches!(
+            queue.messages.borrow().front(),
+            Some((_, Message::PreviewDock { sequence: 999, .. }))
+        ));
+        for _ in 1..64 {
+            assert!(queue.enqueue(source, Message::End));
+        }
+        assert!(!queue.enqueue(source, Message::End));
+    }
 }

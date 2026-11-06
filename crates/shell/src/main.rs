@@ -227,8 +227,8 @@ fn run() -> Result<()> {
             widgets_polled = at;
         }
         at = shell.drain(&mut ui, &mut wakes, at, poll_widgets);
-        shell.bars.tick(&mut ui);
         shell.studio_tick(&mut ui);
+        shell.bars.tick(&mut ui);
         wakes.spent("bars.tick", at);
         if widgets_pending {
             widgets_pending = false;
@@ -288,6 +288,8 @@ impl Shell {
             if let Some(widgets) = &self.widgets { targets.extend(widgets.studio_targets()); }
         }
         self.studio.tick(ui, &targets, self.bars.config());
+        let dock_size = self.studio.dock_preview(self.bars.config());
+        self.bars.studio_dock_size(dock_size);
         self.bars.studio_session(self.studio.active());
         if let Some(widgets) = &mut self.widgets {
             widgets.studio_session(ui, self.studio.active(), self.studio.lifted());

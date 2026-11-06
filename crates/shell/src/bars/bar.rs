@@ -321,6 +321,16 @@ impl Bar {
     pub fn horizontal(&self) -> bool {
         matches!(edge(self.kind, &self.config), Edge::Top | Edge::Bottom)
     }
+
+    /// Repaint transient geometry without changing the appbar reservation or saved config.
+    pub(super) fn studio_size(&mut self, size: Option<f64>) {
+        if self.config.dock.size != size {
+            self.config.dock.size = size;
+            self.dirty = true;
+            self.presentation_dirty = true;
+            self.zoom_due = true;
+        }
+    }
     pub fn shows_content(&self) -> bool {
         !self.hidden && self.slide.value < 0.999
     }

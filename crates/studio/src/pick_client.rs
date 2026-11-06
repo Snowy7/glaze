@@ -17,7 +17,69 @@ struct Client {
     panel: HWND,
     highlighted: Option<String>,
     observed: [(DocId, Value); 3],
+    observed_version: u64,
     undo_chain: UndoChain,
+    session: u64,
+    sequence: u64,
+    preview: Option<PreviewDrag>,
+}
+
+struct PreviewDrag {
+    base_revision: u64,
+    size: f64,
+}
+
+impl Client {
+    fn stream_preview(&mut self, app: &App) {
+        let Some(shell) = self.shell else { return };
+        let size = match &app.drag {
+            Some(crate::app::Drag::Slider { edit, .. })
+                if edit.doc == DocId::Bars && edit.path.as_ref() == "/dock/size" =>
+            {
+                app.get(DocId::Bars, "/dock/size").and_then(Value::as_f64)
+            }
+            _ => None,
+        };
+        if let Some(size) = size {
+            if self.preview.as_ref().is_some_and(|p| p.size == size) {
+                return;
+            }
+            let base_revision = self
+                .preview
+                .as_ref()
+                .map_or_else(|| wire::revision(&self.observed[1].1), |p| p.base_revision);
+            self.sequence += 1;
+            wire::send(
+                shell,
+                self.endpoint.hwnd(),
+                &Message::PreviewDock {
+                    session: self.session,
+                    sequence: self.sequence,
+                    base_revision,
+                    size,
+                },
+            );
+            self.preview = Some(PreviewDrag {
+                base_revision,
+                size,
+            });
+        } else if self.preview.take().is_some() {
+            self.sequence += 1;
+            let message = if matches!(app.docs.saved, crate::docs::Saved::Failed(_)) {
+                Message::PreviewCancel {
+                    session: self.session,
+                    sequence: self.sequence,
+                }
+            } else {
+                Message::PreviewSaved {
+                    session: self.session,
+                    sequence: self.sequence,
+                    revision: wire::revision(&app.docs.doc(DocId::Bars).raw),
+                }
+            };
+            wire::send(shell, self.endpoint.hwnd(), &message);
+        }
+    }
 }
 
 #[derive(Default)]
@@ -82,16 +144,23 @@ pub fn connect(app: &App) {
                 panel,
                 highlighted: None,
                 observed: snapshot(app),
+                observed_version: app.docs.version,
                 undo_chain: UndoChain::default(),
+                session: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos() as u64,
+                sequence: 0,
+                preview: None,
             });
         }
         let client = client.as_mut().unwrap();
-        client.observed = snapshot(app);
         let shell = wire::find_shell();
         if client.shell != shell {
             client.shell = shell;
             client.begun = false;
             client.highlighted = None;
+            client.preview = None;
         }
         if !client.begun
             && let Some(shell) = shell
@@ -105,6 +174,11 @@ pub fn connect(app: &App) {
                     panel: panel.0 as isize,
                 },
             );
+        }
+        client.stream_preview(app);
+        if client.observed_version != app.docs.version {
+            client.observed = snapshot(app);
+            client.observed_version = app.docs.version;
         }
     });
     let hovered = app
@@ -157,6 +231,7 @@ pub fn record_pick(app: &App, label: &str, ops: &[Op], checkpoint: usize, merge:
             );
         }
         client.observed = snapshot(app);
+        client.observed_version = app.docs.version;
     });
 }
 
@@ -546,6 +621,58 @@ mod tests {
         assert_eq!(app.nav.display, 0);
         assert!(app.display().unwrap().rect.x < 0);
         assert_eq!(display_index(&app.monitors, r"\\.\DISPLAY99"), None);
+    }
+
+    #[test]
+    fn dock_slider_streams_memory_values_then_the_saved_revision() {
+        let ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        let receiver = wire::Endpoint::new(true).unwrap();
+        let base_revision = wire::revision(&app.docs.doc(DocId::Bars).raw);
+        let mut client = Client {
+            endpoint: wire::Endpoint::new(false).unwrap(),
+            shell: Some(receiver.hwnd()),
+            begun: true,
+            panel: HWND::default(),
+            highlighted: None,
+            observed: snapshot(&app),
+            observed_version: app.docs.version,
+            undo_chain: UndoChain::default(),
+            session: 123,
+            sequence: 0,
+            preview: None,
+        };
+        let edit = crate::actions::Edit::new(DocId::Bars, "/dock/size", "Icon size");
+        app.drag = Some(crate::app::Drag::Slider {
+            edit,
+            track: mypaper_ui::Rect::new(0.0, 0.0, 100.0, 20.0),
+            min: 24.0,
+            max: 96.0,
+            step: 1.0,
+        });
+        app.docs
+            .live(&[Op {
+                doc: DocId::Bars,
+                path: "/dock/size".into(),
+                value: Some(serde_json::json!(64.0)),
+            }])
+            .unwrap();
+        client.stream_preview(&app);
+        assert!(
+            matches!(receiver.next(), Some((_, Message::PreviewDock { session: 123, sequence: 1, base_revision: base, size: 64.0 })) if base == base_revision)
+        );
+        assert!(
+            !app.docs.can_undo(),
+            "there is no saved step during the drag"
+        );
+        app.docs.commit_live("Icon size").unwrap();
+        app.drag = None;
+        client.stream_preview(&app);
+        assert!(
+            matches!(receiver.next(), Some((_, Message::PreviewSaved { session: 123, sequence: 2, revision })) if revision == wire::revision(&app.docs.doc(DocId::Bars).raw))
+        );
+        assert_eq!(app.docs.undo_count(), 1);
+        assert!(DocId::ALL.iter().all(|id| app.docs.doc(*id).path.is_none()));
     }
 
     #[test]

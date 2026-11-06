@@ -69,6 +69,10 @@ struct Press {
 
 pub struct Bars {
     studio_active: bool,
+    studio_dock_size: Option<f64>,
+    studio_dock_pending: bool,
+    studio_dock_applied: Instant,
+    studio_frame: Duration,
     bars: Vec<Bar>,
     monitors: Vec<Monitor>,
     services: Services,
@@ -140,6 +144,10 @@ impl Bars {
         startup::ready("shell", "services_ms");
         let mut bars = Self {
             studio_active: false,
+            studio_dock_size: None,
+            studio_dock_pending: false,
+            studio_dock_applied: Instant::now(),
+            studio_frame: mypaper_ui::display_frame(),
             bars: vec![],
             monitors: vec![],
             services,
@@ -733,6 +741,17 @@ impl Bars {
     }
 
     fn paint(&mut self, ui: &mut Ui, now: Instant) -> Result<()> {
+        if self.studio_dock_pending && now.saturating_duration_since(self.studio_dock_applied) >= self.studio_frame {
+            let preview = Self::studio_preview_config(&self.config, self.studio_dock_size);
+            let effective = preview.as_ref().unwrap_or(&self.config);
+            for bar in self.bars.iter_mut().filter(|b| b.kind == BarKind::Dock) {
+                let size = effective.for_monitor(&bar.monitor.device, bar.monitor.primary).map_or(effective.dock.size, |c| c.dock.size);
+                bar.studio_size(size);
+            }
+            // No reservation or config file changes during preview; only shell-owned pixels.
+            self.studio_dock_pending = false;
+            self.studio_dock_applied = now;
+        }
         let menu = self.menu.as_ref().is_some_and(Menu::is_open) || self.preview.is_some();
         let before: std::collections::HashSet<_> = self
             .bars
@@ -740,7 +759,7 @@ impl Bars {
             .filter(|b| b.shows_content())
             .map(|b| b.surface.id())
             .collect();
-        let mut moving = false;
+        let mut moving = self.studio_dock_pending;
         for b in &mut self.bars {
             moving |= b.paint(
                 ui,
@@ -831,6 +850,21 @@ impl Bars {
     pub fn studio_session(&mut self, active: bool) {
         self.studio_active = active;
         for bar in &mut self.bars { bar.studio_session(active); }
+    }
+
+    pub fn studio_dock_size(&mut self, size: Option<f64>) {
+        if self.studio_dock_size != size {
+            self.studio_dock_size = size;
+            self.studio_dock_pending = true;
+        }
+    }
+
+    /// Resolve the same per-display overrides the durable document will use on release.
+    fn studio_preview_config(config: &BarsConfig, size: Option<f64>) -> Option<BarsConfig> {
+        let size = size?;
+        let mut raw = config.raw().clone();
+        raw.entry("dock").or_insert_with(|| serde_json::json!({})).as_object_mut()?.insert("size".into(), serde_json::json!(size));
+        BarsConfig::parse(&serde_json::to_string(&raw).ok()?).ok()
     }
 
     pub fn studio_targets(&self) -> Vec<crate::studio_pick::Target> {
@@ -1637,9 +1671,13 @@ impl Bars {
             }
         }
         self.monitors = monitors.clone();
+        let preview = Self::studio_preview_config(&self.config, self.studio_dock_size);
         let mut wanted = Vec::new();
         for monitor in monitors {
             let mut config = self.config.for_monitor(&monitor.device, monitor.primary)?;
+            if let Some(preview) = &preview {
+                config.dock.size = preview.for_monitor(&monitor.device, monitor.primary)?.dock.size;
+            }
             config.resolve(services::default_pins);
             // Plugin heights are geometry: the bar rebuilds for them, unlike the other tokens.
             if let Some(h) = plugin_style::number("top-bar", "top", self.config.raw(), "height") {

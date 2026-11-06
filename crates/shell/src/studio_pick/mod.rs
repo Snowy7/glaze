@@ -2,6 +2,7 @@
 //! Catchers sit below widgets in the desktop band; widget input still reaches its real HWND.
 mod chrome;
 mod notice;
+mod preview;
 pub mod resize;
 pub mod wire;
 
@@ -131,6 +132,7 @@ pub struct StudioPick {
     geometry_due: Instant,
     notice: Option<notice::Notice>,
     gesture: Option<Gesture>,
+    preview: preview::Preview,
 }
 
 impl StudioPick {
@@ -149,6 +151,7 @@ impl StudioPick {
             geometry_due: Instant::now(),
             notice: None,
             gesture: None,
+            preview: preview::Preview::default(),
         })
     }
     pub fn timeout_ms(&self) -> u32 {
@@ -156,6 +159,13 @@ impl StudioPick {
     }
     pub fn active(&self) -> bool {
         self.session.active()
+    }
+
+    pub fn dock_preview(&mut self, bars: &BarsConfig) -> Option<f64> {
+        if !self.preview.active() {
+            return None;
+        }
+        self.preview.effective(wire::revision(bars.raw()))
     }
     pub fn lifted(&self) -> BTreeSet<String> {
         // Keep the receiving HWND alive until its button release has run.
@@ -167,7 +177,7 @@ impl StudioPick {
     }
 
     pub fn tick(&mut self, ui: &mut Ui, targets: &[Target], bars: &BarsConfig) {
-        let previous_owner = self.session.owner;
+        let mut previous_owner = self.session.owner;
         while let Some((source, request)) = self.endpoint.next() {
             match request {
                 Message::Begin { panel } => {
@@ -175,10 +185,42 @@ impl StudioPick {
                     let panel = HWND(panel as _);
                     if pid != 0 && wire::process(panel) == pid {
                         self.session.begin(source.0 as isize, pid);
+                        if self.session.owner != previous_owner {
+                            self.reset_transients();
+                            previous_owner = self.session.owner;
+                        }
                         self.panel = panel;
                     }
                 }
                 Message::End => self.session.end(source.0 as isize),
+                Message::PreviewDock {
+                    session,
+                    sequence,
+                    base_revision,
+                    size,
+                } if self.session.owner.is_some_and(|(h, pid)| {
+                    h == source.0 as isize && wire::process(source) == pid
+                }) =>
+                {
+                    self.preview.update(session, sequence, base_revision, size);
+                }
+                Message::PreviewSaved {
+                    session,
+                    sequence,
+                    revision,
+                } if self.session.owner.is_some_and(|(h, pid)| {
+                    h == source.0 as isize && wire::process(source) == pid
+                }) =>
+                {
+                    self.preview.saved(session, sequence, revision);
+                }
+                Message::PreviewCancel { session, sequence }
+                    if self.session.owner.is_some_and(|(h, pid)| {
+                        h == source.0 as isize && wire::process(source) == pid
+                    }) =>
+                {
+                    self.preview.cancel(session, sequence);
+                }
                 Message::UndoStep { display, text }
                     if self.session.owner.is_some_and(|(h, pid)| {
                         h == source.0 as isize && wire::process(source) == pid
@@ -216,12 +258,7 @@ impl StudioPick {
         self.session
             .check(|h, p| wire::process(HWND(h as _)) == p && wire::process(panel) == p);
         if self.session.owner != previous_owner {
-            self.gesture = None;
-            self.hovered = None;
-            self.hover_until = None;
-            self.decorations.clear();
-            self.pressed = false;
-            self.notice = None;
+            self.reset_transients();
         }
         if !self.session.active() {
             self.gesture = None;
@@ -521,6 +558,16 @@ impl StudioPick {
             );
             log::info!("Studio pick {selection:?}, delivered={taken}");
         }
+    }
+
+    fn reset_transients(&mut self) {
+        self.preview = preview::Preview::default();
+        self.gesture = None;
+        self.hovered = None;
+        self.hover_until = None;
+        self.decorations.clear();
+        self.pressed = false;
+        self.notice = None;
     }
 
     fn finish_resize(&mut self, commit: bool) {
