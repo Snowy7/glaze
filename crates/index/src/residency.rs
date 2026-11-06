@@ -14,7 +14,7 @@ const RETAINED: usize = 4;
 #[derive(Default)]
 pub(crate) struct Windows {
     resident: Mutex<VecDeque<(usize, usize)>>,
-    last: AtomicUsize,
+    cached: [AtomicUsize; RETAINED],
     writable: bool,
 }
 
@@ -45,30 +45,40 @@ impl Windows {
         for chunk in offset / WINDOW..=(offset + length - 1) / WINDOW {
             let start = chunk * WINDOW;
             let address = base as usize + start;
-            if self.last.load(Ordering::Relaxed) == address {
+            if self
+                .cached
+                .iter()
+                .any(|key| key.load(Ordering::Relaxed) == address)
+            {
                 continue;
             }
             let mut resident = self.resident.lock().expect("resident windows");
-            if let Some(at) = resident.iter().position(|(p, _)| *p == address) {
-                let window = resident.remove(at).expect("existing window");
-                resident.push_back(window);
-            } else {
+            if !resident.iter().any(|(p, _)| *p == address) {
                 if resident.len() == RETAINED {
                     let (old, len) = resident.pop_front().expect("full resident windows");
                     release(old, len, self.writable);
                 }
                 resident.push_back((address, WINDOW.min(mapped_len - start)));
             }
-            self.last.store(address, Ordering::Relaxed);
+            // FIFO needs no per-record lock or recency writes. A hot record/name pair
+            // remains in these four slots until new windows actually need its space.
+            for (index, key) in self.cached.iter().enumerate() {
+                key.store(
+                    resident.get(index).map_or(0, |(p, _)| *p),
+                    Ordering::Relaxed,
+                );
+            }
         }
     }
 
     pub fn release(&self) {
         let mut resident = self.resident.lock().expect("resident windows");
+        for key in &self.cached {
+            key.store(0, Ordering::Relaxed);
+        }
         for (address, length) in resident.drain(..) {
             release(address, length, self.writable);
         }
-        self.last.store(0, Ordering::Relaxed);
     }
 }
 
