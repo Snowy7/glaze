@@ -8,6 +8,7 @@ mod controls;
 mod editors;
 mod first_run;
 mod history;
+pub(crate) use history::time_label as history_time;
 mod icons;
 mod lists;
 mod measure;
@@ -143,6 +144,7 @@ pub struct State {
     pub add_module: Option<String>,
     pub history: std::cell::RefCell<history::History>,
     pub theme_data: std::cell::RefCell<saving::ThemeCache>,
+    pub search_match: Option<(Page, String)>,
     pub specimens:
         std::cell::RefCell<std::collections::HashMap<String, std::sync::Arc<mypaper_ui::Image>>>,
     specimen_page: std::cell::Cell<Option<Page>>,
@@ -200,6 +202,7 @@ pub enum Command {
     HideConnectionWidget(String),
     ShowTheme(std::path::PathBuf),
     ResetTheme(std::path::PathBuf),
+    ResetPart(crate::docs::DocId, Option<&'static str>),
     RetryTheme,
     ShowThemeFolder(std::path::PathBuf),
     RetryDoc(crate::docs::DocId),
@@ -352,6 +355,7 @@ pub fn run(app: &mut App, command: Command) {
         Command::HideConnectionWidget(id) => editors::hide_connection_widget(app, &id),
         Command::ShowTheme(dir) => crate::system::reveal(&dir.join(mypaper_theme::MANIFEST)),
         Command::ResetTheme(dir) => saving::reset_theme(app, &dir),
+        Command::ResetPart(doc, path) => saving::reset_part(app, doc, path),
         Command::ShowThemeFolder(dir) => crate::system::open(&dir.to_string_lossy()),
         Command::RetryTheme => {
             if let Some(action) = app.panel.as_ref().unwrap().theme_retry.clone() {
@@ -688,6 +692,9 @@ pub fn fit_height(app: &mut App, surface: &mypaper_ui::Surface, built: &Built) -
 
 /// One additive bridge into the legacy action dispatcher, shared with desktop picking.
 pub fn before_action(app: &mut App, action: &Action) {
+    if matches!(action, Action::AddWallpaper | Action::Panel(Command::Open(Page::AddWallpaper))) {
+        app.texts.remove(&FieldId::Text(crate::docs::DocId::Studio, "/add_use_now".into()));
+    }
     if app.panel.is_some() { choosers::end(app); }
     history::observe(app);
     if let Action::Set(edit, _) | Action::Unset(edit) = action
