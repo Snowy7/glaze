@@ -145,7 +145,7 @@ fn glass(tokens: &Tokens, scale: f32, size: (u32, u32)) -> Option<mypaper_ui::Gl
         .filter(|_| mypaper_ui::glass::available())
         .map(|m| mypaper_ui::Glass {
             body: Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32),
-            radius: tokens.radius * scale,
+            radius: (tokens.radius * scale).round(),
             material: mypaper_ui::GlassMaterial {
                 clarity: m.clarity,
                 blur: m.blur * scale,

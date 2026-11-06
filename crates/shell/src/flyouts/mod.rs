@@ -1177,7 +1177,7 @@ impl Flyouts {
                     .filter(|_| mypaper_ui::glass::available())
                     .map(|material| Glass {
                         body,
-                        radius: self.look.radius * open.scale * body.width() / full.width(),
+                        radius: (self.look.radius * open.scale).round() * body.width() / full.width(),
                         material: mypaper_ui::GlassMaterial {
                             blur: material.blur * open.scale,
                             ..material
