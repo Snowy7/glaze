@@ -59,6 +59,9 @@ pub fn visible(_widget: &str, setting: &Setting, values: &Map<String, Value>) ->
 /// Remove empty/default instructions from labels; string controls show them as placeholders.
 pub fn presentation(setting: &Setting) -> Setting {
     let mut value = serde_json::to_value(setting).expect("setting schema");
+    if matches!(setting, Setting::Select { .. }) && FACE_KEYS.contains(&setting.key()) {
+        value["label"] = Value::String("Face".into());
+    }
     if let Some(label) = value["label"]
         .as_str()
         .and_then(|s| s.split_once(" (").map(|(label, _)| label.to_owned()))

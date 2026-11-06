@@ -8,10 +8,12 @@ use std::sync::Arc;
 
 /// Keep only a page's small previews; large libraries must not grow the panel's footprint.
 pub fn remember(app: &App, key: String, image: &Arc<Image>) {
-    if image.pixels.len() > 4 << 20 { return; }
+    if image.pixels.len() > 2 << 20 {
+        return;
+    }
     let mut cache = app.panel.as_ref().unwrap().specimens.borrow_mut();
     let bytes: usize = cache.values().map(|image| image.pixels.len()).sum();
-    if cache.len() >= 80 || bytes + image.pixels.len() > 4 << 20 {
+    if cache.len() >= 48 || bytes + image.pixels.len() > 2 << 20 {
         cache.clear();
     }
     cache.insert(key, image.clone());
@@ -72,6 +74,168 @@ pub fn backdrop(app: &App, b: &mut B, r: Rect) {
     b.fill(r, b.px(8.0), b.p.fill);
     if let Some(image) = wallpaper(app) {
         crate::stage::image_round(b, r, &image, 1.0, b.px(8.0));
+    }
+}
+
+/// The selected still rendered with the same four transforms as the wallpaper host.
+pub fn fit_tiles(
+    app: &App,
+    b: &mut B,
+    c: &mut crate::ui::Col,
+    current: &str,
+    edit: crate::actions::Edit,
+    image: Option<Arc<Image>>,
+) {
+    use super::controls::height;
+    use mypaper_ui::{
+        Op, Role,
+        controls::{Behavior, key},
+    };
+    text(
+        b,
+        Rect::new(c.x, c.y, c.w, height(b, 24.0)),
+        "Fit",
+        13.0,
+        400,
+        b.p.ink1,
+        Align::Start,
+    );
+    c.y += height(b, 28.0);
+    let columns = if c.w < b.px(340.0) || b.t.text_scale > 1.0 {
+        2
+    } else {
+        4
+    };
+    let gap = b.px(8.0);
+    let width = (c.w - (columns - 1) as f32 * gap) / columns as f32;
+    let display = app.display().map_or((1920, 1080), |display| {
+        (
+            display.rect.width.max(1) as u32,
+            display.rect.height.max(1) as u32,
+        )
+    });
+    let picture_height = (width - b.px(12.0)) * display.1 as f32 / display.0 as f32;
+    let row_height = picture_height + height(b, 29.0) + b.px(12.0);
+    let top = c.y;
+    let values = [
+        ("cover", "Fill"),
+        ("contain", "Fit"),
+        ("stretch", "Stretch"),
+        ("center", "Center"),
+    ];
+    b.group(key(("panel-fit", edit.path.as_ref())), |b| {
+        for (i, (value, label)) in values.into_iter().enumerate() {
+            let rect = Rect::new(
+                c.x + (i % columns) as f32 * (width + gap),
+                top + (i / columns) as f32 * (row_height + gap),
+                width,
+                row_height,
+            );
+            let k = key(("panel-fit", edit.path.as_ref(), i));
+            let on = current == value;
+            b.plate(k, rect, b.px(7.0), on);
+            let screen = Rect::new(
+                rect.left + b.px(6.0),
+                rect.top + b.px(6.0),
+                width - b.px(12.0),
+                picture_height,
+            );
+            b.fill(screen, b.px(3.0), hex(0x111114));
+            if let Some(image) = &image {
+                let native = app
+                    .images
+                    .borrow()
+                    .source_size(image)
+                    .unwrap_or((image.width, image.height));
+                let (target, source) =
+                    fit_geometry(screen, (image.width, image.height), native, display, i);
+                b.list.ops.push(Op::RoundedImage {
+                    rect: target,
+                    image: image.clone(),
+                    opacity: 1.0,
+                    source,
+                    radius: b.px(2.0),
+                });
+            } else {
+                b.icon(screen, crate::theme::glyph::PHOTO, 18.0, b.p.ink3);
+            }
+            b.stroke(screen, b.px(3.0), b.px(1.0), b.p.edge);
+            text(
+                b,
+                Rect::new(rect.left, screen.bottom + b.px(2.0), width, height(b, 29.0)),
+                label,
+                12.0,
+                if on { 600 } else { 400 },
+                b.p.ink1,
+                Align::Center,
+            );
+            if on {
+                b.stroke(rect, b.px(7.0), b.px(1.5), b.p.ink1);
+            }
+            b.hit_checked(
+                k,
+                rect,
+                Role::RadioButton,
+                &format!("Fit: {label}"),
+                Some(on),
+                crate::actions::Action::Set(edit.clone(), serde_json::json!(value)),
+                Behavior::Click,
+            );
+            b.focus_ring(k, rect, b.px(7.0));
+        }
+    });
+    c.y += 4usize.div_ceil(columns) as f32 * (row_height + gap);
+}
+
+fn fit_geometry(
+    screen: Rect,
+    decoded: (u32, u32),
+    native: (u32, u32),
+    display: (u32, u32),
+    fit: usize,
+) -> (Rect, Option<Rect>) {
+    let (iw, ih) = (decoded.0.max(1) as f32, decoded.1.max(1) as f32);
+    let centered = |width, height| {
+        Rect::new(
+            screen.left + (screen.width() - width) / 2.0,
+            screen.top + (screen.height() - height) / 2.0,
+            width,
+            height,
+        )
+    };
+    match fit {
+        0 => {
+            let scale = (screen.width() / iw).max(screen.height() / ih);
+            let (width, height) = (screen.width() / scale, screen.height() / scale);
+            (
+                screen,
+                Some(Rect::new(
+                    (iw - width) / 2.0,
+                    (ih - height) / 2.0,
+                    width,
+                    height,
+                )),
+            )
+        }
+        1 => {
+            let scale = (screen.width() / iw).min(screen.height() / ih);
+            (centered(iw * scale, ih * scale), None)
+        }
+        3 => {
+            let (nw, nh) = (native.0.max(1) as f32, native.1.max(1) as f32);
+            let (dw, dh) = (display.0.max(1) as f32, display.1.max(1) as f32);
+            let (width, height) = (nw.min(dw), nh.min(dh));
+            (
+                centered(screen.width() * width / dw, screen.height() * height / dh),
+                Some(Rect::new(
+                    (nw - width) / nw * iw / 2.0,
+                    (nh - height) / nh * ih / 2.0,
+                    width / nw * iw,
+                    height / nh * ih,
+                )),
+            )
+        }
+        _ => (screen, None),
     }
 }
 
@@ -192,7 +356,7 @@ pub fn style_theme(app: &App, style: Style) -> mypaper_ui::Theme {
     )
 }
 
-/// Pick a bright, detailed crop so glass can be judged even on a quiet wallpaper.
+/// Pick a bright, quiet crop so the material, rather than the wallpaper, leads.
 fn material_backdrop(app: &App, size: (u32, u32)) -> Arc<Image> {
     material_backdrop_from(app, size, wallpaper(app))
 }
@@ -241,7 +405,7 @@ fn material_backdrop_from(app: &App, size: (u32, u32), source: Option<Arc<Image>
                     }
                 }
                 let mean = sum / 144.0;
-                let score = (squares / 144.0 - mean * mean) * 4.0 + mean * 0.04;
+                let score = mean - (squares / 144.0 - mean * mean) * 0.8;
                 if score > best.0 {
                     best = (score, x, y);
                 }
@@ -379,20 +543,10 @@ impl MaterialSample {
     }
 }
 
-/// A software lens uses the same defaults as the kit. Its backdrop stays registered through
-/// the plate; Liquid bends the crop at its rim, the other styles only frost or tint it.
+/// A software lens uses the kit's own defaults. Saved material controls have a separate
+/// editor; choice pictures stay comparable even after the current style has been tuned.
 pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
-    let current: Style = app
-        .get(DocId::Config, "/look/style")
-        .and_then(|value| serde_json::from_value(value.clone()).ok())
-        .unwrap_or_default();
-    material_sample(
-        app,
-        b,
-        r,
-        MaterialSample::look(app, style, current == style),
-        None,
-    );
+    material_sample(app, b, r, MaterialSample::defaults(app, style), None);
 }
 
 pub fn material_sample(
@@ -439,19 +593,22 @@ pub fn material_sample(
             (sample.blur * scale * 0.35).round() as usize,
         );
         let mut pixels = background.pixels.clone();
-        let radius = (sample.radius * scale)
-            .min(height as f32 * 0.36)
-            .min(width as f32 * 0.39);
         let tint = sample.tint;
         for y in 0..height {
             for x in 0..width {
-                let (dx, dy) = (
-                    x as f32 - width as f32 / 2.0,
-                    y as f32 - height as f32 / 2.0,
-                );
+                let widget = y < height * 3 / 4;
+                let (cx, cy, hw, hh) = if widget {
+                    (0.40, 0.39, 0.32, 0.29)
+                } else {
+                    (0.50, 0.85, 0.42, 0.09)
+                };
+                let radius = (sample.radius * scale)
+                    .min(height as f32 * hh)
+                    .min(width as f32 * hw);
+                let (dx, dy) = (x as f32 - width as f32 * cx, y as f32 - height as f32 * cy);
                 let (qx, qy) = (
-                    dx.abs() - (width as f32 * 0.39 - radius),
-                    dy.abs() - (height as f32 * 0.36 - radius),
+                    dx.abs() - (width as f32 * hw - radius),
+                    dy.abs() - (height as f32 * hh - radius),
                 );
                 let distance = qx.max(0.0).hypot(qy.max(0.0)) + qx.max(qy).min(0.0) - radius;
                 let at = (y * width + x) * 4;
@@ -505,21 +662,72 @@ pub fn material_sample(
         radius: b.px(7.0),
     });
     let surface = Rect::new(
-        r.left + r.width() * 0.1,
-        r.top + r.height() * 0.26,
-        r.width() * 0.8,
-        r.height() * 0.5,
+        r.left + r.width() * 0.08,
+        r.top + r.height() * 0.1,
+        r.width() * 0.64,
+        r.height() * 0.58,
     );
-    let ink = theme.color.label;
-    text(
-        b,
-        surface,
-        "10:42",
-        (r.width() / b.s * 0.10).clamp(10.0, 36.0),
-        if style == Style::Mono { 400 } else { 600 },
-        ink,
-        Align::Center,
+    if let Some(widget) = app.registry.get("weather") {
+        let instance = mypaper_widgets::layout::Instance {
+            instance: "style-weather".into(),
+            widget: "weather".into(),
+            monitor: String::new(),
+            cell: [0, 0],
+            size: [3, 2],
+            settings: Default::default(),
+            appearance: mypaper_theme::Appearance {
+                surface: Some(mypaper_theme::Surface::None),
+                text: Some(if desktop_dark(app) {
+                    mypaper_theme::TextTone::Light
+                } else {
+                    mypaper_theme::TextTone::Dark
+                }),
+                ..Default::default()
+            },
+        };
+        super::editors::widgets::face(app, b, &instance, &widget.manifest, "", "", surface);
+    }
+    let dock = Rect::new(
+        r.left + r.width() * 0.08,
+        r.top + r.height() * 0.76,
+        r.width() * 0.84,
+        r.height() * 0.18,
     );
+    let pins = app
+        .get(DocId::Bars, "/dock/pinned")
+        .and_then(serde_json::Value::as_array);
+    let icons: Vec<_> = pins
+        .into_iter()
+        .flatten()
+        .filter_map(|pin| super::icons::image(app, pin.get("path")?.as_str()?))
+        .take(5)
+        .collect();
+    let icon = dock.height() * 0.72;
+    let gap = icon * 0.35;
+    let count = icons.len().max(3);
+    let left = dock.left + (dock.width() - count as f32 * (icon + gap) + gap) / 2.0;
+    for i in 0..count {
+        let slot = Rect::new(
+            left + i as f32 * (icon + gap),
+            dock.top + (dock.height() - icon) / 2.0,
+            icon,
+            icon,
+        );
+        if let Some(image) = icons.get(i) {
+            crate::stage::image_round(b, slot, image, 1.0, icon * 0.18);
+        } else {
+            b.icon(
+                slot,
+                [
+                    crate::theme::glyph::FOLDER,
+                    crate::theme::glyph::SEARCH,
+                    crate::theme::glyph::SETTINGS,
+                ][i % 3],
+                icon / b.s,
+                theme.color.label,
+            );
+        }
+    }
 }
 
 pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
@@ -777,18 +985,31 @@ pub fn bars(
     raw: &serde_json::Value,
     only: Option<crate::actions::Bar>,
 ) {
-    // Lay out at desktop width before reducing: narrow layouts overlap Islands' pills.
-    let width = 1280;
+    // A bar strip, rather than a whole monitor: modules and the silhouette remain readable.
+    let width = 400;
     let height = match only {
-        Some(crate::actions::Bar::Top) => 180,
-        Some(crate::actions::Bar::Dock) => 240,
-        None => 540,
+        Some(crate::actions::Bar::Top) => 100,
+        Some(crate::actions::Bar::Dock) => 140,
+        None => 250,
     };
     let mut specimen = raw.clone();
     if only != Some(crate::actions::Bar::Top) {
         specimen["dock"]["enabled"] = serde_json::json!(true);
     }
-    bars_at(app, b, rect, &specimen, only, (width, height));
+    let background = material_backdrop(
+        app,
+        (
+            rect.width().ceil().max(1.0) as u32,
+            rect.height().ceil().max(1.0) as u32,
+        ),
+    );
+    crate::stage::image_round(b, rect, &background, 1.0, b.px(6.0));
+    bars_at(app, b, rect, &specimen, only, (width, height), true);
+}
+
+/// A compact desktop for starter cards, with enough room for the actual bar thickness.
+pub fn starter_bars(app: &App, b: &mut B, rect: Rect, raw: &serde_json::Value) {
+    bars_at(app, b, rect, raw, None, (560, 315), false);
 }
 
 pub fn desktop_bars(app: &App, b: &mut B, rect: Rect, raw: &serde_json::Value) {
@@ -802,7 +1023,7 @@ pub fn desktop_bars(app: &App, b: &mut B, rect: Rect, raw: &serde_json::Value) {
             )
         })
         .unwrap_or((1280, 720));
-    bars_at(app, b, rect, raw, None, size);
+    bars_at(app, b, rect, raw, None, size, false);
 }
 
 fn bars_at(
@@ -812,6 +1033,7 @@ fn bars_at(
     raw: &serde_json::Value,
     only: Option<crate::actions::Bar>,
     size: (u32, u32),
+    strip: bool,
 ) {
     use mypaper_shell::preview::bars as shell;
     use mypaper_ui::{DisplayList, Op};
@@ -828,7 +1050,7 @@ fn bars_at(
         })
         .collect();
     let cache_key = format!(
-        "bars:{raw}:{only:?}:{size:?}:{icon_stamp:?}:{:.0}x{:.0}:{}",
+        "bars:{raw}:{only:?}:{size:?}:{strip}:{icon_stamp:?}:{:.0}x{:.0}:{}",
         rect.width(),
         rect.height(),
         desktop_dark(app)
@@ -844,6 +1066,35 @@ fn bars_at(
     let image = cached.or_else(|| {
         let mut config = mypaper_bars::BarsConfig::parse(&raw.to_string()).ok()?;
         config.resolve(shell::default_pins);
+        let compact = size.0 <= 560;
+        if compact {
+            // Keep the design's native geometry with a small, plausible set of modules.
+            // A monitor's entire status area cannot fit in a 200-DIP choice card.
+            use mypaper_bars::config::{Module, ModuleRef};
+            config.top.left.retain(|module| {
+                matches!(
+                    module,
+                    ModuleRef::Builtin(Module::Start | Module::App) | ModuleRef::Break
+                )
+            });
+            config.top.right.retain(|module| {
+                matches!(
+                    module,
+                    ModuleRef::Builtin(Module::Volume | Module::Quick | Module::Power)
+                        | ModuleRef::Break
+                )
+            });
+            config.top.clock.format = Some("HH:mm".into());
+            config
+                .dock
+                .left
+                .retain(|module| matches!(module, ModuleRef::Builtin(Module::Start)));
+            config.dock.right.retain(|module| {
+                matches!(module, ModuleRef::Builtin(Module::Clock | Module::Volume))
+            });
+            config.dock.clock.format = Some("HH:mm".into());
+            config.dock.titles = false;
+        }
         let mut ui = super::measure::raster_ui(app)?;
         ui.text.clear_cache();
         let mut images = shell::Images::default();
@@ -867,7 +1118,14 @@ fn bars_at(
         // Keep desktop proportions without allocating a monitor-sized software bitmap.
         let raster_width = rect.width().round().max(1.0) as u32;
         let scale = raster_width as f32 / size.0.max(1) as f32;
-        let raster = (raster_width, (size.1 as f32 * scale).ceil().max(1.0) as u32);
+        let raster = (
+            raster_width,
+            if strip {
+                rect.height().ceil().max(1.0) as u32
+            } else {
+                (size.1 as f32 * scale).ceil().max(1.0) as u32
+            },
+        );
         let mut list = DisplayList::default();
         let mut append = |mut frame: shell::Frame, x: f32, y: f32, tokens: &shell::Tokens| {
             real_pinned_icons(app, &mut frame);
@@ -895,7 +1153,16 @@ fn bars_at(
                 &mut images,
                 None,
             );
-            append(frame, 0.0, 0.0, &tokens);
+            let y = if strip {
+                if only.is_some() {
+                    (raster.1 as f32 - frame.size.1 as f32) / 2.0
+                } else {
+                    raster.1 as f32 * if config.dock.enabled { 0.12 } else { 0.4 }
+                }
+            } else {
+                0.0
+            };
+            append(frame, 0.0, y, &tokens);
         }
         if only != Some(crate::actions::Bar::Top) && config.dock.enabled {
             let tokens = shell::Tokens::resolve(&config.dock.look, &config.appearance, &system);
@@ -905,7 +1172,7 @@ fn bars_at(
                 .clone()
                 .unwrap_or_default()
                 .into_iter()
-                .take(8)
+                .take(if compact { 4 } else { 8 })
                 .map(|pin| mypaper_bars::apps::Item {
                     key: mypaper_bars::apps::pin_key(&pin.path),
                     name: pin
@@ -934,8 +1201,12 @@ fn bars_at(
                 None,
             );
             let x = (raster.0 as f32 - frame.size.0 as f32) / 2.0;
-            let y = if only.is_some() {
+            let y = if only.is_some() || strip && !config.top.enabled {
                 (raster.1 as f32 - frame.size.1 as f32) / 2.0
+            } else if strip {
+                (raster.1 as f32 * 0.62)
+                    .min(raster.1 as f32 - frame.size.1 as f32 - 6.0 * scale)
+                    .max(0.0)
             } else {
                 raster.1 as f32 - frame.size.1 as f32 - 16.0 * scale
             };
@@ -1018,6 +1289,34 @@ fn real_pinned_icons(app: &App, frame: &mut mypaper_shell::preview::bars::Frame)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wallpaper_fits_preserve_the_still_and_center_uses_native_pixels() {
+        let screen = Rect::new(0.0, 0.0, 160.0, 90.0);
+        let decoded = (100, 100);
+        let native = (800, 800);
+        let display = (1600, 900);
+        let (target, crop) = fit_geometry(screen, decoded, native, display, 0);
+        assert_eq!(target, screen);
+        assert_eq!(crop, Some(Rect::new(0.0, 21.875, 100.0, 56.25)));
+        assert_eq!(
+            fit_geometry(screen, decoded, native, display, 1),
+            (Rect::new(35.0, 0.0, 90.0, 90.0), None)
+        );
+        assert_eq!(
+            fit_geometry(screen, decoded, native, display, 2),
+            (screen, None)
+        );
+        assert_eq!(
+            fit_geometry(screen, decoded, native, display, 3),
+            (
+                Rect::new(40.0, 5.0, 80.0, 80.0),
+                Some(Rect::new(0.0, 0.0, 100.0, 100.0))
+            )
+        );
+        let (_, crop) = fit_geometry(screen, decoded, (3200, 1800), display, 3);
+        assert_eq!(crop, Some(Rect::new(25.0, 25.0, 50.0, 50.0)));
+    }
 
     #[test]
     fn blur_keeps_clamped_edges_and_the_original_alpha() {

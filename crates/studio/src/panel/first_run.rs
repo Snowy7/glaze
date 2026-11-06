@@ -223,6 +223,95 @@ pub fn run(app: &mut App, action: Action) {
         .applied = true;
 }
 
+fn contents(index: usize, taskbar: usize) -> String {
+    let (_, _, widgets) = crate::pages::first_run::panel_starter(index).unwrap();
+    let style = ["Liquid", "Fluent", "One UI", "Mono"][index];
+    if taskbar == 2 {
+        return format!("Wallpaper · {style}");
+    }
+    let bars = if taskbar == 1 {
+        "Windows"
+    } else {
+        ["Dock + top", "Taskbar", "Islands", "Top bar"][index]
+    };
+    let count = widgets.len();
+    format!(
+        "{bars} · {count} {} · {style}",
+        if count == 1 { "widget" } else { "widgets" }
+    )
+}
+
+/// Tile-sized shell drawings: a visible bar band and the starter's own complete widgets.
+fn starter_preview(app: &App, b: &mut B, index: usize, rect: Rect, taskbar: usize) {
+    use serde_json::json;
+    let Some((wallpaper, preset, widgets)) = crate::pages::first_run::panel_starter(index) else {
+        return;
+    };
+    let style = [
+        mypaper_config::look::Style::Liquid,
+        mypaper_config::look::Style::Fluent,
+        mypaper_config::look::Style::Oneui,
+        mypaper_config::look::Style::Mono,
+    ][index];
+    b.fill(rect, b.px(6.0), b.p.well);
+    if let Some(image) = app
+        .library
+        .items
+        .iter()
+        .find(|item| item.id == wallpaper)
+        .and_then(|wallpaper| wallpaper.preview.as_ref().or(wallpaper.video.as_ref()))
+        .and_then(|path| {
+            app.images.borrow_mut().get(
+                path,
+                (rect.width().ceil() as u32, rect.height().ceil() as u32),
+            )
+        })
+    {
+        crate::stage::image_round(b, rect, &image, 1.0, b.px(6.0));
+    }
+    if taskbar == 2 {
+        return;
+    }
+    let mut raw = if taskbar == 1 {
+        json!({"version":1,"preset":"windows11"})
+    } else {
+        json!({"version":1,"preset":preset,"look":{"style":style}})
+    };
+    if taskbar == 0 && matches!(preset, "macos" | "islands") {
+        raw["dock"] = json!({"enabled":true});
+    }
+    raw["dock"]["pinned"] = app
+        .get(crate::docs::DocId::Bars, "/dock/pinned")
+        .cloned()
+        .unwrap_or(json!([]));
+    super::specimens::starter_bars(app, b, rect, &raw);
+    let width = rect.width() * 0.43;
+    for (i, (id, size)) in widgets.iter().take(2).enumerate() {
+        let Some(widget) = app.registry.get(id) else {
+            continue;
+        };
+        let mut instance = mypaper_widgets::layout::Instance {
+            instance: format!("starter-{index}-{i}"),
+            widget: (*id).into(),
+            monitor: String::new(),
+            cell: [0, 0],
+            size: *size,
+            settings: Default::default(),
+            appearance: Default::default(),
+        };
+        instance.appearance =
+            serde_json::from_value(super::widget_look::appearance(app, &instance, style))
+                .unwrap_or_default();
+        let r = Rect::new(
+            rect.left + rect.width() * (0.05 + i as f32 * 0.47),
+            rect.top + rect.height() * 0.23,
+            width,
+            rect.height() * 0.47,
+        );
+        super::editors::widgets::face(app, b, &instance, &widget.manifest, "", "", r);
+    }
+}
+
 pub fn view(app: &App, b: &mut B, c: &mut Col) {
     begin(app);
     let (step, starter, taskbar) = match app.overlay {
@@ -234,12 +323,12 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         _ => (0, 0, 0),
     };
     match step {
-        0 => {
+        1 => {
             title(
                 b,
                 c,
                 "Make this desktop yours",
-                "1 of 3 · A starting point you can change",
+                "2 of 3 · A starting point you can change",
             );
             group(b, c, "Starter", |b, c| {
                 let starters = crate::pages::first_run::panel_starters();
@@ -248,9 +337,18 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                     .enumerate()
                     .map(|(i, (name, _))| (*name, starter == i, Action::FirstRunPick(i)))
                     .collect();
-                super::choosers::tiles(app, b, c, key("panel-starters"), &choices, |b, i, r| {
-                    super::editors::starter_preview(app, b, i, r)
-                });
+                let details: Vec<_> = (0..starters.len())
+                    .map(|index| contents(index, taskbar))
+                    .collect();
+                super::choosers::tiles(
+                    app,
+                    b,
+                    c,
+                    key("panel-starters"),
+                    &choices,
+                    &details,
+                    |b, i, r| starter_preview(app, b, i, r, taskbar),
+                );
                 notice(
                     b,
                     c,
@@ -260,12 +358,12 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                 );
             });
         }
-        1 => {
+        0 => {
             title(
                 b,
                 c,
                 "Your taskbar",
-                "2 of 3 · Choose what stays on the desktop",
+                "1 of 3 · Choose what stays on the desktop",
             );
             group(b, c, "", |b, c| {
                 for (i, (label, caption)) in [
@@ -331,4 +429,66 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         c.y += b.px(36.0);
         notice(b, c, "Put the Windows desktop back, from anywhere.");
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::docs::DocId;
+
+    #[test]
+    fn taskbar_precedes_starters_and_every_pick_respects_that_choice() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State {
+            page: super::super::Page::FirstRun,
+            ..Default::default()
+        });
+        app.size = (480, 800);
+        run(&mut app, Action::FirstRunPick(0));
+        let frame = crate::panel::build(&app, &mut ui.text);
+        assert!(
+            frame
+                .targets
+                .iter()
+                .any(|target| target.action == Action::FirstRunTaskbar(0))
+        );
+        assert!(
+            !frame
+                .targets
+                .iter()
+                .any(|target| matches!(target.action, Action::FirstRunPick(_)))
+        );
+        run(&mut app, Action::FirstRunTaskbar(1));
+        run(&mut app, Action::FirstRunNext);
+        let frame = crate::panel::build(&app, &mut ui.text);
+        assert_eq!(
+            frame
+                .targets
+                .iter()
+                .filter(|target| matches!(target.action, Action::FirstRunPick(_)))
+                .count(),
+            4
+        );
+        for starter in 0..4 {
+            run(&mut app, Action::FirstRunPick(starter));
+            assert_eq!(
+                app.get(DocId::Bars, "/taskbar/mode"),
+                Some(&serde_json::json!("keep"))
+            );
+            for bar in ["top", "dock"] {
+                assert_eq!(
+                    app.get(DocId::Bars, &format!("/{bar}/enabled")),
+                    Some(&serde_json::json!(false))
+                );
+            }
+        }
+        run(&mut app, Action::FirstRunTaskbar(2));
+        run(&mut app, Action::FirstRunPick(2));
+        assert_eq!(
+            app.get(DocId::Widgets, "/instances"),
+            Some(&serde_json::json!([]))
+        );
+        assert_eq!(contents(2, 2), "Wallpaper · One UI");
+    }
 }

@@ -34,9 +34,11 @@ fn fixture(ui: &Ui, dark: bool, page: Page) -> App {
 }
 
 fn shot(app: &mut App, ui: &mut Ui, name: &str, hovered: Option<Action>, dark: bool) {
-    let out = std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r9");
+    let out = std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r10");
     let built = crate::panel::build(app, &mut ui.text);
-    app.size.1 = (built.scrolls.last().unwrap().content + 48.0).ceil() as u32;
+    let scroll = built.scrolls.last().unwrap();
+    app.size.1 =
+        (scroll.content + app.size.1 as f32 - scroll.viewport.height() + 8.0).ceil() as u32;
     let built = crate::panel::build(app, &mut ui.text);
     if let Some(action) = hovered {
         let target = built
@@ -64,7 +66,7 @@ fn viewport_shot(app: &App, ui: &mut Ui, name: &str, dark: bool) {
     let image = render(ui, &built.list, app.size.0, app.size.1).unwrap();
     golden::write(
         &image,
-        &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r9").join(format!(
+        &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r10").join(format!(
             "{name}-{}.png",
             if dark { "dark" } else { "light" }
         )),
@@ -261,7 +263,7 @@ fn render_chooser_review() {
         for index in 0..crate::pages::first_run::panel_starters().len() {
             let mut starter = fixture(&ui, dark, Page::FirstRun);
             starter.overlay = Some(crate::app::Overlay::FirstRun {
-                step: 0,
+                step: 1,
                 starter: 0,
                 taskbar: 0,
             });
@@ -283,10 +285,129 @@ fn render_chooser_review() {
         let image = render(&mut ui, &built.list, 360, 620).unwrap();
         golden::write(
             &image,
-            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r9").join(format!(
-                "color-360-{}.png",
-                if dark { "dark" } else { "light" }
-            )),
+            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r10").join(
+                format!("color-360-{}.png", if dark { "dark" } else { "light" }),
+            ),
+        )
+        .unwrap();
+    }
+}
+
+#[test]
+fn render_gallery_countdown_fits_and_taskbar_choices() {
+    let mut ui = Ui::new().unwrap();
+    for dark in [true, false] {
+        let mut gallery = fixture(&ui, dark, Page::AddWidget);
+        gallery.panel.as_mut().unwrap().category = Some("widget:Time".into());
+        gallery.run(Action::Panel(crate::panel::Command::PickWidget(
+            "clock".into(),
+        )));
+        gallery.size = (480, 800);
+        viewport_shot(&gallery, &mut ui, "gallery-selected", dark);
+        let mut countdown = fixture(&ui, dark, Page::Widget);
+        countdown.run(Action::AddWidget("countdown".into()));
+        countdown.nav.widget = crate::pages::widgets::layout(&countdown)
+            .instances
+            .iter()
+            .find(|instance| instance.widget == "countdown")
+            .map(|instance| instance.instance.clone());
+        shot(&mut countdown, &mut ui, "countdown-faces", None, dark);
+        for taskbar in 0..3 {
+            let mut first = fixture(&ui, dark, Page::FirstRun);
+            first.overlay = Some(crate::app::Overlay::FirstRun {
+                step: 1,
+                starter: 0,
+                taskbar,
+            });
+            first.panel.as_mut().unwrap().page = Page::FirstRun;
+            shot(
+                &mut first,
+                &mut ui,
+                &format!("starters-taskbar-{taskbar}"),
+                None,
+                dark,
+            );
+            if taskbar == 0 {
+                first.overlay = Some(crate::app::Overlay::FirstRun {
+                    step: 0,
+                    starter: 0,
+                    taskbar,
+                });
+                shot(&mut first, &mut ui, "first-run-taskbar-first", None, dark);
+            }
+        }
+        for page in [Page::Look, Page::FirstRun, Page::AddWidget] {
+            let mut narrow = fixture(&ui, dark, page);
+            narrow.size = (360, 800);
+            narrow.theme.ty.text_scale = 1.5;
+            if page == Page::FirstRun {
+                narrow.overlay = Some(crate::app::Overlay::FirstRun {
+                    step: 1,
+                    starter: 0,
+                    taskbar: 0,
+                });
+                narrow.panel.as_mut().unwrap().page = Page::FirstRun;
+            }
+            shot(
+                &mut narrow,
+                &mut ui,
+                &format!("{page:?}-360-large"),
+                None,
+                dark,
+            );
+        }
+        let app = fixture(&ui, dark, Page::Wallpaper);
+        let p = crate::panel::palette_for(&app);
+        let mut b =
+            mypaper_ui::controls::Builder::new(&mut ui.text, &p, &app.theme.ty, 1.0, &app.input);
+        b.fill(Rect::new(0.0, 0.0, 480.0, 330.0), 0.0, p.chrome);
+        let mut c = crate::ui::Col {
+            x: 16.0,
+            y: 16.0,
+            w: 448.0,
+            view: key("fit-review"),
+        };
+        if let Some(image) = crate::panel::specimens::wallpaper(&app) {
+            crate::panel::specimens::fit_tiles(
+                &app,
+                &mut b,
+                &mut c,
+                "cover",
+                Edit::new(DocId::Config, "/wallpaper/fit", "Fit"),
+                Some(image),
+            );
+        }
+        c.y += 12.0;
+        let image = std::sync::Arc::new(mypaper_ui::Image {
+            width: 120,
+            height: 180,
+            pixels: (0..120 * 180)
+                .flat_map(|index| {
+                    let (x, y) = (index % 120, index / 120);
+                    [
+                        if x < 60 { 190 } else { 65 },
+                        (90 + y / 2) as u8,
+                        if y < 90 { 210 } else { 80 },
+                        255,
+                    ]
+                })
+                .collect(),
+        });
+        crate::panel::specimens::fit_tiles(
+            &app,
+            &mut b,
+            &mut c,
+            "contain",
+            Edit::new(DocId::Config, "/portrait/fit", "Fit"),
+            Some(image),
+        );
+        let list = b.list;
+        let image = render(&mut ui, &list, 480, c.y.ceil() as u32 + 16).unwrap();
+        golden::write(
+            &image,
+            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r10").join(
+                format!("fit-stills-{}.png", if dark { "dark" } else { "light" }),
+            ),
         )
         .unwrap();
     }

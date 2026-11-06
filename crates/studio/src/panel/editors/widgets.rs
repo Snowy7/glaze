@@ -7,6 +7,22 @@ use serde_json::{Map, Value, json};
 use super::*;
 use crate::pages::widgets as legacy;
 
+fn control_group(setting: &Setting) -> &str {
+    if matches!(setting, Setting::Select { .. })
+        && matches!(
+            setting.key(),
+            "variant" | "face" | "style" | "layout" | "look" | "shape" | "display" | "frame"
+        )
+    {
+        "Face"
+    } else {
+        match legacy::group_of(setting) {
+            Some("Look") => "Face",
+            group => group.unwrap_or("Options"),
+        }
+    }
+}
+
 pub fn widget(app: &App, b: &mut B, c: &mut Col) {
     let layout = legacy::layout(app);
     let Some(instance) = app.nav.widget.as_deref().and_then(|id| layout.get(id)) else {
@@ -50,7 +66,7 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
         !matches!(s, Setting::Font { .. })
             && crate::panel::options::visible(&instance.widget, s, &resolved)
     }) {
-        let group = legacy::group_of(setting).unwrap_or("Options");
+        let group = control_group(setting);
         if !groups.contains(&group) {
             groups.push(group);
         }
@@ -60,24 +76,33 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
             .settings
             .iter()
             .filter(|setting| {
-                legacy::group_of(setting).unwrap_or("Options") == heading
+                control_group(setting) == heading
                     && !matches!(setting, Setting::Font { .. })
                     && crate::panel::options::visible(&instance.widget, setting, &resolved)
             })
-            .all(|setting| matches!(setting, Setting::Select { label, .. } if label == heading));
-        group(b, c, if repeated_heading { "" } else { heading }, |b, c| {
-            if instance.widget == "photo" && heading == "Photos" {
-                photos(app, b, c, instance, &resolved, &base);
-                return;
-            }
-            for setting in manifest.settings.iter().filter(|s| {
-                legacy::group_of(s).unwrap_or("Options") == heading
-                    && !matches!(s, Setting::Font { .. })
-                    && crate::panel::options::visible(&instance.widget, s, &resolved)
-            }) {
-                manifest_control(app, b, c, &base, &resolved, setting, instance, manifest);
-            }
-        });
+            .all(|setting| matches!(crate::panel::options::presentation(setting), Setting::Select { label, .. } if label == heading));
+        group(
+            b,
+            c,
+            if repeated_heading || heading == "Face" {
+                ""
+            } else {
+                heading
+            },
+            |b, c| {
+                if instance.widget == "photo" && heading == "Photos" {
+                    photos(app, b, c, instance, &resolved, &base);
+                    return;
+                }
+                for setting in manifest.settings.iter().filter(|s| {
+                    control_group(s) == heading
+                        && !matches!(s, Setting::Font { .. })
+                        && crate::panel::options::visible(&instance.widget, s, &resolved)
+                }) {
+                    manifest_control(app, b, c, &base, &resolved, setting, instance, manifest);
+                }
+            },
+        );
     }
     group(b, c, "Size", |b, c| {
         size_controls(b, c, instance);
@@ -769,7 +794,7 @@ fn number_unit(name: &str, schema: &Value) -> String {
 use crate::panel::controls::unit as number_readout;
 
 /// Face tiles use the actual shell view with an isolated sample model; no services or writes.
-pub(super) fn face(
+pub(crate) fn face(
     app: &App,
     b: &mut B,
     instance: &Instance,
@@ -853,15 +878,7 @@ pub(super) fn face(
         .get("variant")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let (width, height) = if app.panel.as_ref().unwrap().page == Page::AddWidget {
-        // The kit lays out a gallery face in the tile's proportions, keeping its content in view.
-        (
-            360,
-            (360.0 * pic.height() / pic.width().max(1.0))
-                .round()
-                .max(1.0) as u32,
-        )
-    } else if standalone {
+    let (width, height) = if standalone {
         (
             360,
             (360 * instance.size[1] / instance.size[0].max(1)).clamp(80, 360),
@@ -872,7 +889,7 @@ pub(super) fn face(
             ("clock", "analog") => (240, 220),
             ("clock", "world") => (320, 220),
             ("media-pill", _) => (360, 90),
-            ("countdown", _) => (360, 120),
+            ("countdown", _) => (360, 180),
             ("now-playing", "strip") => (360, 112),
             ("notes" | "calendar" | "photo", _) => (280, 240),
             _ => (360, 220),
@@ -896,6 +913,7 @@ pub(super) fn face(
     let cached = state.specimens.borrow().get(&cache_key).cloned();
     // Construct the isolated runtime only on a bitmap miss; cached gallery rows own pixels.
     let image = cached.or_else(|| {
+    if !crate::panel::choosers::claim_raster(app) { return None; }
     let placed = mypaper_widgets::layout::Placed {
         instance: "panel-face-preview".into(),
         widget: instance.widget.clone(),
@@ -955,11 +973,7 @@ pub(super) fn face(
             && let Some(image) = crate::panel::specimens::frosted_wallpaper(
                 app,
                 resolved_appearance.blur.unwrap_or(12.0),
-                if app.panel.as_ref().unwrap().page == crate::panel::Page::AddWidget {
-                    pic.width().ceil().max(1.0) as u32
-                } else {
-                    app.size.0.clamp(384, 1024)
-                },
+                pic.width().ceil().max(1.0) as u32,
             )
         {
             list.ops.insert(
@@ -997,7 +1011,7 @@ pub(super) fn face(
             list.ops = crate::stage::offset(&list.ops, -pad, -pad).collect();
             (width - 2 * pad as u32, height - 2 * pad as u32)
         } else { (width, height) };
-        let scale = (pic.width() / width as f32).max(pic.height() / height as f32);
+        let scale = (pic.width() / width as f32).min(pic.height() / height as f32);
         let thumb_width = (width as f32 * scale).ceil().max(1.0) as u32;
         let thumb_height = (height as f32 * scale).ceil().max(1.0) as u32;
         crate::panel::measure::scale_picture(&mut list.ops, scale);
@@ -1009,8 +1023,18 @@ pub(super) fn face(
         Some(image)
     });
     if let Some(image) = image {
-        // A face is a picture crop, never a small card floating inside an empty tile.
-        crate::stage::image_round(b, pic, &image, 1.0, b.px(7.0));
+        // Fit the entire face. Cropping made short tiles turn every media face into a strip
+        // and cut Countdown's number and date off at opposite edges.
+        let scale = (pic.width() / image.width as f32).min(pic.height() / image.height as f32);
+        let width = image.width as f32 * scale;
+        let height = image.height as f32 * scale;
+        let target = Rect::new(
+            pic.left + (pic.width() - width) / 2.0,
+            pic.top + (pic.height() - height) / 2.0,
+            width,
+            height,
+        );
+        crate::stage::image_round(b, target, &image, 1.0, b.px(7.0));
     } else {
         unavailable_face(app, b, manifest, pic);
     }
@@ -1294,6 +1318,45 @@ mod gallery_tests {
     use super::*;
 
     #[test]
+    fn gallery_enter_and_double_click_each_create_one_selected_widget() {
+        for double_click in [false, true] {
+            let mut ui = mypaper_ui::Ui::new().unwrap();
+            let mut app = crate::goldens::app(true, &ui);
+            app.panel = Some(crate::panel::State {
+                page: Page::AddWidget,
+                category: Some("widget:Time".into()),
+                ..Default::default()
+            });
+            app.size = (480, 800);
+            let before = legacy::layout(&app).instances.len();
+            let built = crate::panel::build(&app, &mut ui.text);
+            let target = built
+                .targets
+                .iter()
+                .find(|target| {
+                    matches!(&target.action,
+                Action::Panel(Command::PickWidget(id)) if id == "clock")
+                })
+                .unwrap();
+            let key = target.key;
+            let at = target.visible.unwrap().center();
+            app.frame.targets = built.targets;
+            crate::panel::run(&mut app, Command::PickWidget("clock".into()));
+            app.input.focus = Some(key);
+            if double_click {
+                app.event(mypaper_ui::Event::DoubleClick(
+                    mypaper_ui::Pointer { at, screen: (0, 0) },
+                    mypaper_ui::Button::Left,
+                ));
+            } else {
+                assert!(on_key(&mut app, 0x0D, false, false, false));
+            }
+            assert_eq!(legacy::layout(&app).instances.len(), before + 1);
+            assert_eq!(app.panel.as_ref().unwrap().page, Page::Widget);
+        }
+    }
+
+    #[test]
     fn development_catalog_entries_are_hidden_until_developer_mode_is_enabled() {
         for (id, name) in [
             ("hello", "Hello"),
@@ -1323,7 +1386,12 @@ mod gallery_tests {
 }
 
 pub fn add(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "Add a widget", "Choose one, then Add to your desktop");
+    title(
+        b,
+        c,
+        "Add a widget",
+        "Choose one \u{00b7} Enter or double-click to add",
+    );
     field(
         app,
         b,
@@ -1340,7 +1408,14 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
     for (id, installed) in &app.registry.widgets {
         let manifest = &installed.manifest;
         let section = if BUILTINS.contains(&id.as_str()) {
-            (0, "Built in".to_owned())
+            (
+                0,
+                manifest
+                    .category
+                    .as_deref()
+                    .unwrap_or("Built in")
+                    .to_owned(),
+            )
         } else if let Some((plugin, _)) = id.split_once("--") {
             let name = app
                 .plugins
@@ -1375,12 +1450,61 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
     if sections.is_empty() {
         notice(b, c, "No widgets match this search.");
     }
+    let category = app
+        .panel
+        .as_ref()
+        .unwrap()
+        .category
+        .as_deref()
+        .and_then(|category| category.strip_prefix("widget:"))
+        .filter(|category| sections.keys().any(|(_, heading)| heading == category));
+    let total: usize = sections.values().map(Vec::len).sum();
+    let categories: Vec<_> = std::iter::once(("All", total, None))
+        .chain(
+            sections
+                .iter()
+                .map(|((_, name), widgets)| (name.as_str(), widgets.len(), Some(name.as_str()))),
+        )
+        .collect();
+    let font = crate::panel::controls::font(b, 11.0, 500);
+    let mut x = c.x;
+    let h = height(b, 29.0);
+    for (label, count, value) in categories {
+        let label = format!("{label} ({count})");
+        let width = (b.measure(&label, &font).0 + b.px(18.0)).min(c.w);
+        if x > c.x && x + width > c.right() {
+            x = c.x;
+            c.y += h + b.px(6.0);
+        }
+        let rect = Rect::new(x, c.y, width, h);
+        let k = key(("widget-category", value));
+        let on = category == value;
+        b.plate(k, rect, b.px(6.0), on);
+        text(b, rect, &label, 11.0, 500, b.p.ink1, Align::Center);
+        b.hit_checked(
+            k,
+            rect,
+            mypaper_ui::Role::RadioButton,
+            &label,
+            Some(on),
+            Action::Panel(Command::Category(
+                value.map(|value| format!("widget:{value}")),
+            )),
+            mypaper_ui::controls::Behavior::Click,
+        );
+        b.focus_ring(k, rect, b.px(6.0));
+        x += width + b.px(6.0);
+    }
+    c.y += h + b.px(8.0);
     for ((_, heading), widgets) in sections {
+        if category.is_some_and(|category| category != heading) {
+            continue;
+        }
         group(b, c, &heading, |b, c| {
             let gap = b.px(10.0);
             let width = (c.w - gap) / 2.0;
-            let picture_height = width * 0.67;
-            let caption_height = height(b, 66.0);
+            let picture_height = width * 0.49;
+            let caption_height = height(b, 48.0);
             let row_height = picture_height + caption_height + b.px(12.0);
             b.group(key(("widget-gallery", heading.as_str())), |b| {
                 for (i, (id, manifest)) in widgets.iter().enumerate() {
@@ -1468,7 +1592,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     );
                     let mut font = b.font(mypaper_ui::controls::Font::Caption);
                     font.size = b.px(11.0) * b.t.text_scale;
-                    let lines = b.text.lines(&detail, &font, width - b.px(8.0), 2);
+                    let lines = b.text.lines(&detail, &font, width - b.px(8.0), 1);
                     for (line, value) in lines.iter().enumerate() {
                         b.text_in(
                             Rect::new(
@@ -1486,6 +1610,17 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                             Align::Start,
                         );
                     }
+                    if on {
+                        b.stroke(rect.inflate(b.px(2.0)), b.px(9.0), b.px(2.0), b.p.ink1);
+                        let check = Rect::new(
+                            rect.right - b.px(25.0),
+                            rect.top + b.px(5.0),
+                            b.px(20.0),
+                            b.px(20.0),
+                        );
+                        b.fill(check, b.px(10.0), b.p.ink1);
+                        b.icon(check, glyph::CHECK, 12.0, b.p.chrome);
+                    }
                     b.focus_ring(k, rect, b.px(10.0));
                 }
             });
@@ -1497,4 +1632,70 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         c,
         "New widgets land in the first free space. You can move them on the desktop.",
     );
+}
+
+/// Creation shortcuts stay local to Add a widget; ordinary face picks still apply once.
+pub(crate) fn on_key(app: &mut App, vk: u16, ctrl: bool, shift: bool, alt: bool) -> bool {
+    if vk != 0x0D
+        || ctrl
+        || shift
+        || alt
+        || !app
+            .panel
+            .as_ref()
+            .is_some_and(|panel| panel.page == Page::AddWidget)
+        || app.overlay.is_some()
+        || app
+            .field
+            .as_ref()
+            .is_some_and(|field| field.id != FieldId::WidgetSearch)
+    {
+        return false;
+    }
+    if let Some(Action::Panel(Command::PickWidget(id))) = app
+        .input
+        .focus
+        .and_then(|key| app.frame.targets.iter().find(|target| target.key == key))
+        .map(|target| target.action.clone())
+    {
+        crate::panel::run(app, Command::PickWidget(id));
+    }
+    if app.panel.as_ref().unwrap().add_widget.is_none() {
+        return false;
+    }
+    crate::panel::run(app, Command::AddWidget);
+    true
+}
+
+pub(crate) fn event(app: &mut App, event: &mypaper_ui::Event) -> bool {
+    if !app
+        .panel
+        .as_ref()
+        .is_some_and(|panel| panel.page == Page::AddWidget)
+    {
+        return false;
+    }
+    let mypaper_ui::Event::DoubleClick(pointer, mypaper_ui::Button::Left) = event else {
+        return false;
+    };
+    let id = app
+        .frame
+        .targets
+        .iter()
+        .rev()
+        .find(|target| {
+            target
+                .visible
+                .is_some_and(|visible| visible.contains(pointer.at))
+        })
+        .and_then(|target| match &target.action {
+            Action::Panel(Command::PickWidget(id)) => Some(id.clone()),
+            _ => None,
+        });
+    let Some(id) = id else {
+        return false;
+    };
+    crate::panel::run(app, Command::PickWidget(id));
+    crate::panel::run(app, Command::AddWidget);
+    true
 }

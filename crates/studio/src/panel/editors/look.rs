@@ -321,9 +321,7 @@ fn wallpaper_scope(app: &App, b: &mut B, c: &mut Col) {
             b.px(164.0),
             &choices,
             |b, index, rect| {
-                let shown = index
-                    .filter(|index| Some(STYLES[*index].0) != selected)
-                    .map(|index| target::with_style(app, &theme, STYLES[index].0));
+                let shown = index.map(|index| target::with_style(app, &theme, STYLES[index].0));
                 specimens::material_sample(
                     app,
                     b,
@@ -442,22 +440,8 @@ fn wallpaper_scope(app: &App, b: &mut B, c: &mut Col) {
     }
 }
 
-pub fn windows(app: &App, b: &mut B, c: &mut Col) {
-    let reset = Rect::new(c.right() - b.px(28.0), c.y, b.px(28.0), b.px(28.0));
-    crate::panel::controls::icon_button(
-        b,
-        reset,
-        glyph::RESET,
-        "Reset to how Windows has it",
-        true,
-        Action::WindowsLook(0),
-    );
-    title(b, c, "Windows", "Your Windows look");
-    let layer = app
-        .get(DocId::Config, "/look/windows")
-        .cloned()
-        .unwrap_or(json!({}));
-    let looks = [
+fn windows_looks() -> [(&'static str, Value); 4] {
+    [
         (
             "As is",
             json!({"accent":null,"border":null,"caption":null,"caption_text":null,"corners":null,"backdrop":null,"apps":"as-is","cursors":null}),
@@ -474,7 +458,35 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
             "Sharp",
             json!({"accent":"auto","border":"auto","corners":"square","backdrop":"none","apps":"match"}),
         ),
-    ];
+    ]
+}
+
+pub fn windows_summary(app: &App) -> &'static str {
+    let layer = app
+        .get(DocId::Config, "/look/windows")
+        .cloned()
+        .unwrap_or(json!({}));
+    windows_looks()
+        .into_iter()
+        .find(|(_, preset)| windows_matches(&layer, preset))
+        .map_or("Custom", |(name, _)| name)
+}
+pub fn windows(app: &App, b: &mut B, c: &mut Col) {
+    let reset = Rect::new(c.right() - b.px(28.0), c.y, b.px(28.0), b.px(28.0));
+    crate::panel::controls::icon_button(
+        b,
+        reset,
+        glyph::RESET,
+        "Reset to how Windows has it",
+        true,
+        Action::WindowsLook(0),
+    );
+    title(b, c, "Windows", "Your Windows look");
+    let layer = app
+        .get(DocId::Config, "/look/windows")
+        .cloned()
+        .unwrap_or(json!({}));
+    let looks = windows_looks();
     let selected = looks
         .iter()
         .position(|(_, preset)| windows_matches(&layer, preset));
