@@ -81,6 +81,8 @@ pub struct Style {
     /// Depth: the broad soft shade inside the glass under its lit edge, `0..=1`, 0.5 the kit's;
     /// `None` follows the material's highlight.
     pub depth: Option<f32>,
+    /// Independent bottom inner shadow, `0..=1`; zero (the default) is off.
+    pub inner_shadow: f32,
 }
 
 impl Default for Style {
@@ -91,6 +93,7 @@ impl Default for Style {
             smoothing: 0.0,
             sheen: None,
             depth: None,
+            inner_shadow: 0.0,
         }
     }
 }
@@ -120,6 +123,7 @@ impl Style {
             smoothing,
             sheen: set(sheen),
             depth: set(depth),
+            inner_shadow: 0.0,
         }
     }
 
@@ -128,6 +132,7 @@ impl Style {
         within(self.brightness, 2.0)
             && within(self.saturation, 3.0)
             && within(self.smoothing, 1.0)
+            && within(self.inner_shadow, 1.0)
             && [self.sheen, self.depth]
                 .into_iter()
                 .all(|v| v.is_none_or(|v| within(v, 1.0)))
@@ -218,6 +223,13 @@ struct Styles {
     words: [AtomicU32; MAX_PLATES * STYLE_WORDS],
 }
 
+/// Additive sidecar: the v1 style mapping keeps its size/stride for old readers and writers.
+#[repr(C)]
+struct InnerShadows {
+    sequence: AtomicU64,
+    words: [AtomicU32; MAX_PLATES],
+}
+
 struct Handle(HANDLE);
 impl Drop for Handle {
     fn drop(&mut self) {
@@ -267,12 +279,14 @@ impl Drop for Section {
 struct Mapping {
     plates: Section,
     styles: Section,
+    inner_shadows: Section,
     wake: Handle,
 }
 impl Mapping {
     fn open(name: &str) -> Result<Self> {
         let plates = Section::open::<Shared>(name)?;
         let styles = Section::open::<Styles>(&format!("{name}.style"))?;
+        let inner_shadows = Section::open::<InnerShadows>(&format!("{name}.inner-shadow"))?;
         // SAFETY: a named auto-reset event, owned until drop.
         let wake = Handle(unsafe {
             CreateEventW(None, false, false, &HSTRING::from(format!("{name}.wake")))?
@@ -280,6 +294,7 @@ impl Mapping {
         Ok(Self {
             plates,
             styles,
+            inner_shadows,
             wake,
         })
     }
@@ -290,6 +305,10 @@ impl Mapping {
     fn styles(&self) -> &Styles {
         // SAFETY: the section holds a correctly aligned Styles for our whole lifetime.
         unsafe { &*self.styles.view.Value.cast::<Styles>() }
+    }
+    fn inner_shadows(&self) -> &InnerShadows {
+        // SAFETY: the section holds a correctly aligned InnerShadows for our whole lifetime.
+        unsafe { &*self.inner_shadows.view.Value.cast::<InnerShadows>() }
     }
 }
 
@@ -388,6 +407,11 @@ impl Writer {
         }
         let stamp = if styles.is_empty() { 0 } else { sequence };
         style.sequence.store(stamp, Ordering::Relaxed);
+        let inner = self.mapping.inner_shadows();
+        for (word, s) in inner.words.iter().zip(styles) {
+            word.store(s.inner_shadow.to_bits(), Ordering::Relaxed);
+        }
+        inner.sequence.store(stamp, Ordering::Relaxed);
         shared.sequence.store(sequence, Ordering::Release);
         // SAFETY: valid event; auto-reset coalesces bursts without losing the latest snapshot.
         unsafe {
@@ -468,7 +492,7 @@ impl Reader {
                 })
                 .collect();
             let style = self.mapping.styles();
-            let styles: Vec<_> = if style.sequence.load(Ordering::Relaxed) == sequence {
+            let mut styles: Vec<_> = if style.sequence.load(Ordering::Relaxed) == sequence {
                 style
                     .words
                     .as_chunks::<STYLE_WORDS>()
@@ -482,6 +506,12 @@ impl Reader {
             } else {
                 vec![Style::default(); count]
             };
+            let inner = self.mapping.inner_shadows();
+            if inner.sequence.load(Ordering::Relaxed) == sequence {
+                for (s, word) in styles.iter_mut().zip(&inner.words) {
+                    s.inner_shadow = f32::from_bits(word.load(Ordering::Relaxed));
+                }
+            }
             fence(Ordering::Acquire);
             if sequence != shared.sequence.load(Ordering::Acquire) {
                 continue;
@@ -616,12 +646,33 @@ mod tests {
             smoothing: 0.6,
             sheen: Some(0.3),
             depth: None,
+            inner_shadow: 0.8,
         };
         writer
             .publish_styled(&plates, &[styled, Style::default()])
             .unwrap();
         let snapshot = reader.read_changed().unwrap().unwrap();
         assert_eq!(snapshot.styles, [styled, Style::default()]);
+        assert_eq!(
+            size_of::<Styles>(),
+            1928,
+            "v1's five-word stride never changes"
+        );
+        // A pre-extension writer touches only the original section. An unmatched shadow
+        // stamp defaults only the new field, retaining all of its existing style controls.
+        let sequence = writer.publish_styled(&plates, &[styled; 2]).unwrap();
+        writer
+            .mapping
+            .inner_shadows()
+            .sequence
+            .store(sequence - 2, Ordering::Relaxed);
+        assert_eq!(
+            reader.read_changed().unwrap().unwrap().styles,
+            [Style {
+                inner_shadow: 0.0,
+                ..styled
+            }; 2]
+        );
         // A plain publish (or a writer that predates styles) leaves the old stamp: defaults.
         writer.publish(&plates).unwrap();
         let snapshot = reader.read_changed().unwrap().unwrap();
@@ -631,7 +682,32 @@ mod tests {
             ..styled
         };
         assert!(writer.publish_styled(&plates, &[bad, styled]).is_err());
-        assert!(writer.publish_styled(&plates, &[styled]).is_err(), "one per plate");
+        assert!(
+            writer
+                .publish_styled(
+                    &plates,
+                    &[Style {
+                        inner_shadow: f32::NAN,
+                        ..styled
+                    }; 2]
+                )
+                .is_err()
+        );
+        assert!(
+            writer
+                .publish_styled(
+                    &plates,
+                    &[Style {
+                        inner_shadow: 1.01,
+                        ..styled
+                    }; 2]
+                )
+                .is_err()
+        );
+        assert!(
+            writer.publish_styled(&plates, &[styled]).is_err(),
+            "one per plate"
+        );
     }
 
     #[test]
