@@ -430,8 +430,13 @@ pub fn open(path: &str) -> Result<()> {
 
 pub fn terminal(path: &str) -> Result<()> {
     use std::os::windows::process::CommandExt;
+    // GUI launchers do not always inherit WindowsApps in PATH. Resolve its installed alias.
+    let executable = std::env::var_os("LOCALAPPDATA")
+        .map(|root| std::path::PathBuf::from(root).join("Microsoft/WindowsApps/wt.exe"))
+        .filter(|path| path.is_file())
+        .unwrap_or_else(|| "wt.exe".into());
     // Pass the directory as a distinct argument; no shell command is constructed from a path.
-    std::process::Command::new("wt.exe")
+    std::process::Command::new(executable)
         .args(["-d", path])
         .creation_flags(0x08000000)
         .spawn()?;
