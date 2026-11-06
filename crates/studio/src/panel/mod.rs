@@ -206,6 +206,7 @@ pub fn run(app: &mut App, command: Command) {
     let keep_focus = matches!(
         &command,
         Command::PickWidget(_)
+            | Command::PickColor(_)
             | Command::PickModule(_)
             | Command::SortRow(_, _)
             | Command::SortHandle(_, _)
