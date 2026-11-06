@@ -98,7 +98,7 @@ try {
  $result=@{fixture_pid=$fixture.Id;config_unchanged=((Get-FileHash -LiteralPath $realConfig -Algorithm SHA256).Hash -eq $beforeHash);foreground_before=$foreground;foreground_after=$foregroundAfter;foreground_owner_before=$foregroundOwner;foreground_owner_after=(Foreground-Owner);synthetic_input=$false;observations=$observations}
  $result | ConvertTo-Json -Depth 18 | Set-Content -LiteralPath (Join-Path $evidence 'verification.json') -Encoding UTF8
  if(-not $result.config_unchanged){throw 'User config hash changed during verification'}
- $result | Select-Object fixture_pid,config_unchanged,foreground_before,foreground_after | Format-List
+ [pscustomobject]$result | Select-Object fixture_pid,config_unchanged,foreground_before,foreground_after | Format-List
 } finally {
  if($fixture -and -not $fixture.HasExited) {
   [IO.File]::WriteAllText((Join-Path $configRoot 'stop'),'stop')

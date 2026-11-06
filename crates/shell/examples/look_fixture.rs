@@ -59,18 +59,34 @@ fn run(root: PathBuf) -> Result<()> {
         monitor.work.y + 70,
     );
     // An opaque fixture-owned backdrop keeps transparent text screenshots free of other apps.
-    let mut backdrop = Surface::new(Kind::Popup { activate: false }, "mypaper Look fixture backdrop", Role::Pane)?;
+    let mut backdrop = Surface::new(
+        Kind::Popup { activate: false },
+        "mypaper Look fixture backdrop",
+        Role::Pane,
+    )?;
     let mut background = DisplayList::default();
     for row in 0..16 {
         for col in 0..13 {
             background.ops.push(mypaper_ui::Op::Fill {
                 rect: Rect::new(col as f32 * 50.0, row as f32 * 50.0, 50.0, 50.0),
                 radius: 0.0,
-                color: mypaper_ui::Rgba::rgb8(if (col + row) % 2 == 0 { [105, 135, 165] } else { [150, 175, 195] }, 1.0),
+                color: mypaper_ui::Rgba::rgb8(
+                    if (col + row) % 2 == 0 {
+                        [105, 135, 165]
+                    } else {
+                        [150, 175, 195]
+                    },
+                    1.0,
+                ),
             });
         }
     }
-    backdrop.present(&mut ui, (origin.0 - 10, origin.1 - 10), (650, 800), background)?;
+    backdrop.present(
+        &mut ui,
+        (origin.0 - 10, origin.1 - 10),
+        (650, 800),
+        background,
+    )?;
     backdrop.show();
     let mut windows = (0..5)
         .map(|i| {
@@ -314,13 +330,14 @@ fn draw(
         &system,
         &ui.text,
     );
-    let mut panel = flyouts::Look::resolve_with(
+    let panel = flyouts::Look::resolve_settings(
         &bar_look,
         &a,
         &system,
         &mypaper_shell::glass::knobs(user, Family::Menus),
+        user,
+        &ui.text,
     );
-    panel.apply_settings(user, &ui.text);
     let tokens = panel.menu_tokens();
     let entries = vec![
         Entry::action("Settings", ()).with_icon(mypaper_ui::MenuIcon::Glyph('\u{E713}')),

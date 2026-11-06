@@ -43,6 +43,9 @@ function runtime(p, context = '') {
   if (['/paused','/pause_on_battery','/pause_on_fullscreen'].includes(p)) return ref('crates/wallpaper/src/control.rs', 'Action::UpdateHold =>');
   if (p === '/static_snapshot') return ref('crates/wallpaper/src/engine.rs', 'pub fn set_static_snapshot(');
   if (p === '/classic_context_menu') return ref('crates/core/src/desktop_extras.rs', 'extras.apply_classic(');
+  if (p === '/experimental/file_index') return ref('crates/core/src/main.rs', 'if config.experimental.file_index &&');
+  if (p === '/experimental/app_styler') return ref('crates/core/src/main.rs', 'if config.experimental.app_styler &&');
+  if (p === '/experimental/files_default') return ref('crates/core/src/desktop_extras.rs', 'apply_folder_routing(config.experimental.files_default)') + '; ' + ref('crates/shell/src/flyouts/mod.rs', 'mypaper_config::Config::load().is_ok_and(|c| c.experimental.files_default)');
   if (p.startsWith('/desktop_menu')) return refs.menu() + '; ' + ref('crates/shell/src/desktop_menu/items.rs', 'pub fn build(');
   if (p === '/taskbar/mode' || p === '/taskbar/alignment') return ref('crates/shell/src/bars/mod.rs', 'fn apply_taskbar(');
   if (p === '/performance' || p.startsWith('/animation/')) return refs.motion() + '; ' + refs.bars();
@@ -95,7 +98,7 @@ const out = [
   '| Document | Path | Baseline | Runtime consumer |', '|---|---|---|---|',
 ];
 for (const m of settingsPaths) {
-  const p = m[1], doc = p === '/appearance' ? 'studio.json' : p === '/overlay' ? 'widgets.json' : /^(\/(look|engine|desktop_menu)\/|\/(static_snapshot|pause_on_battery|pause_on_fullscreen|classic_context_menu)$)/.test(p) ? 'config.json' : 'bars.json';
+  const p = m[1], doc = p === '/appearance' ? 'studio.json' : p === '/overlay' ? 'widgets.json' : /^(\/(look|engine|experimental|desktop_menu)\/|\/(static_snapshot|pause_on_battery|pause_on_fullscreen|classic_context_menu)$)/.test(p) ? 'config.json' : 'bars.json';
   out.push(`| ${doc} | \`${p}\` | ${dead.has(p) ? '**DEAD**' : partial.has(p) ? '**PARTIAL**' : 'Live'} | ${runtime(p, 'settings')} |`);
 }
 out.push('', '## Custom controls and virtual paths', '', '| Source | Literal/template | Consumer or disposition |', '|---|---|---|');

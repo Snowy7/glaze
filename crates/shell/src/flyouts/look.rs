@@ -93,8 +93,7 @@ impl Look {
         );
         let system = accent::read();
         crate::look::settings::bar(&desktop, crate::glass::Family::Menus, &bars, "top", &mut bar_look, &mut appearance, &system, text);
-        let mut look = Self::resolve_with(&bar_look, &appearance, &system, &knobs);
-        look.apply_settings(&desktop, text);
+        let mut look = Self::resolve_settings(&bar_look, &appearance, &system, &knobs, &desktop, text);
         let performance = bars.performance.active(mypaper_desktop::on_battery());
         look.opening = crate::bars::motion::resolve(
             &bars.top.animation,
@@ -181,6 +180,7 @@ impl Look {
         self.font = crate::look::settings::font(&self.font, |f| text.has_family(f)).into();
         self.resolved.font.family = self.font.clone();
         if let Some(set) = crate::look::settings::icons(desktop, text) {
+            if let mypaper_ui::icons::IconSet::Font(family) = &set { self.icons = family.clone(); }
             self.resolved.icons = set;
         }
         if let Some(edge) = desktop.shape.edge {
@@ -190,6 +190,16 @@ impl Look {
             self.resolved = self.resolved.clone().with_surface_radius(self.radius);
             self.menu_radius = Some(self.radius);
         }
+    }
+
+    /// Runtime tokens, preserving literal family names (including Segoe's installed cuts).
+    pub fn resolve_settings(bar: &BarLook, appearance: &Appearance, system: &System, knobs: &Knobs, desktop: &mypaper_config::Look, text: &Text) -> Self {
+        let mut look = Self::resolve_with(bar, appearance, system, knobs);
+        if let Some(name) = bar.font.family.as_deref().or(appearance.font.as_deref()) {
+            look.font = crate::look::settings::font(name, |f| text.has_family(f)).into();
+        }
+        look.apply_settings(desktop, text);
+        look
     }
 
     /// The look of `bar` over `appearance`, as the bars resolve theirs (bars/look.rs).

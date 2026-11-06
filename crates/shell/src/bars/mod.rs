@@ -1978,13 +1978,14 @@ impl Bars {
                     let mut popup_appearance = appearance.clone();
                     crate::look::settings::bar(&desktop, glass::Family::Menus, &config, bar_key, &mut popup_look, &mut popup_appearance, &self.system, &ui.text);
                     let knobs = crate::glass::knobs(&desktop, crate::glass::Family::Menus);
-                    let mut popup_look = crate::flyouts::look::Look::resolve_with(
+                    let popup_look = crate::flyouts::look::Look::resolve_settings(
                         &popup_look,
                         &popup_appearance,
                         &self.system,
                         &knobs,
+                        &desktop,
+                        &ui.text,
                     );
-                    popup_look.apply_settings(&desktop, &ui.text);
                     let mut popup = popup_look.menu_tokens();
                     if performance {
                         popup.glass = None;

@@ -4,7 +4,8 @@
 //! Everything is drawn with [`kit::Frame`] from the bar's [`Theme`](mypaper_ui::Theme)
 //! (`look.rs`): the body is the kit's surface (an invisible hit fill over engine glass, or the
 //! style's own fill), items are washes, the kit's icons and the theme's type, and hover, press
-//! and keyboard focus come from the kit's [`Interaction`]. Nothing draws an outline on glass.
+//! and keyboard focus come from the kit's [`Interaction`]. An explicit edge draws a hairline
+//! on glass too; its specular rim remains the material's own effect.
 //! Items sit on whole device pixels, so text, icons and tray bitmaps stay crisp at every DPI.
 use super::{look::Tokens, services::Model};
 use mypaper_bars::{

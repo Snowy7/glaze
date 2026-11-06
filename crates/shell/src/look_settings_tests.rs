@@ -51,13 +51,24 @@ fn corners_override_design_and_theme_but_explicit_bar_and_monitor_radii_win() {
 #[test]
 fn strip_bar_drawing_and_published_shapes_share_the_explicit_radius() {
     let mut ui = Ui::new().unwrap();
-    let mut bars = BarsConfig::parse(r#"{"top":{"layout":"strip","left":["start"],"center":[],"right":[]}}"#).unwrap();
+    let mut bars =
+        BarsConfig::parse(r#"{"top":{"layout":"strip","left":["start"],"center":[],"right":[]}}"#)
+            .unwrap();
     bars.resolve(Vec::new);
     let model = crate::preview::bars::sample_model(Default::default(), "Look");
     for radius in [0.0, 24.0] {
         let user = settings(json!({"shape":{"corners":radius}, "text":{"size":1.5}}));
         let tokens = resolve(&user, &bars, "top", &ui.text);
-        let frame = crate::preview::bars::top(1000, &bars, &model, &tokens, tokens.scale, &mut ui, &mut Default::default(), None);
+        let frame = crate::preview::bars::top(
+            1000,
+            &bars,
+            &model,
+            &tokens,
+            tokens.scale,
+            &mut ui,
+            &mut Default::default(),
+            None,
+        );
         assert!(!frame.shapes.is_empty());
         for (rect, published) in &frame.shapes {
             assert_eq!(*published, radius * tokens.scale);
@@ -105,6 +116,22 @@ fn font_family_is_installed_or_falls_back_and_explicit_bar_family_wins() {
     let user = settings(json!({"text":{"font":"__mypaper_missing_face__"}}));
     let tokens = resolve(&user, &BarsConfig::parse("{}").unwrap(), "top", &ui.text);
     assert!(ui.text.has_family(&tokens.font.family));
+    let panel = crate::flyouts::look::Look::resolve_settings(
+        &BarsConfig::parse(r#"{"top":{"look":{"font":{"family":"Segoe UI"}}}}"#)
+            .unwrap()
+            .top
+            .look,
+        &Appearance::default(),
+        &crate::flyouts::look::fixed_system(),
+        &Default::default(),
+        &user,
+        &ui.text,
+    );
+    assert_eq!(
+        panel.font.as_ref(),
+        "Segoe UI",
+        "a literal installed family survives popup resolution"
+    );
 }
 
 #[test]
@@ -165,7 +192,7 @@ fn text_tone_only_changes_bare_labels_and_auto_restores_the_wallpaper() {
 
 #[test]
 fn icons_select_lucide_or_fluent_independently_of_native_style() {
-    let ui = Ui::new().unwrap();
+    let mut ui = Ui::new().unwrap();
     for (name, vector) in [("lucide", true), ("fluent", false)] {
         let user = settings(json!({"text":{"icons":name}}));
         let tokens = resolve(
@@ -181,6 +208,23 @@ fn icons_select_lucide_or_fluent_independently_of_native_style() {
             panel.menu_tokens().icon_set == Some(IconSet::Vector),
             vector
         );
+        let items = vec![
+            mypaper_ui::Entry::action("Settings", ())
+                .with_icon(mypaper_ui::MenuIcon::Glyph('\u{E713}')),
+        ];
+        let tokens = panel.menu_tokens();
+        let layout = mypaper_ui::menu::layout(&items, &tokens, 1.0, &mut ui.text);
+        let list = mypaper_ui::menu::view(&items, &layout, None, &tokens);
+        assert_eq!(
+            list.ops.iter().any(|op| matches!(
+                op,
+                Op::Icon {
+                    icon: mypaper_ui::icons::Icon::Settings,
+                    ..
+                }
+            )),
+            vector
+        );
     }
 }
 
@@ -189,9 +233,15 @@ fn bars_family_style_beats_the_global_style_and_explicit_bar_style_beats_both() 
     let ui = Ui::new().unwrap();
     let user = settings(json!({"style":"liquid", "bars":{"style":"solid"}}));
     let bars = BarsConfig::parse("{}").unwrap();
-    assert_eq!(resolve(&user, &bars, "top", &ui.text).theme.style, mypaper_ui::Style::Solid);
+    assert_eq!(
+        resolve(&user, &bars, "top", &ui.text).theme.style,
+        mypaper_ui::Style::Solid
+    );
     let bars = BarsConfig::parse(r#"{"top":{"look":{"style":"fluent"}}}"#).unwrap();
-    assert_eq!(resolve(&user, &bars, "top", &ui.text).theme.style, mypaper_ui::Style::Fluent);
+    assert_eq!(
+        resolve(&user, &bars, "top", &ui.text).theme.style,
+        mypaper_ui::Style::Fluent
+    );
 }
 
 #[test]
@@ -200,12 +250,27 @@ fn menus_family_style_is_independent_of_bars_and_resets_to_the_global_style() {
     let bars = BarsConfig::parse(r#"{"top":{"look":{"style":"fluent"}}}"#).unwrap();
     let system = crate::flyouts::look::fixed_system();
     for (user, expected) in [
-        (settings(json!({"style":"liquid", "bars":{"style":"solid"}, "menus":{"style":"mono"}})), mypaper_ui::Style::Mono),
-        (settings(json!({"style":"liquid", "bars":{"style":"solid"}})), mypaper_ui::Style::Liquid),
+        (
+            settings(json!({"style":"liquid", "bars":{"style":"solid"}, "menus":{"style":"mono"}})),
+            mypaper_ui::Style::Mono,
+        ),
+        (
+            settings(json!({"style":"liquid", "bars":{"style":"solid"}})),
+            mypaper_ui::Style::Liquid,
+        ),
     ] {
         let mut own = bars.top.look.clone();
         let mut a = Appearance::default();
-        bar(&user, Family::Menus, &bars, "top", &mut own, &mut a, &system, &ui.text);
+        bar(
+            &user,
+            Family::Menus,
+            &bars,
+            "top",
+            &mut own,
+            &mut a,
+            &system,
+            &ui.text,
+        );
         let panel = crate::flyouts::look::Look::resolve(&own, &a, &system);
         assert_eq!(panel.style, expected);
     }

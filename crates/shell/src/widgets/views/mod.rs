@@ -4,8 +4,8 @@
 //!   a view never installs a timer or fetches anything, and the same inputs give the same list,
 //!   so an unchanged widget draws nothing (the surface compares lists).
 //! - **Glass.** The engine draws the plate and its one edge; a view fills the plate's shape
-//!   with `Rgba::HIT` (clicks land on it) and draws content only: no card under the whole
-//!   widget and no outline.
+//!   with `Rgba::HIT` (clicks land on it) and draws content, plus a hairline when explicitly
+//!   enabled. The engine's specular rim is a separate material effect.
 //! - **Kit only.** Text through [`TextRole`]s (and [`Ctx::display`] for hero numerals), colour
 //!   through [`Palette`] roles, icons through `Icon`, controls through the kit's components, and
 //!   layout through `take_*`/`place`/`Stack`.

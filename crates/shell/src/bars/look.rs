@@ -515,8 +515,7 @@ pub fn menu_tokens(text: &mypaper_ui::Text) -> mypaper_ui::Tokens {
     let system = accent::read();
     popup_font(&bars, "top", &mut look);
     crate::look::settings::bar(&desktop, crate::glass::Family::Menus, &bars, "top", &mut look, &mut appearance, &system, text);
-    let mut resolved = crate::flyouts::look::Look::resolve_with(&look, &appearance, &system, &crate::glass::knobs(&desktop, crate::glass::Family::Menus));
-    resolved.apply_settings(&desktop, text);
+    let mut resolved = crate::flyouts::look::Look::resolve_settings(&look, &appearance, &system, &crate::glass::knobs(&desktop, crate::glass::Family::Menus), &desktop, text);
     resolved.patch_colors(&colors);
     resolved.menu_tokens()
 }

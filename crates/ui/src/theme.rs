@@ -271,7 +271,8 @@ pub struct Theme {
     pub icon_weight: f32,
     /// Engine glass under surfaces, or `None` for a drawn [`Palette::surface`].
     pub glass: Option<GlassMaterial>,
-    /// The one hairline a glassless surface draws around itself (Solid), never with glass.
+    /// A surface hairline. The kit draws it on glassless bodies; hosts with an explicit edge
+    /// control can also draw it over glass, independently of the material's specular rim.
     pub border: Option<Rgba>,
 }
 
