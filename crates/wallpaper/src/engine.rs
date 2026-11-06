@@ -4,7 +4,7 @@
 //! same as the last one: covered screens are skipped, static sources draw
 //! once, animated ones are paced by their own fps cap, and the clock that
 //! drives animation stops while everything is hidden. Once every screen has
-//! been covered for [`RELEASE_AFTER`], it also lets go of what drawing holds
+//! been covered (or held for a game) for [`RELEASE_AFTER`], it also lets go of what drawing holds
 //! (swapchains, kept frames, pyramids, the source; see [`Engine::release`]).
 
 use std::path::Path;
@@ -87,10 +87,13 @@ pub struct Engine {
     renderer_config: EngineConfig,
     render_settings: RenderSettings,
     restart_due: bool,
-    /// Since when every screen has been covered (desktop mode).
+    /// Since every screen was covered or a game held the wallpaper (desktop mode).
     covered_since: Option<Instant>,
     /// The drawing is released ([`release`](Self::release)): our windows are hidden.
     released: bool,
+    /// Game hold reveals the installed theme still immediately, before the drawing is released.
+    /// Cleared only after a fresh frame is presented, so a short hold never exposes a stale frame.
+    game_still: bool,
     /// ... and so is the source, which [`resume`](Self::resume) loads again.
     source_released: bool,
     /// When the last resume began, until its first frame is presented (logged).
@@ -169,6 +172,7 @@ impl Engine {
             restart_due: false,
             covered_since: None,
             released: false,
+            game_still: false,
             source_released: false,
             resuming: None,
             game: crate::game::GameSignal::default(),
@@ -391,6 +395,21 @@ impl Engine {
         }
         self.follow_cover(now);
 
+        if self.game_still && !self.can_release() {
+            self.game_still = false;
+            for screen in &self.screens {
+                screen.window.show(true);
+            }
+            self.mark_dirty();
+        }
+        if !self.game_still && self.reasons.contains(Reason::Game) && self.can_release() {
+            for screen in &self.screens {
+                screen.window.show(false);
+            }
+            self.game_still = true;
+            log::info!("game hold: showing the theme still");
+        }
+
         self.sync_visibility();
         self.glass.reload();
         for (index, screen) in self.screens.iter_mut().enumerate() {
@@ -400,6 +419,11 @@ impl Engine {
         let active = !self.held && self.screens.iter().any(|s| !s.paused);
         if !active {
             self.last_tick = None; // the clock stops while nothing is visible
+            // The same Windows still stays visible through the ten-second release. Do not
+            // redraw hidden swapchains (or recreate drawing that has already been released).
+            if self.game_still || self.released {
+                return Flow::Wait(self.deadline(None));
+            }
             // Held, but an uncovered screen is still seen (e.g. the second
             // monitor while a game is fullscreen): give it one still frame of
             // the current wallpaper rather than whatever was there before.
@@ -453,6 +477,9 @@ impl Engine {
     fn follow_cover(&mut self, now: Instant) {
         if self.monitors.is_none() {
             return;
+        }
+        if self.released && !self.can_release() {
+            self.resume(); // Snapshot was disabled while held: keep the wallpaper visible.
         }
         let game = self.reasons.contains(Reason::Game);
         if !game && self.screens.iter().any(|s| !s.paused) {
@@ -528,7 +555,9 @@ impl Engine {
             self.shown.fill(Visibility::Live);
         }
         for screen in &mut self.screens {
-            screen.window.show(true);
+            if !self.game_still {
+                screen.window.show(true);
+            }
             screen.dirty = true;
         }
     }
@@ -554,7 +583,9 @@ impl Engine {
             self.screens
                 .iter()
                 .enumerate()
-                .any(|(i, s)| !s.paused && self.glass.animating(i))
+                .any(|(i, s)| {
+                    !self.game_still && !self.released && !s.paused && self.glass.animating(i)
+                })
                 .then(|| Instant::now() + Duration::from_millis(4)),
             self.reload_at,
             self.recheck_at,
@@ -691,6 +722,14 @@ impl Engine {
             drew = true;
         }
 
+        if drew && std::mem::take(&mut self.game_still) {
+            // Present before showing: a short hold kept the old swapchain, and a released
+            // hold just rebuilt it. Neither may flash the old contents on the way back.
+            for screen in &self.screens {
+                screen.window.show(true);
+            }
+            log::info!("game hold: fresh frame shown");
+        }
         if drew && let Some(timing) = &mut self.timing {
             timing.presented(self.frame);
         }
@@ -788,6 +827,12 @@ impl Engine {
         // screens as it would have, windows shown, and isn't released until it has one.
         if std::mem::take(&mut self.released) {
             self.source_released = false;
+            for screen in &self.screens {
+                screen.window.show(true);
+            }
+        }
+        // A new theme has no installed still yet. Draw it normally until its snapshot is ready.
+        if std::mem::take(&mut self.game_still) {
             for screen in &self.screens {
                 screen.window.show(true);
             }

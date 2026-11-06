@@ -379,10 +379,13 @@ RenderSettings}`; theme `engine` uses `RenderOptions`. See their exact fields in
 
 **During games** (`"engine": { "during_games": "pause" }`, the default; `"keep"` turns it off;
 written to the file only when kept). While core's game signal is on (docs/system.md, "Games":
-a fullscreen or Direct3D app in front), every screen holds on its current frame, and after 10 s the
-engine releases its drawing exactly as when every screen is covered (docs/performance.md, "Hidden
-= free"): the windows hide over the theme's still, and the swapchains, kept frames, pyramids and
-source go. When the signal clears it resumes. The engine follows the signal with a directory
+a fullscreen or Direct3D app in front), the engine reveals the installed theme still immediately
+on screens that remain visible. That same still stays on screen when, after 10 s, the engine
+releases its drawing exactly as when every screen is covered (docs/performance.md, "Hidden
+= free"): the swapchains, kept frames, pyramids and releasable source go. When the signal clears,
+the windows stay hidden over the still until a fresh live frame is presented, including holds
+shorter than 10 s. Without an installed snapshot (`static_snapshot` off, or an unsupported source),
+the current frame stays held and drawing is kept. The engine follows the signal with a directory
 notification and the publisher's process handle in its wait set: no timer, and nothing at all
 with `"keep"`. A game on one monitor no longer leaves the other one animating or the drawing held.
 
@@ -396,9 +399,11 @@ rain-city, 20 s sampled from 14-16 s into the "game":
 | After (`pause`: released 10 s in) | **0.000 %** | **124.7 MiB** | 90.9 |
 
 What wakes is the NVIDIA driver's two device threads (docs/performance.md, round 3). When the game
-ended, the first frame came 73.9 ms later (private 171 MiB). Not checked frame by frame: on the
-uncovered screen the release swaps the held frame for the theme's still (its first frame), so an
-animated theme visibly steps there once, without black or another wallpaper in between.
+ended, the first frame came 73.9 ms later (private 171 MiB). Those measurements preceded the
+still-at-hold change: the old path visibly swapped the held animated frame for the theme's still
+at release. The engine now reveals that still at hold start, so release cannot change the image.
+Snapshot completion wakes the engine once to re-evaluate this policy even if it is already held;
+there is no readiness timer. Live capture evidence is in `crates/wallpaper/evidence/watch-merge`.
 
 ### Shader image inputs
 

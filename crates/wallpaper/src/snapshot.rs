@@ -32,7 +32,7 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 use anyhow::{Context, Result, bail};
 use mypaper_desktop::Rect;
 use mypaper_desktop::desktop_wallpaper::{self, Apartment, SNAPSHOT_DIR, Wallpapers};
-use windows::Win32::Foundation::GENERIC_WRITE;
+use windows::Win32::Foundation::{GENERIC_WRITE, LPARAM, WPARAM};
 use windows::Win32::Graphics::Imaging::{
     CLSID_WICImagingFactory, GUID_ContainerFormatJpeg, GUID_WICPixelFormat24bppBGR,
     IWICImagingFactory, WICBitmapEncoderNoCache,
@@ -40,9 +40,10 @@ use windows::Win32::Graphics::Imaging::{
 use windows::Win32::System::Com::StructuredStorage::PROPBAG2;
 use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
 use windows::Win32::System::Threading::{
-    GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_BELOW_NORMAL,
+    GetCurrentThread, GetCurrentThreadId, SetThreadPriority, THREAD_PRIORITY_BELOW_NORMAL,
 };
 use windows::Win32::System::Variant::VARIANT;
+use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_NULL};
 use windows::core::{HSTRING, PWSTR, w};
 
 use crate::gpu::Gpu;
@@ -396,16 +397,18 @@ impl Readback {
 /// Starts the worker thread. `None` if the thread can't be started.
 fn spawn(base: PathBuf, blank: Arc<AtomicBool>) -> Option<mpsc::Sender<Job>> {
     let (sender, receiver) = mpsc::channel();
+    // SAFETY: the calling engine thread owns the message loop.
+    let thread = unsafe { GetCurrentThreadId() };
     thread::Builder::new()
         .name("snapshot".into())
-        .spawn(move || work(&base, &receiver, &blank))
+        .spawn(move || work(&base, &receiver, &blank, thread))
         .inspect_err(|e| log::warn!("no static snapshot: cannot start its thread: {e}"))
         .ok()?;
     Some(sender)
 }
 
 /// The worker: encodes, writes and sets, one job at a time. Ends when the engine is dropped.
-fn work(base: &Path, jobs: &mpsc::Receiver<Job>, blank: &AtomicBool) {
+fn work(base: &Path, jobs: &mpsc::Receiver<Job>, blank: &AtomicBool, thread: u32) {
     // SAFETY: lowers the priority of this very thread.
     let _ = unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL) };
     let _apartment = match Apartment::enter() {
@@ -432,6 +435,10 @@ fn work(base: &Path, jobs: &mpsc::Receiver<Job>, blank: &AtomicBool) {
             Ok(()) => log::debug!("snapshot job took {:.1?}", started.elapsed()),
             Err(e) => log::warn!("snapshot: {e:#}"),
         }
+        // A held engine may be asleep indefinitely. Re-evaluate the game still/release as
+        // soon as its snapshot is installed, without adding a readiness timer.
+        // SAFETY: a no-op message; a gone engine thread simply rejects it.
+        let _ = unsafe { PostThreadMessageW(thread, WM_NULL, WPARAM(0), LPARAM(0)) };
     }
 }
 
