@@ -809,7 +809,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     if app.quick_look {
         f.fill(bounds, 0.0, color.shadow.with_alpha(0.46));
         let panel = bounds.inset(Insets::xy(px(64.0), px(40.0)));
-        f.fill(panel, px(14.0), color.elevated);
+        f.fill(panel, px(14.0), color.elevated.with_alpha(1.0));
         f.list.hits.clear();
         preview_body = preview_panel(&mut f, app, panel, now, true);
     } else if let Some(hit) = app

@@ -1317,6 +1317,11 @@ impl App {
                         width: widths[index] / self.surface.scale(),
                     });
                 } else if let Some(id) = target.filter(|id| (TAB..TAB + 32).contains(id)) {
+                    // Keep the release when a tab is dragged outside this window.
+                    // SAFETY: this UI thread captures the pointer for its own live surface.
+                    unsafe {
+                        SetCapture(self.surface.hwnd());
+                    }
                     self.drag = Some(Drag::Tab {
                         index: (id - TAB) as usize,
                         start: pointer.at,
@@ -1415,6 +1420,8 @@ impl App {
                 let target = hit(self, pointer.at);
                 let drag = self.drag.take();
                 if let Some(Drag::Tab { index, start }) = drag {
+                    // SAFETY: balances this tab's pointer capture before opening another window.
+                    let _ = unsafe { ReleaseCapture() };
                     if !self
                         .geometry
                         .tabs
