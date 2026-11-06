@@ -574,32 +574,8 @@ fn choice_documents(app: &App, action: &Action) -> Option<Vec<wire::PreviewDocum
     use serde_json::json;
     let op = |doc, path: String, value| Op { doc, path, value };
     let mut ops = match action {
-        Action::SetStyle(style) => {
-            let mut ops = vec![op(DocId::Config, "/look/style".into(), style.map(|s| json!(s)))];
-            let theme = style.map(|style| {
-                let style = match style {
-                    mypaper_config::look::Style::Liquid => mypaper_ui::Style::Liquid,
-                    mypaper_config::look::Style::Oneui => mypaper_ui::Style::OneUi,
-                    mypaper_config::look::Style::Solid => mypaper_ui::Style::Solid,
-                    mypaper_config::look::Style::Fluent => mypaper_ui::Style::Fluent,
-                    mypaper_config::look::Style::Mono => mypaper_ui::Style::Mono,
-                };
-                mypaper_ui::Theme::new(style, mypaper_ui::Scheme::Dark, mypaper_ui::theme::SYSTEM_BLUE)
-            });
-            let material = theme.as_ref().and_then(|theme| mypaper_ui::theme::material(theme.style, theme.color.surface));
-            // Removing a knob reveals the wallpaper's glass; an explicit default is needed
-            // to preview a whole style over wallpapers with their own material or shape.
-            for (field, value) in [
-                ("clarity", material.map(|m| m.clarity).or_else(|| theme.as_ref().map(|t| 1.0 - t.color.surface.a))),
-                ("blur", theme.as_ref().map(|_| material.map_or(0.0, |m| m.blur))),
-                ("refraction", theme.as_ref().map(|_| material.map_or(0.0, |m| m.refraction))),
-                ("highlight", theme.as_ref().map(|_| material.map_or(0.0, |m| m.highlight))),
-            ] {
-                ops.push(op(DocId::Config, format!("/look/material/{field}"), value.map(|v| json!(v))));
-            }
-            ops.push(op(DocId::Config, "/look/shape/corners".into(), theme.map(|t| json!(t.radius.surface))));
-            ops
-        }
+        // The same ops a click saves, so the hover shows exactly what applying gives.
+        Action::SetStyle(style) => crate::pages::look::style_ops(*style),
         Action::Preset(id) => {
             let mut ops = vec![op(DocId::Bars, "/preset".into(), Some(json!(id)))];
             for bar in ["top", "dock"] {
@@ -1211,14 +1187,11 @@ mod tests {
                 let (_, raw) = before.iter().find(|(id, _)| self::document(*id) == document.document).unwrap();
                 let effective = wire::patched(raw, &document.ops).unwrap();
                 if document.document == wire::Document::Config {
+                    // Hover previews exactly what a click saves: the style, with its own
+                    // material and corners (the custom knobs removed).
                     assert_eq!(effective["look"]["style"], serde_json::json!(style));
-                    assert!(effective["look"]["shape"]["corners"].is_number());
-                    assert_eq!(effective["look"]["material"]["blur"], match style {
-                        mypaper_config::look::Style::Liquid => serde_json::json!(12.0),
-                        mypaper_config::look::Style::Oneui => serde_json::json!(24.0),
-                        mypaper_config::look::Style::Fluent => serde_json::json!(30.0),
-                        _ => serde_json::json!(0.0),
-                    });
+                    assert!(effective["look"].pointer("/shape/corners").is_none());
+                    assert!(effective["look"].pointer("/material/blur").is_none());
                 }
             }
         }
