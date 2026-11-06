@@ -31,6 +31,9 @@ pub struct Config {
     pub system: SystemConfig,
     /// Optional native services. Every experiment is off until explicitly enabled.
     pub experimental: Experimental,
+    /// File-name index rules layered over its built-in cache/build exclusions.
+    #[serde(skip_serializing_if = "IndexConfig::is_empty")]
+    pub index: IndexConfig,
     /// Wallpaper GPU preference and frame cap, with optional overrides keyed by theme folder ID.
     pub engine: EngineConfig,
     /// Theme name (looked up like `mypaper_theme::locate`) or folder path.
@@ -64,6 +67,7 @@ impl Default for Config {
         Self {
             system: SystemConfig::default(),
             experimental: Experimental::default(),
+            index: IndexConfig::default(),
             engine: EngineConfig::default(),
             theme: "aurora".into(),
             paused: false,
@@ -74,6 +78,19 @@ impl Default for Config {
             static_snapshot: true,
             look: Look::default(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct IndexConfig {
+    pub exclude: Vec<String>,
+    pub include: Vec<String>,
+}
+
+impl IndexConfig {
+    pub fn is_empty(&self) -> bool {
+        self.exclude.is_empty() && self.include.is_empty()
     }
 }
 
