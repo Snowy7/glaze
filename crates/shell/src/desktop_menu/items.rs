@@ -9,7 +9,7 @@
 
 use std::sync::Arc;
 
-use mypaper_config::desktop_menu::{Builtin, DesktopMenu, Entry as Configured, default_items};
+use mypaper_config::desktop_menu::{Builtin, DesktopMenu, Entry as Configured};
 use mypaper_desktop::desktop_view::{IconSize, NewItem, SortKey};
 use mypaper_ui::{Entry, Image, MenuIcon};
 
@@ -135,41 +135,10 @@ fn sort_label(key: SortKey) -> &'static str {
     }
 }
 
-/// One slot of the menu: a built-in, a configured custom command, or one of mypaper's items
-/// that only the default menu has.
+/// One slot of the configured menu, in the same order Studio edits it.
 enum Slot<'a> {
     Builtin(Builtin),
     Custom(&'a mypaper_config::desktop_menu::Custom),
-    AddWidget,
-    Studio,
-}
-
-/// The default menu: Windows 11's full desktop menu, then mypaper's.
-fn default_slots() -> Vec<Slot<'static>> {
-    use Builtin::*;
-    let mut slots: Vec<Slot> = [
-        View,
-        Sort,
-        Refresh,
-        Separator,
-        Paste,
-        Separator,
-        Terminal,
-        More,
-        Separator,
-        New,
-        Separator,
-        Display,
-        Personalize,
-        Separator,
-        Wallpaper,
-        Widgets,
-    ]
-    .into_iter()
-    .map(Slot::Builtin)
-    .collect();
-    slots.extend([Slot::AddWidget, Slot::Studio]);
-    slots
 }
 
 /// The menu for `config` in `state` with mypaper's built-ins only (Studio's preview).
@@ -181,18 +150,14 @@ pub fn build(config: &DesktopMenu, state: ViewState) -> Vec<Item> {
 /// default config it is Windows 11's full menu; in a configured one, `more` stands for the shell
 /// extensions and `new` lists every registered type.
 pub fn build_with(config: &DesktopMenu, state: ViewState, sources: Sources) -> Vec<Item> {
-    let slots = if config.items == default_items() {
-        default_slots()
-    } else {
-        config
+    let slots = config
             .tidy_items()
             .into_iter()
             .map(|entry| match entry {
                 Configured::Builtin(b) => Slot::Builtin(*b),
                 Configured::Custom(c) => Slot::Custom(c),
             })
-            .collect()
-    };
+            .collect::<Vec<_>>();
     let mypaper = |glyph| match sources.mypaper {
         Some(image) => MenuIcon::Image(image.clone()),
         None => MenuIcon::Glyph(glyph),
@@ -207,6 +172,12 @@ pub fn build_with(config: &DesktopMenu, state: ViewState, sources: Sources) -> V
             Slot::Builtin(b @ Builtin::Widgets) => {
                 items.push(builtin_item(b, state, sources).with_icon(mypaper(glyph::WIDGETS)))
             }
+            Slot::Builtin(b @ Builtin::AddWidget) => {
+                items.push(builtin_item(b, state, sources).with_icon(mypaper(glyph::ADD)))
+            }
+            Slot::Builtin(b @ Builtin::Studio) => {
+                items.push(builtin_item(b, state, sources).with_icon(mypaper(glyph::STUDIO)))
+            }
             Slot::Builtin(b) => items.push(builtin_item(b, state, sources)),
             Slot::Custom(c) => items.push(
                 Entry::action(
@@ -217,13 +188,6 @@ pub fn build_with(config: &DesktopMenu, state: ViewState, sources: Sources) -> V
                     },
                 )
                 .with_icon(MenuIcon::Glyph(glyph::APP)),
-            ),
-            Slot::AddWidget => items.push(
-                Entry::action("Add widget", Command::AddWidget).with_icon(mypaper(glyph::ADD)),
-            ),
-            Slot::Studio => items.push(
-                Entry::action("mypaper Studio", Command::OpenStudio)
-                    .with_icon(mypaper(glyph::STUDIO)),
             ),
         }
     }
@@ -495,6 +459,8 @@ fn builtin_item(builtin: Builtin, state: ViewState, sources: Sources) -> Item {
         .with_icon(icon(glyph::PASTE)),
         Builtin::Wallpaper => Entry::action("Change wallpaper", Command::OpenStudio),
         Builtin::Widgets => Entry::action("Edit widgets", Command::EditWidgets),
+        Builtin::AddWidget => Entry::action("Add widget", Command::AddWidget),
+        Builtin::Studio => Entry::action("mypaper Studio", Command::OpenStudio),
         Builtin::Display => {
             Entry::action("Display settings", Command::Display).with_icon(icon(glyph::DISPLAY))
         }
@@ -557,6 +523,32 @@ mod tests {
             ],
             took: Default::default(),
         }
+    }
+
+    #[test]
+    fn preview_order_is_the_editable_list_order_even_after_the_first_reorder() {
+        use mypaper_config::desktop_menu::default_items;
+        let mut config = DesktopMenu::default();
+        for _ in 0..2 {
+            let expected: Vec<_> = config.tidy_items().into_iter().filter_map(|entry| {
+                match entry {
+                    Configured::Builtin(Builtin::More) => None, // Runtime extension slot.
+                    Configured::Builtin(b) => Some(builtin_item(*b, ViewState::default(), Sources::default())),
+                    Configured::Custom(_) => unreachable!(),
+                }
+            }).collect();
+            assert_eq!(labels(&build(&config, ViewState::default())), labels(&tidy(expected)));
+            let studio = config.items.pop().unwrap();
+            config.items.insert(0, studio);
+        }
+        assert!(default_items().contains(&Configured::Builtin(Builtin::AddWidget)));
+        assert!(default_items().contains(&Configured::Builtin(Builtin::Studio)));
+    }
+
+    #[test]
+    fn existing_explicit_lists_keep_their_order_and_hidden_items() {
+        let config: DesktopMenu = serde_json::from_str(r#"{"items":["refresh","new","paste","wallpaper","widgets","display","personalize","terminal","more"]}"#).unwrap();
+        assert_eq!(labels(&build(&config, ViewState::default())), ["Refresh", "New", "Paste", "Change wallpaper", "Edit widgets", "Display settings", "Personalize", "Open in Terminal"]);
     }
 
     #[test]

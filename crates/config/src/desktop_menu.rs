@@ -36,6 +36,11 @@ pub enum Builtin {
     Wallpaper,
     /// Toggles widget edit mode.
     Widgets,
+    /// Opens Studio's Add a widget page.
+    #[serde(rename = "add-widget")]
+    AddWidget,
+    /// Opens mypaper Studio's Home page.
+    Studio,
     /// `ms-settings:display`.
     Display,
     /// `ms-settings:personalization`.
@@ -93,16 +98,20 @@ pub fn default_items() -> Vec<Entry> {
         Sort,
         Refresh,
         Separator,
-        New,
         Paste,
-        Separator,
-        Wallpaper,
-        Widgets,
-        Display,
-        Personalize,
         Separator,
         Terminal,
         More,
+        Separator,
+        New,
+        Separator,
+        Display,
+        Personalize,
+        Separator,
+        Wallpaper,
+        Widgets,
+        AddWidget,
+        Studio,
     ]
     .into_iter()
     .map(Entry::Builtin)
@@ -161,7 +170,7 @@ mod tests {
         assert!(menu.enabled);
         assert_eq!(menu.items, default_items());
         assert_eq!(menu.items.first(), Some(&Entry::Builtin(Builtin::View)));
-        assert_eq!(menu.items.last(), Some(&Entry::Builtin(Builtin::More)));
+        assert_eq!(menu.items.last(), Some(&Entry::Builtin(Builtin::Studio)));
         // Items without `enabled` (a file edited before the default changed) are on too.
         assert!(parse(r#"{ "items": ["refresh"] }"#).unwrap().enabled);
         assert!(!parse(r#"{ "enabled": false }"#).unwrap().enabled);
