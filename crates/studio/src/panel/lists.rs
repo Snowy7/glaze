@@ -283,7 +283,26 @@ fn store(app: &mut App, list: &List, items: Vec<Value>, label: &str) {
 pub fn reorder(app: &mut App, list: &List, from: usize, to: usize) {
     let mut items = values(app, list);
     if mypaper_ui::sortable::reorder(&mut items, from, to) {
+        let version = app.docs.version;
         store(app, list, items, "Reorder items");
+        if app.docs.version == version {
+            return;
+        }
+        if let List::Modules(bar, side) = list
+            && let Some(slot) = app.nav.module.as_mut()
+            && slot.bar == *bar
+            && slot.list == *side
+        {
+            slot.index = if slot.index == from {
+                to
+            } else if from < slot.index && slot.index <= to {
+                slot.index - 1
+            } else if to <= slot.index && slot.index < from {
+                slot.index + 1
+            } else {
+                slot.index
+            };
+        }
     }
 }
 
@@ -291,6 +310,21 @@ pub fn remove(app: &mut App, list: &List, index: usize) {
     let mut items = values(app, list);
     if index < items.len() {
         items.remove(index);
+        let version = app.docs.version;
         store(app, list, items, "Remove item");
+        if app.docs.version == version {
+            return;
+        }
+        if let List::Modules(bar, side) = list
+            && let Some(slot) = app.nav.module.as_mut()
+            && slot.bar == *bar
+            && slot.list == *side
+        {
+            if slot.index == index {
+                app.nav.module = None;
+            } else if slot.index > index {
+                slot.index -= 1;
+            }
+        }
     }
 }

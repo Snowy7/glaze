@@ -50,6 +50,7 @@ pub fn displays(app: &App, b: &mut B, c: &mut Col) {
 }
 
 pub fn save_banner(app: &App, b: &mut B, c: &mut Col, page: super::Page) {
+    super::saving::banner(app, b, c, page);
     use super::Page;
     use crate::docs::DocId;
     let relevant: &[DocId] = match page {

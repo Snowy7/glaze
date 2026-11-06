@@ -65,7 +65,12 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         );
     }
     if editing {
-        let status = if !app.panel.as_ref().unwrap().save_errors.borrow().is_empty() {
+        let status = if !app.panel.as_ref().unwrap().save_errors.borrow().is_empty()
+            || !app.panel.as_ref().unwrap().theme_errors.borrow().is_empty()
+            || crate::docs::DocId::ALL
+                .into_iter()
+                .any(|id| app.docs.error(id).is_some())
+        {
             "Couldn't save"
         } else if app.drag.is_some() {
             "Saving…"

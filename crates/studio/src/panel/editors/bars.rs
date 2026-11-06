@@ -141,25 +141,7 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default();
-            for (index, module) in modules.iter().enumerate() {
-                let id = module.as_str().unwrap_or("Custom module");
-                let slot = Slot { bar, list, index };
-                let pic = crate::panel::lists::row(
-                    app,
-                    b,
-                    c,
-                    &crate::panel::SortList::Modules(bar, list),
-                    index,
-                    name(id),
-                    id == "|",
-                    Some(crate::panel::icons::module(id)),
-                    Some(Action::SelectModule(Some(slot))),
-                );
-                if let Some(image) = crate::panel::icons::plugin_image(app, id) {
-                    b.fill(pic, b.px(4.0), b.p.panel);
-                    crate::stage::image_round(b, pic, &image, 1.0, b.px(4.0));
-                }
-            }
+            module_rows(app, b, c, bar, list, &modules);
             if modules.is_empty() {
                 notice(b, c, "No modules here");
             }
@@ -196,6 +178,27 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
             "Follow the design's look and motion",
             Action::ResetBar(bar),
         );
+    }
+}
+
+fn module_rows(app: &App, b: &mut B, c: &mut Col, bar: Bar, list: &'static str, modules: &[Value]) {
+    for (index, module) in modules.iter().enumerate() {
+        let id = module.as_str().unwrap_or("Custom module");
+        let pic = crate::panel::lists::row(
+            app,
+            b,
+            c,
+            &crate::panel::SortList::Modules(bar, list),
+            index,
+            name(id),
+            id == "|",
+            Some(crate::panel::icons::module(id)),
+            Some(Action::SelectModule(Some(Slot { bar, list, index }))),
+        );
+        if let Some(image) = crate::panel::icons::plugin_image(app, id) {
+            b.fill(pic, b.px(4.0), b.p.panel);
+            crate::stage::image_round(b, pic, &image, 1.0, b.px(4.0));
+        }
     }
 }
 
@@ -291,7 +294,12 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
                     label,
                     "",
                     app.get(DocId::Bars, &path)
-                        .and_then(Value::as_str)
+                        .map(|value| {
+                            value
+                                .as_str()
+                                .map_or_else(|| value.to_string(), str::to_owned)
+                        })
+                        .as_deref()
                         .unwrap_or(""),
                 );
             }
@@ -304,8 +312,15 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
                     format!("/module_args/{}", crate::docs::token(id)).into(),
                 ),
                 "Arguments",
-                "",
-                "",
+                "No arguments",
+                &crate::panel::field_initial(
+                    app,
+                    &FieldId::Text(
+                        DocId::Studio,
+                        format!("/module_args/{}", crate::docs::token(id)).into(),
+                    ),
+                )
+                .unwrap_or_default(),
             );
         });
     }
@@ -333,14 +348,7 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
         });
     }
     group(b, c, "Order", |b, c| {
-        action_button(b, c, "Move earlier", Action::MoveModule(slot.clone(), -1));
-        action_button(b, c, "Move later", Action::MoveModule(slot.clone(), 1));
-        action_button(
-            b,
-            c,
-            "Remove from this bar",
-            Action::RemoveModule(slot.clone()),
-        );
+        module_rows(app, b, c, slot.bar, slot.list, list.unwrap());
     });
 }
 
@@ -463,7 +471,9 @@ pub fn insert_module(app: &mut App) {
         "center" if bar == Bar::Top => "center",
         _ => "right",
     };
-    if let Some(id) = app.panel.as_ref().unwrap().add_module.clone() {
+    if let Some(id) = app.panel.as_ref().unwrap().add_module.clone()
+        && can_insert_module(app, &id)
+    {
         app.run(Action::InsertModule(bar, list, id));
         app.panel.as_mut().unwrap().page = if bar == Bar::Top {
             Page::Top
@@ -471,6 +481,19 @@ pub fn insert_module(app: &mut App) {
             Page::Dock
         };
     }
+}
+
+pub fn can_insert_module(app: &App, id: &str) -> bool {
+    let bar = app.nav.bar.unwrap_or(Bar::Top);
+    !id.is_empty()
+        && (id == "|"
+            || ["left", "center", "right"].into_iter().all(|side| {
+                !app.get(DocId::Bars, &format!("/{}/{side}", bar.key()))
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .any(|v| v.as_str() == Some(id))
+            }))
 }
 
 pub fn panels(b: &mut B, c: &mut Col) {

@@ -12,8 +12,10 @@ mod options;
 mod pages;
 mod peek;
 mod pickers;
+mod saving;
 mod specimens;
 pub use lists::List as SortList;
+pub use saving::{theme_failed, theme_saved};
 mod tokens;
 
 #[path = "../pick_client.rs"]
@@ -135,6 +137,7 @@ pub struct State {
     pub sort_drag: Option<lists::Drag>,
     pub fonts: std::cell::OnceCell<Vec<String>>,
     pub save_errors: std::cell::RefCell<std::collections::HashMap<crate::docs::DocId, String>>,
+    pub theme_errors: std::cell::RefCell<std::collections::HashMap<std::path::PathBuf, String>>,
     reset_version: std::cell::Cell<Option<(crate::docs::DocId, u64)>>,
     auto_left: std::cell::Cell<Option<bool>>,
 }
@@ -170,6 +173,8 @@ pub enum Command {
     PickZone(pickers::ZoneTarget, usize),
     ConnectionModule(String, crate::actions::Bar, bool),
     HideConnectionWidget(String),
+    ShowTheme(std::path::PathBuf),
+    ResetTheme(std::path::PathBuf),
 }
 
 pub fn run(app: &mut App, command: Command) {
@@ -313,6 +318,8 @@ pub fn run(app: &mut App, command: Command) {
         Command::PickZone(target, city) => pickers::choose_zone(app, &target, city),
         Command::ConnectionModule(id, bar, on) => editors::connection_module(app, &id, bar, on),
         Command::HideConnectionWidget(id) => editors::hide_connection_widget(app, &id),
+        Command::ShowTheme(dir) => crate::system::reveal(&dir.join(mypaper_theme::MANIFEST)),
+        Command::ResetTheme(dir) => saving::reset_theme(app, &dir),
         Command::PickWidget(id) => {
             let state = app.panel.as_mut().unwrap();
             state.add_widget = Some(id);
@@ -350,10 +357,13 @@ pub fn run(app: &mut App, command: Command) {
         Command::Restore => history::restore(app),
         Command::CancelRestore => app.panel.as_ref().unwrap().history.borrow_mut().selected = None,
         Command::ClearHistory => history::clear(app),
-        Command::Side(left) => app.set(
-            &crate::actions::Edit::new(crate::docs::DocId::Studio, "/panel_side", "Panel side"),
-            serde_json::json!(if left { "left" } else { "right" }),
-        ),
+        Command::Side(left) => {
+            app.set(
+                &crate::actions::Edit::new(crate::docs::DocId::Studio, "/panel_side", "Panel side"),
+                serde_json::json!(if left { "left" } else { "right" }),
+            );
+            move_to_display(app);
+        }
         Command::PickAsset(path) => editors::pick_asset(app, &path),
         Command::PickModule(id) => app.panel.as_mut().unwrap().add_module = Some(id),
         Command::AddModule => editors::insert_module(app),
@@ -783,6 +793,29 @@ pub fn intercept_set(
     value: &serde_json::Value,
 ) -> bool {
     if app.panel.is_some()
+        && edit.doc == crate::docs::DocId::Bars
+        && edit.path.starts_with("/modules/")
+        && edit.path.ends_with("/interval")
+        && let Some(text) = value.as_str()
+    {
+        match text
+            .parse::<f64>()
+            .ok()
+            .and_then(serde_json::Number::from_f64)
+        {
+            Some(number) => app.apply(
+                &edit.label,
+                vec![crate::docs::Op {
+                    doc: edit.doc,
+                    path: edit.path.to_string(),
+                    value: Some(serde_json::Value::Number(number)),
+                }],
+            ),
+            None => app.alert("Enter the interval as a number of seconds"),
+        }
+        return true;
+    }
+    if app.panel.is_some()
         && edit.doc == crate::docs::DocId::Config
         && edit.path.as_ref() == "/look/material/tint"
         && value.is_string()
@@ -892,6 +925,45 @@ pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
     let FieldId::Text(doc, path) = id else {
         return None;
     };
+    let color = *doc == crate::docs::DocId::Config
+        && matches!(
+            path.as_ref(),
+            "/look/accent"
+                | "/look/windows/accent"
+                | "/look/material/tint"
+                | "/look/windows/border"
+                | "/look/windows/caption"
+                | "/look/windows/caption_text"
+        )
+        || *doc == crate::docs::DocId::Widgets && path.ends_with("/appearance/tint");
+    if color {
+        return Some(
+            app.get(*doc, path)
+                .and_then(serde_json::Value::as_str)
+                .filter(|s| s.starts_with('#'))
+                .unwrap_or("")
+                .to_owned(),
+        );
+    }
+    if *doc == crate::docs::DocId::Studio && path.starts_with("/module_args/") {
+        let module = path.trim_start_matches("/module_args/");
+        return Some(
+            app.get(crate::docs::DocId::Bars, &format!("/modules/{module}/args"))
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(serde_json::Value::as_str)
+                .map(|s| {
+                    if s.contains(' ') {
+                        format!("\"{s}\"")
+                    } else {
+                        s.into()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" "),
+        );
+    }
     if *doc == crate::docs::DocId::Studio
         && let Some(index) = path
             .strip_prefix("/panel/menu_args/")

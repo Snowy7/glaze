@@ -155,10 +155,14 @@ pub fn intercept(app: &mut App, path: &str, value: Option<serde_json::Value>) ->
         let pointer = format!("/{pointer}");
         match crate::library::edit_theme(&dir, &pointer, value) {
             Ok(()) => {
+                crate::panel::theme_saved(app, &dir);
                 app.library = crate::library::Library::scan(crate::app::theme_name(&app.docs).as_deref());
                 app.docs.saved = crate::docs::Saved::Done(std::time::Instant::now());
             }
-            Err(e) => app.alert(format!("{e:#}")),
+            Err(e) => {
+                crate::panel::theme_failed(app, &dir, &format!("{e:#}"));
+                app.alert(format!("{e:#}"));
+            }
         }
         return true;
     }

@@ -340,7 +340,10 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
             }),
             "Add",
             Action::Panel(Command::AddModule),
-            state.add_module.is_some(),
+            state
+                .add_module
+                .as_deref()
+                .is_some_and(|id| bars::can_insert_module(app, id)),
         ),
         Page::History => (
             "Cancel",
