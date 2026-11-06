@@ -22,6 +22,7 @@ struct Client {
     session: u64,
     sequence: u64,
     preview: Option<PreviewDrag>,
+    choice_preview: Option<ChoicePreview>,
     color_open: bool,
     undo_serial: u64,
     undo_step: Option<UndoGuard>,
@@ -33,6 +34,12 @@ struct PreviewDrag {
     documents: Vec<wire::PreviewDocument>,
     label: String,
     checkpoint: usize,
+}
+
+struct ChoicePreview {
+    action: Action,
+    version: u64,
+    display: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -52,12 +59,30 @@ impl UndoGuard {
 }
 
 impl Client {
+    fn finish_choice(&mut self, app: &App) {
+        if self.choice_preview.take().is_none() { return; }
+        let Some(shell) = self.shell else { return };
+        self.sequence += 1;
+        let message = if matches!(app.docs.saved, crate::docs::Saved::Failed(_)) {
+            Message::PreviewCancel { session: self.session, sequence: self.sequence }
+        } else {
+            Message::PreviewCommit {
+                session: self.session, sequence: self.sequence,
+                revisions: snapshot(app).iter().map(|(id, raw)| wire::Revision {
+                    document: document(*id), revision: wire::revision(raw),
+                }).collect(),
+            }
+        };
+        wire::send(shell, self.endpoint.hwnd(), &message);
+    }
+
     fn stream_preview(&mut self, app: &App) {
         if self.color_open {
             return;
         }
         let Some(shell) = self.shell else { return };
         if let Some(crate::app::Drag::Slider { edit, .. }) = &app.drag {
+            self.choice_preview = None;
             let documents = preview_documents(&self.observed, app);
             if self
                 .preview
@@ -165,6 +190,10 @@ fn document(id: DocId) -> wire::Document {
 }
 
 fn preview_documents(before: &[(DocId, Value); 3], app: &App) -> Vec<wire::PreviewDocument> {
+    preview_difference(before, &snapshot(app))
+}
+
+fn preview_difference(before: &[(DocId, Value); 3], after: &[(DocId, Value); 3]) -> Vec<wire::PreviewDocument> {
     fn diff(
         document: wire::Document,
         path: &str,
@@ -185,7 +214,7 @@ fn preview_documents(before: &[(DocId, Value); 3], app: &App) -> Vec<wire::Previ
             for key in keys {
                 diff(
                     document,
-                    &format!("{path}/{key}"),
+                    &format!("{path}/{}", crate::docs::token(key)),
                     &before[key],
                     &after[key],
                     ops,
@@ -212,7 +241,8 @@ fn preview_documents(before: &[(DocId, Value); 3], app: &App) -> Vec<wire::Previ
         .filter_map(|(id, raw)| {
             let document = document(*id);
             let mut ops = Vec::new();
-            diff(document, "", raw, &app.docs.doc(*id).raw, &mut ops);
+            let changed = &after.iter().find(|(changed, _)| changed == id)?.1;
+            diff(document, "", raw, changed, &mut ops);
             (!ops.is_empty() && ops.len() <= 32).then(|| wire::PreviewDocument {
                 document,
                 base_revision: wire::revision(raw),
@@ -490,13 +520,124 @@ thread_local! { static CLIENT: RefCell<Option<Client>> = const { RefCell::new(No
 /// Shows a chooser's action on shell-owned desktop surfaces without editing documents.
 /// Call after the chooser's hover/focus delay; clicking still runs the normal action.
 /// Returns false for unsupported actions (including Windows looks) or an absent shell.
-pub fn preview_action(_app: &App, _action: &Action) -> bool {
-    false
+pub fn preview_action(app: &App, action: &Action) -> bool {
+    if app.fixture || app.drag.is_some() {
+        return false;
+    }
+    connect(app);
+    if CLIENT.with(|client| client.borrow().as_ref().is_some_and(|client| {
+        client.choice_preview.as_ref().is_some_and(|choice| {
+            choice.action == *action && choice.version == app.docs.version && choice.display == app.nav.display
+        })
+    })) {
+        return true;
+    }
+    let Some(documents) = choice_documents(app, action) else {
+        end_preview();
+        return false;
+    };
+    CLIENT.with(|client| {
+        let mut client = client.borrow_mut();
+        let Some(client) = client.as_mut() else { return false };
+        let Some(shell) = client.shell.filter(|_| client.begun && !client.color_open) else { return false };
+        client.sequence += 1;
+        let message = if documents.is_empty() {
+            Message::PreviewCancel { session: client.session, sequence: client.sequence }
+        } else {
+            Message::Preview { session: client.session, sequence: client.sequence, documents: documents.clone() }
+        };
+        if !wire::send(shell, client.endpoint.hwnd(), &message) {
+            return false;
+        }
+        client.choice_preview = Some(ChoicePreview { action: action.clone(), version: app.docs.version, display: app.nav.display });
+        true
+    })
 }
 
 /// Restores the saved desktop after leaving a chooser, Esc, or navigation.
 /// Safe to call repeatedly; ending a preview never discards a committed pick.
-pub fn end_preview() {}
+pub fn end_preview() {
+    CLIENT.with(|client| {
+        let mut client = client.borrow_mut();
+        let Some(client) = client.as_mut() else { return };
+        if client.choice_preview.take().is_some() && let Some(shell) = client.shell {
+            client.sequence += 1;
+            wire::send(shell, client.endpoint.hwnd(), &Message::PreviewCancel {
+                session: client.session, sequence: client.sequence,
+            });
+        }
+    });
+}
+
+/// Builds exactly the shell portion of a pick on owned JSON copies, never through Docs::edit.
+fn choice_documents(app: &App, action: &Action) -> Option<Vec<wire::PreviewDocument>> {
+    use serde_json::json;
+    let op = |doc, path: String, value| Op { doc, path, value };
+    let mut ops = match action {
+        Action::SetStyle(style) => {
+            let mut ops = vec![op(DocId::Config, "/look/style".into(), style.map(|s| json!(s)))];
+            for field in ["clarity", "blur", "refraction", "highlight"] {
+                ops.push(op(DocId::Config, format!("/look/material/{field}"), None));
+            }
+            // A style's signature includes its shape, even over a customized saved look.
+            let radius = style.map(|style| {
+                let style = match style {
+                    mypaper_config::look::Style::Liquid => mypaper_ui::Style::Liquid,
+                    mypaper_config::look::Style::Oneui => mypaper_ui::Style::OneUi,
+                    mypaper_config::look::Style::Solid => mypaper_ui::Style::Solid,
+                    mypaper_config::look::Style::Fluent => mypaper_ui::Style::Fluent,
+                    mypaper_config::look::Style::Mono => mypaper_ui::Style::Mono,
+                };
+                json!(mypaper_ui::Theme::new(style, mypaper_ui::Scheme::Dark, mypaper_ui::theme::SYSTEM_BLUE).radius.surface)
+            });
+            ops.push(op(DocId::Config, "/look/shape/corners".into(), radius));
+            ops
+        }
+        Action::Preset(id) => {
+            let mut ops = vec![op(DocId::Bars, "/preset".into(), Some(json!(id)))];
+            for bar in ["top", "dock"] {
+                for field in ["design", "enabled"] {
+                    ops.push(op(DocId::Bars, format!("/{bar}/{field}"), None));
+                }
+            }
+            ops
+        }
+        Action::Set(edit, value) if edit.doc == DocId::Studio && edit.path.as_ref() == "/panel/bar-preset" => {
+            let base = mypaper_bars::BarsConfig::parse(&json!({"preset":value}).to_string()).ok()?;
+            let base = serde_json::to_value(base).ok()?;
+            let mut ops = vec![op(DocId::Bars, crate::panel::editors::bar_path(app, "/preset"), Some(value.clone()))];
+            for bar in ["top", "dock"] {
+                for field in ["design", "enabled"] {
+                    let path = format!("/{bar}/{field}");
+                    ops.push(op(DocId::Bars, crate::panel::editors::bar_path(app, &path), base.pointer(&path).cloned()));
+                }
+            }
+            ops
+        }
+        Action::Set(edit, value) if matches!(edit.doc, DocId::Bars | DocId::Widgets | DocId::Config) => {
+            let candidate = wire::PreviewOp { path: edit.path.to_string(), value: value.clone() };
+            let appearance = edit.doc == DocId::Widgets && edit.path.ends_with("/appearance")
+                && (value.is_object() || value.is_null());
+            if !appearance && !candidate.valid(document(edit.doc)) { return None; }
+            vec![op(edit.doc, edit.path.to_string(), (!value.is_null()).then(|| value.clone()))]
+        }
+        _ => return None,
+    };
+    ops.extend(crate::look::projection_after(&app.docs, &ops));
+    let before = snapshot(app);
+    let mut after = before.clone();
+    for operation in &ops {
+        let (_, raw) = after.iter_mut().find(|(id, _)| *id == operation.doc)?;
+        crate::docs::apply_op(raw, operation);
+    }
+    // Use the owning parsers before sending; an incomplete/invalid face never reaches the host.
+    for ((id, old), (_, new)) in before.iter().zip(&after) {
+        if old != new && (app.docs.error(*id).is_some() || id.parse(&new.to_string()).is_err()) {
+            return None;
+        }
+    }
+    Some(preview_difference(&before, &after))
+}
 
 impl Drop for Client {
     fn drop(&mut self) {
@@ -537,6 +678,7 @@ pub fn connect(app: &App) {
                     .as_nanos() as u64,
                 sequence: 0,
                 preview: None,
+                choice_preview: None,
                 color_open: false,
                 undo_serial: 0,
                 undo_step: None,
@@ -551,6 +693,7 @@ pub fn connect(app: &App) {
             client.begun = false;
             client.highlighted = None;
             client.preview = None;
+            client.choice_preview = None;
             client.color_open = false;
             client.page_selection = None;
             client.desktop_selected = false;
@@ -576,6 +719,9 @@ pub fn connect(app: &App) {
             }
         }
         client.stream_preview(app);
+        if client.choice_preview.is_some() && client.observed_version != app.docs.version && app.drag.is_none() {
+            client.finish_choice(app);
+        }
         let selection = page_selection(app);
         if client.page_selection != selection {
             if let Some(shell) = client.shell {
@@ -672,6 +818,7 @@ pub fn record_pick(app: &App, label: &str, ops: &[Op], checkpoint: usize, merge:
         if client.shell.is_none() {
             return;
         }
+        client.finish_choice(app);
         let choice = ops.iter().find_map(|op| {
             let before = client
                 .observed
@@ -758,6 +905,9 @@ fn deselect() {
 }
 
 pub fn on_key(app: &mut App, key: u16) -> bool {
+    if key == 0x1b {
+        end_preview();
+    }
     if key == 0x1B && app.field.is_none() && app.overlay.is_none() && app.drag.is_none() {
         let selected = CLIENT.with(|c| c.borrow().as_ref().is_some_and(|c| c.desktop_selected));
         if selected {
@@ -1021,6 +1171,55 @@ fn reposition(app: &App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chooser_previews_include_whole_styles_without_touching_documents_or_undo() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let app = crate::goldens::app(true, &ui);
+        let before = snapshot(&app);
+        let undo = app.docs.undo_count();
+        let version = app.docs.version;
+        for style in mypaper_config::look::Style::ALL {
+            let documents = choice_documents(&app, &Action::SetStyle(Some(style))).unwrap();
+            assert!(documents.iter().all(|d| d.ops.iter().all(|op| op.valid(d.document))));
+            for document in documents {
+                let (_, raw) = before.iter().find(|(id, _)| self::document(*id) == document.document).unwrap();
+                let effective = wire::patched(raw, &document.ops).unwrap();
+                if document.document == wire::Document::Config {
+                    assert_eq!(effective["look"]["style"], serde_json::json!(style));
+                    assert!(effective["look"]["shape"]["corners"].is_number());
+                }
+            }
+        }
+        assert_eq!(snapshot(&app), before);
+        assert_eq!(app.docs.undo_count(), undo);
+        assert_eq!(app.docs.version, version);
+        assert!(choice_documents(&app, &Action::WindowsLook(0)).is_none());
+    }
+
+    #[test]
+    fn bar_choices_preview_each_display_without_changing_its_neighbors() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        if let Some(first) = app.monitors.first().cloned() {
+            let mut second = first;
+            second.device = r"\\.\DISPLAY2".into();
+            second.primary = false;
+            app.monitors.push(second);
+        }
+        app.nav.display = app.monitors.len().saturating_sub(1);
+        let action = Action::Set(crate::actions::Edit::new(DocId::Studio, "/panel/bar-preset", "Design"), serde_json::json!("windows11"));
+        let preview = choice_documents(&app, &action).unwrap();
+        let bars = preview.iter().find(|d| d.document == wire::Document::Bars).unwrap();
+        assert!(bars.ops.iter().all(|op| op.path.starts_with("/overrides/")));
+        let raw = &app.docs.doc(DocId::Bars).raw;
+        let changed = wire::patched(raw, &bars.ops).unwrap();
+        assert_eq!(changed.get("dock"), raw.get("dock"));
+        let parsed = mypaper_bars::BarsConfig::parse(&changed.to_string()).unwrap();
+        let second = parsed.for_monitor(r"\\.\DISPLAY2", false).unwrap();
+        assert!(!second.top.enabled);
+        assert_eq!(second.dock.design, mypaper_bars::config::DockDesign::Windows11);
+    }
     use mypaper_ui::Ui;
 
     #[test]
@@ -1175,6 +1374,7 @@ mod tests {
             session: 123,
             sequence: 0,
             preview: None,
+            choice_preview: None,
             color_open: false,
             undo_serial: 0,
             undo_step: None,
@@ -1475,6 +1675,7 @@ mod tests {
                 session: 123,
                 sequence: 0,
                 preview: None,
+                choice_preview: None,
                 color_open: false,
                 undo_serial: 12,
                 undo_step: Some(guard),

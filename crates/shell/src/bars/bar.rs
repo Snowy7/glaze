@@ -53,6 +53,9 @@ pub(super) fn total_repaints() -> u64 {
 pub struct Bar {
     studio_active: bool,
     studio_base: Option<BarsConfig>,
+    studio_band: Option<DesktopRect>,
+    /// A preview may show a normally disabled bar; it never owns a reservation.
+    pub(super) studio_only: bool,
     pub surface: Surface,
     pub kind: BarKind,
     pub config: BarsConfig,
@@ -178,6 +181,8 @@ impl Bar {
         let mut bar = Self {
             studio_active: false,
             studio_base: None,
+            studio_band: None,
+            studio_only: false,
             surface,
             kind,
             config,
@@ -374,6 +379,7 @@ impl Bar {
     /// material change, since its id, the window, stays the same).
     pub fn restyle(&mut self, config: BarsConfig, tokens: Tokens, animate: bool) {
         self.studio_base = None;
+        if let Some(band) = self.studio_band.take() { self.band = band; }
         let motion = if self.kind == BarKind::Dock {
             &config.dock.animation
         } else {
@@ -414,8 +420,16 @@ impl Bar {
     pub(super) fn durable_config(&self) -> &BarsConfig { self.studio_base.as_ref().unwrap_or(&self.config) }
 
     pub(super) fn studio_appearance(&mut self, config: BarsConfig, tokens: Tokens, transient: bool) {
-        if transient { self.studio_base.get_or_insert_with(|| self.config.clone()); }
-        else { self.studio_base = None; }
+        if transient {
+            self.studio_base.get_or_insert_with(|| self.config.clone());
+            self.studio_band.get_or_insert(self.band);
+            let thickness = if self.kind == BarKind::Top { config.top.band() } else { config.dock.band() };
+            self.band = appbar::settle(self.monitor.rect, edge(self.kind, &config),
+                (thickness as f32 * self.monitor.dpi as f32 / 96.0 * tokens.scale).round() as i32);
+        } else {
+            self.studio_base = None;
+            if let Some(band) = self.studio_band.take() { self.band = band; }
+        }
         self.config = config;
         self.tokens = tokens;
         self.dirty = true;
@@ -423,7 +437,10 @@ impl Bar {
         self.zoom_due = true;
     }
     pub fn shows_content(&self) -> bool {
-        !self.hidden && self.slide.value < 0.999
+        !self.hidden && self.enabled() && self.slide.value < 0.999
+    }
+    fn enabled(&self) -> bool {
+        if self.kind == BarKind::Top { self.config.top.enabled } else { self.config.dock.enabled }
     }
     pub fn topics(&self) -> std::collections::BTreeSet<mypaper_bars::actions::Topic> {
         bar_topics(self.kind, &self.config)
@@ -440,6 +457,7 @@ impl Bar {
     /// A visibility transition changes only this reservation. Explorer resizes maximized apps;
     /// restored windows keep their positions (no global work-area setter or window enumeration).
     pub fn tick_maximized(&mut self, now: Instant) -> Result<()> {
+        if self.studio_only { return Ok(()); }
         if let Some(hidden) = self.maximized.take_due(now) {
             if hidden && self.edge_surface.is_none() {
                 self.edge_surface = Some(Surface::new_deferred_accessibility(
@@ -460,6 +478,7 @@ impl Bar {
         Ok(())
     }
     pub fn reserve(&mut self) {
+        if self.studio_only { return; }
         if self.reservation.is_none() && !self.auto_hides() {
             self.reservation = Reservation::new(edge(self.kind, &self.config))
                 .inspect_err(|e| log::error!("app-bar reservation: {e:#}"))
@@ -612,7 +631,7 @@ impl Bar {
         now: Instant,
         keep_open: bool,
     ) -> Result<bool> {
-        if self.hidden {
+        if self.hidden || !self.enabled() {
             if self.reveal_snapshots.iter().any(Option::is_some) {
                 self.surface.release();
                 for island in &mut self.islands {
@@ -631,6 +650,9 @@ impl Bar {
             return Ok(false);
         }
         let first_paint = self.redraws == 0;
+        if self.studio_base.is_some() {
+            self.slide.target(0.0, false, now);
+        }
         if self.hide_at.is_some_and(|t| t <= now) {
             self.hide_at = if keep_open {
                 Some(now + Duration::from_secs(1))
@@ -1000,7 +1022,7 @@ impl Bar {
     }
 
     pub fn plates(&self) -> Vec<Plate> {
-        if self.hidden || self.slide.value >= 0.999 {
+        if !self.shows_content() {
             return vec![];
         }
         let Some(material) = self.material() else {

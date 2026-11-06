@@ -245,4 +245,43 @@ mod tests {
             .is_none()
         );
     }
+
+    #[test]
+    fn choices_replace_each_other_and_leave_or_matching_save_restores_the_base() {
+        let mut preview = Preview::default();
+        let raw = json!({"top":{"design":"monochrome"},"dock":{"pinned":["keep.exe"]},
+            "overrides":{"DISPLAY2":{"dock":{"design":"minimal"}}}});
+        let revision = super::super::wire::revision(&raw);
+        for (sequence, design) in [(1, "macos"), (2, "fluent"), (3, "capsule")] {
+            preview.update(7, sequence, vec![document(Document::Bars, revision,
+                "/overrides/DISPLAY2/top/design", json!(design))]);
+            let effective = patched(&raw, preview.effective(Document::Bars, revision).unwrap().1).unwrap();
+            assert_eq!(effective["overrides"]["DISPLAY2"]["top"]["design"], design);
+            assert_eq!(effective["top"]["design"], "monochrome");
+            assert_eq!(effective["dock"]["pinned"], raw["dock"]["pinned"]);
+        }
+        preview.cancel(7, 4);
+        assert!(preview.effective(Document::Bars, revision).is_none());
+        preview.update(7, 5, vec![document(Document::Widgets, 9,
+            "/instances/0/settings/variant", json!("digital"))]);
+        assert!(!preview.has(Document::Bars));
+        preview.saved(7, 6, &[Revision { document: Document::Widgets, revision: 10 }]);
+        assert!(preview.effective(Document::Widgets, 9).is_some());
+        assert!(preview.effective(Document::Widgets, 10).is_none());
+        assert_eq!(raw["top"]["design"], "monochrome");
+    }
+
+    #[test]
+    fn choice_validation_excludes_commands_sources_and_windows_styling() {
+        for (doc, path, value) in [
+            (Document::Config, "/look/windows/backdrop", json!("mica")),
+            (Document::Bars, "/overrides/DISPLAY2/modules/clock/click", json!("run")),
+            (Document::Bars, "/overrides/DISPLAY2/taskbar/mode", json!("hide")),
+            (Document::Bars, "/top/design", json!("unknown")),
+            (Document::Widgets, "/instances/0/settings/target", json!("run.exe")),
+            (Document::Widgets, "/instances/0/appearance/radius", json!(49)),
+        ] {
+            assert!(!super::super::wire::PreviewOp { path: path.into(), value }.valid(doc), "{path}");
+        }
+    }
 }

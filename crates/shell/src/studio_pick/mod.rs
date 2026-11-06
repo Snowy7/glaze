@@ -24,6 +24,8 @@ pub struct Target {
     pub selection: Selection,
     pub label: String,
     pub rect: Rect,
+    /// Physical-pixel radius of the visible surface, shared by frame and corner handles.
+    pub radius: f32,
     pub topmost: bool,
     pub surface: SurfaceId,
     /// Modules are selected by their chip; the body's normal action still runs.
@@ -434,7 +436,7 @@ impl StudioPick {
             {
                 let rect = gesture.spec.rect(gesture.pending.0, gesture.pending.1);
                 if let Err(e) =
-                    paint_frame(ui, &mut decoration.frame, rect, gesture.spec.scale, true)
+                    paint_frame(ui, &mut decoration.frame, rect, decoration.target.radius, gesture.spec.scale, true)
                 {
                     log::warn!("Studio resize outline: {e:#}");
                 }
@@ -685,7 +687,7 @@ impl StudioPick {
             .find(|m| m.device == target.selection.display);
         let scale = monitor.map_or(1.0, |m| m.dpi as f32 / 96.0);
         let r = target.rect.inflate(3.0 * scale);
-        paint_frame(ui, &mut frame, target.rect, scale, selected)?;
+        paint_frame(ui, &mut frame, target.rect, target.radius, scale, selected)?;
         let suffix = if selected {
             ""
         } else if target.selection.kind == Kind::Module {
@@ -746,7 +748,7 @@ impl StudioPick {
         let mut handles = Vec::new();
         if selected && target.resize.is_some() {
             for corner in resize::CORNERS {
-                let rect = resize::handle(r, corner, scale);
+                let rect = resize::handle(r, corner, target.radius + 3.0 * scale, scale);
                 let mut surface = Surface::new(kind, "Studio resize corner", Role::Pane)?;
                 surface.set_no_activate(true);
                 surface.present(
@@ -784,6 +786,7 @@ fn paint_frame(
     ui: &mut Ui,
     surface: &mut Surface,
     target: Rect,
+    radius: f32,
     scale: f32,
     selected: bool,
 ) -> Result<()> {
@@ -801,6 +804,7 @@ fn paint_frame(
         DisplayList {
             ops: chrome::frame(
                 Rect::new(3.0 * scale, 3.0 * scale, rect.width(), rect.height()),
+                radius + 3.0 * scale,
                 scale,
                 selected,
             ),

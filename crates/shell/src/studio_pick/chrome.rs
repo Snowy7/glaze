@@ -3,37 +3,39 @@ use mypaper_bars::config::{BarsConfig, DockPosition};
 use mypaper_desktop::Monitor;
 use mypaper_ui::{Op, Point, Rect, Rgba};
 
-pub(super) fn frame(rect: Rect, scale: f32, selected: bool) -> Vec<Op> {
+pub(super) fn frame(rect: Rect, radius: f32, scale: f32, selected: bool) -> Vec<Op> {
+    let radius = radius.max(0.0).min(rect.width().min(rect.height()) / 2.0);
     let mut ops = Vec::new();
     if selected {
         ops.push(Op::Stroke {
             rect,
-            radius: 10.0 * scale,
+            radius,
             width: 4.0 * scale,
             color: Rgba::rgb8([20, 20, 20], 1.0),
         });
     }
     ops.push(Op::Stroke {
         rect,
-        radius: 10.0 * scale,
+        radius,
         width: if selected { 1.5 } else { 1.0 } * scale,
         color: Rgba::rgb8([245, 245, 245], if selected { 1.0 } else { 0.45 }),
     });
     if selected {
         for (width, color) in [(5.0, [20, 20, 20]), (2.0, [255, 255, 255])] {
-            for (x, dx) in [(rect.left, 1.0), (rect.right, -1.0)] {
-                for (y, dy) in [(rect.top, 1.0), (rect.bottom, -1.0)] {
-                    for to in [
-                        Point::new(x + dx * 13.0 * scale, y),
-                        Point::new(x, y + dy * 13.0 * scale),
-                    ] {
-                        ops.push(Op::Line {
-                            from: Point::new(x, y),
-                            to,
-                            width: width * scale,
-                            color: Rgba::rgb8(color, 1.0),
-                        });
-                    }
+            let reach = (radius + 6.0 * scale).max(13.0 * scale)
+                .min(rect.width().min(rect.height()) / 2.0);
+            for left in [true, false] {
+                for top in [true, false] {
+                    // Clip the same rounded outline at each corner: the bracket and frame
+                    // share a curve, including square and capsule-shaped selections.
+                    let clip = Rect::new(
+                        if left { rect.left } else { rect.right - reach },
+                        if top { rect.top } else { rect.bottom - reach }, reach, reach,
+                    ).inflate(width * scale / 2.0);
+                    ops.push(Op::Clipped {
+                        rect: clip,
+                        ops: vec![Op::Stroke { rect, radius, width: width * scale, color: Rgba::rgb8(color, 1.0) }].into(),
+                    });
                 }
             }
         }
@@ -110,7 +112,7 @@ mod tests {
 
     #[test]
     fn selected_stroke_has_an_opaque_dark_halo_and_white_line() {
-        let ops = frame(Rect::new(2.0, 2.0, 100.0, 100.0), 1.0, true);
+        let ops = frame(Rect::new(2.0, 2.0, 100.0, 100.0), 10.0, 1.0, true);
         assert!(
             matches!(&ops[0], Op::Stroke { width: 4.0, color, .. } if *color == Rgba::rgb8([20, 20, 20], 1.0))
         );
@@ -118,8 +120,24 @@ mod tests {
             matches!(&ops[1], Op::Stroke { color, .. } if *color == Rgba::rgb8([245, 245, 245], 1.0))
         );
         assert_eq!(
-            frame(Rect::new(2.0, 2.0, 100.0, 100.0), 1.0, false).len(),
+            frame(Rect::new(2.0, 2.0, 100.0, 100.0), 10.0, 1.0, false).len(),
             1
         );
+    }
+
+    #[test]
+    fn brackets_share_the_frame_curve_for_square_round_and_capsule_surfaces() {
+        for radius in [0.0, 8.0, 28.0, 500.0] {
+            let rect = Rect::new(4.0, 4.0, 300.0, 80.0);
+            let ops = frame(rect, radius, 1.25, true);
+            let expected = radius.min(40.0);
+            for op in &ops {
+                match op {
+                    Op::Stroke { radius, .. } => assert_eq!(*radius, expected),
+                    Op::Clipped { ops, .. } => assert!(matches!(&ops[0], Op::Stroke { radius, rect: r, .. } if *radius == expected && *r == rect)),
+                    _ => panic!("selection corners should be a clipped rounded outline"),
+                }
+            }
+        }
     }
 }

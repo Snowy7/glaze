@@ -549,6 +549,12 @@ impl Widgets {
             .unwrap_or_else(|| self.studio_config_raw.clone());
         if let Ok(config) = Config::parse(&config.to_string()) {
             self.knobs = glass::knobs(&config.look, glass::Family::Widgets);
+            if apply_style(&config) {
+                for entry in self.entries.values_mut() {
+                    entry.model.dirty = true;
+                    entry.painted = false;
+                }
+            }
         }
         self.studio_layout = widgets.and_then(|(_, ops)| wire::patched(&self.studio_raw, ops))
             .and_then(|raw| Layout::parse(&raw.to_string()).ok());
@@ -592,7 +598,9 @@ impl Widgets {
                     kind: crate::studio_pick::wire::Kind::Widget,
                     id: id.clone(), display: self.monitors[e.monitor].device.clone(),
                 },
-                label: label.into(), rect: e.rect, topmost: e.topmost,
+                label: label.into(), rect: e.rect,
+                radius: view::plate_radius(&e.model, e.rect, e.dpi_scale * e.tokens.scale),
+                topmost: e.topmost,
                 surface: e.surface.id(), body_selects: true,
                 resize,
             }

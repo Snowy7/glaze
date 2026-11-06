@@ -769,7 +769,33 @@ impl Bars {
 
     fn paint(&mut self, ui: &mut Ui, now: Instant) -> Result<()> {
         if self.studio_dock_pending && now.saturating_duration_since(self.studio_dock_applied) >= self.studio_frame {
+            if self.studio_config.is_none() {
+                self.bars.retain(|bar| !bar.studio_only);
+            }
             let effective = self.studio_config.as_ref().unwrap_or(&self.config);
+            if self.studio_config.is_some() {
+                for monitor in &self.monitors {
+                    let mut config = effective.for_monitor(&monitor.device, monitor.primary)?;
+                    config.resolve(services::default_pins);
+                    for kind in [BarKind::Top, BarKind::Dock] {
+                        let (enabled, included) = match kind {
+                            BarKind::Top => (config.top.enabled, config.top.monitors.includes(&monitor.device, monitor.primary)),
+                            BarKind::Dock => (config.dock.enabled, config.dock.monitors.includes(&monitor.device, monitor.primary)),
+                        };
+                        if !enabled || !included || self.bars.iter().any(|b| b.kind == kind && b.monitor.device == monitor.device) { continue; }
+                        let mut bar = Bar::new(kind, config.clone(), monitor.clone(), look::Tokens::resolve(
+                            if kind == BarKind::Top { &config.top.look } else { &config.dock.look },
+                            &config.appearance.over(&self.appearance), &self.system), false)?;
+                        bar.studio_only = true;
+                        bar.studio_session(self.studio_active);
+                        bar.hidden = self.asleep || self.fullscreen.as_deref() == Some(&monitor.device);
+                        if kind == BarKind::Dock {
+                            bar.items = self.services.dock_items(&config, providers::apps::window_monitor(bar.surface.hwnd()));
+                        }
+                        self.bars.push(bar);
+                    }
+                }
+            }
             for bar in &mut self.bars {
                 let mut config = effective.for_monitor(&bar.monitor.device, bar.monitor.primary)?;
                 config.resolve(services::default_pins);
@@ -803,7 +829,7 @@ impl Bars {
                 &self.services.model,
                 &mut self.images,
                 now,
-                menu || self.press.is_some(),
+                menu || self.press.is_some() || self.studio_config.is_some(),
             )?;
         }
         if let Some(at) = self.tooltip_fade
@@ -916,13 +942,13 @@ impl Bars {
         for bar in self.bars.iter().filter(|b| b.shows_content()) {
             let key = if bar.kind == BarKind::Top { "top" } else { "dock" };
             let origin = bar.origin();
-            let make = |kind, id, label, rect, body_selects| PickTarget {
+            let make = |kind, id, label, rect, radius, body_selects| PickTarget {
                 selection: Selection { kind, id, display: bar.monitor.device.clone() },
-                label, rect, topmost: true, surface: bar.surface.id(), body_selects, resize: None,
+                label, rect, radius, topmost: true, surface: bar.surface.id(), body_selects, resize: None,
             };
-            for (rect, _) in &bar.frame.shapes {
+            for (rect, radius) in &bar.frame.shapes {
                 result.push(make(Kind::Bar, key.into(), if key == "top" { "Top bar" } else { "Dock" }.into(),
-                    rect.offset(origin.0 as f32, origin.1 as f32), true));
+                    rect.offset(origin.0 as f32, origin.1 as f32), *radius, true));
             }
             for hit in &bar.frame.list.hits {
                 let Some(target) = bar.frame.targets.get(hit.id as usize - 1) else { continue };
@@ -943,7 +969,7 @@ impl Bars {
                 }).nth(occurrence) else { continue };
                 let label = studio_labels::label(&module, &bar.config, bar.tokens.family == Family::Fluent);
                 result.push(make(Kind::Module, format!("{key}/{list}/{index}"), label,
-                    hit.rect.offset(origin.0 as f32, origin.1 as f32), false));
+                    hit.rect.offset(origin.0 as f32, origin.1 as f32), 4.0 * bar.scale(), false));
             }
         }
         result
@@ -1756,6 +1782,7 @@ impl Bars {
     /// flash. Only bars whose geometry changed are dropped (first, freeing their band) and built
     /// again, and only then do the bars reserve again.
     fn reconcile(&mut self, ui: &mut Ui) -> Result<()> {
+        self.bars.retain(|bar| !bar.studio_only);
         plugin_modules::place(&self.config);
         self.press = None;
         self.preview = None;
@@ -1901,7 +1928,7 @@ impl Bars {
         Ok(())
     }
     fn schedule_reservations(&mut self) {
-        if self.bars.iter().any(|bar| !bar.reserved) {
+        if self.bars.iter().any(|bar| !bar.studio_only && !bar.reserved) {
             self.reservation_due
                 .get_or_insert_with(|| Instant::now() + Duration::from_secs(1));
         } else {

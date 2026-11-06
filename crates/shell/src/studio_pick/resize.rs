@@ -69,11 +69,13 @@ pub(super) const CORNERS: [Corner; 4] = [
     },
 ];
 
-pub(super) fn handle(rect: Rect, corner: Corner, scale: f32) -> Rect {
+pub(super) fn handle(rect: Rect, corner: Corner, radius: f32, scale: f32) -> Rect {
     let side = 20.0 * scale;
+    let inset = radius.max(0.0).min(rect.width().min(rect.height()) / 2.0)
+        * (1.0 - std::f32::consts::FRAC_1_SQRT_2);
     Rect::new(
-        if corner.left { rect.left } else { rect.right } - side / 2.0,
-        if corner.top { rect.top } else { rect.bottom } - side / 2.0,
+        if corner.left { rect.left + inset } else { rect.right - inset } - side / 2.0,
+        if corner.top { rect.top + inset } else { rect.bottom - inset } - side / 2.0,
         side,
         side,
     )
@@ -227,7 +229,7 @@ mod tests {
     #[test]
     fn handle_hit_boxes_cover_only_corners() {
         let r = Rect::new(-500.0, 100.0, 300.0, 240.0);
-        let handles = CORNERS.map(|c| handle(r, c, 1.0));
+        let handles = CORNERS.map(|c| handle(r, c, 10.0, 1.0));
         assert!(handles[0].contains(Point::new(r.left, r.top)));
         assert!(
             !handles

@@ -65,10 +65,57 @@ pub struct Revision {
 }
 
 impl PreviewOp {
-    /// Preview can change only material and size; it cannot invoke actions or edit files.
+    /// Only shell-owned appearance, design, face and geometry can be previewed.
+    /// Actions, pins, sources and Windows styling never cross this boundary.
     pub fn valid(&self, document: Document) -> bool {
+        if !self.path.starts_with('/') || self.path.len() > 256 {
+            return false;
+        }
         let path: Vec<_> = self.path.trim_start_matches('/').split('/').collect();
-        let field = match (document, path.as_slice()) {
+        let path = match (document, path.as_slice()) {
+            (Document::Bars, ["overrides", display, rest @ ..])
+                if !display.is_empty() && display.len() <= 128 => rest,
+            _ => path.as_slice(),
+        };
+        let optional = |valid| self.value.is_null() || valid;
+        match (document, path) {
+            (Document::Config, ["look", "style"] | ["look", "bars" | "widgets" | "menus", "style"]) => {
+                return optional(serde_json::from_value::<mypaper_config::look::Style>(self.value.clone()).is_ok());
+            }
+            (Document::Config, ["look", "shape", "corners"]) => {
+                return optional(self.value.as_f64().is_some_and(|v| (0.0..=48.0).contains(&v)));
+            }
+            (Document::Bars, ["preset"]) => {
+                return optional(serde_json::from_value::<mypaper_bars::config::Preset>(self.value.clone()).is_ok());
+            }
+            (Document::Bars, ["top", "design"]) => {
+                return optional(serde_json::from_value::<mypaper_bars::config::TopDesign>(self.value.clone()).is_ok());
+            }
+            (Document::Bars, ["dock", "design"]) => {
+                return optional(serde_json::from_value::<mypaper_bars::config::DockDesign>(self.value.clone()).is_ok());
+            }
+            (Document::Bars, ["top" | "dock", "enabled"]) => return optional(self.value.is_boolean()),
+            (Document::Bars, ["look", "style"] | ["top" | "dock", "look", "style"]) => {
+                return optional(serde_json::from_value::<mypaper_bars::style::NativeStyle>(self.value.clone()).is_ok());
+            }
+            (Document::Bars, ["look", "family"]) => {
+                return optional(serde_json::from_value::<mypaper_bars::style::Family>(self.value.clone()).is_ok());
+            }
+            (Document::Bars, ["appearance", field] | ["top" | "dock", "appearance", field])
+            | (Document::Widgets, ["appearance", field] | ["instances", _, "appearance", field]) => {
+                return matches!(*field, "surface" | "tint" | "opacity" | "blur" | "radius" | "border" | "text" | "accent" | "font" | "scale" | "shadow" | "style")
+                    && optional(serde_json::from_value::<mypaper_theme::Appearance>(
+                        serde_json::json!({*field: self.value.clone()})
+                    ).is_ok_and(|a| a.validate().is_ok()));
+            }
+            (Document::Widgets, ["instances", index, "settings", field]) => {
+                return index.parse::<usize>().is_ok()
+                    && matches!(*field, "variant" | "face" | "layout" | "style" | "look" | "shape" | "display" | "frame")
+                    && optional(self.value.as_str().is_some_and(|v| v.len() <= 128 && !v.chars().any(char::is_control)));
+            }
+            _ => {}
+        }
+        let field = match (document, path) {
             (Document::Config, ["look", "material", field])
             | (Document::Config, ["look", "bars" | "widgets" | "menus", "material", field]) => {
                 *field
@@ -87,9 +134,6 @@ impl PreviewOp {
             (Document::Widgets, ["instances", _, "cell", "0" | "1"]) => "cell",
             _ => return false,
         };
-        if !self.path.starts_with('/') || self.path.len() > 256 {
-            return false;
-        }
         let max = match field {
             "clarity" | "refraction" | "highlight" | "opacity" => 1.0,
             "blur" if document == Document::Widgets => 64.0,
@@ -156,7 +200,10 @@ pub fn patched(raw: &serde_json::Value, ops: &[PreviewOp]) -> Option<serde_json:
     }
     let mut result = raw.clone();
     for op in ops {
-        let path: Vec<_> = op.path.strip_prefix('/')?.split('/').collect();
+        let tokens: Vec<_> = op.path.strip_prefix('/')?.split('/')
+            .map(|part| part.replace("~1", "/").replace("~0", "~"))
+            .collect();
+        let path: Vec<_> = tokens.iter().map(String::as_str).collect();
         set(&mut result, &path, &op.value)?;
     }
     Some(result)
