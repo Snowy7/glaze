@@ -1057,7 +1057,9 @@ impl Panel for Launcher {
                 hits.iter()
                     .map(|hit| {
                         let id = format!("file:{}", hit.path);
-                        if hit.directory {
+                        if hit.directory && hit.size_unknown {
+                            self.file_sizes.insert(id.clone(), "Size unknown (excluded or inaccessible files)".into());
+                        } else if hit.directory {
                             self.file_sizes.insert(
                                 id.clone(),
                                 format!(
