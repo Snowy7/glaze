@@ -611,7 +611,9 @@ impl Widgets {
     /// The selected face can move from its empty area; its own buttons and fields keep input.
     pub fn studio_move_surface(&self, surface: SurfaceId, point: mypaper_ui::Point) -> Option<&Surface> {
         let entry = self.entries.values().find(|e| e.surface.id() == surface)?;
-        entry.surface.shown().hit_at(point).is_none().then_some(&entry.surface)
+        entry.surface.shown().hit_at(point)
+            .is_none_or(|hit| hit.id == view::BODY)
+            .then_some(&entry.surface)
     }
     #[allow(dead_code, reason = "live fixture diagnostics")]
     pub fn costs(&self) -> WorkCosts {
