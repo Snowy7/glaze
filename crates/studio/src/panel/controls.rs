@@ -56,6 +56,7 @@ pub fn relevant_docs(page: super::Page) -> &'static [crate::docs::DocId] {
     match page {
         Page::Widgets | Page::Widget | Page::AddWidget => &[DocId::Widgets],
         Page::Bars
+        | Page::BarDesign
         | Page::Top
         | Page::Dock
         | Page::Module

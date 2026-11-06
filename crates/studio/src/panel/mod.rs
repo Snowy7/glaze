@@ -46,6 +46,7 @@ pub enum Page {
     Wallpapers,
     Look,
     Bars,
+    BarDesign,
     Top,
     Dock,
     Widgets,
@@ -79,6 +80,7 @@ impl Page {
             Self::Wallpapers => "Wallpaper",
             Self::Look => "Look",
             Self::Bars => "Bars",
+            Self::BarDesign => "Design",
             Self::Top => "Top bar",
             Self::Dock => "Dock",
             Self::Widgets => "Widgets",
@@ -115,6 +117,7 @@ impl Page {
             | Self::Troubleshoot
             | Self::About => Some(Self::Settings),
             Self::Top | Self::Dock => Some(Self::Bars),
+            Self::BarDesign => Some(Self::Bars),
             Self::Widget | Self::AddWidget => Some(Self::Widgets),
             Self::Wallpaper | Self::AddWallpaper => Some(Self::Wallpapers),
             Self::Connection => Some(Self::Connections),
@@ -186,6 +189,8 @@ pub enum Command {
     ShowThemeFolder(std::path::PathBuf),
     RetryDoc(crate::docs::DocId),
     ShowFolder(crate::docs::DocId),
+    Design(Option<crate::actions::Bar>),
+    SameBars,
 }
 
 pub fn run(app: &mut App, command: Command) {
@@ -201,6 +206,12 @@ pub fn run(app: &mut App, command: Command) {
             | Command::SortHandle(_, _)
     );
     match command {
+        Command::Design(bar) => {
+            app.nav.bar = bar;
+            app.nav.module = None;
+            app.panel.as_mut().unwrap().page = Page::BarDesign;
+        }
+        Command::SameBars => editors::same_bars(app),
         Command::Open(page) => {
             app.overlay = None;
             if page == Page::FirstRun {
@@ -266,6 +277,11 @@ pub fn run(app: &mut App, command: Command) {
         }
         Command::Back => {
             app.overlay = None;
+            if app.panel.as_ref().unwrap().page == Page::BarDesign {
+                let page = match app.nav.bar { Some(crate::actions::Bar::Top) => Page::Top, Some(crate::actions::Bar::Dock) => Page::Dock, None => Page::Bars };
+                run(app, Command::Open(page));
+                return;
+            }
             let state = app.panel.as_mut().unwrap();
             if state.page == Page::Module
                 || app.nav.module.is_some() && matches!(state.page, Page::Top | Page::Dock)
@@ -834,6 +850,7 @@ pub fn intercept_set(
     edit: &crate::actions::Edit,
     value: &serde_json::Value,
 ) -> bool {
+    if app.panel.is_some() && editors::intercept_page_set(app, edit, value) { return true; }
     if app.panel.is_some()
         && edit.doc == crate::docs::DocId::Studio
         && edit.path.starts_with("/plugins/setting/")
