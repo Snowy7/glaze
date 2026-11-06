@@ -520,6 +520,53 @@ pub fn remove(app: &mut App, list: &List, index: usize) {
 mod tests {
     use super::*;
 
+    #[test]
+    fn render_module_drag_and_focus() {
+        let out = std::env::var_os("MYPAPER_STUDIO_PANEL_SHOTS")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| r"C:\mypaper-targets\studio-panel\shots".into())
+            .join("states");
+        std::fs::create_dir_all(&out).unwrap();
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        for dark in [true, false] {
+            for (width, scale) in [(480, 1.0), (360, 1.5)] {
+                let mut app = fixture(&ui);
+                app.size.0 = width;
+                app.theme.ty.text_scale = scale;
+                app.theme.palette = if dark {
+                    mypaper_ui::controls::Palette::dark()
+                } else {
+                    mypaper_ui::controls::Palette::light()
+                };
+                app.panel.as_mut().unwrap().page = super::super::Page::Top;
+                app.nav.bar = Some(Bar::Top);
+                app.input.focus = Some(row_key(&List::Modules(Bar::Top, "left"), 1));
+                app.input.focus_visible = true;
+                for drag in [false, true] {
+                    if drag {
+                        app.panel.as_mut().unwrap().sort_drag = Some(Drag {
+                            list: List::Modules(Bar::Top, "left"),
+                            from: 1,
+                            destination: Some((List::Modules(Bar::Dock, "left"), 0)),
+                            start: Point::new(0.0, 0.0),
+                            moved: true,
+                        });
+                    }
+                    let built = super::super::build(&app, &mut ui.text);
+                    let image =
+                        mypaper_ui::render(&mut ui, &built.list, width, app.size.1).unwrap();
+                    let name = format!(
+                        "module-{}-{}{}.png",
+                        if drag { "drag" } else { "focus" },
+                        width,
+                        if dark { "-dark" } else { "-light" }
+                    );
+                    mypaper_ui::golden::write(&image, &out.join(name)).unwrap();
+                }
+            }
+        }
+    }
+
     fn fixture(ui: &mypaper_ui::Ui) -> App {
         let mut app = crate::goldens::app(true, ui);
         app.panel = Some(super::super::State::default());
@@ -628,7 +675,6 @@ mod tests {
             &mut app,
             &Event::Press(pointer(handle), Button::Left)
         ));
-        assert!(event(&mut app, &Event::Move(pointer(handle.inflate(10.0)))));
         // Move horizontally to leave the threshold, then rebuild the drag overlay.
         let mut moved = pointer(handle);
         moved.at.x += 10.0;

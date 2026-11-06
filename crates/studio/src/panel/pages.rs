@@ -327,7 +327,6 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::Top | Page::Dock => super::editors::view(app, b, c, page),
         _ => super::editors::view(app, b, c, page),
     }
-    super::lists::drop_overlay(app, b);
     super::editors::reveal_search(app, b, page, first_target);
     super::saving::finish_page(app, b, page, first_op, first_target);
 }
