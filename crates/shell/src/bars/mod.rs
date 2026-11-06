@@ -10,6 +10,7 @@ mod preview;
 pub(crate) mod services;
 mod sprites;
 mod styling;
+mod studio_labels;
 #[cfg(test)]
 mod tests;
 mod tray_menu;
@@ -940,7 +941,7 @@ impl Bars {
                 let Some((list, index)) = lists.into_iter().flat_map(|(list, modules)| {
                     modules.iter().enumerate().filter(|(_, m)| **m == module).map(move |(i, _)| (list, i))
                 }).nth(occurrence) else { continue };
-                let label = serde_json::to_value(&module).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
+                let label = studio_labels::label(&module, &bar.config, bar.tokens.family == Family::Fluent);
                 result.push(make(Kind::Module, format!("{key}/{list}/{index}"), label,
                     hit.rect.offset(origin.0 as f32, origin.1 as f32), false));
             }
