@@ -581,7 +581,7 @@ impl Session {
     fn on_add(&self, handle: InstanceHandle, parent: InstanceHandle, kind: &str, name: String) {
         // SAFETY: no preconditions.
         let thread = unsafe { GetCurrentThreadId() };
-        let (wanted, new_thread) = {
+        let (wanted, new_thread, roots) = {
             let mut state = self.lock();
             // Read under the lock `close` sets it under, so a thread recorded here is one whose
             // clean-up `close` posts.
@@ -646,10 +646,23 @@ impl Session {
                     thread,
                 },
             );
-            if let Some(p) = state.nodes.get_mut(&parent) {
-                p.children.push(handle);
-            }
-            (state.wanted(handle), new_thread)
+            let roots = match state.nodes.get_mut(&parent) {
+                Some(p) => {
+                    p.children.push(handle);
+                    Vec::new()
+                }
+                // A new root (a window or popup opening): the thread's other roots, to see
+                // whether a closed window's tree went without a removal.
+                None => state
+                    .nodes
+                    .iter()
+                    .filter(|&(&h, e)| {
+                        h != handle && e.thread == thread && !state.nodes.contains_key(&e.parent)
+                    })
+                    .map(|(&h, _)| h)
+                    .collect(),
+            };
+            (state.wanted(handle), new_thread, roots)
         };
         // The thread's first element: its theme resources first, so rules see them.
         if new_thread {
@@ -658,6 +671,46 @@ impl Session {
         if !wanted.is_empty() {
             self.style(handle, &wanted);
         }
+        let gone: Vec<InstanceHandle> = roots
+            .into_iter()
+            .filter(|&r| self.hold(r).is_none())
+            .collect();
+        self.forget_gone(thread, &gone);
+    }
+
+    /// Forgets elements (with everything below them) whose objects are gone without a removal
+    /// (Explorer closes a window but keeps its thread, and the tree just goes): their handles
+    /// don't resolve any more, so there is nothing to put back. On their UI thread.
+    fn forget_gone(&self, thread: u32, gone: &[InstanceHandle]) {
+        if gone.is_empty() {
+            return;
+        }
+        let (count, styled) = {
+            let mut state = self.lock();
+            let mut stack = gone.to_vec();
+            let mut count = 0;
+            let mut styled = Vec::new();
+            for &h in gone {
+                if let Some(parent) = state.nodes.get(&h).map(|e| e.parent)
+                    && let Some(p) = state.nodes.get_mut(&parent)
+                {
+                    p.children.retain(|&c| c != h);
+                }
+            }
+            while let Some(h) = stack.pop() {
+                if let Some(element) = state.nodes.remove(&h) {
+                    count += 1;
+                    stack.extend(element.children);
+                }
+                styled.extend(state.styled.remove(&h));
+            }
+            (count, styled)
+        };
+        // What they held (originals) is released here, on its thread, outside the lock.
+        drop(styled);
+        log(&format!(
+            "thread {thread}: {count} element(s) went without a removal; forgot them"
+        ));
     }
 
     /// An element left the tree (on its UI thread): give it and everything below it its values
@@ -717,6 +770,9 @@ impl Session {
     fn style(&self, handle: InstanceHandle, wanted: &[(String, String)]) {
         // Held while we work: nothing done meanwhile can destroy it and hand its handle on.
         let Some(_keep) = self.hold(handle) else {
+            // Its handle doesn't resolve: the object is gone without a removal.
+            // SAFETY: no preconditions.
+            self.forget_gone(unsafe { GetCurrentThreadId() }, &[handle]);
             return;
         };
         let mut previous: HashMap<String, Applied> = self
