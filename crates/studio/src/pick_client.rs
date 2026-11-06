@@ -1241,33 +1241,19 @@ fn display_index(monitors: &[mypaper_desktop::Monitor], device: &str) -> Option<
         .position(|m| m.device.eq_ignore_ascii_case(device))
 }
 
+pub(crate) fn panel_side_path(app: &App) -> String {
+    app.display().map_or_else(|| "/panel_side".into(), |m|
+        format!("/panel_sides/{}", crate::docs::token(&m.device)))
+}
+
+/// A display remembers its own side; older Studio settings remain the initial fallback.
+pub(crate) fn panel_side(app: &App) -> Option<&str> {
+    app.get(DocId::Studio, &panel_side_path(app)).and_then(Value::as_str)
+        .or_else(|| app.get(DocId::Studio, "/panel_side").and_then(Value::as_str))
+}
+
 fn reposition(app: &App) {
-    if let Some(window) = app.window {
-        use windows::Win32::Foundation::{POINT, RECT};
-        use windows::Win32::Graphics::Gdi::ClientToScreen;
-        use windows::Win32::UI::WindowsAndMessaging::{
-            GetWindowRect, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER, SetWindowPos,
-        };
-        let bounds = super::placement(app);
-        let mut outer = RECT::default();
-        let mut client = POINT::default();
-        // SAFETY: only the panel's own window moves, preserving focus and the other windows.
-        unsafe {
-            if GetWindowRect(window, &mut outer).is_ok()
-                && ClientToScreen(window, &mut client).as_bool()
-            {
-                let _ = SetWindowPos(
-                    window,
-                    None,
-                    bounds.0 - (client.x - outer.left),
-                    bounds.1 - (client.y - outer.top),
-                    0,
-                    0,
-                    SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER,
-                );
-            }
-        }
-    }
+    super::move_to_display(app);
 }
 
 #[cfg(test)]
@@ -1485,6 +1471,33 @@ mod tests {
         );
         assert_eq!(unsafe { GetForegroundWindow() }, foreground);
         assert_eq!(app.docs.version, revision);
+    }
+
+    #[test]
+    fn picks_restore_each_displays_saved_side_without_activating_or_saving() {
+        use windows::Win32::{Foundation::POINT, Graphics::Gdi::ClientToScreen, UI::WindowsAndMessaging::GetForegroundWindow};
+        let ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State::default());
+        let first=app.monitors[0].device.clone();
+        let second=app.monitors[1].device.clone();
+        app.apply("Test display sides",vec![Op {doc:DocId::Studio,path:"/panel_side".into(),value:Some(serde_json::json!("right"))},
+            Op {doc:DocId::Studio,path:"/panel_sides".into(),value:Some(serde_json::json!({first.clone():"left",second.clone():"right"}))}]);
+        let surface=mypaper_ui::Surface::new(mypaper_ui::Kind::App{min:(360,160)},"Studio per-display pick test",mypaper_ui::Role::Window).unwrap();
+        surface.place((100,100,480,600));
+        app.window=Some(surface.hwnd());
+        let foreground=unsafe {GetForegroundWindow()};
+        let version=app.docs.version;
+        for (display,left) in [(first,true),(second,false)] {
+            selected(&mut app,Selection{kind:Kind::Wallpaper,id:"wallpaper".into(),display});
+            let monitor=app.display().unwrap();
+            let mut origin=POINT::default();
+            assert!(unsafe {ClientToScreen(surface.hwnd(),&mut origin)}.as_bool());
+            let middle=monitor.work.x+monitor.work.width/2;
+            assert_eq!(origin.x < middle,left,"pick should restore this monitor's own side");
+        }
+        assert_eq!(unsafe {GetForegroundWindow()},foreground);
+        assert_eq!(app.docs.version,version);
     }
 
     #[test]
