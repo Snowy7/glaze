@@ -448,7 +448,7 @@ pub fn run(app: &mut App, command: Command) {
         Command::RetryHistory => history::retry(app),
         Command::Side(left) => {
             app.set(
-                &crate::actions::Edit::new(crate::docs::DocId::Studio, "/panel_side", "Panel side"),
+                &crate::actions::Edit::new(crate::docs::DocId::Studio, pick_client::panel_side_path(app), "Panel side"),
                 serde_json::json!(if left { "left" } else { "right" }),
             );
             move_to_display(app);
@@ -651,9 +651,7 @@ pub fn placement(app: &App) -> (i32, i32, i32, i32) {
     let screen = monitor.map_or(fallback, |m| m.rect);
     let scale = monitor.map_or(app.scale, |m| m.dpi as f32 / 96.0);
     let mut rect = bounds(screen, work, scale);
-    let saved = app
-        .get(crate::docs::DocId::Studio, "/panel_side")
-        .and_then(serde_json::Value::as_str);
+    let saved = pick_client::panel_side(app);
     let left = match saved {
         Some("left") => true,
         Some("right") => false,
