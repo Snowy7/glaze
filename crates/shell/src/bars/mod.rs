@@ -343,9 +343,14 @@ impl Bars {
                 }
             }
             events::SETTINGS => {
-                self.system = providers::accent::read();
-                self.config_changed();
-                crate::inbox::post(crate::inbox::WM_CONFIG, 0);
+                // Every setting any app changes is announced like this (a tweak tool or
+                // Settings can send dozens a second); the shell follows only these values.
+                let system = providers::accent::read();
+                if system != self.system {
+                    self.system = system;
+                    self.config_changed();
+                    crate::inbox::post(crate::inbox::WM_CONFIG, 0);
+                }
             }
             events::TIME => self.services.clock_due = Some(now),
             events::POWER => {
