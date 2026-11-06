@@ -1,7 +1,9 @@
 # Native Windows styling
 
-A theme can restyle Windows itself while it is active: window borders, title bars, corners,
-backdrop (Mica and friends), the system accent color and dark mode. Everything uses supported public
+A native look can restyle Windows itself while it is active: window borders, title bars, corners,
+backdrop (Mica and friends), the system accent color, light/dark mode and accent visibility.
+Selecting `config.json` > `look.style` supplies Windows defaults as well as the native shell's.
+A wallpaper can refine those defaults with its `windows` section. Everything uses supported public
 APIs (`DwmSetWindowAttribute` and the same per-user registry values the Settings app writes). No code
 runs inside any other process, and everything is undone when the theme changes, mypaper quits, the
 panic hotkey fires, or core restarts after a crash.
@@ -24,14 +26,59 @@ panic hotkey fires, or core restarts after a crash.
 
 **Your look wins.** A theme's `windows` section is a suggestion: `config.json` › `look.windows`
 (edited in Studio › Look › Windows) is your layer over it, field by field. A field absent there
-follows the theme; `null` keeps Windows' own setting ("As is"); a value sets it. The fields and
+follows the theme or native style; `null` keeps Windows' own setting ("As is"); a value sets it. The fields and
 values are the ones below. So styling Windows needs no copy of a built-in theme, and it survives a
 wallpaper change. See [studio-ux.md](studio-ux.md#6-look-and-windows-styling-as-part-of-it-d2).
 
+## One switch for the desktop
+
+```json
+{ "look": { "style": "fluent", "appearance": "dark", "accent": "auto" } }
+```
+
+The pure resolver is [`mypaper_theme::windows::resolve`](../crates/theme/src/windows.rs).
+Layers are native style defaults < wallpaper `windows` < shared `look.accent`/`appearance` <
+explicit `look.windows` fields. A missing `look.style` preserves the previous behavior: only
+the wallpaper and explicit Windows layer manage Windows. Removing both releases Windows.
+
+| Style | Corners | Backdrop | Caption, dark / light | Automatic accent | Accent on Start/taskbar; titles |
+|---|---|---|---|---|---|
+| `liquid` | round | acrylic | `#1c1c1e` / `#f5f5f7` | wallpaper accent | on in dark mode, off in light; on |
+| `oneui` | round | acrylic | `#17171a` / `#f4f4f6` | wallpaper accent | on in dark mode, off in light; on |
+| `fluent` | small | mica | `#202020` / `#f3f3f3` | wallpaper accent | on in dark mode, off in light; on |
+| `solid` | square | none | `#1c1c1e` / `#f2f2f7` | wallpaper accent | on in dark mode, off in light; on |
+| `mono` | square | none | `#141416` / `#f7f7f8` | `#f2f2f2` dark / `#1c1c1e` light | off; off |
+
+Default borders use the resolved accent; caption text is white in dark mode and `#1c1c1e` in
+light mode. These surface colours match the native UI kit. DWM has three corner choices rather
+than the kit's arbitrary radii, and its acrylic is Windows' material, not engine Liquid Glass.
+Explicit colours can add colour to mono; an explicit `look.windows.accent: "auto"` uses the
+wallpaper there too. Cursors are never chosen by a style.
+
+`look.appearance: light/dark` sets both app and system mode. If absent, a theme's `dark_mode`,
+then its bar text tone, then the native dark default supplies the mode. `appearance: auto`
+leaves Windows' mode alone and resolves caption/mono colours against its unmanaged app scheme.
+The journal's original scheme prevents a previous mypaper override feeding back into auto.
+In `look.windows`, `apps: light/dark/match/as-is` is the higher-priority mode control (`dark_mode`
+is the theme's field). `match` follows this same appearance resolution; `as-is` releases mode.
+
+For example, `look.windows: { "border": null, "accent_on_taskbar": false }` leaves borders to
+Windows and disables accent on Start/taskbar while the other fields follow the selected style.
+Both accent-visibility fields accept absent, null, true and false independently. Windows only
+supports a coloured Start/taskbar in dark system mode, so light/automatic-light defaults keep
+that switch off. Explicit overrides are still honoured.
+
+Resolution runs only on the existing config/theme/palette events: no extra process, hook,
+thread, timer or polling. The experimental app styler uses the same resolved `$accent` (including
+explicit Windows accent overrides) and wallpaper `$dominant`. If Windows accent is explicitly
+unmanaged with null, app tokens fall back to the shared look/wallpaper accent. Without a matching
+palette, automatic colours wait; fixed colours and mono's neutral defaults work immediately.
+Turning on style synchronization does not turn on the experimental app styler.
+
 ## The `windows` section
 
-Every field is optional; an unset field leaves Windows' own setting alone. Unknown fields are
-rejected.
+Every theme field is optional; an unset field follows the selected native style, or leaves
+Windows alone when no style was selected. Unknown fields are rejected.
 
 | Field | Values | What it changes |
 |---|---|---|
@@ -42,6 +89,8 @@ rejected.
 | `corners` | `default`, `round`, `small`, `square` | Corner rounding (`DWMWA_WINDOW_CORNER_PREFERENCE`) |
 | `backdrop` | `auto`, `none`, `mica`, `acrylic`, `tabbed` | System backdrop (`DWMWA_SYSTEMBACKDROP_TYPE`) |
 | `dark_mode` | `true` / `false` | Dark title bars (`DWMWA_USE_IMMERSIVE_DARK_MODE`) and the system's app/system theme |
+| `accent_on_taskbar` | `true` / `false` | Accent on Start/taskbar (`Themes\Personalize\ColorPrevalence`) |
+| `accent_on_title_bars` | `true` / `false` | Accent on title bars/borders (`DWM\ColorPrevalence`) |
 | `cursors` | `"mypaper-dark"`, `"mypaper-light"`, a set name, or a folder | The mouse cursor scheme (`HKCU\Control Panel\Cursors` + `SPI_SETCURSORS`), journaled like the accent; see [desktop-extras.md](desktop-extras.md#cursor-themes) |
 
 Border, caption, corner and backdrop attributes need Windows 11 (build 22000, and 22621 for
@@ -77,12 +126,12 @@ out-of-context `EVENT_OBJECT_SHOW` WinEvent hook on core's main thread, so nothi
 
 | Key (under `HKCU`) | Values |
 |---|---|
-| `Software\Microsoft\Windows\DWM` | `AccentColor` (`0xAABBGGRR`), `ColorizationColor` (`0xAARRGGBB`) |
+| `Software\Microsoft\Windows\DWM` | `AccentColor` (`0xAABBGGRR`), `ColorizationColor` (`0xAARRGGBB`), `ColorPrevalence` (1 = accent on titles/borders) |
 | `Software\Microsoft\Windows\CurrentVersion\Explorer\Accent` | `AccentColorMenu` (`0xAABBGGRR`), `AccentPalette` (8 swatches `R G B 00`: three lighter shades, the accent, three darker ones, then Windows' fixed orange) |
-| `Software\Microsoft\Windows\CurrentVersion\Themes\Personalize` | `AppsUseLightTheme`, `SystemUsesLightTheme` (0 = dark) |
+| `Software\Microsoft\Windows\CurrentVersion\Themes\Personalize` | `AppsUseLightTheme`, `SystemUsesLightTheme` (0 = dark), `ColorPrevalence` (1 = accent on Start/taskbar) |
 
-The accent shows on the taskbar and Start only if the user has "Show accent color on Start and
-taskbar" enabled in Settings; mypaper doesn't change that switch.
+The two `ColorPrevalence` switches are independent, journaled with the other originals and
+restored when their fields are released, styling stops, or core recovers after a crash.
 
 ## `"auto"` colors from the wallpaper
 
