@@ -1,4 +1,4 @@
-//! One readable specimen above name rows. Hover/focus is transient; only clicks commit.
+//! Compact picture rows. Hover/focus is transient; only clicks commit.
 use std::time::{Duration, Instant};
 
 use super::controls::{height, text};
@@ -35,15 +35,16 @@ pub fn begin(app: &App) {
     state.groups.clear();
 }
 
-/// Existing click actions also describe desktop previews, including per-display choices.
+/// Each choice owns a thumbnail; hover/focus previews on the real desktop.
+/// Keep the height argument for the shared bar-editor callers.
 pub fn draw(
     app: &App,
     b: &mut B,
     c: &mut Col,
     id: Key,
-    picture_height: f32,
+    _picture_height: f32,
     choices: &[(&str, bool, Action)],
-    picture: impl FnOnce(&mut B, Option<usize>, Rect),
+    mut picture: impl FnMut(&mut B, Option<usize>, Rect),
 ) -> Option<usize> {
     if choices.is_empty() {
         return None;
@@ -55,15 +56,19 @@ pub fn draw(
         .borrow_mut()
         .groups
         .insert(id);
-    let caption_font = super::controls::font(b, 12.0, 500);
+    let selected = choices.iter().position(|(_, selected, _)| *selected);
+    let count = choices.len() + usize::from(selected.is_none());
+    let text_x = c.x + b.px(90.0);
+    let text_width = (c.right() - text_x - b.px(30.0)).max(b.px(40.0));
+    let caption_font = super::controls::font(b, 11.0, 400);
     let caption_lines = choices
         .iter()
         .map(|(name, _, _)| {
             b.text
                 .lines(
-                    &format!("Previewing {name} · Click to apply"),
+                    &format!("Previewing {name} \u{00b7} Click to apply"),
                     &caption_font,
-                    c.w,
+                    text_width,
                     3,
                 )
                 .len()
@@ -71,12 +76,12 @@ pub fn draw(
         .max()
         .unwrap_or(1)
         .max(1);
-    let caption_height = height(b, 20.0 * caption_lines as f32) + b.px(6.0);
-    let rows_top = c.y + caption_height + picture_height + b.px(8.0);
-    let row_height = height(b, 34.0);
-    let selected = choices.iter().position(|(_, selected, _)| *selected);
-    let count = choices.len() + usize::from(selected.is_none());
-    let row_rect = |index| Rect::new(c.x, rows_top + index as f32 * row_height, c.w, row_height);
+    // Reserve captions so hovering never moves the following row.
+    let row_height = b
+        .px(48.0)
+        .max(height(b, 22.0 + 15.0 * caption_lines as f32) + b.px(10.0));
+    let top = c.y;
+    let row_rect = |index| Rect::new(c.x, top + index as f32 * row_height, c.w, row_height);
     let pointer = if app.fixture || app.window.is_none() {
         b.input.pointer
     } else {
@@ -100,80 +105,181 @@ pub fn draw(
     let shown = highlighted
         .or(selected)
         .filter(|index| *index < choices.len());
-    let name = shown.map_or("Custom", |index| choices[index].0);
-    let previewing = shown.is_some() && shown != selected;
-    let caption = if previewing {
-        format!("Previewing {name} · Click to apply")
-    } else {
-        name.to_owned()
-    };
-    for (line, label) in b
-        .text
-        .lines(&caption, &caption_font, c.w, 3)
-        .iter()
-        .enumerate()
-    {
-        text(
-            b,
-            Rect::new(
-                c.x,
-                c.y + line as f32 * height(b, 20.0),
-                c.w,
-                height(b, 20.0),
-            ),
-            label,
-            12.0,
-            500,
-            b.p.ink2,
-            Align::Start,
-        );
-    }
-    b.announce(&caption, id);
-    picture(
-        b,
-        shown,
-        Rect::new(c.x, c.y + caption_height, c.w, picture_height),
-    );
-    c.y = rows_top;
     b.group(id, |b| {
         let custom = ("Custom", true, Action::None);
-        for (index, (name, selected, action)) in choices
+        for (index, (name, applied, action)) in choices
             .iter()
             .chain(selected.is_none().then_some(&custom))
             .enumerate()
         {
             let k = key((id, index));
-            let rect = Rect::new(c.x, c.y, c.w, row_height);
-            // The native pointer sample drives both the specimen and its row highlight.
-            if *selected {
-                b.fill(rect, b.px(7.0), super::tokens::thumb(b.p.dark));
-            } else if highlighted == Some(index) {
+            let rect = row_rect(index);
+            let hovered = highlighted == Some(index);
+            if hovered {
+                b.fill(rect, b.px(7.0), b.p.hover);
+            } else if *applied {
+                b.fill(rect, b.px(7.0), b.p.selected);
+            }
+            if b.clip_rect().is_none_or(|clip| rect.intersects(&clip)) {
+                picture(
+                    b,
+                    (index < choices.len()).then_some(index),
+                    Rect::new(
+                        rect.left + b.px(6.0),
+                        rect.top + (rect.height() - b.px(44.0)) / 2.0,
+                        b.px(72.0),
+                        b.px(44.0),
+                    ),
+                );
+                let label = Rect::new(
+                    text_x,
+                    rect.top
+                        + if hovered {
+                            b.px(5.0)
+                        } else {
+                            (rect.height() - height(b, 22.0)) / 2.0
+                        },
+                    text_width,
+                    height(b, 22.0),
+                );
+                text(
+                    b,
+                    label,
+                    name,
+                    13.0,
+                    if *applied { 600 } else { 400 },
+                    b.p.ink1,
+                    Align::Start,
+                );
+                if hovered && index < choices.len() {
+                    let caption = format!("Previewing {name} \u{00b7} Click to apply");
+                    for (line, value) in b
+                        .text
+                        .lines(&caption, &caption_font, text_width, 3)
+                        .iter()
+                        .enumerate()
+                    {
+                        text(
+                            b,
+                            Rect::new(
+                                text_x,
+                                label.bottom + line as f32 * height(b, 15.0),
+                                text_width,
+                                height(b, 15.0),
+                            ),
+                            value,
+                            11.0,
+                            400,
+                            b.p.ink2,
+                            Align::Start,
+                        );
+                    }
+                    b.announce(&caption, id);
+                }
+                if *applied {
+                    b.icon(
+                        Rect::new(rect.right - b.px(26.0), rect.top, b.px(20.0), rect.height()),
+                        crate::theme::glyph::CHECK,
+                        13.0 * b.t.text_scale,
+                        b.p.ink1,
+                    );
+                }
+            }
+            b.hit_checked(
+                k,
+                rect,
+                Role::RadioButton,
+                name,
+                Some(*applied),
+                action.clone(),
+                Behavior::Click,
+            );
+            b.focus_ring(k, rect, b.px(7.0));
+        }
+    });
+    c.y = top + count as f32 * row_height + b.px(6.0);
+    if let Some(index) = hot.filter(|index| *index < choices.len()) {
+        app.panel.as_ref().unwrap().chooser.borrow_mut().requested =
+            Some((key((id, index)), choices[index].2.clone()));
+    }
+    shown
+}
+
+/// Two columns of miniature desktops for the four first-run starters.
+pub fn tiles(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    id: Key,
+    choices: &[(&str, bool, Action)],
+    mut picture: impl FnMut(&mut B, usize, Rect),
+) {
+    app.panel
+        .as_ref()
+        .unwrap()
+        .chooser
+        .borrow_mut()
+        .groups
+        .insert(id);
+    let gap = b.px(10.0);
+    let width = (c.w - gap) / 2.0;
+    let picture_height = width * 9.0 / 16.0;
+    let row_height = picture_height + height(b, 32.0) + gap;
+    let pointer = if app.fixture || app.window.is_none() {
+        b.input.pointer
+    } else {
+        super::pick_client::panel_pointer(app)
+    }
+    .filter(|point| b.clip_rect().is_none_or(|clip| clip.contains(*point)));
+    let keyboard =
+        b.input.focus_visible && !app.panel.as_ref().unwrap().chooser.borrow().pointer_mode;
+    b.group(id, |b| {
+        for (i, (name, applied, action)) in choices.iter().enumerate() {
+            let k = key((id, i));
+            let rect = Rect::new(
+                c.x + (i % 2) as f32 * (width + gap),
+                c.y + (i / 2) as f32 * row_height,
+                width,
+                row_height - gap,
+            );
+            let hot = if keyboard {
+                b.input.focus == Some(k)
+            } else {
+                pointer.is_some_and(|point| rect.contains(point))
+            };
+            let hot = hot && app.panel.as_ref().unwrap().chooser.borrow().suppressed != Some(k);
+            if *applied {
+                b.fill(rect, b.px(7.0), b.p.selected);
+            }
+            if hot {
                 b.fill(rect, b.px(7.0), b.p.hover);
             }
+            picture(b, i, Rect::new(rect.left, rect.top, width, picture_height));
             text(
                 b,
                 Rect::new(
-                    rect.left + b.px(10.0),
-                    rect.top,
-                    rect.width() - b.px(44.0),
-                    rect.height(),
+                    rect.left + b.px(8.0),
+                    rect.top + picture_height,
+                    width - b.px(32.0),
+                    height(b, 32.0),
                 ),
                 name,
                 13.0,
-                if *selected { 600 } else { 400 },
-                if *selected {
-                    super::tokens::hex(0xffffff)
-                } else {
-                    b.p.ink1
-                },
+                500,
+                b.p.ink1,
                 Align::Start,
             );
-            if *selected {
+            if *applied {
                 b.icon(
-                    Rect::new(rect.right - b.px(30.0), rect.top, b.px(20.0), rect.height()),
+                    Rect::new(
+                        rect.right - b.px(24.0),
+                        rect.top + picture_height,
+                        b.px(20.0),
+                        height(b, 32.0),
+                    ),
                     crate::theme::glyph::CHECK,
-                    13.0,
-                    super::tokens::hex(0xffffff),
+                    13.0 * b.t.text_scale,
+                    b.p.ink1,
                 );
             }
             b.hit_checked(
@@ -181,20 +287,18 @@ pub fn draw(
                 rect,
                 Role::RadioButton,
                 name,
-                Some(*selected),
+                Some(*applied),
                 action.clone(),
                 Behavior::Click,
             );
             b.focus_ring(k, rect, b.px(7.0));
-            c.y += row_height;
+            if hot {
+                app.panel.as_ref().unwrap().chooser.borrow_mut().requested =
+                    Some((k, action.clone()));
+            }
         }
     });
-    c.y += b.px(6.0);
-    if let Some(index) = hot.filter(|index| *index < choices.len()) {
-        app.panel.as_ref().unwrap().chooser.borrow_mut().requested =
-            Some((key((id, index)), choices[index].2.clone()));
-    }
-    shown
+    c.y += choices.len().div_ceil(2) as f32 * row_height;
 }
 
 /// Arrows browse a chooser; Enter/Space and clicks apply through the existing target action.
@@ -377,6 +481,80 @@ mod tests {
     };
     use mypaper_config::look::Style;
     use mypaper_ui::{Point, Ui};
+
+    #[test]
+    fn style_hover_disables_material_and_color_until_leaving_or_applying() {
+        let mut ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(PanelState {
+            page: Page::Look,
+            ..Default::default()
+        });
+        app.size = (480, 800);
+        let frame = crate::panel::build(&app, &mut ui.text);
+        let is_material = |action: &Action| matches!(action, Action::Slider(edit) if edit.path.starts_with("/look/material/"));
+        assert!(
+            frame
+                .targets
+                .iter()
+                .any(|target| is_material(&target.action))
+        );
+        let tint = frame.targets.iter().filter(|target| matches!(&target.action,
+            Action::Set(edit, _) | Action::Unset(edit) if edit.path.as_ref() == "/look/material/tint"))
+            .map(|target| target.rect.bottom).reduce(f32::max).unwrap();
+        assert!(
+            tint < 752.0,
+            "Style and Material fit on the first 480-DIP-wide screen: {tint}"
+        );
+        let action = Action::SetStyle(Some(Style::Fluent));
+        let target = frame
+            .targets
+            .iter()
+            .find(|target| target.action == action)
+            .unwrap();
+        app.input.pointer = Some(Point::new(target.rect.left + 20.0, target.rect.top + 10.0));
+        let frame = crate::panel::build(&app, &mut ui.text);
+        assert!(
+            !frame
+                .targets
+                .iter()
+                .any(|target| is_material(&target.action))
+        );
+        assert!(!frame.targets.iter().any(|target| matches!(&target.action,
+            Action::Set(edit, _) if edit.path.as_ref() == "/look/appearance")));
+        assert!(
+            frame
+                .list
+                .ops
+                .iter()
+                .any(|op| matches!(op, mypaper_ui::Op::Text { text, .. }
+            if text.as_ref() == "Click Fluent to edit its material"))
+        );
+        app.input.pointer = None;
+        let frame = crate::panel::build(&app, &mut ui.text);
+        assert!(
+            frame
+                .targets
+                .iter()
+                .any(|target| is_material(&target.action))
+        );
+        app.run(action);
+        let frame = crate::panel::build(&app, &mut ui.text);
+        assert!(
+            frame
+                .targets
+                .iter()
+                .any(|target| is_material(&target.action))
+        );
+        assert!(
+            frame
+                .list
+                .ops
+                .iter()
+                .any(|op| matches!(op, mypaper_ui::Op::Text { text, .. }
+            if text.as_ref() == "Your Fluent settings"))
+        );
+    }
 
     #[test]
     fn stale_input_hover_does_not_split_row_highlight_from_the_preview() {

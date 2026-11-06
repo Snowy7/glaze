@@ -94,63 +94,74 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         .get(DocId::Config, "/look/style")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
+    let mut shown = Some(current);
     group(b, c, "Style", |b, c| {
         crate::ui::anchor(app, "style", c.view, c.y);
-        style_tiles(app, b, c, Some(current), |style| {
+        shown = style_tiles(app, b, c, Some(current), |style| {
             Action::SetStyle(Some(style))
         });
     });
+    let preview = shown.filter(|style| *style != current).map(style_name);
     group(b, c, "Material", |b, c| {
-        notice(b, c, &format!("Your {} settings", style_name(current)));
-        let sliders: Vec<_> = ["clarity", "blur", "refraction", "highlight"]
-            .into_iter()
-            .zip(crate::look::uses(current))
-            .filter(|(_, uses)| *uses)
-            .map(|(id, _)| {
-                let setting = crate::settings::Setting::get(id).unwrap();
-                crate::ui::anchor(app, id, c.view, c.y);
-                crate::panel::material::Slider {
-                    label: setting.label,
-                    value: crate::panel::material::look_value(app, current, id),
-                    max: if id == "blur" { 32.0 } else { 1.0 },
-                    edit: Edit::new(setting.doc, setting.path, setting.label),
-                }
-            })
-            .collect();
-        crate::ui::anchor(app, "tint", c.view, c.y);
-        crate::panel::material::block(
-            app,
-            b,
-            c,
-            &sliders,
-            Edit::new(DocId::Config, "/look/material/tint", "Tint"),
-            app.get(DocId::Config, "/look/material/tint"),
-            true,
-        );
+        crate::panel::material::applied_controls(b, c, preview, |b, c| {
+            if preview.is_none() {
+                notice(b, c, &format!("Your {} settings", style_name(current)));
+            }
+            let sliders: Vec<_> = ["clarity", "blur", "refraction", "highlight"]
+                .into_iter()
+                .zip(crate::look::uses(current))
+                .filter(|(_, uses)| *uses)
+                .map(|(id, _)| {
+                    let setting = crate::settings::Setting::get(id).unwrap();
+                    crate::ui::anchor(app, id, c.view, c.y);
+                    crate::panel::material::Slider {
+                        label: setting.label,
+                        value: crate::panel::material::look_value(app, current, id),
+                        max: if id == "blur" { 32.0 } else { 1.0 },
+                        edit: Edit::new(setting.doc, setting.path, setting.label),
+                    }
+                })
+                .collect();
+            crate::ui::anchor(app, "tint", c.view, c.y);
+            crate::panel::material::block(
+                app,
+                b,
+                c,
+                &sliders,
+                Edit::new(DocId::Config, "/look/material/tint", "Tint"),
+                app.get(DocId::Config, "/look/material/tint"),
+                true,
+            );
+        });
     });
     group(b, c, "Color", |b, c| {
-        setting(app, b, c, "appearance", "Appearance", "");
-        text(
-            b,
-            Rect::new(c.x, c.y, c.w, height(b, 28.0)),
-            "Accent",
-            13.0,
-            400,
-            b.p.ink1,
-            Align::Start,
-        );
-        crate::ui::anchor(app, "accent", c.view, c.y);
-        c.y += height(b, 28.0);
-        super::super::colors::swatches(
-            app,
-            b,
-            c,
-            &Edit::new(DocId::Config, "/look/accent", "Accent"),
-            app.get(DocId::Config, "/look/accent"),
-            true,
-            false,
-            &COLORS,
-        );
+        crate::panel::material::applied_controls(b, c, preview, |b, c| {
+            if preview.is_none() {
+                notice(b, c, &format!("Your {} colors", style_name(current)));
+            }
+            setting(app, b, c, "appearance", "Appearance", "");
+            text(
+                b,
+                Rect::new(c.x, c.y, c.w, height(b, 28.0)),
+                "Accent",
+                13.0,
+                400,
+                b.p.ink1,
+                Align::Start,
+            );
+            crate::ui::anchor(app, "accent", c.view, c.y);
+            c.y += height(b, 28.0);
+            super::super::colors::swatches(
+                app,
+                b,
+                c,
+                &Edit::new(DocId::Config, "/look/accent", "Accent"),
+                app.get(DocId::Config, "/look/accent"),
+                true,
+                false,
+                &COLORS,
+            );
+        });
     });
     let more_hint = if b.t.text_scale > 1.0 {
         ""
@@ -199,9 +210,14 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                     options,
                 );
                 if family == "widgets" {
+                    let mut nested = Col {
+                        x: c.x + b.px(16.0),
+                        w: c.w - b.px(16.0),
+                        ..*c
+                    };
                     select(
                         b,
-                        c,
+                        &mut nested,
                         "Background",
                         app.get(DocId::Widgets, "/appearance/surface")
                             .cloned()
@@ -214,20 +230,21 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                             (json!("solid"), "Solid".into()),
                         ],
                     );
+                    c.y = nested.y;
                 }
             }
         });
     }
 }
 
-/// Look and widget overrides share one specimen and the same five names.
+/// Look and widget overrides share the same five pictured choices.
 pub(super) fn style_tiles(
     app: &App,
     b: &mut B,
     c: &mut Col,
     selected: Option<Style>,
     action: impl Fn(Style) -> Action,
-) {
+) -> Option<Style> {
     let choices: Vec<_> = STYLES
         .iter()
         .map(|(style, name, _)| (*name, selected == Some(*style), action(*style)))
@@ -249,9 +266,7 @@ pub(super) fn style_tiles(
             )
         },
     );
-    if let Some(index) = shown {
-        notice(b, c, STYLES[index].2);
-    }
+    shown.map(|index| STYLES[index].0)
 }
 
 pub(super) fn style_name(style: Style) -> &'static str {
@@ -286,6 +301,7 @@ fn wallpaper_scope(app: &App, b: &mut B, c: &mut Col) {
         "Saved to this wallpaper. Your own look still wins where you set it.",
     );
     let selected = target::selected(&theme);
+    let mut shown = None;
     group(b, c, "Style", |b, c| {
         let choices: Vec<_> = STYLES
             .iter()
@@ -297,7 +313,7 @@ fn wallpaper_scope(app: &App, b: &mut B, c: &mut Col) {
                 )
             })
             .collect();
-        crate::panel::choosers::draw(
+        shown = crate::panel::choosers::draw(
             app,
             b,
             c,
@@ -318,54 +334,74 @@ fn wallpaper_scope(app: &App, b: &mut B, c: &mut Col) {
             },
         );
     });
+    let preview = shown
+        .map(|index| STYLES[index].0)
+        .filter(|style| Some(*style) != selected)
+        .map(style_name);
     group(b, c, "Material", |b, c| {
-        notice(
-            b,
-            c,
-            &format!(
-                "This wallpaper's {} settings",
-                selected.map_or("Custom", style_name)
-            ),
-        );
-        crate::panel::material::wallpaper(app, b, c, wallpaper, &theme)
+        crate::panel::material::applied_controls(b, c, preview, |b, c| {
+            if preview.is_none() {
+                notice(
+                    b,
+                    c,
+                    &format!(
+                        "This wallpaper's {} settings",
+                        selected.map_or("Custom", style_name)
+                    ),
+                );
+            }
+            crate::panel::material::wallpaper(app, b, c, wallpaper, &theme);
+        });
     });
     let edit = |path: &str, label: &str| target::edit(wallpaper, path, label);
     group(b, c, "Color", |b, c| {
-        select(
-            b,
-            c,
-            "Text",
-            theme
-                .pointer("/widgets/appearance/text")
-                .cloned()
-                .unwrap_or(Value::Null),
-            edit("/@both/appearance/text", "Text tone"),
-            vec![
-                (Value::Null, "The style's".into()),
-                (json!("light"), "Light".into()),
-                (json!("dark"), "Dark".into()),
-            ],
-        );
-        text(
-            b,
-            Rect::new(c.x, c.y, c.w, height(b, 28.0)),
-            "Accent",
-            13.0,
-            400,
-            b.p.ink1,
-            Align::Start,
-        );
-        c.y += height(b, 28.0);
-        crate::panel::colors::swatches(
-            app,
-            b,
-            c,
-            &edit("/@both/appearance/accent", "Accent"),
-            theme.pointer("/widgets/appearance/accent"),
-            true,
-            false,
-            &COLORS,
-        );
+        crate::panel::material::applied_controls(b, c, preview, |b, c| {
+            if preview.is_none() {
+                notice(
+                    b,
+                    c,
+                    &format!(
+                        "This wallpaper's {} colors",
+                        selected.map_or("Custom", style_name)
+                    ),
+                );
+            }
+            select(
+                b,
+                c,
+                "Text",
+                theme
+                    .pointer("/widgets/appearance/text")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                edit("/@both/appearance/text", "Text tone"),
+                vec![
+                    (Value::Null, "The style's".into()),
+                    (json!("light"), "Light".into()),
+                    (json!("dark"), "Dark".into()),
+                ],
+            );
+            text(
+                b,
+                Rect::new(c.x, c.y, c.w, height(b, 28.0)),
+                "Accent",
+                13.0,
+                400,
+                b.p.ink1,
+                Align::Start,
+            );
+            c.y += height(b, 28.0);
+            crate::panel::colors::swatches(
+                app,
+                b,
+                c,
+                &edit("/@both/appearance/accent", "Accent"),
+                theme.pointer("/widgets/appearance/accent"),
+                true,
+                false,
+                &COLORS,
+            );
+        });
     });
     if more(app, b, c, "Text and shape") {
         group(b, c, "Text", |b, c| {

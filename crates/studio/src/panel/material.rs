@@ -38,7 +38,7 @@ pub fn row(
 ) {
     let label_width = super::controls::label_width(b, c);
     let stacked = c.w < b.px(340.0) || b.t.text_scale > 1.0 || label_width > c.w * 0.45;
-    let h = height(b, 38.0);
+    let h = height(b, 34.0);
     text(
         b,
         Rect::new(
@@ -72,6 +72,37 @@ pub fn row(
         Action::Slider(edit),
     );
     c.y += h;
+}
+
+/// Keep the applied controls visible during a transient style preview, but inert.
+pub fn applied_controls(
+    b: &mut B,
+    c: &mut Col,
+    preview: Option<&str>,
+    body: impl FnOnce(&mut B, &mut Col),
+) {
+    if let Some(style) = preview {
+        super::controls::notice(b, c, &format!("Click {style} to edit its material"));
+    }
+    let top = c.y;
+    let (targets, hits, semantics, focus) = (
+        b.targets.len(),
+        b.list.hits.len(),
+        b.semantics.len(),
+        b.list.focus,
+    );
+    body(b, c);
+    if preview.is_some() {
+        b.targets.truncate(targets);
+        b.list.hits.truncate(hits);
+        b.semantics.truncate(semantics);
+        b.list.focus = focus;
+        b.fill(
+            Rect::new(c.x, top, c.w, c.y - top),
+            0.0,
+            b.p.panel.with_alpha(0.65),
+        );
+    }
 }
 
 pub fn block(
