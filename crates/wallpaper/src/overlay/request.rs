@@ -19,7 +19,10 @@ use windows::core::{PCWSTR, w};
 
 #[path = "channel.rs"]
 mod channel;
+#[path = "curve.rs"]
+mod curve;
 pub use channel::Channel;
+pub use curve::FadeCurve;
 pub const WM_PLACEMENT: u32 = channel::WM_PLACEMENT;
 
 /// The window class of the engine's overlay message window (message-only).
@@ -85,9 +88,13 @@ pub struct Style {
     /// The broad soft shade under the lit edge, 0..=1 (0.5: the kit's); negative: follows the
     /// highlight.
     pub depth: f32,
-    /// How long the glass fades in when it first shows, in ms (0..=2000); 0 shows it at once,
+    /// How long the glass fades in when it first shows, in ms (0..=5000); 0 shows it at once,
     /// for reduced motion.
     pub fade_ms: f32,
+    /// Bottom inner shadow, 0..=1; zero is off, independently of the lit rim's `depth`.
+    pub inner_shadow: f32,
+    /// Resolved named/Bézier/physical spring curve. Default keeps the original cubic ease-out.
+    pub fade_curve: FadeCurve,
 }
 
 impl Style {
@@ -99,6 +106,8 @@ impl Style {
         sheen: -1.0,
         depth: -1.0,
         fade_ms: 300.0,
+        inner_shadow: 0.0,
+        fade_curve: FadeCurve::DEFAULT,
     };
 
     fn valid(&self) -> bool {
@@ -109,7 +118,9 @@ impl Style {
             && within(self.smoothing, 1.0)
             && optional(self.sheen)
             && optional(self.depth)
-            && within(self.fade_ms, 2000.0)
+            && within(self.fade_ms, 5000.0)
+            && within(self.inner_shadow, 1.0)
+            && self.fade_curve.valid()
     }
 }
 
@@ -196,6 +207,8 @@ struct Wire {
 
 /// The wire without its `style` tail.
 const SHORT: usize = std::mem::offset_of!(Wire, style);
+/// The first style version, retained for older engines and shells.
+const STYLE_V1: usize = SHORT + std::mem::offset_of!(Style, inner_shadow);
 
 const OPEN: u32 = 1;
 const PLACE: u32 = 2;
@@ -295,7 +308,11 @@ impl Wire {
     /// The bytes `send` puts on the wire for it.
     fn bytes(&self) -> &[u8] {
         let all = bytemuck::bytes_of(self);
-        if self.kind == STYLE { all } else { &all[..SHORT] }
+        if self.kind == STYLE {
+            all
+        } else {
+            &all[..SHORT]
+        }
     }
 }
 
@@ -307,22 +324,21 @@ pub unsafe fn decode(lparam: LPARAM) -> Option<Request> {
     // SAFETY: the caller's contract.
     let data = unsafe { &*(lparam.0 as *const COPYDATASTRUCT) };
     let len = data.cbData as usize;
-    if data.dwData != MAGIC || !(len == SHORT || len == size_of::<Wire>()) || data.lpData.is_null()
+    if data.dwData != MAGIC
+        || !(len == SHORT || len == STYLE_V1 || len == size_of::<Wire>())
+        || data.lpData.is_null()
     {
         return None;
     }
     // A short wire has no style tail: it reads as zeros, which only a `Style` request (which
     // must be long) would look at.
     let mut wire = Wire::zeroed();
+    wire.style = Style::DEFAULT;
     // SAFETY: `len` (at most the wire's size) bytes at `lpData`, alive for the message.
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            data.lpData.cast::<u8>(),
-            (&raw mut wire).cast::<u8>(),
-            len,
-        )
+        std::ptr::copy_nonoverlapping(data.lpData.cast::<u8>(), (&raw mut wire).cast::<u8>(), len)
     };
-    if wire.kind == STYLE && len != size_of::<Wire>() {
+    if wire.kind == STYLE && len == SHORT {
         return None;
     }
     wire.decode()
@@ -337,8 +353,21 @@ pub fn find_engine() -> Option<HWND> {
 /// The shell side: sends `request` to the engine window `engine`, waiting at most 50 ms for the
 /// engine to take it (it is queued there, not drawn yet).
 pub fn send(engine: HWND, request: &Request) -> Reply {
-    let wire = Wire::from(request);
-    let bytes = wire.bytes();
+    let mut wire = Wire::from(request);
+    let Some(reply) = send_wire(engine, wire.bytes()) else {
+        return Reply::Rejected;
+    };
+    if reply == Reply::Rejected && wire.kind == STYLE {
+        // Older engines reject the extended size before reading it. Retry the original style
+        // so they still receive brightness, saturation, corners and the supported fade range.
+        wire.style.fade_ms = wire.style.fade_ms.min(2000.0);
+        return send_wire(engine, &bytemuck::bytes_of(&wire)[..STYLE_V1])
+            .unwrap_or(Reply::Rejected);
+    }
+    reply
+}
+
+fn send_wire(engine: HWND, bytes: &[u8]) -> Option<Reply> {
     let data = COPYDATASTRUCT {
         dwData: MAGIC,
         cbData: bytes.len() as u32,
@@ -358,9 +387,9 @@ pub fn send(engine: HWND, request: &Request) -> Reply {
         )
     };
     if sent.0 == 0 {
-        return Reply::Rejected;
+        return None;
     }
-    Reply::from_lresult(result)
+    Some(Reply::from_lresult(result))
 }
 
 #[cfg(test)]
@@ -414,6 +443,8 @@ mod tests {
                     smoothing: 0.6,
                     sheen: 0.4,
                     fade_ms: 0.0,
+                    inner_shadow: 0.8,
+                    fade_curve: FadeCurve::bezier([0.42, 0.0, 0.58, 1.0]),
                     ..Style::DEFAULT
                 },
             },
@@ -450,6 +481,48 @@ mod tests {
             },
         };
         assert_eq!(roundtrip(wild), None);
+    }
+
+    #[test]
+    fn legacy_styles_keep_their_knobs_and_new_fields_default() {
+        assert_eq!(STYLE_V1, 80);
+        let request = Request::Style {
+            client: HWND(0x1234 as *mut _),
+            style: Style {
+                smoothing: 0.6,
+                saturation: 2.0,
+                fade_ms: 1200.0,
+                ..Style::DEFAULT
+            },
+        };
+        let wire = Wire::from(&request);
+        let data = COPYDATASTRUCT {
+            dwData: MAGIC,
+            cbData: STYLE_V1 as u32,
+            lpData: bytemuck::bytes_of(&wire).as_ptr().cast_mut().cast(),
+        };
+        // SAFETY: a valid COPYDATASTRUCT over the old prefix of a live wire.
+        assert_eq!(
+            unsafe { decode(LPARAM(&raw const data as isize)) },
+            Some(request)
+        );
+        for (duration, curve, valid) in [
+            (5000.0, FadeCurve::bezier([0.0, 0.0, 1.0, 1.0]), true),
+            (0.0, FadeCurve::DEFAULT, true),
+            (5001.0, FadeCurve::DEFAULT, false),
+            (300.0, FadeCurve::bezier([f32::NAN, 0.0, 1.0, 1.0]), false),
+            (300.0, FadeCurve::bezier([1.1, 0.0, 1.0, 1.0]), false),
+        ] {
+            let request = Request::Style {
+                client: request.client(),
+                style: Style {
+                    fade_ms: duration,
+                    fade_curve: curve,
+                    ..Style::DEFAULT
+                },
+            };
+            assert_eq!(roundtrip(request).is_some(), valid);
+        }
     }
 
     #[test]

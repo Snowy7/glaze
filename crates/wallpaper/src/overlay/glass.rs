@@ -332,17 +332,23 @@ impl Targets {
         );
         let (material, appearance) = crate::material::liquid(&controls(material), s);
         let set = |v: f32| (v >= 0.0).then_some(v);
-        let material = crate::material::styled(
+        let mut material = crate::material::styled(
             material,
             style.brightness,
             style.saturation,
             set(style.sheen),
             set(style.depth),
         );
+        material.inner_shadow = style.inner_shadow;
+        // DComp only has circular rectangle clips. Smoothed overlays use the shader's exact
+        // continuous coverage and a rectangular DComp bound; circular defaults stay as before.
+        material.clip_to_shape = style.smoothing > 0.0;
         self.scene.place(self.glass, frame);
         // Exactly the surface's own corners: quarter circles unless the style smooths them.
-        self.scene
-            .set_shape(self.glass, crate::material::shape(radius / s, style.smoothing));
+        self.scene.set_shape(
+            self.glass,
+            crate::material::shape(radius / s, style.smoothing),
+        );
         self.scene.set_material(self.glass, material);
         self.scene.set_appearance(self.glass, Some(appearance));
         self.scene.update(0.0);
@@ -406,7 +412,11 @@ impl Targets {
                 ..Default::default()
             }));
         };
-        pass(encoder, wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), begin);
+        pass(
+            encoder,
+            wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+            begin,
+        );
         self.renderer.render(
             device,
             queue,

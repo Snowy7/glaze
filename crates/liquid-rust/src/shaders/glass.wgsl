@@ -377,7 +377,7 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
 
     // Outside: drop shadow and the darkened hairline edge.
     var dark = 0.0;
-    if cov < 1.0 {
+    if cov < 1.0 && mat.dark_b.w == 0.0 {
         var adapt = v.backdrop.x;
         if !lone {
             adapt = shadow_adapt(center_uv);
@@ -501,6 +501,14 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
             let lines = inner_shadow(p, grp, h, 0.0, 0.125 * pt) + inner_shadow(p, grp, -h, 0.0, 0.125 * pt);
             g += vec3f(mat.edge.x * lines);
         }
+    }
+
+    // mypaper: a separate bottom inner shadow (the bars' depth contract). The shifted hole
+    // exposes the bottom edge; thin glass narrows it with its lens, as for the kit's rims.
+    // Zero strength skips the SDF/blur entirely and leaves the original picture unchanged.
+    if mat.dark_b.z > 0.0 && -d < 45.0 * pt {
+        let shade = inner_shadow(p, grp, vec2f(0.0, -4.0 * pt * rims), 0.0, 6.0 * pt * rims);
+        g -= vec3f(0.2 * mat.dark_b.z * shade * max(n.y, 0.0));
     }
 
     // Touch: the glass lights up from the finger; the light spills onto nearby glass.

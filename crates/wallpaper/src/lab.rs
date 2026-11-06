@@ -18,7 +18,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use mypaper_desktop::Rect;
-use mypaper_glass_ipc::{Material, Plate};
+use mypaper_glass_ipc::{Material, Plate, Style};
 
 use crate::glass_pass::GlassPass;
 use crate::gpu::{Gpu, KeptFrame};
@@ -234,7 +234,13 @@ impl Lab {
                 let labels = p.labels();
                 let n = labels.len() as u32 + 1;
                 encoder.resolve_query_set(p.queries(), 0..n, &self.pass_resolve, 0);
-                encoder.copy_buffer_to_buffer(&self.pass_resolve, 0, &self.pass_read, 0, u64::from(n) * 8);
+                encoder.copy_buffer_to_buffer(
+                    &self.pass_resolve,
+                    0,
+                    &self.pass_read,
+                    0,
+                    u64::from(n) * 8,
+                );
                 labels
             })
             .unwrap_or_default();
@@ -256,7 +262,11 @@ impl Lab {
             let s = self.map(&self.pass_read, ticks);
             labels.iter().enumerate().map(|(i, l)| (*l, ms(&s, i, i + 1))).collect()
         };
-        ([ms(&stamps, 0, 1), ms(&stamps, 1, 2), ms(&stamps, 2, 3)], cpu, passes)
+        (
+            [ms(&stamps, 0, 1), ms(&stamps, 1, 2), ms(&stamps, 2, 3)],
+            cpu,
+            passes,
+        )
     }
 
     /// Times the glass renderer's passes from the next frame on.
@@ -365,8 +375,31 @@ fn lab() {
     let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
     let mut lab = Lab::new(&root.join(parts[0]));
     let custom = std::env::var_os("MYPAPER_LAB_PLATES").map(|p| plates_file(Path::new(&p)));
-    lab.glass
-        .set_plates(custom.clone().unwrap_or_else(|| fixture(0.0)));
+    // Optional optics fixture: brightness,saturation,smoothing,sheen,depth,inner-shadow.
+    // Negative sheen/depth retain the highlight-derived defaults, just like the overlay wire.
+    let style = std::env::var("MYPAPER_LAB_STYLE")
+        .ok()
+        .map(|line| {
+            let v: Vec<f32> = line.split(',').map(|x| x.trim().parse().unwrap()).collect();
+            assert_eq!(v.len(), 6);
+            Style {
+                brightness: v[0],
+                saturation: v[1],
+                smoothing: v[2],
+                sheen: (v[3] >= 0.0).then_some(v[3]),
+                depth: (v[4] >= 0.0).then_some(v[4]),
+                inner_shadow: v[5],
+            }
+        })
+        .unwrap_or_default();
+    lab.glass.set_styled(
+        custom
+            .clone()
+            .unwrap_or_else(|| fixture(0.0))
+            .into_iter()
+            .map(|p| (p, style))
+            .collect(),
+    );
     lab.glass.settle();
     if custom.is_some() {
         // Captures only: the timed runs move the fixture's dock.
@@ -416,8 +449,12 @@ fn lab() {
     let mut glass = [vec![], vec![], vec![], vec![]];
     let mut glass_passes = Passes::default();
     for f in 0..frames {
-        lab.glass
-            .set_plates(fixture(160.0 * (f as f32 * 0.05).sin()));
+        lab.glass.set_styled(
+            fixture(160.0 * (f as f32 * 0.05).sin())
+                .into_iter()
+                .map(|p| (p, style))
+                .collect(),
+        );
         let (ms, cpu, passes) = lab.timed(Duration::from_secs(5), f, false);
         glass[0].push(ms[1]);
         glass[1].push(ms[2]);
@@ -451,6 +488,141 @@ fn lab() {
 }
 
 use crate::trim::private_mib;
+
+/// Transparent overlay fixture: proves the continuous edge keeps its own coverage and that
+/// the independent shadow darkens the bottom without changing the top. Dumps inspectable BGRA.
+#[test]
+#[ignore = "dev tool: MYPAPER_PARITY_OUT=<output directory>"]
+fn glass_parity() {
+    use liquid_rust as lr;
+    let out = PathBuf::from(std::env::var_os("MYPAPER_PARITY_OUT").expect("output directory"));
+    std::fs::create_dir_all(&out).unwrap();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let lab = Lab::new(&root.join("themes/rain-city"));
+    let gpu = &lab.gpu;
+    let size = (512, 320);
+    let format = gpu.format.add_srgb_suffix();
+    let content = gpu.texture(
+        "parity backdrop",
+        size,
+        format,
+        wgpu::TextureUsages::TEXTURE_BINDING,
+        None,
+    );
+    gpu.write_texture(
+        &content,
+        &[140, 160, 180, 255].repeat((size.0 * size.1) as usize),
+    );
+    let content = content.create_view(&Default::default());
+    let target = gpu.texture(
+        "parity glass",
+        size,
+        format,
+        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        None,
+    );
+    let view = target.create_view(&Default::default());
+    let mut renderer = lr::Renderer::new(&gpu.device, format);
+    let mut render = |clip, shadow| {
+        let mut scene = lr::Scene::new();
+        scene.physics = false;
+        scene.add(
+            lr::Glass::new(lr::Rect::new(48.0, 48.0, 416.0, 224.0))
+                .shape(crate::material::shape(48.0, 0.6))
+                .material(lr::Material {
+                    refraction: 0.0,
+                    dispersion: 0.0,
+                    frost: 0.0,
+                    specular: 0.0,
+                    rim: 0.0,
+                    rim_shade: 0.0,
+                    inner_shadow: shadow,
+                    clip_to_shape: clip,
+                    adaptive: false,
+                    ..lr::Material::regular()
+                })
+                .appearance(lr::Appearance {
+                    adapt_to_content: false,
+                    ..Default::default()
+                }),
+        );
+        scene.update(0.0);
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            ..Default::default()
+        }));
+        renderer.render(
+            &gpu.device,
+            &gpu.queue,
+            &mut encoder,
+            &lr::Frame {
+                content: &content,
+                target: &view,
+                size,
+                scale: 1.0,
+                content_changed: true,
+                copy_content: false,
+            },
+            &scene,
+        );
+        gpu.queue.submit([encoder.finish()]);
+        lab.pixels(&target)
+    };
+    let uncut = render(false, 0.0);
+    let clipped = render(true, 0.0);
+    let shadow = render(true, 1.0);
+    let pixel = |data: &[u8], x, y| data[((y * size.0 + x) * 4) as usize..][..4].to_vec();
+    assert_eq!(
+        pixel(&clipped, 48, 48)[3],
+        0,
+        "corner outside the contour stays transparent"
+    );
+    assert_eq!(
+        pixel(&clipped, 256, 48)[3],
+        255,
+        "straight edge stays covered"
+    );
+    assert!(
+        uncut
+            .chunks_exact(4)
+            .zip(clipped.chunks_exact(4))
+            .any(|(a, b)| a[3] > 0 && b[3] == 0),
+        "the shader clip removes the outer shadow/hairline"
+    );
+    assert_eq!(
+        pixel(&clipped, 256, 50),
+        pixel(&shadow, 256, 50),
+        "top rim is unchanged"
+    );
+    assert!(
+        pixel(&shadow, 256, 269)[0] < pixel(&clipped, 256, 269)[0],
+        "bottom darkens"
+    );
+    assert!(
+        clipped
+            .chunks_exact(4)
+            .zip(shadow.chunks_exact(4))
+            .all(|(a, b)| a[3] == b[3]),
+        "inner shadow cannot change the shape"
+    );
+    for (name, bytes) in [
+        ("continuous", clipped),
+        ("bottom-shadow", shadow),
+        ("unclipped", uncut),
+    ] {
+        std::fs::write(out.join(format!("{name}.bgra")), bytes).unwrap();
+    }
+    eprintln!("512x320 overlay fixtures: {}", out.display());
+}
 
 /// Private bytes after each step of a two-screen engine's allocations (no swapchains).
 /// `MYPAPER_LAB_THEME=themes\rain-city cargo test -p mypaper-wallpaper lab::memory -- --ignored --nocapture`
@@ -634,7 +806,9 @@ fn release() {
 
     step("start", Instant::now());
     let t = Instant::now();
-    let mut gpu = Gpu::opened(crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto));
+    let mut gpu = Gpu::opened(crate::gpu::Opening::start(
+        mypaper_config::GpuPreference::Auto,
+    ));
     eprintln!("GPU: {}", gpu.adapter.get_info().name);
     step("cold: device opened", t);
     for round in 1..=3 {
@@ -666,7 +840,9 @@ fn release() {
         drop(reopened);
         step(&format!("{round}: everything released"), t);
         let t = Instant::now();
-        gpu = Gpu::opened(crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto));
+        gpu = Gpu::opened(crate::gpu::Opening::start(
+            mypaper_config::GpuPreference::Auto,
+        ));
         step(&format!("{round}: warm: device opened"), t);
     }
 }
@@ -754,7 +930,9 @@ fn idle() {
         eprintln!("PHASE {name} pid {} at {:?}", std::process::id(), std::time::SystemTime::now());
         std::thread::sleep(Duration::from_secs(12));
     };
-    let gpu = Gpu::opened(crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto));
+    let gpu = Gpu::opened(crate::gpu::Opening::start(
+        mypaper_config::GpuPreference::Auto,
+    ));
     let mut source = sources::load(&gpu, &theme, &[]).unwrap();
     let kept = KeptFrame::new(&gpu, source.render_size(SIZE));
     let mut encoder = gpu.device.create_command_encoder(&Default::default());

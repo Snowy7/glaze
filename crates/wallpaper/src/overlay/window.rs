@@ -40,7 +40,7 @@ use windows::core::{PCWSTR, w};
 use windows_core::Interface;
 
 use super::capture::{CaptureDevice, Crop};
-use super::request::Layer;
+use super::request::{FadeCurve, Layer};
 
 const CLASS: PCWSTR = w!("mypaper.wallpaper.glass");
 /// The glass's fade-in, matching the shell's open animation.
@@ -141,6 +141,7 @@ impl OverlayWindow {
         frame: Rect,
         plate: Rect,
         radius: f32,
+        smoothing: f32,
     ) -> Result<()> {
         let size = pixels(frame);
         if size != self.size {
@@ -152,9 +153,21 @@ impl OverlayWindow {
             self.size = size;
         }
         move_under(self.hwnd.0, client, frame, false)?;
+        self.set_clip(plate, radius, smoothing)
+    }
+
+    /// Changes only the clip. The caller commits it together with the matching shader frame
+    /// so restyling a visible overlay never exposes the previous contour for a frame.
+    pub fn set_clip(&self, plate: Rect, radius: f32, smoothing: f32) -> Result<()> {
         let (x0, y0) = (plate.x as f32, plate.y as f32);
         let (x1, y1) = (x0 + plate.width as f32, y0 + plate.height as f32);
-        let r = radius.max(0.0);
+        // Continuous corners are clipped by the glass shader's own coverage. A circular
+        // compositor clip cuts into that contour even when its nominal radius agrees.
+        let r = if smoothing > 0.0 {
+            0.0
+        } else {
+            radius.max(0.0)
+        };
         // SAFETY: DirectComposition calls on a live clip.
         unsafe {
             self.clip.SetLeft2(x0)?;
@@ -183,10 +196,15 @@ impl OverlayWindow {
         capture.present(glass, &self.surface)
     }
 
-    /// Fades the window in over `fade` (the shell's, [`FADE`] by default), an ease-out run by
-    /// DirectComposition (no frames of ours); no fade shows it at once (reduced motion). Takes
+    /// Fades the window in over `fade` (the shell's, [`FADE`] by default), along the resolved
+    /// curve in DirectComposition (no frames of ours); zero shows it at once. Takes
     /// effect at the next commit.
-    pub fn fade_in(&self, dcomp: &IDCompositionDesktopDevice, fade: Duration) -> Result<()> {
+    pub fn fade_in(
+        &self,
+        dcomp: &IDCompositionDesktopDevice,
+        fade: Duration,
+        curve: FadeCurve,
+    ) -> Result<()> {
         if fade.is_zero() {
             return self.settle();
         }
@@ -194,8 +212,14 @@ impl OverlayWindow {
         // SAFETY: DirectComposition calls on live objects.
         unsafe {
             let fade: IDCompositionAnimation = dcomp.CreateAnimation()?;
-            // 1 - (1 - t/T)^3 = 3 (t/T) - 3 (t/T)^2 + (t/T)^3.
-            fade.AddCubic(0.0, 0.0, 3.0 / t, -3.0 / (t * t), 1.0 / (t * t * t))?;
+            if curve == FadeCurve::DEFAULT {
+                // Preserve the original curve exactly for old/default clients.
+                fade.AddCubic(0.0, 0.0, 3.0 / t, -3.0 / (t * t), 1.0 / (t * t * t))?;
+            } else {
+                for [x0, y0, x1, y1] in curve.segments() {
+                    fade.AddCubic(f64::from(x0 * t), y0, (y1 - y0) / ((x1 - x0) * t), 0.0, 0.0)?;
+                }
+            }
             fade.End(f64::from(t), 1.0)?;
             self.visual
                 .cast::<IDCompositionVisual3>()?

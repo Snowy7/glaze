@@ -72,9 +72,7 @@ use windows::core::{PCWSTR, w};
 pub use self::capture::Counts;
 use self::capture::{CaptureDevice, CopyTimer, Session};
 use self::glass::{Pipelines, Targets};
-use self::request::{
-    Channel, Layer, Material, OVERLAY_CLASS, Reply, Request, Style, WM_PLACEMENT,
-};
+use self::request::{Channel, Layer, Material, OVERLAY_CLASS, Reply, Request, Style, WM_PLACEMENT};
 use self::timing::Timer;
 use self::window::OverlayWindow;
 
@@ -486,6 +484,14 @@ impl Overlays {
                     return Ok(());
                 };
                 let changed = std::mem::replace(&mut self.open[o].style, style) != style;
+                if changed {
+                    let overlay = &self.open[o];
+                    overlay.window.set_clip(
+                        geometry::local(overlay.rect, overlay.frame),
+                        overlay.radius,
+                        style.smoothing,
+                    )?;
+                }
                 // Shown glass takes new knobs at once; the fade only applies to glass not shown yet.
                 if changed && self.open[o].shown.is_some() && !self.open[o].fresh {
                     self.draw(&[o])?;
@@ -545,6 +551,7 @@ impl Overlays {
             frame,
             geometry::local(rect, frame),
             radius,
+            0.0,
         )?;
         let targets = Targets::new(&self.gpu.device, &live.pipes, &live.capture, size(frame))?;
         // SAFETY: a commit on a live device.
@@ -628,6 +635,7 @@ impl Overlays {
             frame,
             geometry::local(rect, frame),
             radius,
+            overlay.style.smoothing,
         )?;
         // SAFETY: a commit on a live device.
         unsafe { live.dcomp.Commit()? };
@@ -890,7 +898,9 @@ impl Overlays {
             let fade = Duration::from_secs_f32(overlay.style.fade_ms / 1000.0);
             match overlay.shown {
                 None => {
-                    overlay.window.fade_in(&live.dcomp, fade)?;
+                    overlay
+                        .window
+                        .fade_in(&live.dcomp, fade, overlay.style.fade_curve)?;
                     overlay.shown = Some(Instant::now());
                     overlay.faded = fade.is_zero();
                     self.stats.open_to_glass = Some(overlay.opened.elapsed());
