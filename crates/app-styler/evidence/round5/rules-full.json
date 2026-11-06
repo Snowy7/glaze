@@ -1,0 +1,28 @@
+{
+  "rules": {
+    "ButtonEntityItem > Button#ContainerButton": {
+      "BorderThickness": "0",
+      "CornerRadius": "10"
+    },
+    "Grid#RootPageGrid": {
+      "Background": "Transparent"
+    },
+    "Rectangle#SelectionIndicator": {
+      "Fill": "#2e42b8"
+    },
+    "SettingsExpander ExpanderToggleButton#ContainerButton": {
+      "BorderThickness": "0",
+      "CornerRadius": "10"
+    },
+    "TextBox#CommandSearchTextBox": {
+      "BorderThickness": "0",
+      "CornerRadius": "16"
+    }
+  },
+  "resources": {
+    "CardBackgroundFillColorDefaultBrush": "light-dark(#66FFFFFF, #0AFFFFFF)",
+    "ControlFillColorDefaultBrush": "light-dark(#66FFFFFF, #0AFFFFFF)",
+    "ControlFillColorSecondaryBrush": "light-dark(#99FFFFFF, #12FFFFFF)",
+    "ControlFillColorTertiaryBrush": "light-dark(#40FFFFFF, #06FFFFFF)"
+  }
+}

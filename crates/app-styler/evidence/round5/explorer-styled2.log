@@ -1,0 +1,12 @@
+11:37:29 explorer bursts start styled (glass) (3 bursts); shell explorer 76024; styler 64972: 2.4 MB priv, 0.05 s cpu
+11:37:29 [start] shell 76024: 1,121.8 MB priv, 7792 handles
+11:38:32 burst 1: folder explorer(s) with both windows open: 11748: 213.5 MB priv, 3103 handles, 53544: 172.6 MB priv, 2678 handles; 11748 exited 50.3 s after closing (styled True); 53544 exited 51.8 s after closing (styled True); focus kept False/False
+11:38:32 [after burst 1] shell 76024: 1,122.7 MB priv, 7800 handles
+11:38:32   styler 64972: 2.9 MB priv, 0.08 s cpu
+11:39:45 burst 2: folder explorer(s) with both windows open: 27256: 202.7 MB priv, 2947 handles, 76976: 300.0 MB priv, 3762 handles; 27256 exited 50.0 s after closing (styled True); 76976 exited 52.1 s after closing (styled True); focus kept False/False
+11:39:45 [after burst 2] shell 76024: 1,128.9 MB priv, 8058 handles
+11:39:45   styler 64972: 2.8 MB priv, 0.13 s cpu
+11:40:58 burst 3: folder explorer(s) with both windows open: 76792: 262.5 MB priv, 3360 handles, 91532: 348.5 MB priv, 3366 handles; 76792 exited 49.5 s after closing (styled True); 91532 exited 51.5 s after closing (styled True); focus kept False/False
+11:40:58 [after burst 3] shell 76024: 1,132.9 MB priv, 8158 handles
+11:40:58   styler 64972: 2.9 MB priv, 0.14 s cpu
+11:41:08 explorer bursts done styled (glass)

@@ -288,8 +288,22 @@ sizes, any dependency property, by rules. It runs our own code inside those two 
 opt-in and off by default:
 
 ```json
-{ "experimental": { "app_styler": true } }
+{ "experimental": { "app_styler": true }, "system": { "separate_process": true } }
 ```
+
+Explorer is styled only with `system.separate_process` ([system.md](system.md)): folder windows
+then open in their own Explorer process, which exits about a minute after its last window
+closes (the helper lets go of it then, or it wouldn't). The shell's Explorer (desktop, taskbar, and any folder window that lives in it) is never
+attached; see "Only processes that exit" below for why. Without `separate_process` the helper
+logs one line (`not styling explorer: it needs system.separate_process = true ...`) and leaves
+Explorer alone.
+
+Settings is **off unless asked for** with `"look": { "apps": { "settings": { "enabled": true } } }`:
+on Windows 11 26100, Settings ends itself on Personalization › Background (and Lock screen)
+whenever XAML Diagnostics is attached, with or without rules (see "Settings and Personalization ›
+Background" below). `"enabled": false` under `look.apps.explorer` switches Explorer off the same way. A
+theme's `apps` can set `enabled` too; the user's wins. A switched-off app's live sessions put it
+back and detach, and it comes back when the switch does.
 
 Off costs nothing: no process, no hook, nothing loaded anywhere. On, core runs `mypaper-styler`
 (`--parent <core's pid>`); turning the flag off, quitting mypaper, the panic hotkey, core ending
@@ -312,7 +326,12 @@ up to 10 s for it. Studio has no switch for it yet (Experimental section, later)
   to another process while a handle to it is open, so the attach can't reach a different app.
   Its exit is watched from before the TAP loads (a crash while it loads counts). The TAP copy is
   used only if its bytes are still this build's. Settings runs with the inbox package identity
-  `windows.immersivecontrolpanel_cw5n1h2txyewy`, which the allowlist names.
+  `windows.immersivecontrolpanel_cw5n1h2txyewy`, which the allowlist names. Of Explorer's
+  processes only a folder process is attached, never the shell's: the one that owns the shell
+  window (`GetShellWindow`, the desktop's `Progman`) or a taskbar (`Shell_TrayWnd`,
+  `Shell_SecondaryTrayWnd`). The helper logs the pid it refuses (`explorer (PID) is the shell's
+  Explorer: never styled`), and while there is no shell window at all (Explorer restarting) it
+  attaches to no Explorer. `--attach` and `--dump` refuse the shell's Explorer too.
 - **Which framework**: Settings is system XAML (`Windows.UI.Xaml`). Explorer's folder windows are
   WinUI 3 (`Microsoft.UI.Xaml` from the Windows App SDK). The helper attaches through that SDK's
   `Microsoft.Internal.FrameworkUdk.dll`, loaded from the same folder Explorer uses, when the
@@ -475,8 +494,43 @@ window behind the XAML, so they stay solid in `glass`.
   objects from whichever thread lets go last, and in the shell Explorer every window has its own
   UI thread, so no thread can do it safely. Visual Studio never lets go of XAML Diagnostics; the
   code was reverted. The fix belongs in WinUI (close the root a `DesktopWindowXamlSource` added);
-  the TAP can drop the per-handle part (no handles for objects outside the tree). Until then the
-  flag stays **off**. Evidence and the burst table: `crates/app-styler/evidence/round4`.
+  the TAP can drop the per-handle part (no handles for objects outside the tree). Evidence and
+  the burst table: `crates/app-styler/evidence/round4`.
+- **Only processes that exit (round 5).** Since an attached process keeps every tree until it
+  exits, the styler only attaches to processes that exit on their own: Settings
+  (`SystemSettings.exe` exits when its window closes) and Explorer's separate folder process
+  (exits after its last folder window). The shell's Explorer runs all session, so it is never
+  attached. A subscribed folder process doesn't exit on its own, though: the trees XAML
+  Diagnostics keeps hold the process too (styled, 3 of 3 lived on without a window; unstyled
+  ones exit 45–57 s after their last window). So the helper **lets go of a folder process when
+  its last folder window closes**: a destroy hook per attached process spots it, a per-process
+  stop marker (`explorer.<pid>.off`) makes that process's TAP put everything back and detach, and
+  the process then exits like an unstyled one (50–52 s; log: `explorer (PID) has no folder
+  window left: letting go so it can exit`). That pid is never attached again: a window that
+  still opens in it before it exits stays stock. Unlike round 4's recycling, no live XAML is left
+  in the process to disturb. On this build every `explorer.exe <folder>` launch gets its own
+  folder process (two windows opened a second apart: two processes). With that, styled folder
+  processes exited 49.5–52.1 s after their windows closed (6 of 6), and the shell Explorer moved
+  as much as with nothing attached (+11 MB over 3 bursts, control +10 MB).
+- **Known issue (round 5): styled folder windows can hang.** Two of 15 styled folder processes
+  in the bursts hung within seconds of attaching, their UI thread spinning at a full core in
+  WinUI's `ItemsView::GetElementIndex` (a walk up the tree that never ends) from a `GettingFocus`
+  raised by `FileExplorerFolderViewController::SetInnerFocus`; one was on Gallery. No TAP code on
+  the stack; none of 13 unstyled ones hung. Windows opened straight on Gallery didn't reproduce
+  it (glass 0 of 5, attached with no rules 0 of 5, nothing attached 0 of 5), so whether it needs
+  a rule or only XAML Diagnostics is still open. The flag stays **off** until that is understood:
+  a hung folder window has to be ended from Task Manager.
+- **Settings and Personalization › Background (round 5).** With XAML Diagnostics attached,
+  Settings fails fast when that page opens: a stowed `E_INVALIDARG` ("The parameter is
+  incorrect") from `CDependencyObject::SetEffectiveValue` while a control template applies a
+  `TemplateBinding` to a `Border` during layout (`Windows.UI.Xaml.dll` 10.0.26100.9711,
+  `propertysystem.cpp` line 1625; no TAP code on the stack). It happens attached with **no
+  rules** too (3 of 3), and never without the styler (2 of 2), so it is XAML Diagnostics on that
+  page, not a style. Nothing the TAP can do avoids it, so Settings is off unless
+  `look.apps.settings.enabled` is `true`; the crash guard stops styling Settings after two such
+  exits. Personalization › Lock screen does the same; Themes, Start, Fonts, Colours, Display,
+  About, Network, Bluetooth, Sound, Taskbar and Privacy don't. Evidence:
+  `crates/app-styler/evidence/round5`.
 - Missing elements across Windows builds are not errors: a selector that matches nothing does
   nothing.
 - Nothing is persisted in the apps. If anything is ever stuck, closing and reopening the window

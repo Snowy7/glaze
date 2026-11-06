@@ -1,0 +1,7 @@
+11:13:12 settings rounds start (2); no styler
+11:13:12 [start] shell 76024: 1,133.8 MB priv, 8021 handles
+11:13:24 round 1: settings 87500 at 132.6 MB priv with two pages open; exited 0.5 s after closing; focus kept False/True; no styler
+11:13:24 [after round 1] shell 76024: 1,134.1 MB priv, 8046 handles
+11:13:41 round 2: settings 12332 at 132.7 MB priv with two pages open; exited 0.5 s after closing; focus kept False/True; no styler
+11:13:41 [after round 2] shell 76024: 1,135.2 MB priv, 8040 handles
+11:13:41 settings rounds done

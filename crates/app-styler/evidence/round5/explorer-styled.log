@@ -1,0 +1,8 @@
+11:25:32 explorer bursts start styled (glass) (3 bursts); shell explorer 76024; styler 76724: 2.5 MB priv, 0.03 s cpu
+11:25:32 [start] shell 76024: 1,133.1 MB priv, 8048 handles
+11:30:00 burst 1: folder explorer 85452 at ? with both windows open; exited 0.0 s after its last window closed; styled True; focus kept False/False
+11:30:00 [after burst 1] folder 30652: 169.7 MB priv, 2698 handles | shell 76024: 1,126.7 MB priv, 7848 handles
+11:30:00   styler 76724: 2.8 MB priv, 0.05 s cpu
+11:32:55 burst 2: folder explorer 82256 at 204.5 MB priv, 2984 handles with both windows open; STILL RUNNING 150 s after closing; styled True; focus kept False/False
+11:32:55 [after burst 2] folder 30652: 145.9 MB priv, 1988 handles | folder 45600: 287.4 MB priv, 2396 handles | shell 76024: 1,122.3 MB priv, 7815 handles | folder 82256: 200.3 MB priv, 2048 handles
+11:32:55   styler 76724: 2.8 MB priv, 0.09 s cpu

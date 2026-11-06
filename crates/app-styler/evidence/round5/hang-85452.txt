@@ -1,0 +1,246 @@
+Opened log file 'C:\mypaper-targets\app-styler\round5\hang-85452.txt'
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.094 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 30
+
+Microsoft (R) Windows Debugger Version 10.0.26100.7705 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+*** wait with pending attach
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*C:\symbols*https://msdl.microsoft.com/download/symbols
+OK                                             C:\mypaper-targets\app-styler\release
+Symbol search path is: srv*C:\symbols*https://msdl.microsoft.com/download/symbols;C:\mypaper-targets\app-styler\release
+Executable search path is: 
+WARNING: Process 85452 is not attached as a debuggee
+         The process can be examined but debug events will not be received
+................................................................
+................................................................
+................................................................
+.............................
+Loading unloaded module list
+.........
+(14dcc.110b8): Wake debugger - code 80000007 (first chance)
+
++------------------------------------------------------------------------+
+| This target supports Hardware-enforced Stack Protection. A HW based    |
+| "Shadow Stack" may be available to assist in debugging and analysis.   |
+| See aka.ms/userhsp for more info.                                      |
+|                                                                        |
+| dps @ssp                                                               |
+|                                                                        |
++------------------------------------------------------------------------+
+
+win32u!NtUserMsgWaitForMultipleObjectsEx+0x14:
+00007ffe`a90aaf04 c3              ret
+0:000> ~~[0x11144]s; k 50; ~~[0x11144]s; k 50; q
+Microsoft_UI_Xaml_Controls!winrt::impl::root_implements<NavigationViewItemAutomationPeer,winrt::Microsoft::UI::Xaml::Automation::Peers::NavigationViewItemAutomationPeer,winrt::Microsoft::UI::Xaml::Automation::Provider::IExpandCollapseProvider,winrt::composable,winrt::composing,winrt::Microsoft::UI::Xaml::Automation::Peers::IAutomationPeerOverrides,winrt::Microsoft::UI::Xaml::Automation::Provider::IInvokeProvider,winrt::Microsoft::UI::Xaml::Automation::Provider::ISelectionItemProvider,IReferenceTrackerExtension>::query_interface+0x14b:
+00007ffe`66e0bba7 4883c420        add     rsp,20h
+Child-SP          RetAddr               Call Site
+00000000`0410c240 00007ffe`66e088a5     Microsoft_UI_Xaml_Controls!winrt::impl::root_implements<NavigationViewItemAutomationPeer,winrt::Microsoft::UI::Xaml::Automation::Peers::NavigationViewItemAutomationPeer,winrt::Microsoft::UI::Xaml::Automation::Provider::IExpandCollapseProvider,winrt::composable,winrt::composing,winrt::Microsoft::UI::Xaml::Automation::Peers::IAutomationPeerOverrides,winrt::Microsoft::UI::Xaml::Automation::Provider::IInvokeProvider,winrt::Microsoft::UI::Xaml::Automation::Provider::ISelectionItemProvider,IReferenceTrackerExtension>::query_interface+0x14b
+00000000`0410c270 00007ffe`66f65ff6     Microsoft_UI_Xaml_Controls!winrt::impl::root_implements<NavigationViewItemAutomationPeer,winrt::Microsoft::UI::Xaml::Automation::Peers::NavigationViewItemAutomationPeer,winrt::Microsoft::UI::Xaml::Automation::Provider::IExpandCollapseProvider,winrt::composable,winrt::composing,winrt::Microsoft::UI::Xaml::Automation::Peers::IAutomationPeerOverrides,winrt::Microsoft::UI::Xaml::Automation::Provider::IInvokeProvider,winrt::Microsoft::UI::Xaml::Automation::Provider::ISelectionItemProvider,IReferenceTrackerExtension>::NonDelegatingQueryInterface+0x55
+(Inline Function) --------`--------     Microsoft_UI_Xaml_Controls!winrt::impl::try_as+0x21
+(Inline Function) --------`--------     Microsoft_UI_Xaml_Controls!winrt::Windows::Foundation::IUnknown::try_as+0x21
+00000000`0410c2a0 00007ffe`66f694bc     Microsoft_UI_Xaml_Controls!SharedHelpers::GetAncestorOfType<winrt::Microsoft::UI::Xaml::Controls::ItemContainer>+0x7e
+00000000`0410c300 00007ffe`66f73f51     Microsoft_UI_Xaml_Controls!ItemsView::GetElementIndex+0x1d4
+00000000`0410c380 00007ffe`66de810b     Microsoft_UI_Xaml_Controls!ItemsView::OnItemsViewElementGettingFocus+0x1d1
+(Inline Function) --------`--------     Microsoft_UI_Xaml_Controls!winrt::Microsoft::UI::Xaml::SizeChangedEventHandler::{ctor}::__l1::<lambda_396_>::operator()+0x1a
+00000000`0410c460 00007ffe`691af689     Microsoft_UI_Xaml_Controls!winrt::impl::delegate<winrt::Microsoft::UI::Xaml::SizeChangedEventHandler,`winrt::Microsoft::UI::Xaml::SizeChangedEventHandler::IInspectable<RatingControl,void (__cdecl RatingControl::*)(winrt::Windows::Foundation::IInspectable const &,winrt::Microsoft::UI::Xaml::SizeChangedEventArgs const &)>'::`1'::<lambda_396_> >::Invoke+0x3b
+00000000`0410c4b0 00007ffe`691b9228     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::CRoutedEventSourceBase<DirectUI::IUntypedEventSource,ABI::Windows::Foundation::ITypedEventHandler<ABI::Microsoft::UI::Xaml::UIElement *,ABI::Microsoft::UI::Xaml::Input::GettingFocusEventArgs *>,ABI::Microsoft::UI::Xaml::IUIElement,ABI::Microsoft::UI::Xaml::Input::IGettingFocusEventArgs>::Raise+0xe1
+00000000`0410c550 00007ffe`6900fa2f     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::CRoutedEventSourceBase<DirectUI::IUntypedEventSource,ABI::Windows::Foundation::ITypedEventHandler<ABI::Microsoft::UI::Xaml::UIElement *,ABI::Microsoft::UI::Xaml::Input::GettingFocusEventArgs *>,ABI::Microsoft::UI::Xaml::IUIElement,ABI::Microsoft::UI::Xaml::Input::IGettingFocusEventArgs>::UntypedRaise+0x98
+00000000`0410c5b0 00007ffe`6900f8ab     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::DependencyObject::FireEvent+0x37
+00000000`0410c5e0 00007ffe`6900f608     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::DXamlCore::FireEvent+0x12b
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!AgCoreCallbacks::FireEvent+0x36
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!FxCallbacks::JoltHelper_FireEvent+0x36
+00000000`0410c690 00007ffe`6900f4cd     Microsoft_UI_Xaml_7ffe68fa0000!CCoreServices::CLR_FireEvent+0x128
+00000000`0410c720 00007ffe`69165e33     Microsoft_UI_Xaml_7ffe68fa0000!CommonBrowserHost::CLR_FireEvent+0x1d
+00000000`0410c760 00007ffe`6909dbd4     Microsoft_UI_Xaml_7ffe68fa0000!CControlBase::ScriptCallback+0xf3
+00000000`0410c7f0 00007ffe`6909d9c0     Microsoft_UI_Xaml_7ffe68fa0000!CXcpDispatcher::OnScriptCallback+0x104
+00000000`0410c8b0 00007ffe`6909d925     Microsoft_UI_Xaml_7ffe68fa0000!CXcpDispatcher::OnWindowMessage+0x40
+00000000`0410c8e0 00007ffe`6909d398     Microsoft_UI_Xaml_7ffe68fa0000!CXcpDispatcher::ProcessMessage+0x2d
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!CXcpDispatcher::SendMessageW+0x10
+00000000`0410c910 00007ffe`690349b6     Microsoft_UI_Xaml_7ffe68fa0000!CXcpBrowserHost::SyncScriptCallbackRequest+0x88
+00000000`0410c990 00007ffe`6903468d     Microsoft_UI_Xaml_7ffe68fa0000!CEventManager::RaiseHelper+0x1b6
+00000000`0410ca30 00007ffe`6914458b     Microsoft_UI_Xaml_7ffe68fa0000!CEventManager::Raise+0x1ed
+00000000`0410cb50 00007ffe`691441f3     Microsoft_UI_Xaml_7ffe68fa0000!CEventManager::RaiseRoutedEventBubbling+0xdf
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!CEventManager::RaiseRoutedEvent+0x2d
+00000000`0410cc20 00007ffe`69143ee5     Microsoft_UI_Xaml_7ffe68fa0000!CFocusManager::RaiseChangingFocusEvent<CGettingFocusEventArgs>+0x12b
+00000000`0410ccd0 00007ffe`69143961     Microsoft_UI_Xaml_7ffe68fa0000!CFocusManager::RaiseAndProcessGettingAndLosingFocusEvents+0xd9
+00000000`0410cd90 00007ffe`691437fd     Microsoft_UI_Xaml_7ffe68fa0000!CFocusManager::SetWindowFocus+0x11d
+00000000`0410cea0 00007ffe`69143755     Microsoft_UI_Xaml_7ffe68fa0000!ContentRootInput::ActivationManager::ProcessFocusInput+0x85
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!CInputManager::ProcessFocusInput+0xf
+00000000`0410ced0 00007ffe`691435d2     Microsoft_UI_Xaml_7ffe68fa0000!CInputServices::ProcessInput+0x79
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!CCoreServices::ProcessInput+0x3d
+00000000`0410cf20 00007ffe`691cae72     Microsoft_UI_Xaml_7ffe68fa0000!CXcpBrowserHost::HandleInputMessage+0x162
+00000000`0410cfb0 00007ffe`691cadb6     Microsoft_UI_Xaml_7ffe68fa0000!CJupiterControl::HandleGenericMessage+0x8e
+00000000`0410d060 00007ffe`691cad39     Microsoft_UI_Xaml_7ffe68fa0000!CJupiterControl::HandleWindowMessage+0x72
+00000000`0410d0e0 00007ffe`691b41a8     Microsoft_UI_Xaml_7ffe68fa0000!CJupiterWindow::ProcessFocusEvents+0x1d
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!CJupiterWindow::OnIslandGotFocus+0x10
+00000000`0410d120 00007ffe`691b4038     Microsoft_UI_Xaml_7ffe68fa0000!CXamlIslandRoot::OnIslandGotFocus+0x84
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!CXamlIslandRoot::SubscribeToInputKeyboardSourceEvents::__l44::<lambda_6>::operator()+0x3d
+00000000`0410d150 00007ffe`58db7557     Microsoft_UI_Xaml_7ffe68fa0000!Microsoft::WRL::Details::DelegateArgTraits<long (__cdecl ABI::Windows::Foundation::ITypedEventHandler_impl<ABI::Windows::Foundation::Internal::AggregateType<ABI::Microsoft::UI::Input::InputFocusController *,ABI::Microsoft::UI::Input::IInputFocusController *>,ABI::Windows::Foundation::Internal::AggregateType<ABI::Microsoft::UI::Input::FocusChangedEventArgs *,ABI::Microsoft::UI::Input::IFocusChangedEventArgs *> >::*)(ABI::Microsoft::UI::Input::IInputFocusController *,ABI::Microsoft::UI::Input::IFocusChangedEventArgs *)>::DelegateInvokeHelper<Microsoft::WRL::Implements<Microsoft::WRL::RuntimeClassFlags<2>,ABI::Windows::Foundation::ITypedEventHandler<ABI::Microsoft::UI::Input::InputFocusController *,ABI::Microsoft::UI::Input::FocusChangedEventArgs *>,Microsoft::WRL::FtmBase>,`CXamlIslandRoot::SubscribeToInputKeyboardSourceEvents'::`44'::<lambda_6> &,1,ABI::Microsoft::UI::Input::IInputFocusController *,ABI::Microsoft::UI::Input::IFocusChangedEventArgs *>::Invoke+0x58
+00000000`0410d190 00007ffe`58da5ff5     Microsoft_UI_Input!Microsoft::WRL::Details::DelegateArgTraits<long (__cdecl Windows::Foundation::ITypedEventHandler_impl<Windows::Foundation::Internal::AggregateType<Microsoft::UI::Input::InputFocusController * __ptr64,Microsoft::UI::Input::IInputFocusController * __ptr64>,Windows::Foundation::Internal::AggregateType<Microsoft::UI::Input::FocusChangedEventArgs * __ptr64,Microsoft::UI::Input::IFocusChangedEventArgs * __ptr64> >::*)(Microsoft::UI::Input::IInputFocusController * __ptr64,Microsoft::UI::Input::IFocusChangedEventArgs * __ptr64) __ptr64>::DelegateInvokeHelper<Microsoft::WRL::Implements<Microsoft::WRL::RuntimeClassFlags<2>,Windows::Foundation::ITypedEventHandler<Microsoft::UI::Input::InputFocusController * __ptr64,Microsoft::UI::Input::FocusChangedEventArgs * __ptr64>,Microsoft::WRL::FtmBase>,`Microsoft::WRL::Details::CreateAgileHelper<Windows::Foundation::ITypedEventHandler<Microsoft::UI::Input::InputFocusController * __ptr64,Microsoft::UI::Input::FocusChangedEventArgs * __ptr64> >'::`2'::<lambda_1>,-1,Microsoft::UI::Input::IInputFocusController * __ptr64,Microsoft::UI::Input::IFocusChangedEventArgs * __ptr64>::Invoke+0x87
+00000000`0410d1d0 00007ffe`58db6af3     Microsoft_UI_Input!Microsoft::WRL::InvokeTraits<-2>::InvokeDelegates<<lambda_17569b863f75902873bfbef49c0c74fb>,Windows::Foundation::ITypedEventHandler<Microsoft::UI::Content::ContentIslandEnvironment * __ptr64,Microsoft::UI::Content::ContentEnvironmentSettingChangedEventArgs * __ptr64> >+0x95
+00000000`0410d280 00007ffe`58db6c61     Microsoft_UI_Input!Microsoft::WRL::EventSource<Windows::Foundation::ITypedEventHandler<Microsoft::UI::Content::ContentSite * __ptr64,Microsoft::UI::Content::EndpointConnectionEventArgs * __ptr64>,Microsoft::WRL::InvokeModeOptions<-2> >::InvokeAll<Microsoft::UI::Content::IContentSite * __ptr64,Microsoft::UI::Content::IEndpointConnectionEventArgs * __ptr64>+0x9f
+00000000`0410d2e0 00007ffe`58db77f8     Microsoft_UI_Input!Microsoft::WRL2::ContextSession::LeaveSession_Callback<`InputFocusControllerWinRT::OnGotFocusEvent_Callback'::`6'::<lambda_1> >+0x65
+00000000`0410d320 00007ffe`58db7a03     Microsoft_UI_Input!InputFocusControllerWinRT::OnGotFocusEvent_Callback+0xa4
+00000000`0410d380 00007ffe`58d92612     Microsoft_UI_Input!InputFocusControllerWinRT::OnWindowMessage_Callback+0x23
+00000000`0410d3b0 00007ffe`58d915a4     Microsoft_UI_Input!std::_Func_impl_no_alloc<<lambda_89a0c9d2f8d659d4b70be900e5c72add>,enum InputSiteIterationDecision,Microsoft::WRL::ComPtr<BaseInputObjectWinRT> const &>::_Do_call+0x62
+00000000`0410d3f0 00007ffe`58d918c0     Microsoft_UI_Input!InputSiteWinRT::ForEachAttachedObject+0x48
+00000000`0410d440 00007ffe`58d8ae09     Microsoft_UI_Input!InputSiteWinRT::OnWindowMessage_Callback+0xb0
+00000000`0410d500 00007ffe`58d95724     Microsoft_UI_Input!WindowsMessageDeliveryInputSiteWinRT::OnWindowMessage_Callback+0x119
+00000000`0410d660 00007ffe`58d962f3     Microsoft_UI_Input!InputSiteHwndWinRT::MessageHandler+0x1f4
+00000000`0410d6f0 00007ffe`a9c752e6     Microsoft_UI_Input!InputSiteHwndWinRT::WndProcStatic_NoLock+0x113
+00000000`0410d740 00007ffe`a9c74dac     user32!UserCallWinProcCheckWow+0x356
+00000000`0410d8a0 00007ffe`68f2e123     user32!CallWindowProcW+0x16c
+00000000`0410d910 00007ffe`68f2c144     Microsoft_UI_Windowing_Core!CFlat::SehSafe::Execute<<lambda_fc41777ddb63a3c65dfacf75533a1e1f> >+0x4b
+00000000`0410d950 00007ffe`68f1698d     Microsoft_UI_Windowing_Core!Windowing::Window::DefaultProcessing+0xb0
+00000000`0410da00 00007ffe`68f184bf     Microsoft_UI_Windowing_Core!Windowing::DefaultFeature::FeatureProc+0x2d
+00000000`0410da30 00007ffe`68f2cfa4     Microsoft_UI_Windowing_Core!Windowing::FeatureCallManager::CallFeatureChain+0x287
+00000000`0410dad0 00007ffe`68f2d477     Microsoft_UI_Windowing_Core!Windowing::Window::ProcessMessage+0x120
+00000000`0410db40 00007ffe`a9c752e6     Microsoft_UI_Windowing_Core!EnterContextAndProcessWindowMessage+0x87
+00000000`0410dbb0 00007ffe`a9c74b6c     user32!UserCallWinProcCheckWow+0x356
+00000000`0410dd10 00007ffe`a9c9f593     user32!DispatchClientMessage+0x9c
+00000000`0410dd70 00007ffe`abee5d94     user32!_fnDWORD+0x33
+00000000`0410ddd0 00007ffe`a90a1c64     ntdll!KiUserCallbackDispatcherContinue
+00000000`0410de58 00007ffe`58d94500     win32u!NtUserSetFocus+0x14
+00000000`0410de60 00007ffe`58d96062     Microsoft_UI_Input!Microsoft::WRL2::ContextSession::LeaveSession_Callback<<lambda_7b57d9d3aa905f3fc480a17ff4f1c2a3> >+0x4c
+00000000`0410dea0 00007ffe`58d8dde0     Microsoft_UI_Input!InputSiteHwndWinRT::SetFocus_Callback+0x56
+00000000`0410ded0 00007ffe`58db7d5f     Microsoft_UI_Input!IslandInputSiteWinRT::PushFocusToIsland_Callback+0x40
+00000000`0410df00 00007ffe`691b4350     Microsoft_UI_Input!InputFocusControllerWinRT::Api::TrySetFocus+0x6f
+00000000`0410df40 00007ffe`691b42fd     Microsoft_UI_Xaml_7ffe68fa0000!CXamlIslandRoot::TrySetFocus+0x40
+00000000`0410df70 00007ffe`690f77ec     Microsoft_UI_Xaml_7ffe68fa0000!ContentRootAdapters::FocusManagerXamlIslandAdapter::SetFocus+0x2d
+00000000`0410dfb0 00007ffe`690f722a     Microsoft_UI_Xaml_7ffe68fa0000!CFocusManager::UpdateFocus+0x510
+00000000`0410e0b0 00007ffe`690f8228     Microsoft_UI_Xaml_7ffe68fa0000!CFocusManager::SetFocusedElement+0x52
+00000000`0410e120 00007ffe`691fb515     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::FocusManagerFactory::TryFocusAsyncImpl+0x138
+00000000`0410e1d0 00007ffe`68229df9     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::FocusManagerFactory::TryFocusAsync+0x75
+00000000`0410e220 00007ffe`68229d4d     Windows_UI_FileExplorer!winrt::impl::consume_Microsoft_UI_Xaml_Input_IFocusManagerStatics<winrt::Microsoft::UI::Xaml::Input::IFocusManagerStatics>::TryFocusAsync+0x51
+00000000`0410e290 00007ffe`68221eb2     Windows_UI_FileExplorer!winrt::Microsoft::UI::Xaml::Input::FocusManager::TryFocusAsync+0x49
+00000000`0410e2e0 00007ffe`aab282f9     Windows_UI_FileExplorer!winrt::WindowsUdk::UI::Shell::implementation::FileExplorerFolderViewController::SetInnerFocus+0x142
+Microsoft_UI_Xaml_Controls!winrt::impl::root_implements<NavigationViewItemAutomationPeer,winrt::Microsoft::UI::Xaml::Automation::Peers::NavigationViewItemAutomationPeer,winrt::Microsoft::UI::Xaml::Automation::Provider::IExpandCollapseProvider,winrt::composable,winrt::composing,winrt::Microsoft::UI::Xaml::Automation::Peers::IAutomationPeerOverrides,winrt::Microsoft::UI::Xaml::Automation::Provider::IInvokeProvider,winrt::Microsoft::UI::Xaml::Automation::Provider::ISelectionItemProvider,IReferenceTrackerExtension>::query_interface+0x14b:
+00007ffe`66e0bba7 4883c420        add     rsp,20h
+Child-SP          RetAddr               Call Site
+00000000`0410c240 00007ffe`66e088a5     Microsoft_UI_Xaml_Controls!winrt::impl::root_implements<NavigationViewItemAutomationPeer,winrt::Microsoft::UI::Xaml::Automation::Peers::NavigationViewItemAutomationPeer,winrt::Microsoft::UI::Xaml::Automation::Provider::IExpandCollapseProvider,winrt::composable,winrt::composing,winrt::Microsoft::UI::Xaml::Automation::Peers::IAutomationPeerOverrides,winrt::Microsoft::UI::Xaml::Automation::Provider::IInvokeProvider,winrt::Microsoft::UI::Xaml::Automation::Provider::ISelectionItemProvider,IReferenceTrackerExtension>::query_interface+0x14b
+00000000`0410c270 00007ffe`66f65ff6     Microsoft_UI_Xaml_Controls!winrt::impl::root_implements<NavigationViewItemAutomationPeer,winrt::Microsoft::UI::Xaml::Automation::Peers::NavigationViewItemAutomationPeer,winrt::Microsoft::UI::Xaml::Automation::Provider::IExpandCollapseProvider,winrt::composable,winrt::composing,winrt::Microsoft::UI::Xaml::Automation::Peers::IAutomationPeerOverrides,winrt::Microsoft::UI::Xaml::Automation::Provider::IInvokeProvider,winrt::Microsoft::UI::Xaml::Automation::Provider::ISelectionItemProvider,IReferenceTrackerExtension>::NonDelegatingQueryInterface+0x55
+(Inline Function) --------`--------     Microsoft_UI_Xaml_Controls!winrt::impl::try_as+0x21
+(Inline Function) --------`--------     Microsoft_UI_Xaml_Controls!winrt::Windows::Foundation::IUnknown::try_as+0x21
+00000000`0410c2a0 00007ffe`66f694bc     Microsoft_UI_Xaml_Controls!SharedHelpers::GetAncestorOfType<winrt::Microsoft::UI::Xaml::Controls::ItemContainer>+0x7e
+00000000`0410c300 00007ffe`66f73f51     Microsoft_UI_Xaml_Controls!ItemsView::GetElementIndex+0x1d4
+00000000`0410c380 00007ffe`66de810b     Microsoft_UI_Xaml_Controls!ItemsView::OnItemsViewElementGettingFocus+0x1d1
+(Inline Function) --------`--------     Microsoft_UI_Xaml_Controls!winrt::Microsoft::UI::Xaml::SizeChangedEventHandler::{ctor}::__l1::<lambda_396_>::operator()+0x1a
+00000000`0410c460 00007ffe`691af689     Microsoft_UI_Xaml_Controls!winrt::impl::delegate<winrt::Microsoft::UI::Xaml::SizeChangedEventHandler,`winrt::Microsoft::UI::Xaml::SizeChangedEventHandler::IInspectable<RatingControl,void (__cdecl RatingControl::*)(winrt::Windows::Foundation::IInspectable const &,winrt::Microsoft::UI::Xaml::SizeChangedEventArgs const &)>'::`1'::<lambda_396_> >::Invoke+0x3b
+00000000`0410c4b0 00007ffe`691b9228     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::CRoutedEventSourceBase<DirectUI::IUntypedEventSource,ABI::Windows::Foundation::ITypedEventHandler<ABI::Microsoft::UI::Xaml::UIElement *,ABI::Microsoft::UI::Xaml::Input::GettingFocusEventArgs *>,ABI::Microsoft::UI::Xaml::IUIElement,ABI::Microsoft::UI::Xaml::Input::IGettingFocusEventArgs>::Raise+0xe1
+00000000`0410c550 00007ffe`6900fa2f     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::CRoutedEventSourceBase<DirectUI::IUntypedEventSource,ABI::Windows::Foundation::ITypedEventHandler<ABI::Microsoft::UI::Xaml::UIElement *,ABI::Microsoft::UI::Xaml::Input::GettingFocusEventArgs *>,ABI::Microsoft::UI::Xaml::IUIElement,ABI::Microsoft::UI::Xaml::Input::IGettingFocusEventArgs>::UntypedRaise+0x98
+00000000`0410c5b0 00007ffe`6900f8ab     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::DependencyObject::FireEvent+0x37
+00000000`0410c5e0 00007ffe`6900f608     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::DXamlCore::FireEvent+0x12b
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!AgCoreCallbacks::FireEvent+0x36
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!FxCallbacks::JoltHelper_FireEvent+0x36
+00000000`0410c690 00007ffe`6900f4cd     Microsoft_UI_Xaml_7ffe68fa0000!CCoreServices::CLR_FireEvent+0x128
+00000000`0410c720 00007ffe`69165e33     Microsoft_UI_Xaml_7ffe68fa0000!CommonBrowserHost::CLR_FireEvent+0x1d
+00000000`0410c760 00007ffe`6909dbd4     Microsoft_UI_Xaml_7ffe68fa0000!CControlBase::ScriptCallback+0xf3
+00000000`0410c7f0 00007ffe`6909d9c0     Microsoft_UI_Xaml_7ffe68fa0000!CXcpDispatcher::OnScriptCallback+0x104
+00000000`0410c8b0 00007ffe`6909d925     Microsoft_UI_Xaml_7ffe68fa0000!CXcpDispatcher::OnWindowMessage+0x40
+00000000`0410c8e0 00007ffe`6909d398     Microsoft_UI_Xaml_7ffe68fa0000!CXcpDispatcher::ProcessMessage+0x2d
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!CXcpDispatcher::SendMessageW+0x10
+00000000`0410c910 00007ffe`690349b6     Microsoft_UI_Xaml_7ffe68fa0000!CXcpBrowserHost::SyncScriptCallbackRequest+0x88
+00000000`0410c990 00007ffe`6903468d     Microsoft_UI_Xaml_7ffe68fa0000!CEventManager::RaiseHelper+0x1b6
+00000000`0410ca30 00007ffe`6914458b     Microsoft_UI_Xaml_7ffe68fa0000!CEventManager::Raise+0x1ed
+00000000`0410cb50 00007ffe`691441f3     Microsoft_UI_Xaml_7ffe68fa0000!CEventManager::RaiseRoutedEventBubbling+0xdf
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!CEventManager::RaiseRoutedEvent+0x2d
+00000000`0410cc20 00007ffe`69143ee5     Microsoft_UI_Xaml_7ffe68fa0000!CFocusManager::RaiseChangingFocusEvent<CGettingFocusEventArgs>+0x12b
+00000000`0410ccd0 00007ffe`69143961     Microsoft_UI_Xaml_7ffe68fa0000!CFocusManager::RaiseAndProcessGettingAndLosingFocusEvents+0xd9
+00000000`0410cd90 00007ffe`691437fd     Microsoft_UI_Xaml_7ffe68fa0000!CFocusManager::SetWindowFocus+0x11d
+00000000`0410cea0 00007ffe`69143755     Microsoft_UI_Xaml_7ffe68fa0000!ContentRootInput::ActivationManager::ProcessFocusInput+0x85
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!CInputManager::ProcessFocusInput+0xf
+00000000`0410ced0 00007ffe`691435d2     Microsoft_UI_Xaml_7ffe68fa0000!CInputServices::ProcessInput+0x79
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!CCoreServices::ProcessInput+0x3d
+00000000`0410cf20 00007ffe`691cae72     Microsoft_UI_Xaml_7ffe68fa0000!CXcpBrowserHost::HandleInputMessage+0x162
+00000000`0410cfb0 00007ffe`691cadb6     Microsoft_UI_Xaml_7ffe68fa0000!CJupiterControl::HandleGenericMessage+0x8e
+00000000`0410d060 00007ffe`691cad39     Microsoft_UI_Xaml_7ffe68fa0000!CJupiterControl::HandleWindowMessage+0x72
+00000000`0410d0e0 00007ffe`691b41a8     Microsoft_UI_Xaml_7ffe68fa0000!CJupiterWindow::ProcessFocusEvents+0x1d
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!CJupiterWindow::OnIslandGotFocus+0x10
+00000000`0410d120 00007ffe`691b4038     Microsoft_UI_Xaml_7ffe68fa0000!CXamlIslandRoot::OnIslandGotFocus+0x84
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!CXamlIslandRoot::SubscribeToInputKeyboardSourceEvents::__l44::<lambda_6>::operator()+0x3d
+00000000`0410d150 00007ffe`58db7557     Microsoft_UI_Xaml_7ffe68fa0000!Microsoft::WRL::Details::DelegateArgTraits<long (__cdecl ABI::Windows::Foundation::ITypedEventHandler_impl<ABI::Windows::Foundation::Internal::AggregateType<ABI::Microsoft::UI::Input::InputFocusController *,ABI::Microsoft::UI::Input::IInputFocusController *>,ABI::Windows::Foundation::Internal::AggregateType<ABI::Microsoft::UI::Input::FocusChangedEventArgs *,ABI::Microsoft::UI::Input::IFocusChangedEventArgs *> >::*)(ABI::Microsoft::UI::Input::IInputFocusController *,ABI::Microsoft::UI::Input::IFocusChangedEventArgs *)>::DelegateInvokeHelper<Microsoft::WRL::Implements<Microsoft::WRL::RuntimeClassFlags<2>,ABI::Windows::Foundation::ITypedEventHandler<ABI::Microsoft::UI::Input::InputFocusController *,ABI::Microsoft::UI::Input::FocusChangedEventArgs *>,Microsoft::WRL::FtmBase>,`CXamlIslandRoot::SubscribeToInputKeyboardSourceEvents'::`44'::<lambda_6> &,1,ABI::Microsoft::UI::Input::IInputFocusController *,ABI::Microsoft::UI::Input::IFocusChangedEventArgs *>::Invoke+0x58
+00000000`0410d190 00007ffe`58da5ff5     Microsoft_UI_Input!Microsoft::WRL::Details::DelegateArgTraits<long (__cdecl Windows::Foundation::ITypedEventHandler_impl<Windows::Foundation::Internal::AggregateType<Microsoft::UI::Input::InputFocusController * __ptr64,Microsoft::UI::Input::IInputFocusController * __ptr64>,Windows::Foundation::Internal::AggregateType<Microsoft::UI::Input::FocusChangedEventArgs * __ptr64,Microsoft::UI::Input::IFocusChangedEventArgs * __ptr64> >::*)(Microsoft::UI::Input::IInputFocusController * __ptr64,Microsoft::UI::Input::IFocusChangedEventArgs * __ptr64) __ptr64>::DelegateInvokeHelper<Microsoft::WRL::Implements<Microsoft::WRL::RuntimeClassFlags<2>,Windows::Foundation::ITypedEventHandler<Microsoft::UI::Input::InputFocusController * __ptr64,Microsoft::UI::Input::FocusChangedEventArgs * __ptr64>,Microsoft::WRL::FtmBase>,`Microsoft::WRL::Details::CreateAgileHelper<Windows::Foundation::ITypedEventHandler<Microsoft::UI::Input::InputFocusController * __ptr64,Microsoft::UI::Input::FocusChangedEventArgs * __ptr64> >'::`2'::<lambda_1>,-1,Microsoft::UI::Input::IInputFocusController * __ptr64,Microsoft::UI::Input::IFocusChangedEventArgs * __ptr64>::Invoke+0x87
+00000000`0410d1d0 00007ffe`58db6af3     Microsoft_UI_Input!Microsoft::WRL::InvokeTraits<-2>::InvokeDelegates<<lambda_17569b863f75902873bfbef49c0c74fb>,Windows::Foundation::ITypedEventHandler<Microsoft::UI::Content::ContentIslandEnvironment * __ptr64,Microsoft::UI::Content::ContentEnvironmentSettingChangedEventArgs * __ptr64> >+0x95
+00000000`0410d280 00007ffe`58db6c61     Microsoft_UI_Input!Microsoft::WRL::EventSource<Windows::Foundation::ITypedEventHandler<Microsoft::UI::Content::ContentSite * __ptr64,Microsoft::UI::Content::EndpointConnectionEventArgs * __ptr64>,Microsoft::WRL::InvokeModeOptions<-2> >::InvokeAll<Microsoft::UI::Content::IContentSite * __ptr64,Microsoft::UI::Content::IEndpointConnectionEventArgs * __ptr64>+0x9f
+00000000`0410d2e0 00007ffe`58db77f8     Microsoft_UI_Input!Microsoft::WRL2::ContextSession::LeaveSession_Callback<`InputFocusControllerWinRT::OnGotFocusEvent_Callback'::`6'::<lambda_1> >+0x65
+00000000`0410d320 00007ffe`58db7a03     Microsoft_UI_Input!InputFocusControllerWinRT::OnGotFocusEvent_Callback+0xa4
+00000000`0410d380 00007ffe`58d92612     Microsoft_UI_Input!InputFocusControllerWinRT::OnWindowMessage_Callback+0x23
+00000000`0410d3b0 00007ffe`58d915a4     Microsoft_UI_Input!std::_Func_impl_no_alloc<<lambda_89a0c9d2f8d659d4b70be900e5c72add>,enum InputSiteIterationDecision,Microsoft::WRL::ComPtr<BaseInputObjectWinRT> const &>::_Do_call+0x62
+00000000`0410d3f0 00007ffe`58d918c0     Microsoft_UI_Input!InputSiteWinRT::ForEachAttachedObject+0x48
+00000000`0410d440 00007ffe`58d8ae09     Microsoft_UI_Input!InputSiteWinRT::OnWindowMessage_Callback+0xb0
+00000000`0410d500 00007ffe`58d95724     Microsoft_UI_Input!WindowsMessageDeliveryInputSiteWinRT::OnWindowMessage_Callback+0x119
+00000000`0410d660 00007ffe`58d962f3     Microsoft_UI_Input!InputSiteHwndWinRT::MessageHandler+0x1f4
+00000000`0410d6f0 00007ffe`a9c752e6     Microsoft_UI_Input!InputSiteHwndWinRT::WndProcStatic_NoLock+0x113
+00000000`0410d740 00007ffe`a9c74dac     user32!UserCallWinProcCheckWow+0x356
+00000000`0410d8a0 00007ffe`68f2e123     user32!CallWindowProcW+0x16c
+00000000`0410d910 00007ffe`68f2c144     Microsoft_UI_Windowing_Core!CFlat::SehSafe::Execute<<lambda_fc41777ddb63a3c65dfacf75533a1e1f> >+0x4b
+00000000`0410d950 00007ffe`68f1698d     Microsoft_UI_Windowing_Core!Windowing::Window::DefaultProcessing+0xb0
+00000000`0410da00 00007ffe`68f184bf     Microsoft_UI_Windowing_Core!Windowing::DefaultFeature::FeatureProc+0x2d
+00000000`0410da30 00007ffe`68f2cfa4     Microsoft_UI_Windowing_Core!Windowing::FeatureCallManager::CallFeatureChain+0x287
+00000000`0410dad0 00007ffe`68f2d477     Microsoft_UI_Windowing_Core!Windowing::Window::ProcessMessage+0x120
+00000000`0410db40 00007ffe`a9c752e6     Microsoft_UI_Windowing_Core!EnterContextAndProcessWindowMessage+0x87
+00000000`0410dbb0 00007ffe`a9c74b6c     user32!UserCallWinProcCheckWow+0x356
+00000000`0410dd10 00007ffe`a9c9f593     user32!DispatchClientMessage+0x9c
+00000000`0410dd70 00007ffe`abee5d94     user32!_fnDWORD+0x33
+00000000`0410ddd0 00007ffe`a90a1c64     ntdll!KiUserCallbackDispatcherContinue
+00000000`0410de58 00007ffe`58d94500     win32u!NtUserSetFocus+0x14
+00000000`0410de60 00007ffe`58d96062     Microsoft_UI_Input!Microsoft::WRL2::ContextSession::LeaveSession_Callback<<lambda_7b57d9d3aa905f3fc480a17ff4f1c2a3> >+0x4c
+00000000`0410dea0 00007ffe`58d8dde0     Microsoft_UI_Input!InputSiteHwndWinRT::SetFocus_Callback+0x56
+00000000`0410ded0 00007ffe`58db7d5f     Microsoft_UI_Input!IslandInputSiteWinRT::PushFocusToIsland_Callback+0x40
+00000000`0410df00 00007ffe`691b4350     Microsoft_UI_Input!InputFocusControllerWinRT::Api::TrySetFocus+0x6f
+00000000`0410df40 00007ffe`691b42fd     Microsoft_UI_Xaml_7ffe68fa0000!CXamlIslandRoot::TrySetFocus+0x40
+00000000`0410df70 00007ffe`690f77ec     Microsoft_UI_Xaml_7ffe68fa0000!ContentRootAdapters::FocusManagerXamlIslandAdapter::SetFocus+0x2d
+00000000`0410dfb0 00007ffe`690f722a     Microsoft_UI_Xaml_7ffe68fa0000!CFocusManager::UpdateFocus+0x510
+00000000`0410e0b0 00007ffe`690f8228     Microsoft_UI_Xaml_7ffe68fa0000!CFocusManager::SetFocusedElement+0x52
+00000000`0410e120 00007ffe`691fb515     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::FocusManagerFactory::TryFocusAsyncImpl+0x138
+00000000`0410e1d0 00007ffe`68229df9     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::FocusManagerFactory::TryFocusAsync+0x75
+00000000`0410e220 00007ffe`68229d4d     Windows_UI_FileExplorer!winrt::impl::consume_Microsoft_UI_Xaml_Input_IFocusManagerStatics<winrt::Microsoft::UI::Xaml::Input::IFocusManagerStatics>::TryFocusAsync+0x51
+00000000`0410e290 00007ffe`68221eb2     Windows_UI_FileExplorer!winrt::Microsoft::UI::Xaml::Input::FocusManager::TryFocusAsync+0x49
+00000000`0410e2e0 00007ffe`aab282f9     Windows_UI_FileExplorer!winrt::WindowsUdk::UI::Shell::implementation::FileExplorerFolderViewController::SetInnerFocus+0x142
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'

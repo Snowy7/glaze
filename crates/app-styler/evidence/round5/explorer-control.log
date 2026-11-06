@@ -1,0 +1,12 @@
+11:21:56 explorer bursts start control (nothing attached) (3 bursts); shell explorer 76024; no styler
+11:21:56 [start] shell 76024: 1,123.5 MB priv, 7814 handles
+11:22:57 burst 1: folder explorer 64928 at 165.4 MB priv, 2776 handles with both windows open; exited 49.4 s after its last window closed; styled False; focus kept False/False
+11:22:57 [after burst 1] folder 10288: 119.5 MB priv, 1831 handles | shell 76024: 1,123.4 MB priv, 7767 handles
+11:22:57   no styler
+11:24:08 burst 2: folder explorer 92944 at 162.7 MB priv, 2663 handles with both windows open; exited 50.1 s after its last window closed; styled False; focus kept False/False
+11:24:08 [after burst 2] folder 12496: 140.9 MB priv, 2291 handles | shell 76024: 1,129.1 MB priv, 8031 handles
+11:24:08   no styler
+11:25:19 burst 3: folder explorer 22924 at 166.1 MB priv, 3185 handles with both windows open; exited 45.3 s after its last window closed; styled False; focus kept True/True
+11:25:19 [after burst 3] shell 76024: 1,133.4 MB priv, 8081 handles | folder 76484: 139.0 MB priv, 1997 handles
+11:25:19   no styler
+11:25:29 explorer bursts done control (nothing attached)
