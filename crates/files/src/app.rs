@@ -158,7 +158,7 @@ pub struct App {
     pub indexed: bool,
     pub geometry: Geometry,
     pub drag: Option<Drag>,
-    pub sizes: HashMap<String, u64>,
+    pub sizes: HashMap<String, crate::model::Size>,
     pub decorations: HashMap<(String, i32), Option<Decoration>>,
     pending_images: HashSet<(String, i32)>,
     image_order: VecDeque<(String, i32)>,
@@ -918,7 +918,9 @@ impl App {
     fn run_search(&mut self) {
         let text = self.search.text().unwrap_or_default();
         self.query_text = text.clone();
-        self.query = self.backend.search(text, self.entries.clone(), self.sort);
+        self.query = self
+            .backend
+            .search(text, self.entries.clone(), self.sort, self.sizes.clone());
         self.selection.clear();
         self.scroll.reset();
     }
@@ -1629,6 +1631,7 @@ impl App {
                             self.query_text.clone(),
                             self.entries.clone(),
                             self.sort,
+                            self.sizes.clone(),
                         );
                     }
                     self.selection.items = self

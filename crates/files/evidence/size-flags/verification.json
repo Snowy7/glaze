@@ -1,0 +1,18 @@
+{
+  "source": "Production Files view with isolated metadata, independent of the running index generation",
+  "exact": "1.0 GB",
+  "lower_bound": "\u2265 4.2 GB",
+  "excluded": "\u2014",
+  "tooltip": "Not indexed (excluded)",
+  "selected_total": "\u2265 4.2 GB",
+  "size_bars": "Exact sizes only",
+  "pure_tests": [
+    "flags and labels",
+    "selection totals",
+    "both sort directions",
+    "metadata precedence"
+  ],
+  "tests_passed": 18,
+  "deadline_ms": 250,
+  "deployed_during_measurement_window": false
+}

@@ -7,10 +7,71 @@ pub struct Entry {
     pub path: String,
     pub name: String,
     pub directory: bool,
-    pub size: Option<u64>,
+    pub size: Option<Size>,
     pub modified: u64,
     pub kind: String,
     pub hidden: bool,
+}
+
+/// Index aggregates can be lower bounds; an excluded tree has no measured byte count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Size {
+    Exact(u64),
+    LowerBound(u64),
+    Excluded,
+}
+impl Size {
+    /// Search hits are current index metadata; directory listings use their latest size reply.
+    pub fn resolve(entry: Option<Self>, cached: Option<Self>, indexed: bool) -> Option<Self> {
+        if indexed { entry } else { cached.or(entry) }
+    }
+    pub fn indexed(bytes: u64, unknown: bool, excluded: bool) -> Self {
+        if excluded {
+            Self::Excluded
+        } else if unknown {
+            Self::LowerBound(bytes)
+        } else {
+            Self::Exact(bytes)
+        }
+    }
+    pub fn exact(self) -> Option<u64> {
+        match self {
+            Self::Exact(bytes) => Some(bytes),
+            _ => None,
+        }
+    }
+    pub fn bytes(self) -> u64 {
+        match self {
+            Self::Exact(bytes) | Self::LowerBound(bytes) => bytes,
+            Self::Excluded => 0,
+        }
+    }
+    pub fn label(self) -> String {
+        match self {
+            Self::Exact(bytes) => size_label(bytes),
+            Self::LowerBound(bytes) => format!("≥ {}", size_label(bytes)),
+            Self::Excluded => "—".into(),
+        }
+    }
+    pub fn total(sizes: impl IntoIterator<Item = Option<Self>>) -> Self {
+        let (mut bytes, mut unknown) = (0u64, false);
+        let (mut any, mut all_excluded) = (false, true);
+        for size in sizes {
+            any = true;
+            all_excluded &= size == Some(Self::Excluded);
+            let value = size.map_or(0, Self::bytes);
+            unknown |= bytes.checked_add(value).is_none();
+            bytes = bytes.saturating_add(value);
+            unknown |= size.is_none_or(|size| size.exact().is_none());
+        }
+        if any && all_excluded {
+            Self::Excluded
+        } else if unknown {
+            Self::LowerBound(bytes)
+        } else {
+            Self::Exact(bytes)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,21 +98,31 @@ pub struct Sort {
 
 impl Sort {
     pub fn compare(self, a: &Entry, b: &Entry) -> Ordering {
-        // Folders stay together in either direction, like Explorer.
-        b.directory.cmp(&a.directory).then_with(|| {
-            let order = match self.column {
-                Column::Name => natural(&a.name, &b.name),
-                Column::Modified => a.modified.cmp(&b.modified),
-                Column::Type => a.kind.cmp(&b.kind),
-                Column::Size => a.size.cmp(&b.size),
-            }
-            .then_with(|| natural(&a.name, &b.name));
-            if self.descending {
-                order.reverse()
-            } else {
-                order
-            }
-        })
+        // Size completeness never reverses with direction: unknowns always follow exact sizes.
+        let completeness = if self.column == Column::Size {
+            a.size
+                .and_then(Size::exact)
+                .is_none()
+                .cmp(&b.size.and_then(Size::exact).is_none())
+        } else {
+            Ordering::Equal
+        };
+        completeness
+            .then_with(|| b.directory.cmp(&a.directory))
+            .then_with(|| {
+                let order = match self.column {
+                    Column::Name => natural(&a.name, &b.name),
+                    Column::Modified => a.modified.cmp(&b.modified),
+                    Column::Type => a.kind.cmp(&b.kind),
+                    Column::Size => a.size.map(Size::bytes).cmp(&b.size.map(Size::bytes)),
+                }
+                .then_with(|| natural(&a.name, &b.name));
+                if self.descending {
+                    order.reverse()
+                } else {
+                    order
+                }
+            })
     }
 }
 
@@ -223,6 +294,83 @@ impl Preferences {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn indexed_sizes_labels_bars_and_selection_totals_preserve_uncertainty() {
+        assert_eq!(
+            Size::resolve(Some(Size::LowerBound(10)), Some(Size::Exact(10)), true),
+            Some(Size::LowerBound(10))
+        );
+        assert_eq!(
+            Size::resolve(Some(Size::Exact(10)), Some(Size::Excluded), false),
+            Some(Size::Excluded)
+        );
+        assert_eq!(Size::indexed(1024, false, false), Size::Exact(1024));
+        assert_eq!(Size::indexed(1024, true, false).label(), "≥ 1.0 KB");
+        assert_eq!(Size::indexed(999, false, true), Size::Excluded);
+        assert_eq!(Size::Excluded.label(), "—");
+        assert_eq!(Size::LowerBound(1024).exact(), None);
+        assert_eq!(Size::Excluded.exact(), None);
+        assert_eq!(Size::Exact(0).exact(), Some(0));
+        assert_eq!(
+            Size::total([Some(Size::Exact(10)), Some(Size::Exact(20))]),
+            Size::Exact(30)
+        );
+        assert_eq!(
+            Size::total([
+                Some(Size::Exact(10)),
+                Some(Size::LowerBound(20)),
+                Some(Size::Excluded)
+            ]),
+            Size::LowerBound(30)
+        );
+        assert_eq!(
+            Size::total([Some(Size::Exact(10)), None]),
+            Size::LowerBound(10)
+        );
+        assert_eq!(Size::total([Some(Size::Excluded)]), Size::Excluded);
+        assert_eq!(
+            Size::total([Some(Size::Exact(u64::MAX)), Some(Size::Exact(1))]),
+            Size::LowerBound(u64::MAX)
+        );
+    }
+
+    #[test]
+    fn size_sort_keeps_unknowns_after_exact_sizes_in_both_directions() {
+        let entry = |name: &str, directory, size| Entry {
+            path: name.into(),
+            name: name.into(),
+            directory,
+            size,
+            modified: 0,
+            kind: String::new(),
+            hidden: false,
+        };
+        for descending in [false, true] {
+            let sort = Sort {
+                column: Column::Size,
+                descending,
+            };
+            let mut entries = [
+                entry("excluded", true, Some(Size::Excluded)),
+                entry("lower", true, Some(Size::LowerBound(100))),
+                entry("missing", true, None),
+                entry("small", false, Some(Size::Exact(1))),
+                entry("large", false, Some(Size::Exact(5))),
+            ];
+            entries.sort_by(|a, b| sort.compare(a, b));
+            assert!(
+                entries[..2]
+                    .iter()
+                    .all(|e| e.size.and_then(Size::exact).is_some())
+            );
+            assert!(
+                entries[2..]
+                    .iter()
+                    .all(|e| e.size.and_then(Size::exact).is_none())
+            );
+            assert_eq!(entries[0].name, if descending { "large" } else { "small" });
+        }
+    }
     #[test]
     fn history_branches_and_selection_follows_control_shift() {
         let mut h = History::default();

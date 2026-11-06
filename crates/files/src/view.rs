@@ -514,6 +514,22 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     }
 
     let mut rows = Vec::new();
+    let mut size_tooltip = None;
+    let max_exact = if app.indexed && !app.query_text.is_empty() {
+        app.shown
+            .iter()
+            .filter(|e| e.directory)
+            .filter_map(|e| e.size.and_then(model::Size::exact))
+            .max()
+    } else {
+        app.sizes
+            .values()
+            .copied()
+            .filter_map(model::Size::exact)
+            .max()
+    }
+    .unwrap_or(1)
+    .max(1);
     let (row_height, columns) = if app.preferences.view == View::Details {
         (px(34.0), 1)
     } else {
@@ -650,18 +666,18 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
                         Align::Start,
                     );
                     x += widths[2];
-                    let size = app
-                        .sizes
-                        .get(&entry.path)
-                        .copied()
-                        .or(entry.size)
-                        .map(model::size_label)
-                        .unwrap_or_default();
+                    let size = model::Size::resolve(
+                        entry.size,
+                        app.sizes.get(&entry.path).copied(),
+                        app.indexed && !app.query_text.is_empty(),
+                    );
+                    let size_rect =
+                        Rect::new(x + px(10.0), rect.top, widths[3] - px(24.0), rect.height());
                     if entry.directory
-                        && let Some(bytes) = app.sizes.get(&entry.path)
+                        && let Some(bytes) = size.and_then(model::Size::exact)
                     {
-                        let max = app.sizes.values().copied().max().unwrap_or(1).max(1);
-                        let bar = ((widths[3] - px(24.0)) * (*bytes as f64 / max as f64) as f32)
+                        let bar = ((widths[3] - px(24.0))
+                            * (bytes as f64 / max_exact as f64).min(1.0) as f32)
                             .max(px(2.0));
                         f.fill(
                             Rect::new(x + px(10.0), rect.bottom - px(5.0), bar, px(2.0)),
@@ -669,11 +685,18 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
                             color.accent.with_alpha(0.28),
                         );
                     }
+                    if size == Some(model::Size::Excluded) && app.interaction.hover == Some(id) {
+                        size_tooltip = Some(size_rect.intersect(content));
+                    }
                     f.text_in(
-                        Rect::new(x + px(10.0), rect.top, widths[3] - px(24.0), rect.height()),
-                        &size,
+                        size_rect,
+                        &size.map(model::Size::label).unwrap_or_default(),
                         TextRole::Callout,
-                        color.secondary,
+                        if size == Some(model::Size::Excluded) {
+                            color.tertiary
+                        } else {
+                            color.secondary
+                        },
                         Align::End,
                     );
                 } else {
@@ -757,24 +780,23 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     let selected = if app.selection.items.is_empty() {
         String::new()
     } else {
-        let bytes: u64 = app
-            .selection
-            .items
-            .iter()
-            .filter_map(|i| app.shown.get(*i))
-            .filter_map(|e| app.sizes.get(&e.path).copied().or(e.size))
-            .sum();
-        let unknown = app
-            .selection
-            .items
-            .iter()
-            .filter_map(|i| app.shown.get(*i))
-            .any(|e| e.directory && !app.sizes.contains_key(&e.path) && e.size.is_none());
+        let total = model::Size::total(
+            app.selection
+                .items
+                .iter()
+                .filter_map(|i| app.shown.get(*i))
+                .map(|e| {
+                    model::Size::resolve(
+                        e.size,
+                        app.sizes.get(&e.path).copied(),
+                        app.indexed && !app.query_text.is_empty(),
+                    )
+                }),
+        );
         format!(
-            "  ·  {} selected · {}{}",
+            "  ·  {} selected · {}",
             app.selection.items.len(),
-            model::size_label(bytes),
-            if unknown { " + uncounted folders" } else { "" }
+            total.label()
         )
     };
     f.text_in(
@@ -812,6 +834,12 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
         f.fill(panel, px(14.0), color.elevated.with_alpha(1.0));
         f.list.hits.clear();
         preview_body = preview_panel(&mut f, app, panel, now, true);
+    } else if let Some(rect) = size_tooltip {
+        f.tooltip(
+            rect,
+            "Not indexed (excluded)",
+            bounds.inset(Insets::all(px(8.0))),
+        );
     } else if let Some(hit) = app
         .interaction
         .hover

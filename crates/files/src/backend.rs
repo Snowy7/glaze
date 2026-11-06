@@ -39,7 +39,7 @@ pub enum Reply {
     },
     Sizes {
         epoch: u64,
-        sizes: HashMap<String, u64>,
+        sizes: HashMap<String, crate::model::Size>,
     },
     Image {
         epoch: u64,
@@ -66,12 +66,13 @@ enum Job {
         text: String,
         entries: Arc<Vec<Entry>>,
         sort: Sort,
+        sizes: HashMap<String, crate::model::Size>,
     },
     Sort {
         epoch: u64,
         entries: Arc<Vec<Entry>>,
         sort: Sort,
-        sizes: HashMap<String, u64>,
+        sizes: HashMap<String, crate::model::Size>,
     },
 }
 
@@ -176,7 +177,14 @@ impl Backend {
                                                 .hits
                                                 .into_iter()
                                                 .filter(|h| h.directory)
-                                                .map(|h| (h.path, h.size))
+                                                .map(|h| {
+                                                    let size = crate::model::Size::indexed(
+                                                        h.size,
+                                                        h.size_unknown,
+                                                        h.excluded,
+                                                    );
+                                                    (h.path, size)
+                                                })
                                                 .collect(),
                                         },
                                     );
@@ -187,6 +195,7 @@ impl Backend {
                                 text,
                                 entries,
                                 sort,
+                                sizes,
                                 ..
                             } => {
                                 if active_query.load(Ordering::Relaxed) != query {
@@ -215,7 +224,11 @@ impl Backend {
                                             name: hit.name,
                                             path: hit.path,
                                             directory: hit.directory,
-                                            size: Some(hit.size),
+                                            size: Some(crate::model::Size::indexed(
+                                                hit.size,
+                                                hit.size_unknown,
+                                                hit.excluded,
+                                            )),
                                             modified: (u64::from(hit.modified) + 11_644_473_600)
                                                 * 10_000_000,
                                             kind: if hit.directory { "Folder" } else { "File" }
@@ -233,6 +246,14 @@ impl Backend {
                                 };
                                 if active_query.load(Ordering::Relaxed) != query {
                                     return Ok(());
+                                }
+                                if !from_index {
+                                    for entry in &mut filtered {
+                                        if entry.directory {
+                                            entry.size =
+                                                sizes.get(&entry.path).copied().or(entry.size);
+                                        }
+                                    }
                                 }
                                 filtered.sort_by(|a, b| sort.compare(a, b));
                                 send(
@@ -255,7 +276,7 @@ impl Backend {
                                 let mut entries = entries.as_ref().clone();
                                 for entry in &mut entries {
                                     if entry.directory {
-                                        entry.size = sizes.get(&entry.path).copied();
+                                        entry.size = sizes.get(&entry.path).copied().or(entry.size);
                                     }
                                 }
                                 entries.sort_by(|a, b| sort.compare(a, b));
@@ -334,7 +355,13 @@ impl Backend {
         });
         epoch
     }
-    pub fn search(&self, text: String, entries: Arc<Vec<Entry>>, sort: Sort) -> u64 {
+    pub fn search(
+        &self,
+        text: String,
+        entries: Arc<Vec<Entry>>,
+        sort: Sort,
+        sizes: HashMap<String, crate::model::Size>,
+    ) -> u64 {
         let query = self.query.fetch_add(1, Ordering::Relaxed) + 1;
         let _ = self.jobs.send(Job::Search {
             epoch: self.epoch.load(Ordering::Relaxed),
@@ -342,10 +369,16 @@ impl Backend {
             text,
             entries,
             sort,
+            sizes,
         });
         query
     }
-    pub fn sort(&self, entries: Arc<Vec<Entry>>, sort: Sort, sizes: HashMap<String, u64>) {
+    pub fn sort(
+        &self,
+        entries: Arc<Vec<Entry>>,
+        sort: Sort,
+        sizes: HashMap<String, crate::model::Size>,
+    ) {
         self.query.store(0, Ordering::Relaxed);
         let _ = self.jobs.send(Job::Sort {
             epoch: self.epoch.load(Ordering::Relaxed),

@@ -76,6 +76,25 @@ Both calls have a 250 ms deadline. A response with `scanning: true` contains cac
 while the helper reconciles its snapshot. Sizes includes the requested folder followed by
 its immediate children; Files associates each logical byte count with the returned path.
 
+Index sizes retain the `Hit.size_unknown` and `Hit.excluded` flags in the browser's entries,
+folder cache and inactive tabs. A lower bound reads **≥ 4.2 GB**; an excluded folder reads **—**
+with the tooltip **Not indexed (excluded)**. Only exact sizes get a relative size bar. Size
+sorting puts exact sizes before unknown sizes in both directions, including when an uncertain
+folder would otherwise precede an exact file. Indexed search hits take precedence over older
+cached metadata, and local search retains the current folder's size flags.
+
+Selection totals also preserve uncertainty: exact and lower-bound byte counts are added, but
+any lower-bound, excluded or unmeasured item makes the total a lower bound. A selection containing
+only excluded folders reads **—**. No recursive work is started to fill these gaps.
+
+The internal value is `model::Size::{Exact(u64), LowerBound(u64), Excluded}`; missing index
+results remain `None`. Focused pure tests cover flag conversion, labels, exact-only bar inputs,
+both sorting directions, metadata precedence and mixed selection totals. The manual
+`mypaper-files-size-proof` example renders the production view with isolated metadata, independent
+of the live helper's current generation; run it only under the desktop lock. The inspected
+[capture](../crates/files/evidence/size-flags/exact-lower-excluded.png) shows all three states,
+the excluded tooltip, and a lower-bound selection total.
+
 ## Previews and toolbar
 
 `Alt+P` toggles the preview pane. Images use a bounded 768-pixel shell thumbnail; text and code

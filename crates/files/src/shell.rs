@@ -145,8 +145,9 @@ fn from_find(parent: &str, data: &WIN32_FIND_DATAW) -> Entry {
         path: Path::new(parent).join(&name).to_string_lossy().into_owned(),
         name,
         directory,
-        size: (!directory)
-            .then_some((u64::from(data.nFileSizeHigh) << 32) | u64::from(data.nFileSizeLow)),
+        size: (!directory).then_some(crate::model::Size::Exact(
+            (u64::from(data.nFileSizeHigh) << 32) | u64::from(data.nFileSizeLow),
+        )),
         modified: (u64::from(data.ftLastWriteTime.dwHighDateTime) << 32)
             | u64::from(data.ftLastWriteTime.dwLowDateTime),
         kind,
