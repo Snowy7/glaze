@@ -16,9 +16,15 @@ pub(crate) fn key(input: &Input) -> Option<Key> {
         Input::Host(HostMsg::Held(_)) => ("", "held", String::new()),
         // Explicit user actions keep their order rather than silently losing commands.
         Input::Host(_) | Input::Toast { .. } => return None,
-        Input::Http { plugin, id, .. } | Input::PipeHttp { plugin, id, .. } => (plugin.as_str(), "http", id.to_string()),
+        Input::Http { plugin, id, .. } | Input::PipeHttp { plugin, id, .. } => {
+            (plugin.as_str(), "http", id.to_string())
+        }
         Input::Native { plugin, id, .. } => (plugin.as_str(), "native-reply", id.to_string()),
-        Input::NativeEvent(event) => (event.plugin.as_str(), "native-event", format!("{}:{}", event.module, event.name)),
+        Input::NativeEvent(event) => (
+            event.plugin.as_str(),
+            "native-event",
+            format!("{}:{}", event.module, event.name),
+        ),
         Input::Socket { plugin, event } => match event {
             SocketEvent::Opened(id) => (plugin.as_str(), "socket-open", id.to_string()),
             SocketEvent::Message((id, _)) => (plugin.as_str(), "socket-message", id.to_string()),
@@ -48,20 +54,35 @@ fn system(event: &SystemEvent) -> Option<Key> {
 
 pub(crate) fn credit(input: &Input) -> Option<(&str, u64)> {
     match input {
-        Input::Socket { plugin, event: SocketEvent::Message((id, _)) }
-        | Input::Pipe { plugin, event: PipeEvent::Data((id, _)) } => Some((plugin, *id)),
+        Input::Socket {
+            plugin,
+            event: SocketEvent::Message((id, _)),
+        }
+        | Input::Pipe {
+            plugin,
+            event: PipeEvent::Data((id, _)),
+        } => Some((plugin, *id)),
         _ => None,
     }
 }
 
 pub(crate) fn belongs_to(input: &Input, plugin: &str, instances: &[String]) -> bool {
     match input {
-        Input::Host(HostMsg::Open { plugin: owner, .. } | HostMsg::Command { plugin: owner, .. })
-        | Input::Http { plugin: owner, .. } | Input::PipeHttp { plugin: owner, .. }
-        | Input::Native { plugin: owner, .. } | Input::Socket { plugin: owner, .. }
-        | Input::Pipe { plugin: owner, .. } | Input::Toast { plugin: owner, .. } => owner == plugin,
+        Input::Host(
+            HostMsg::Open { plugin: owner, .. } | HostMsg::Command { plugin: owner, .. },
+        )
+        | Input::Http { plugin: owner, .. }
+        | Input::PipeHttp { plugin: owner, .. }
+        | Input::Native { plugin: owner, .. }
+        | Input::Socket { plugin: owner, .. }
+        | Input::Pipe { plugin: owner, .. }
+        | Input::Toast { plugin: owner, .. } => owner == plugin,
         Input::NativeEvent(event) => event.plugin == plugin,
-        Input::Host(HostMsg::Close { instance } | HostMsg::Options { instance, .. } | HostMsg::Action { instance, .. }) => instances.contains(instance),
+        Input::Host(
+            HostMsg::Close { instance }
+            | HostMsg::Options { instance, .. }
+            | HostMsg::Action { instance, .. },
+        ) => instances.contains(instance),
         _ => false,
     }
 }

@@ -1,7 +1,10 @@
 //! Core's activity publication wakes the existing shell loop. The publisher process is also
 //! in its wait set, so a crash resumes consumers even without a final file notification.
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use mypaper_tweaks::game_activity::{self, Owner};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Threading::WaitForSingleObject;
 
@@ -22,18 +25,33 @@ impl GameControl {
             if !changed.swap(true, Ordering::AcqRel) {
                 crate::inbox::post(WM_GAME_ACTIVITY, 0);
             }
-        }).inspect_err(|e| log::warn!("game activity watcher: {e:#}")).ok();
-        Self { _watch: watch, dirty, owner: None, active: false }
+        })
+        .inspect_err(|e| log::warn!("game activity watcher: {e:#}"))
+        .ok();
+        Self {
+            _watch: watch,
+            dirty,
+            owner: None,
+            active: false,
+        }
     }
 
-    pub fn handle(&self) -> Option<HANDLE> { self.owner.as_ref().map(Owner::handle) }
+    pub fn handle(&self) -> Option<HANDLE> {
+        self.owner.as_ref().map(Owner::handle)
+    }
 
     pub fn refresh(&mut self) {
         // SAFETY: the Owner keeps this query-only process handle alive.
-        let exited = self.handle().is_some_and(|h| unsafe { WaitForSingleObject(h, 0) } == WAIT_OBJECT_0);
-        if !self.dirty.swap(false, Ordering::AcqRel) && !exited { return; }
+        let exited = self
+            .handle()
+            .is_some_and(|h| unsafe { WaitForSingleObject(h, 0) } == WAIT_OBJECT_0);
+        if !self.dirty.swap(false, Ordering::AcqRel) && !exited {
+            return;
+        }
         let current = game_activity::read();
-        self.active = current.as_ref().is_some_and(|(s, _)| s.activity.pause_background);
+        self.active = current
+            .as_ref()
+            .is_some_and(|(s, _)| s.activity.pause_background);
         self.owner = current.map(|(_, owner)| owner);
     }
 }
