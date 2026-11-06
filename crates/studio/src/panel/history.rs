@@ -677,7 +677,7 @@ pub fn picture(
         return None;
     }
     let mut ui = Ui::isolated().ok()?;
-    ui.text.set_capacity(24);
+    ui.text.set_capacity(8);
     let mut list = DisplayList::default();
     list.ops.push(Op::Fill {
         rect,

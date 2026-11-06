@@ -489,6 +489,9 @@ pub fn render(ui: &mut Ui, list: &DisplayList, width: u32, height: u32) -> Resul
     let canvas = Canvas::new(ui, width, height)?;
     let full = PixelRect::full(width, height);
     canvas.draw(&mut ui.text, list, full)?;
+    // EndDraw committed the picture to WIC. Release source copies before allocating
+    // the returned pixels; a one-shot raster never draws those bitmaps again.
+    canvas.images.borrow_mut().clear();
     let mut pixels = vec![0u8; (width * height * 4) as usize];
     canvas.read(full, |row, bytes| {
         let at = row as usize * width as usize * 4;
