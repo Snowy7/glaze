@@ -8,6 +8,19 @@ $deployed = 'D:\Coding\projects\desktop\wallpaper\target\release\mypaper-index.e
 $service = @(Get-CimInstance Win32_Process -Filter "Name='mypaper-index.exe'" | Where-Object { $_.ExecutablePath -eq $deployed -and $_.CommandLine -match '--parent' })
 if ($service.Count -ne 1) { throw 'Expected one core-owned deployed index' }
 $index = Get-Process -Id $service[0].ProcessId
+function Request-Index([hashtable]$Request) {
+  $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'mypaper-index', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
+  try {
+    $pipe.Connect(500)
+    $pipe.ReadMode = [IO.Pipes.PipeTransmissionMode]::Message
+    $message = [Text.Encoding]::UTF8.GetBytes(($Request | ConvertTo-Json -Compress))
+    $pipe.Write($message,0,$message.Length)
+    $buffer = [byte[]]::new(1024*1024)
+    $read = $pipe.ReadAsync($buffer,0,$buffer.Length)
+    if (-not $read.Wait(5000)) { throw 'Index request timed out' }
+    [Text.Encoding]::UTF8.GetString($buffer,0,$read.Result) | ConvertFrom-Json
+  } finally { $pipe.Dispose() }
+}
 if ([IntPtr]::Size -ne 8) { throw '64-bit PowerShell required for native thread counters' }
 Add-Type @'
 using System; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -71,8 +84,8 @@ while (-not (New-Item -ItemType Directory -Path $lockDir -ErrorAction SilentlyCo
 try { # Outer scope also cleans the optional filesystem fixture if activation fails.
 try {
   # Start from a loaded, exercised full index, rather than certifying a tiny startup stub.
-  $status = & $deployed --status | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or $status.entries -lt 1000000) { throw 'Full cached index is not ready for the game test' }
+  $status = Request-Index @{method='status'}
+  if ($status.entries -lt 1000000) { throw 'Full cached index is not ready for the game test' }
   if ($TestCatchup) {
     if ($status.scanning) { throw 'Wait for initial reconciliation before the subtree catch-up test' }
     $gameRoot = Join-Path $env:USERPROFILE ('mypaper-index-fixtures\game-' + [Guid]::NewGuid().ToString('N'))
@@ -81,14 +94,19 @@ try {
     [IO.Directory]::CreateDirectory($gameRoot) | Out-Null
     $until = [DateTime]::UtcNow.AddSeconds(10)
     do {
-      $directory = & $deployed --sizes $gameRoot | ConvertFrom-Json
+      $directory = Request-Index @{method='sizes';path=$gameRoot;limit=50}
       if (@($directory.hits | Where-Object path -eq $gameRoot).Count -eq 1) { break }
       if ([DateTime]::UtcNow -ge $until) { throw 'Filesystem fixture did not become indexed' }
       Start-Sleep -Milliseconds 100
     } while ($true)
   }
-  $warm = & $deployed --bench-query 1 | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or $warm.queries -ne 11) { throw 'Game test query warmup did not complete' }
+  $warmupQueries = 0
+  for ($round=0; $round -lt 2; $round++) {
+    foreach ($query in @('cargo','readme','ext:rs','folder:src','wallpaper','path:projects ext:toml','unlikely-no-match-8932','c','ca','ra','e')) {
+      $null = Request-Index @{method='search';query=$query;limit=50}
+      $warmupQueries++
+    }
+  }
   $index.Refresh()
   $beforePrivate = $index.PrivateMemorySize64
   $beforeWorkingSet = $index.WorkingSet64
@@ -105,7 +123,9 @@ try {
     Start-Sleep -Seconds 2
     $signal = Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json
   }
-  [pscustomobject]@{fixture_pid=$fixture.Id;foreground_pid=[IndexGameThreads]::ForegroundPid();signal=$signal} | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $evidence 'round2-game-activation.json')
+  $foregroundPid = [IndexGameThreads]::ForegroundPid()
+  $foregroundProcess = Get-Process -Id $foregroundPid -ErrorAction SilentlyContinue
+  [pscustomobject]@{fixture_pid=$fixture.Id;foreground_pid=$foregroundPid;foreground_process=$foregroundProcess.ProcessName;signal=$signal} | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $evidence 'round2-game-activation.json')
   if (-not $signal.activity.pause_background -or $signal.activity.foreground_pid -ne $fixture.Id -or [IndexGameThreads]::ForegroundPid() -ne $fixture.Id) { throw 'Owned fullscreen fixture did not engage the real game hint' }
   Start-Sleep -Seconds 2
   $index.Refresh()
@@ -138,7 +158,7 @@ try {
   }
   [pscustomobject]@{
     index_pid=$index.Id;fixture_pid=$fixture.Id;seconds=$elapsed
-    entries_before_game=$status.entries;warmup_queries=$warm.queries
+    entries_before_game=$status.entries;warmup_queries=$warmupQueries
     before_private_bytes=$beforePrivate;before_working_set_bytes=$beforeWorkingSet
     cpu_core_pct=($index.TotalProcessorTime.TotalMilliseconds-$cpuBefore)/($elapsed*10)
     context_switches_per_second=$switches/$elapsed
@@ -158,13 +178,13 @@ try {
     if ($TestCatchup -and $validGame) {
       $catchupClock = [Diagnostics.Stopwatch]::StartNew()
       do {
-        $answer = & $deployed --query $gameName | ConvertFrom-Json
+        $answer = Request-Index @{method='search';query=$gameName;limit=50}
         if (@($answer.hits | Where-Object path -eq $gameFile).Count -eq 1) { break }
         if ($catchupClock.Elapsed.TotalSeconds -gt 30) { throw 'Subtree change did not catch up within 30 seconds' }
         Start-Sleep -Milliseconds 100
       } while ($true)
       $catchupMs = $catchupClock.Elapsed.TotalMilliseconds
-      $sizes = & $deployed --sizes $gameRoot | ConvertFrom-Json
+      $sizes = Request-Index @{method='sizes';path=$gameRoot;limit=50}
       $aggregate = @($sizes.hits | Where-Object path -eq $gameRoot)
       if ($aggregate.Count -ne 1 -or $aggregate[0].size -ne 32768 -or $aggregate[0].files -ne 1 -or $aggregate[0].size_unknown) { throw 'Resumed fixture size was incorrect' }
       [pscustomobject]@{created_at=$createdAt;file=$gameFile;catchup_ms=$catchupMs;search=$answer;sizes=$sizes} | ConvertTo-Json -Depth 7 | Set-Content -Encoding utf8 (Join-Path $evidence 'round2-backed-game-catchup.json')
