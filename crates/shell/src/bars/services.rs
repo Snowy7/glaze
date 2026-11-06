@@ -192,7 +192,7 @@ impl Services {
             }
             if on(Topic::Stats) != self.sampler.is_some() {
                 self.sampler = on(Topic::Stats).then(Sampler::new);
-                self.stats_due = on(Topic::Stats).then_some(now + Duration::from_secs(2));
+                self.stats_due = on(Topic::Stats).then_some(now + aligned(STATS_MS));
             }
             self.notifications_due = None;
             if !on(Topic::Notifications) {
@@ -340,11 +340,11 @@ impl Services {
                 .as_ref()
                 .is_none_or(|old| displayed_stats(old) != displayed_stats(&stats));
             self.model.stats = Some(stats);
-            self.stats_due = Some(now + Duration::from_secs(2));
             self.stats_costs.1 += u64::from(changed);
             if changed {
                 topics.insert(Topic::Stats);
             }
+            self.stats_due = Some(now + aligned(STATS_MS));
         }
         if take_due(&mut self.custom_due, now) {
             self.custom_due = self.model.custom.tick(now);
@@ -570,13 +570,21 @@ pub fn wait_ms(duration: Duration) -> u32 {
 }
 
 pub fn next_tick(seconds: bool) -> Duration {
+    aligned(if seconds { 1000 } else { 60000 })
+}
+
+/// The wait until the next whole multiple of `unit` ms of the wall clock, plus the clocks'
+/// slack: the widgets' clocks wake at the same moments, so one wake does both.
+fn aligned(unit: u64) -> Duration {
     let ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
-    let unit = if seconds { 1000 } else { 60000 };
-    Duration::from_millis(unit - ms % unit + 5)
+    Duration::from_millis(unit - ms % unit) + crate::widgets::time::CLOCK_SLACK
 }
+
+/// How often the stats module samples, on even seconds (see [`aligned`]).
+const STATS_MS: u64 = 2000;
 
 pub fn default_pins() -> Vec<services::config::Pinned> {
     let folder = std::env::var_os("APPDATA")

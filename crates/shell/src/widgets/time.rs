@@ -246,6 +246,13 @@ pub fn local_epoch(date: Date, hour: u32, minute: u32) -> Option<i64> {
 pub fn boundary(now: i64, quantum: i64) -> Duration {
     Duration::from_millis((quantum - now.rem_euclid(quantum)).max(1) as u64)
 }
+/// How long after a second or minute boundary clocks redraw: a wait can end a little early, and
+/// the bars' clocks and the widgets' (and media progress) use the same, so one wake does both.
+pub const CLOCK_SLACK: Duration = Duration::from_millis(5);
+/// The wait until a clock showing `quantum`-ms steps next changes, plus [`CLOCK_SLACK`].
+pub fn clock_tick(now: i64, quantum: i64) -> Duration {
+    boundary(now, quantum) + CLOCK_SLACK
+}
 pub fn remaining_boundary(remaining: i64, quantum: i64) -> Duration {
     Duration::from_millis(((remaining.max(1) - 1).rem_euclid(quantum) + 1) as u64)
 }
