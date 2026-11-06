@@ -499,7 +499,8 @@ impl Launcher {
                     query: query.clone(),
                     limit: 50,
                 };
-                let hits = mypaper_index::pipe::request(&request, 100)
+                // Quiet services trim mapped pages; a cold full-volume query faults them back in.
+                let hits = mypaper_index::pipe::request(&request, 250)
                     .ok()
                     .filter(|r| r.error.is_none())
                     .map(|r| r.hits);
