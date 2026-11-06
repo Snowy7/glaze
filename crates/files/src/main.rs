@@ -67,7 +67,7 @@ fn run() -> anyhow::Result<()> {
             let result = match input {
                 native::Input::Character(character) => { app.type_select(character); Ok(()) }
                 native::Input::Back(forward) => if let Some(path) = app.history.go(forward) { app.navigate(path, false) } else { Ok(()) },
-                native::Input::Key(key) => app.key(&mut ui, key),
+                native::Input::Key(key, modifiers) => app.key(&mut ui, key, modifiers),
             };
             if let Err(error) = result { app.error = Some(format!("{error:#}")); }
             redraw = true;

@@ -91,7 +91,11 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
                 let measured = f.text.measure(&name, &f.font(TextRole::Body)).0;
                 let w = (measured + px(20.0)).min((address_inner.right - x).max(0.0));
                 if w < px(22.0) { break; }
-                f.button(CRUMB + crumbs.len() as u32, Rect::new(x, address_inner.top, w, address_inner.height()), &name, None, ButtonKind::Plain, true);
+                let rect = Rect::new(x, address_inner.top, w, address_inner.height());
+                let id = CRUMB + crumbs.len() as u32;
+                f.wash(id, rect, px(5.0), true);
+                f.text_in(rect.inset(Insets::xy(px(8.0), 0.0)), &name, TextRole::Body, color.label, Align::Start);
+                f.hit(id, rect, Role::Button, &name, true, None);
                 crumbs.push(path);
                 x += w;
                 if x + px(18.0) < address_inner.right {
@@ -118,7 +122,8 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
 
     let command_inner = commands.inset(Insets::xy(inset, px(8.0)));
     let (modes, mut actions) = command_inner.take_right(px(114.0), px(10.0));
-    let (new, remaining) = actions.take_left(px(104.0), px(12.0)); actions = remaining;
+    let new_width = f.button_size("New folder", true).0;
+    let (new, remaining) = actions.take_left(new_width, px(12.0)); actions = remaining;
     f.button(NEW, new, "New folder", Some(Icon::Add), ButtonKind::Plain, !app.busy && app.location.as_ref().is_some_and(|l| l.filesystem));
     for (id, icon, label, enabled) in [
         (CUT, Icon::Edit, "Cut (Ctrl+X)", !app.selection.items.is_empty()),
@@ -134,7 +139,9 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     let (detail, modes) = modes.take_left(px(36.0), px(3.0));
     let (icons, more) = modes.take_left(px(36.0), px(3.0));
     f.button(DETAILS, detail, "", Some(Icon::Grip), if app.preferences.view == View::Details { ButtonKind::Tinted } else { ButtonKind::Plain }, true);
+    if let Some(hit) = f.list.hits.last_mut() { hit.label = "Details view".into(); }
     f.button(ICONS, icons, "", Some(Icon::Apps), if app.preferences.view == View::Icons { ButtonKind::Tinted } else { ButtonKind::Plain }, true);
+    if let Some(hit) = f.list.hits.last_mut() { hit.label = "Icons view".into(); }
     f.icon_button(MORE, more, Icon::More, px(18.0), "More actions", false);
 
     let (heading, content) = main.take_top(px(44.0), 0.0);
@@ -147,7 +154,10 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
         for (index, name) in ["Name", "Date modified", "Type", "Size"].into_iter().enumerate() {
             let rect = Rect::new(x, heading.top + px(4.0), widths[index], heading.height() - px(8.0));
             let label = if app.sort.column as usize == index { format!("{name}  {}", if app.sort.descending { "↓" } else { "↑" }) } else { name.into() };
-            f.button(HEADER + index as u32, rect, &label, None, ButtonKind::Plain, true);
+            let id = HEADER + index as u32;
+            f.wash(id, rect, px(5.0), true);
+            f.text_in(rect.inset(Insets::xy(px(10.0), 0.0)), &label, TextRole::Subheadline, color.secondary, Align::Start);
+            f.hit(id, rect, Role::Button, &label, true, None);
             x += widths[index];
             if index < 3 { boundaries.push(x); }
         }

@@ -102,7 +102,6 @@ pub struct App {
 
 pub fn control() -> bool { unsafe { GetKeyState(VK_CONTROL.0 as i32) < 0 } }
 pub fn shift() -> bool { unsafe { GetKeyState(VK_SHIFT.0 as i32) < 0 } }
-pub fn alt() -> bool { unsafe { GetKeyState(VK_MENU.0 as i32) < 0 } }
 
 impl App {
     pub fn new(path: String, scheme_override: Option<Scheme>) -> Result<Self> {
@@ -177,15 +176,16 @@ impl App {
             Field::Address => {
                 self.address.set_text(self.location.as_ref().map_or("", |l| &l.path))?;
                 self.address.set_rect(self.geometry.address);
-                self.surface.set_text_field(Some(self.address.clone())); self.address.focus(); self.address.select_all();
+                self.surface.set_text_field(Some(self.address.clone())); self.address.request_redraw(); self.address.focus(); self.address.select_all();
             }
-            Field::Search => { self.surface.set_text_field(Some(self.search.clone())); self.search.focus(); }
+            Field::Search => { self.search.set_rect(self.geometry.search); self.surface.set_text_field(Some(self.search.clone())); self.search.request_redraw(); self.search.focus(); }
             Field::Rename(path) => {
                 let name = Path::new(path).file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
                 self.editor.set_text(&name)?;
-                self.surface.set_text_field(Some(self.editor.clone())); self.editor.focus(); self.editor.select_all();
+                if !self.geometry.edit.is_empty() { self.editor.set_rect(self.geometry.edit); }
+                self.surface.set_text_field(Some(self.editor.clone())); self.editor.request_redraw(); self.editor.focus(); self.editor.select_all();
             }
-            Field::NewFolder => { self.editor.set_text("New folder")?; self.surface.set_text_field(Some(self.editor.clone())); self.editor.focus(); self.editor.select_all(); }
+            Field::NewFolder => { self.editor.set_text("New folder")?; self.surface.set_text_field(Some(self.editor.clone())); self.editor.request_redraw(); self.editor.focus(); self.editor.select_all(); }
             Field::None => {}
         }
         self.field = field;
@@ -220,7 +220,7 @@ impl App {
             Command::Paste => if let Some(location) = self.location.as_ref().filter(|l| l.filesystem) {
                 self.operation(transfer::paste(location.path.clone())?)?;
             },
-            Command::Delete => { let paths = self.selected_paths(); if !paths.is_empty() { self.operation(Operation::Delete { paths, permanent: shift() })?; } }
+            Command::Delete => { let paths = self.selected_paths(); if !paths.is_empty() { self.operation(Operation::Delete { paths, permanent: false })?; } }
             Command::Rename => if let Some(path) = self.selected_paths().first() { self.focus(Field::Rename(path.clone()))?; },
             Command::NewFolder => if self.location.as_ref().is_some_and(|l| l.filesystem) { self.focus(Field::NewFolder)?; },
             Command::Pin => if let Some(location) = &self.location {
@@ -317,19 +317,19 @@ impl App {
         Ok(())
     }
 
-    pub fn key(&mut self, ui: &mut Ui, key: u16) -> Result<()> {
-        if alt() {
+    pub fn key(&mut self, ui: &mut Ui, key: u16, modifiers: native::Modifiers) -> Result<()> {
+        if modifiers.alt {
             match key { 0x25 => self.activate(ui, BACK)?, 0x27 => self.activate(ui, FORWARD)?, 0x26 => self.activate(ui, UP)?, _ => {} }
             return Ok(());
         }
-        if control() && !matches!(key, 0x21..=0x28) {
+        if modifiers.control && !matches!(key, 0x21..=0x28) {
             match key {
                 0x4c => self.focus(Field::Address)?, 0x45 | 0x46 => { self.focus(Field::Search)?; self.search.select_all(); }
                 0x41 if self.field == Field::None => { self.selection.items = (0..self.shown.len()).collect(); }
                 0x43 if self.field == Field::None => self.command(Command::Copy)?,
                 0x58 if self.field == Field::None => self.command(Command::Cut)?,
                 0x56 if self.field == Field::None => self.command(Command::Paste)?,
-                0x4e if shift() => self.command(Command::NewFolder)?,
+                0x4e if modifiers.shift => self.command(Command::NewFolder)?,
                 _ => {}
             }
             return Ok(());
@@ -340,7 +340,7 @@ impl App {
             0x08 if self.field == Field::None => self.activate(ui, UP)?,
             0x71 if self.field == Field::None => self.command(Command::Rename)?,
             0x74 => self.refresh()?,
-            0x2e if self.field == Field::None => self.command(Command::Delete)?,
+            0x2e if self.field == Field::None => { let paths = self.selected_paths(); if !paths.is_empty() { self.operation(Operation::Delete { paths, permanent: modifiers.shift })?; } }
             0x5d => { let origin = native::origin(self.surface.hwnd()); self.context(ui, (origin.0 + self.geometry.viewport.left as i32 + 60, origin.1 + self.geometry.viewport.top as i32 + 40))?; }
             0x09 => { self.focus(match self.field { Field::None => Field::Address, Field::Address => Field::Search, _ => Field::None })?; }
             0x20 if self.field == Field::None => if let Some(index) = self.selection.focus { self.selection.choose(index, true, false); },
@@ -352,7 +352,7 @@ impl App {
                     0x24 => 0, 0x23 => self.shown.len() - 1, 0x21 => current.saturating_sub(page), 0x22 => current.saturating_add(page),
                     0x25 => current.saturating_sub(1), 0x27 => current + 1, 0x26 => current.saturating_sub(columns), _ => if self.selection.focus.is_none() { 0 } else { current + columns },
                 }.min(self.shown.len() - 1);
-                if control() { self.selection.focus = Some(next); } else { self.selection.choose(next, false, shift()); }
+                if modifiers.control { self.selection.focus = Some(next); } else { self.selection.choose(next, false, modifiers.shift); }
                 self.interaction.focus = Some(ITEM + next as u32);
                 self.interaction.focus_visible = true;
                 let top = (next / columns) as f32 * self.geometry.row;
@@ -390,7 +390,7 @@ impl App {
         match event {
             Event::Close => self.closing = true,
             Event::SettingChanged | Event::DpiChanged(_) => self.reload_look()?,
-            Event::Key(key) => self.key(ui, key)?,
+            Event::Key(key) => self.key(ui, key, native::Modifiers::read())?,
             Event::TextSubmit => self.submit()?,
             Event::TextChanged => if self.field == Field::Search {
                 let text = self.search.text()?; if text != self.query_text { self.run_search(); }

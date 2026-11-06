@@ -9,7 +9,17 @@ thread_local! {
     static CONTEXT: RefCell<Option<IContextMenu3>> = const { RefCell::new(None) };
 }
 
-pub enum Input { Character(char), Back(bool), Key(u16) }
+#[derive(Clone, Copy, Debug)]
+pub struct Modifiers { pub control: bool, pub shift: bool, pub alt: bool }
+impl Modifiers {
+    pub fn read() -> Self {
+        use windows::Win32::UI::Input::KeyboardAndMouse::*;
+        Self { control: unsafe { GetKeyState(VK_CONTROL.0 as i32) } < 0,
+            shift: unsafe { GetKeyState(VK_SHIFT.0 as i32) } < 0,
+            alt: unsafe { GetKeyState(VK_MENU.0 as i32) } < 0 }
+    }
+}
+pub enum Input { Character(char), Back(bool), Key(u16, Modifiers) }
 pub fn next() -> Option<Input> { INPUT.with_borrow_mut(VecDeque::pop_front) }
 pub fn field(active: bool) { FIELD.set(active); }
 
@@ -39,12 +49,15 @@ unsafe extern "system" fn subclass(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM, _
         }
         return LRESULT(0);
     }
-    // App shortcuts must reach the browser even when RichEdit owns a field.
-    if msg == WM_KEYDOWN && FIELD.get() {
-        use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL};
-        let control = unsafe { GetKeyState(VK_CONTROL.0 as i32) } < 0;
-        if (control && matches!(w.0, 0x4c | 0x45 | 0x46)) || w.0 == 0x74 {
-            INPUT.with_borrow_mut(|input| input.push_back(Input::Key(w.0 as u16)));
+    // Snapshot modifiers while dispatching the key, before the queue drains its key-up. The
+    // controller runs afterwards; GetKeyState there can already report a released Ctrl/Shift.
+    if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
+        let modifiers = Modifiers::read();
+        let system = msg == WM_SYSKEYDOWN && matches!(w.0, 0x73 | 0x20);
+        let app_shortcut = modifiers.control && matches!(w.0, 0x4c | 0x45 | 0x46)
+            || w.0 == 0x74 || w.0 == 0x1b || matches!(w.0, 0x09 | 0x21 | 0x22 | 0x26 | 0x28);
+        if !system && (!FIELD.get() || app_shortcut || modifiers.alt) {
+            INPUT.with_borrow_mut(|input| input.push_back(Input::Key(w.0 as u16, modifiers)));
             return LRESULT(0);
         }
     }
