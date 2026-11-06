@@ -5,6 +5,114 @@ pub struct Memory {
     pub private_mb: f64,
 }
 
+/// Software factories belong to the visible page; bitmap caches never retain widget models.
+#[derive(Default)]
+pub struct Raster(pub std::cell::RefCell<Option<mypaper_ui::Ui>>);
+impl std::fmt::Debug for Raster {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Raster")
+    }
+}
+
+pub fn raster_ui(app: &crate::app::App) -> Option<std::cell::RefMut<'_, mypaper_ui::Ui>> {
+    let mut raster = app.panel.as_ref()?.raster.0.borrow_mut();
+    if raster.is_none() {
+        let mut ui = mypaper_ui::Ui::new().ok()?;
+        ui.text.set_capacity(24);
+        *raster = Some(ui);
+    }
+    Some(std::cell::RefMut::map(raster, |raster| {
+        raster.as_mut().unwrap()
+    }))
+}
+
+/// Lay out at widget size, then paint those operations once at the displayed pixel size.
+/// This preserves text fitting without allocating a native intermediate bitmap.
+pub fn scale_picture(ops: &mut [mypaper_ui::Op], scale: f32) {
+    use mypaper_ui::{Op, Point, Rect};
+    let rect = |r: &mut Rect| {
+        r.left *= scale;
+        r.top *= scale;
+        r.right *= scale;
+        r.bottom *= scale;
+    };
+    let point = |p: &mut Point| {
+        p.x *= scale;
+        p.y *= scale;
+    };
+    for op in ops {
+        match op {
+            Op::Image { rect: r, .. } | Op::Clip { rect: r } | Op::TextField { rect: r, .. } => {
+                rect(r)
+            }
+            Op::RoundedImage {
+                rect: r, radius, ..
+            }
+            | Op::Fill {
+                rect: r, radius, ..
+            } => {
+                rect(r);
+                *radius *= scale;
+            }
+            Op::Stroke {
+                rect: r,
+                radius,
+                width,
+                ..
+            } => {
+                rect(r);
+                *radius *= scale;
+                *width *= scale;
+            }
+            Op::Icon {
+                rect: r, weight, ..
+            } => {
+                rect(r);
+                *weight *= scale;
+            }
+            Op::Text { rect: r, style, .. } | Op::Emphasis { rect: r, style, .. } => {
+                rect(r);
+                style.size *= scale;
+                style.tracking *= scale;
+            }
+            Op::Line {
+                from, to, width, ..
+            } => {
+                point(from);
+                point(to);
+                *width *= scale;
+            }
+            Op::Arc {
+                center,
+                radius,
+                width,
+                ..
+            } => {
+                point(center);
+                *radius *= scale;
+                *width *= scale;
+            }
+            Op::Shadow {
+                rect: r,
+                radius,
+                spread,
+                drop,
+                ..
+            } => {
+                rect(r);
+                *radius *= scale;
+                *spread *= scale;
+                *drop *= scale;
+            }
+            Op::Clipped { rect: r, ops } => {
+                rect(r);
+                scale_picture(std::sync::Arc::make_mut(ops), scale);
+            }
+            Op::Unclip => {}
+        }
+    }
+}
+
 /// Temporary software canvases can finish after a page's async wallpaper decode.
 /// Reclaim their released allocations after the resulting frame has been presented too.
 pub fn raster_finished(app: &crate::app::App) {
@@ -25,6 +133,7 @@ pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
         .pictures
         .borrow_mut()
         .clear();
+    app.panel.as_ref().unwrap().raster.0.borrow_mut().take();
     if app.fixture {
         return;
     }

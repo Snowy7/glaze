@@ -867,6 +867,8 @@ pub(super) fn face(
         model.data = json!({"current":{"temperature":22,"condition":"Partly cloudy","code":2,"isDay":true,"location":{"name":"Hong Kong"}},"forecast":{"days":[{"date":"2026-11-06","max":24,"min":19,"code":2},{"date":"2026-11-07","max":23,"min":18,"code":3},{"date":"2026-11-08","max":25,"min":20,"code":0}]}});
     }
     model.photo.current = photo;
+        let mut ui = crate::panel::measure::raster_ui(app)?;
+        ui.text.clear_cache();
         let mut list = view(
             &model,
             &tokens(&appearance),
@@ -877,7 +879,7 @@ pub(super) fn face(
                 instant: std::time::Instant::now(),
                 editing: false,
             },
-            b.text,
+            &mut ui.text,
         );
         if !standalone
             && resolved_appearance.surface != Some(mypaper_theme::Surface::None)
@@ -915,21 +917,11 @@ pub(super) fn face(
                 },
             );
         }
-        let mut ui = mypaper_ui::Ui::new().ok()?;
-        let native = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, width, height).ok()?);
-        // Cache only the picture's size, not a native widget-sized raster per gallery tile.
         let thumb_width = pic.width().ceil().max(1.0) as u32;
         let thumb_height = (thumb_width * height / width).max(1);
-        let mut reduced = mypaper_ui::DisplayList::default();
-        reduced.ops.push(mypaper_ui::Op::Image {
-            rect: Rect::new(0.0, 0.0, thumb_width as f32, thumb_height as f32),
-            image: native,
-            opacity: 1.0,
-            source: None,
-        });
-        let image = std::sync::Arc::new(
-            mypaper_ui::render(&mut ui, &reduced, thumb_width, thumb_height).ok()?,
-        );
+        crate::panel::measure::scale_picture(&mut list.ops, thumb_width as f32 / width as f32);
+        let image = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, thumb_width, thumb_height).ok()?);
+        ui.text.clear_cache();
         crate::panel::specimens::remember(app, cache_key, &image);
         Some(image)
     });

@@ -141,6 +141,7 @@ impl Page {
 pub struct State {
     pub chooser: std::cell::RefCell<choosers::State>,
     reclaim_heap: std::cell::Cell<bool>,
+    raster: measure::Raster,
     pub page: Page,
     pub first_run: std::cell::RefCell<Option<first_run::Baseline>>,
     pub add_widget: Option<String>,
