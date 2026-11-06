@@ -76,8 +76,16 @@ fn check(status: WIN32_ERROR) -> Result<()> {
     Ok(())
 }
 
-impl Store for Registry {
-    fn read(&self, key: &str, name: &str) -> Result<Option<Value>> {
+impl Registry {
+    /// The untouched type and bytes, for settings whose undo must be byte-for-byte exact.
+    pub fn read_exact(&self, key: &str, name: &str) -> Result<Option<Value>> {
+        Ok(self.read_bytes(key, name)?.map(|(kind, bytes)| Value::Raw {
+            kind: kind.0,
+            bytes,
+        }))
+    }
+
+    fn read_bytes(&self, key: &str, name: &str) -> Result<Option<(REG_VALUE_TYPE, Vec<u8>)>> {
         let Some(key) = Key::open(key, KEY_QUERY_VALUE)? else {
             return Ok(None);
         };
@@ -106,6 +114,15 @@ impl Store for Registry {
         };
         check(status)?;
         data.truncate(size as usize);
+        Ok(Some((kind, data)))
+    }
+}
+
+impl Store for Registry {
+    fn read(&self, key: &str, name: &str) -> Result<Option<Value>> {
+        let Some((kind, data)) = self.read_bytes(key, name)? else {
+            return Ok(None);
+        };
         match kind {
             REG_DWORD => Ok(Some(Value::Dword(u32::from_le_bytes(
                 data.try_into()
@@ -121,6 +138,7 @@ impl Store for Registry {
     fn write(&mut self, key: &str, name: &str, value: &Value) -> Result<()> {
         let key = Key::create(key)?;
         let (kind, bytes) = match value {
+            Value::Raw { kind, bytes } => (REG_VALUE_TYPE(*kind), bytes.clone()),
             Value::Dword(v) => (REG_DWORD, v.to_le_bytes().to_vec()),
             Value::Binary(b) => (REG_BINARY, b.clone()),
             Value::String(s) => (REG_SZ, encode_text(s)),

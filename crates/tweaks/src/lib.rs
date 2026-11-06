@@ -26,9 +26,12 @@ pub mod color;
 pub mod cursor_art;
 pub mod cursors;
 pub mod dwm;
+pub mod folder_routing;
+pub mod game_activity;
 pub mod palette;
 pub mod plan;
 pub mod registry;
+pub mod system;
 pub mod undo;
 
 use std::path::Path;
