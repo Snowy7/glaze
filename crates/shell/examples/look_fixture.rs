@@ -58,6 +58,20 @@ fn run(root: PathBuf) -> Result<()> {
         monitor.work.x + monitor.work.width - 650,
         monitor.work.y + 70,
     );
+    // An opaque fixture-owned backdrop keeps transparent text screenshots free of other apps.
+    let mut backdrop = Surface::new(Kind::Popup { activate: false }, "mypaper Look fixture backdrop", Role::Pane)?;
+    let mut background = DisplayList::default();
+    for row in 0..16 {
+        for col in 0..13 {
+            background.ops.push(mypaper_ui::Op::Fill {
+                rect: Rect::new(col as f32 * 50.0, row as f32 * 50.0, 50.0, 50.0),
+                radius: 0.0,
+                color: mypaper_ui::Rgba::rgb8(if (col + row) % 2 == 0 { [105, 135, 165] } else { [150, 175, 195] }, 1.0),
+            });
+        }
+    }
+    backdrop.present(&mut ui, (origin.0 - 10, origin.1 - 10), (650, 800), background)?;
+    backdrop.show();
     let mut windows = (0..5)
         .map(|i| {
             Surface::new(

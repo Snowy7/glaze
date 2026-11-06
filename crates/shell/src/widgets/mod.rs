@@ -1245,8 +1245,8 @@ impl Widgets {
             }
             entry.tokens = tokens(&placed.appearance);
             entry.tokens.icon_set = crate::look::settings::icons(&self.desktop_look, &ui.text);
-            entry.model.corner_override = instance.appearance.radius.or(self.desktop_look.shape.corners).or(self.layout.appearance.radius);
-            entry.model.edge_override = instance.appearance.border.or(self.desktop_look.shape.edge).or(self.layout.appearance.border);
+            entry.model.corner_override = instance.appearance.radius.or(self.desktop_look.shape.corners).or(effective.appearance.radius).or(self.studio_skin.as_ref().unwrap_or(&self.skin).appearance.radius);
+            entry.model.edge_override = instance.appearance.border.or(self.desktop_look.shape.edge).or(effective.appearance.border);
             entry.model.placed = placed;
             if !self.settling.contains_key(&instance.instance)
                 && !self

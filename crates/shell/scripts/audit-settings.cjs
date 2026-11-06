@@ -15,7 +15,7 @@ const refs = {
   look: () => ref('crates/shell/src/look_settings.rs', 'pub fn appearance('),
   barLook: () => ref('crates/shell/src/look_settings.rs', 'pub fn bar('),
   tokens: () => ref('crates/shell/src/bars/look.rs', 'pub fn resolve_settings('),
-  widgets: () => ref('crates/shell/src/widgets/mod.rs', 'let base = self.layout.appearance.over'),
+  widgets: () => ref('crates/shell/src/widgets/mod.rs', 'let mut global = crate::look::settings::appearance'),
   widgetView: () => ref('crates/shell/src/widgets/views/mod.rs', 'pub fn view('),
   flyouts: () => ref('crates/shell/src/flyouts/look.rs', 'pub fn apply_settings('),
   top: () => ref('crates/shell/src/bars/view.rs', 'pub fn top('),

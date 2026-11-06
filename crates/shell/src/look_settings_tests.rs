@@ -49,6 +49,24 @@ fn corners_override_design_and_theme_but_explicit_bar_and_monitor_radii_win() {
 }
 
 #[test]
+fn strip_bar_drawing_and_published_shapes_share_the_explicit_radius() {
+    let mut ui = Ui::new().unwrap();
+    let mut bars = BarsConfig::parse(r#"{"top":{"layout":"strip","left":["start"],"center":[],"right":[]}}"#).unwrap();
+    bars.resolve(Vec::new);
+    let model = crate::preview::bars::sample_model(Default::default(), "Look");
+    for radius in [0.0, 24.0] {
+        let user = settings(json!({"shape":{"corners":radius}, "text":{"size":1.5}}));
+        let tokens = resolve(&user, &bars, "top", &ui.text);
+        let frame = crate::preview::bars::top(1000, &bars, &model, &tokens, tokens.scale, &mut ui, &mut Default::default(), None);
+        assert!(!frame.shapes.is_empty());
+        for (rect, published) in &frame.shapes {
+            assert_eq!(*published, radius * tokens.scale);
+            assert!(frame.list.ops.iter().any(|op| matches!(op, Op::Fill {rect:r,radius:drawn,color} if r==rect && drawn==published && *color==mypaper_ui::Rgba::HIT)));
+        }
+    }
+}
+
+#[test]
 fn edge_switch_reaches_glass_surface_styles_and_specific_border_wins() {
     let ui = Ui::new().unwrap();
     for edge in [false, true] {
@@ -163,6 +181,33 @@ fn icons_select_lucide_or_fluent_independently_of_native_style() {
             panel.menu_tokens().icon_set == Some(IconSet::Vector),
             vector
         );
+    }
+}
+
+#[test]
+fn bars_family_style_beats_the_global_style_and_explicit_bar_style_beats_both() {
+    let ui = Ui::new().unwrap();
+    let user = settings(json!({"style":"liquid", "bars":{"style":"solid"}}));
+    let bars = BarsConfig::parse("{}").unwrap();
+    assert_eq!(resolve(&user, &bars, "top", &ui.text).theme.style, mypaper_ui::Style::Solid);
+    let bars = BarsConfig::parse(r#"{"top":{"look":{"style":"fluent"}}}"#).unwrap();
+    assert_eq!(resolve(&user, &bars, "top", &ui.text).theme.style, mypaper_ui::Style::Fluent);
+}
+
+#[test]
+fn menus_family_style_is_independent_of_bars_and_resets_to_the_global_style() {
+    let ui = Ui::new().unwrap();
+    let bars = BarsConfig::parse(r#"{"top":{"look":{"style":"fluent"}}}"#).unwrap();
+    let system = crate::flyouts::look::fixed_system();
+    for (user, expected) in [
+        (settings(json!({"style":"liquid", "bars":{"style":"solid"}, "menus":{"style":"mono"}})), mypaper_ui::Style::Mono),
+        (settings(json!({"style":"liquid", "bars":{"style":"solid"}})), mypaper_ui::Style::Liquid),
+    ] {
+        let mut own = bars.top.look.clone();
+        let mut a = Appearance::default();
+        bar(&user, Family::Menus, &bars, "top", &mut own, &mut a, &system, &ui.text);
+        let panel = crate::flyouts::look::Look::resolve(&own, &a, &system);
+        assert_eq!(panel.style, expected);
     }
 }
 

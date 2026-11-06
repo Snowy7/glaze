@@ -113,10 +113,11 @@ pub fn bar(
     text: &Text,
 ) {
     let own = |p| crate::bars::look::explicit_look(config, key, p);
-    let bare = bar.transparent.unwrap_or(matches!(
-        bar.background,
-        Some(mypaper_bars::style::Fill::None)
-    )) || base.surface == Some(mypaper_theme::Surface::None);
+    let bare = bar.transparent.unwrap_or_else(|| match bar.background {
+        Some(mypaper_bars::style::Fill::None) => true,
+        Some(_) => false,
+        None => base.surface == Some(mypaper_theme::Surface::None),
+    });
     *base = appearance(look, surface, base, bare, system);
     if (surface != Family::Bars || !own("/style"))
         && let Some(style) = style(look, surface)

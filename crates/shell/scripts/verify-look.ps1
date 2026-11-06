@@ -28,6 +28,12 @@ public static class LookCapture {
 '@
 $oldDpi=[LookCapture]::SetThreadDpiAwarenessContext([IntPtr](-4))
 $foreground=[LookCapture]::GetForegroundWindow().ToInt64()
+function Foreground-Owner {
+ [uint32]$foregroundPid=0
+ [LookCapture]::GetWindowThreadProcessId([LookCapture]::GetForegroundWindow(),[ref]$foregroundPid) | Out-Null
+ return (Get-Process -Id $foregroundPid -ErrorAction SilentlyContinue).ProcessName
+}
+$foregroundOwner=Foreground-Owner
 $previous=@{APPDATA=$env:APPDATA;LOCALAPPDATA=$env:LOCALAPPDATA;MYPAPER_LOOK_FIXTURE=$env:MYPAPER_LOOK_FIXTURE}
 $fixture=$null
 $held=$false
@@ -67,10 +73,12 @@ try {
  Start-Sleep -Milliseconds 600
  Capture '01-square' $revision
  $observations+=@{name='square';revision=$revision}
- foreach($step in @(@('corners',24),@('edge',$true),@('font','Consolas'),@('size',1.5),@('tone','dark'),@('shadow',$true),@('icons','fluent'),@('style','liquid'))) {
+ foreach($step in @(@('corners',24),@('edge',$true),@('font','Consolas'),@('size',1.5),@('tone','dark'),@('shadow',$true),@('icons','fluent'),@('style','liquid'),@('bars_style','solid'),@('menus_style','solid'))) {
   $key=$step[0];$value=$step[1]
   if($key -in 'corners','edge'){$baseline.look.shape[$key]=$value}
   elseif($key -eq 'style'){$baseline.look.style=$value}
+  elseif($key -eq 'bars_style'){$baseline.look.bars=@{style=$value}}
+  elseif($key -eq 'menus_style'){$baseline.look.menus=@{style=$value}}
   else{$baseline.look.text[$key]=$value}
   Save-Config
   $revision=Await-Revision $revision.revision
@@ -87,7 +95,7 @@ try {
  if($LASTEXITCODE -ne 0){throw 'measure.ps1 failed'}
  Copy-Item -LiteralPath 'C:\Users\you\AppData\Local\Temp\mypaper-tools\measure-look-settings.json' -Destination (Join-Path $evidence 'idle.json') -Force
  Copy-Item -LiteralPath (Join-Path $configRoot 'revisions.jsonl') -Destination (Join-Path $evidence 'revisions.jsonl') -Force
- $result=@{fixture_pid=$fixture.Id;config_unchanged=((Get-FileHash -LiteralPath $realConfig -Algorithm SHA256).Hash -eq $beforeHash);foreground_before=$foreground;foreground_after=$foregroundAfter;observations=$observations}
+ $result=@{fixture_pid=$fixture.Id;config_unchanged=((Get-FileHash -LiteralPath $realConfig -Algorithm SHA256).Hash -eq $beforeHash);foreground_before=$foreground;foreground_after=$foregroundAfter;foreground_owner_before=$foregroundOwner;foreground_owner_after=(Foreground-Owner);synthetic_input=$false;observations=$observations}
  $result | ConvertTo-Json -Depth 18 | Set-Content -LiteralPath (Join-Path $evidence 'verification.json') -Encoding UTF8
  if(-not $result.config_unchanged){throw 'User config hash changed during verification'}
  $result | Select-Object fixture_pid,config_unchanged,foreground_before,foreground_after | Format-List
