@@ -139,6 +139,7 @@ fn run() -> Result<()> {
             )
         };
         let mut at = Instant::now();
+        wakes.resume();
         if parent.is_some() && woke == WAIT_OBJECT_0 {
             log::info!("the process that started the shell exited; stopping");
             break;
