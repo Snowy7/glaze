@@ -2,19 +2,33 @@
   "settings": {
     "rules": {
       "Grid#RootPageGrid": { "Background": "Transparent" },
-      "ButtonEntityItem > Button#ContainerButton": { "Background": "#10FFFFFF", "BorderBrush": "#18FFFFFF", "CornerRadius": "12" },
-      "SettingsExpander ExpanderToggleButton#ContainerButton": { "Background": "#10FFFFFF", "BorderBrush": "#18FFFFFF", "CornerRadius": "12" },
-      "GridViewItem": { "CornerRadius": "12" },
+      "ButtonEntityItem > Button#ContainerButton": { "BorderThickness": "0", "CornerRadius": "10" },
+      "SettingsExpander ExpanderToggleButton#ContainerButton": { "BorderThickness": "0", "CornerRadius": "10" },
+      "TextBox#CommandSearchTextBox": { "BorderThickness": "0", "CornerRadius": "16" },
       "Rectangle#SelectionIndicator": { "Fill": "$accent" }
+    },
+    "resources": {
+      "ControlFillColorDefaultBrush": "light-dark(#66FFFFFF, #0AFFFFFF)",
+      "ControlFillColorSecondaryBrush": "light-dark(#99FFFFFF, #12FFFFFF)",
+      "ControlFillColorTertiaryBrush": "light-dark(#40FFFFFF, #06FFFFFF)",
+      "CardBackgroundFillColorDefaultBrush": "light-dark(#66FFFFFF, #0AFFFFFF)"
     }
   },
   "explorer": {
     "rules": {
       "Grid#NavigationBarControlGrid": { "Background": "Transparent" },
+      "TabViewItem Path#SelectedBackgroundPath": { "Fill": "{ThemeResource ControlFillColorSecondaryBrush}" },
+      "CommandBarControl_Wave1 > Grid": { "Background": "Transparent", "BorderThickness": "0" },
       "CommandBar#FileExplorerCommandBar": { "Background": "Transparent" },
       "CommandBar#FileExplorerSecondaryCommandBar": { "Background": "Transparent" },
       "Grid#DetailsViewControlRootGrid": { "Background": "Transparent" },
-      "AutoSuggestBox TextBox#TextBox": { "Background": "#14FFFFFF", "BorderBrush": "#22FFFFFF", "BorderThickness": "1", "CornerRadius": "12" }
+      "AddressBarControl > Grid#PART_LayoutRoot": { "CornerRadius": "16" },
+      "AutoSuggestBox#FileExplorerSearchBox TextBox#TextBox": { "BorderThickness": "0", "CornerRadius": "16" }
+    },
+    "resources": {
+      "ControlFillColorDefaultBrush": "light-dark(#66FFFFFF, #0AFFFFFF)",
+      "ControlFillColorSecondaryBrush": "light-dark(#99FFFFFF, #12FFFFFF)",
+      "ControlFillColorTertiaryBrush": "light-dark(#40FFFFFF, #06FFFFFF)"
     }
   }
 }

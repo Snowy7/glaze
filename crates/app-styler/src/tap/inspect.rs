@@ -37,21 +37,27 @@ const SOURCES: [&str; 15] = [
 const LIMIT: usize = 16;
 
 impl Session {
-    /// Appends the properties of the elements `selector` matches to the dump at `path`. Each
-    /// element is read on its own UI thread (the tree service refuses other threads).
-    pub(super) fn dump_props(self: &Arc<Self>, path: &Path, selector: &str) {
-        let selector: Selector = match selector.parse() {
-            Ok(s) => s,
-            Err(e) => return log(&e.to_string()),
-        };
+    /// Appends the properties of the elements `selectors` (separated by `;`) match to the dump
+    /// at `path`. Each element is read on its own UI thread (the tree service refuses others).
+    pub(super) fn dump_props(self: &Arc<Self>, path: &Path, selectors: &str) {
+        let selectors: Vec<Selector> = selectors
+            .split(';')
+            .filter(|s| !s.trim().is_empty())
+            .filter_map(|s| {
+                s.parse()
+                    .inspect_err(|e: &crate::selector::ParseError| log(&e.to_string()))
+                    .ok()
+            })
+            .collect();
         let (picked, windows) = {
             let state = self.lock();
             let mut picked: HashMap<u32, Vec<(InstanceHandle, String)>> = HashMap::new();
             for (&h, element) in state.nodes.iter().filter(|(_, element)| {
-                selector.matches(&At {
+                let at = At {
                     nodes: &state.nodes,
                     element,
-                })
+                };
+                selectors.iter().any(|s| s.matches(&at))
             }) {
                 picked
                     .entry(element.thread)
