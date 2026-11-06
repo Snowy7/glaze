@@ -62,6 +62,10 @@ pub fn intercept_page_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
     bars::intercept_set(app, edit, value) || settings::intercept_set(app, edit, value)
 }
 
+pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
+    bars::field_initial(app, id)
+}
+
 /// Position is relative to the display's actual grid, including the widget's size.
 pub fn position(app: &App, layout: &Layout, instance: &Instance) -> String {
     let Some(monitor) = app.display() else {
@@ -443,7 +447,21 @@ fn desktop_preview(app: &App, b: &mut B, r: Rect, desktop: &super::history::Desk
     {
         crate::stage::image_round(b, r, &image, 1.0, b.px(6.0));
     }
-    crate::panel::specimens::desktop_bars(app, b, r, desktop.bars());
+    let monitor_bars = app
+        .display()
+        .and_then(|monitor| {
+            mypaper_bars::BarsConfig::parse(&desktop.bars().to_string())
+                .ok()?
+                .for_monitor(&monitor.device, monitor.primary)
+                .ok()
+        })
+        .and_then(|config| serde_json::to_value(config).ok());
+    crate::panel::specimens::desktop_bars(
+        app,
+        b,
+        r,
+        monitor_bars.as_ref().unwrap_or_else(|| desktop.bars()),
+    );
     if let Ok(layout) = serde_json::from_value::<Layout>(desktop.widgets().clone())
         && let Some(monitor) = app.display()
     {
@@ -667,10 +685,12 @@ pub fn number(
     range: (f64, f64, f64),
     fallback: f64,
 ) {
-    let value = app
-        .get(doc, path)
-        .and_then(Value::as_f64)
-        .unwrap_or(fallback);
+    let source = if doc == DocId::Bars {
+        bars::bar_value(app, path)
+    } else {
+        app.get(doc, path).cloned()
+    };
+    let value = source.as_ref().and_then(Value::as_f64).unwrap_or(fallback);
     let h = height(b, 38.0);
     text(
         b,

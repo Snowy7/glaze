@@ -367,21 +367,36 @@ fn playback_status(app: &App) -> String {
     if !stopped.is_empty() {
         return format!("{} stopped · {}", stopped.join(", "), metrics(app));
     }
-    let specific = app.library.active().and_then(|i| {
-        app.get(
-            DocId::Config,
-            &format!(
-                "/engine/wallpapers/{}/fps",
-                crate::docs::token(&app.library.items[i].id)
-            ),
+    let Some(wallpaper) = app.library.active().map(|i| &app.library.items[i]) else {
+        return "No wallpaper selected".into();
+    };
+    let loaded = mypaper_theme::LoadedTheme::load(wallpaper.dir.clone()).ok();
+    let engine: mypaper_config::EngineConfig = app
+        .get(DocId::Config, "/engine")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+    let cap = engine
+        .resolve(
+            &wallpaper.id,
+            loaded.as_ref().map_or_default(|theme| theme.theme.engine),
         )
-    });
-    specific
-        .or_else(|| app.get(DocId::Config, "/engine/fps"))
-        .and_then(Value::as_u64)
-        .map_or("At the wallpaper's frame rate".into(), |fps| {
-            format!("Up to {fps} fps")
-        })
+        .fps;
+    let source = loaded
+        .as_ref()
+        .and_then(|theme| match &theme.theme.wallpaper {
+            mypaper_theme::Wallpaper::Shader(source) => Some(source.fps),
+            mypaper_theme::Wallpaper::Video(source) => Some(source.fps),
+            mypaper_theme::Wallpaper::Scene(source) => Some(source.fps),
+            _ => None,
+        });
+    match (source, cap, wallpaper.kind) {
+        (_, _, Some(crate::library::Kind::Image)) => "Still picture".into(),
+        (Some(source), cap, _) => format!("{} fps", cap.map_or(source, |cap| cap.min(source))),
+        (_, Some(cap), _) => format!("Up to {cap} fps"),
+        (_, _, Some(crate::library::Kind::Web)) => "Frame rate set by the page".into(),
+        (_, _, Some(crate::library::Kind::App)) => "Frame rate set by the app".into(),
+        _ => "At the wallpaper's frame rate".into(),
+    }
 }
 
 fn root(app: &App, b: &mut B, c: &mut Col) {
@@ -999,5 +1014,17 @@ mod tests {
                 .any(|hit| hit.label.contains("column "))
         );
         assert_eq!(app.docs.version, version);
+    }
+
+    #[test]
+    fn home_uses_the_wallpapers_frame_rate_and_honors_a_lower_user_cap() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = fixture(&ui);
+        for wallpaper in &mut app.library.items {
+            wallpaper.active = wallpaper.id == "rain-city";
+        }
+        assert_eq!(playback_status(&app), "30 fps");
+        app.set(&Edit::new(DocId::Config, "/engine/fps", "Cap"), json!(12));
+        assert_eq!(playback_status(&app), "12 fps");
     }
 }

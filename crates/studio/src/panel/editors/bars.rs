@@ -51,7 +51,7 @@ fn shared(path: &str) -> bool {
 
 /// Each display edits its own layer; Windows taskbar and pinned apps remain shared.
 pub fn bar_path(app: &App, path: &str) -> String {
-    if app.monitors.len() > 1 && !shared(path) {
+    if app.monitors.len() > 1 && !shared(path) && !path.starts_with("/overrides/") {
         format!("/overrides/{}{path}", crate::docs::token(&display_key(app)))
     } else {
         path.into()
@@ -79,7 +79,54 @@ fn resolved_for(app: &App, index: usize) -> Value {
 }
 
 pub fn bar_value(app: &App, path: &str) -> Option<Value> {
-    resolved(app).pointer(path).cloned()
+    let unscoped = path
+        .strip_prefix("/overrides/")
+        .and_then(|p| p.split_once('/'))
+        .map(|(_, p)| format!("/{p}"));
+    resolved(app)
+        .pointer(unscoped.as_deref().unwrap_or(path))
+        .cloned()
+}
+
+pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
+    let FieldId::Text(doc, path) = id else {
+        return None;
+    };
+    if *doc == DocId::Bars {
+        return bar_value(app, path)
+            .filter(|value| !value.is_null())
+            .map(|value| {
+                value
+                    .as_str()
+                    .map_or_else(|| value.to_string(), str::to_owned)
+            });
+    }
+    if *doc != DocId::Studio {
+        return None;
+    }
+    if let Some(path) = path.strip_prefix("/panel/gesture-target/") {
+        let (kind, path) = path.split_once('/')?;
+        return bar_value(app, &format!("/{path}"))?
+            .get(kind)?
+            .as_str()
+            .map(str::to_owned);
+    }
+    let module = path.strip_prefix("/panel/module-args/")?;
+    let args = bar_value(app, &format!("/modules/{module}/args"))?;
+    Some(
+        args.as_array()?
+            .iter()
+            .filter_map(Value::as_str)
+            .map(|arg| {
+                if arg.contains(' ') {
+                    format!("\"{arg}\"")
+                } else {
+                    arg.into()
+                }
+            })
+            .collect::<Vec<String>>()
+            .join(" "),
+    )
 }
 
 fn design_name(app: &App, bar: Option<Bar>) -> String {
@@ -483,27 +530,31 @@ pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
             }
             let target = value.as_str().unwrap_or("").trim();
             if !target.is_empty() {
+                let path = format!("/{tail}");
+                let args = bar_value(app, &path)
+                    .and_then(|v| v.get("args").cloned())
+                    .unwrap_or_else(|| json!([]));
                 let value = if kind == "exec" {
-                    json!({"exec":target,"args":[]})
+                    json!({"exec":target,"args":args})
                 } else {
                     json!({"open":target})
                 };
                 app.set(
-                    &Edit::new(
-                        DocId::Bars,
-                        bar_path(app, &format!("/{tail}")),
-                        edit.label.clone(),
-                    ),
+                    &Edit::new(DocId::Bars, bar_path(app, &path), edit.label.clone()),
                     value,
                 );
+                app.texts.remove(&FieldId::Text(
+                    DocId::Studio,
+                    format!("/panel/draft/gesture{path}").into(),
+                ));
             }
         } else {
             let mode = value.as_str().unwrap_or("default");
-            app.texts.insert(
-                FieldId::Text(DocId::Studio, format!("/panel/draft/gesture{path}").into()),
-                mode.into(),
-            );
-            if !matches!(mode, "program" | "open") {
+            let draft = FieldId::Text(DocId::Studio, format!("/panel/draft/gesture{path}").into());
+            if matches!(mode, "program" | "open") {
+                app.texts.insert(draft, mode.into());
+            } else {
+                app.texts.remove(&draft);
                 app.set(
                     &Edit::new(DocId::Bars, bar_path(app, path), edit.label.clone()),
                     json!(mode),
@@ -1045,8 +1096,32 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
     let document = resolved(app);
     if id == "clock" {
         group(b, c, "Shows", |b, c| {
-            setting(app, b, c, "top_clock_seconds", "Seconds", "");
-            setting(app, b, c, "top_clock_format", "Format", "");
+            setting(
+                app,
+                b,
+                c,
+                if slot.bar == Bar::Top {
+                    "top_clock_seconds"
+                } else {
+                    "dock_clock_seconds"
+                },
+                "Seconds",
+                "",
+            );
+            let path = format!("/{}/clock/format", slot.bar.key());
+            notice(b, c, "Clock format · All displays");
+            field(
+                app,
+                b,
+                c,
+                FieldId::Text(DocId::Bars, path.clone().into()),
+                "Format",
+                "HH:mm",
+                document
+                    .pointer(&path)
+                    .and_then(Value::as_str)
+                    .unwrap_or(""),
+            );
         });
     }
     group(b, c, "Clicks", |b, c| {
@@ -1059,6 +1134,7 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
         ] {
             let path = format!("{base}/click/{trigger}");
             let current = bar_value(app, &path).unwrap_or(Value::Null);
+            let path = bar_path(app, &path);
             let mode_key = format!("/panel/draft/gesture{path}");
             let mode = app
                 .texts
