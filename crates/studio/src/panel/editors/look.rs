@@ -408,6 +408,31 @@ pub(super) fn windows_matches(layer: &Value, preset: &Value) -> bool {
 mod tests {
     use super::*;
     #[test]
+    fn header_reset_returns_to_the_wallpaper_and_preserves_windows_styling() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State {
+            page: Page::Look,
+            ..Default::default()
+        });
+        let original = json!({"style":"solid","material":{"blur":8},"windows":{"apps":"dark","corners":"square"}});
+        app.run(Action::Set(
+            Edit::new(DocId::Config, "/look", "Your look"),
+            original.clone(),
+        ));
+        app.nav.look_windows = true;
+        let checkpoint = app.docs.undo_count();
+        app.run(Action::LookReset);
+        assert_eq!(
+            app.get(DocId::Config, "/look/windows"),
+            Some(&original["windows"])
+        );
+        assert!(app.get(DocId::Config, "/look/style").is_none());
+        assert_eq!(app.docs.undo_count(), checkpoint + 1);
+        app.run(Action::Undo);
+        assert_eq!(app.get(DocId::Config, "/look"), Some(&original));
+    }
+    #[test]
     fn missing_native_fields_are_as_is_and_extra_changes_are_custom() {
         let as_is = json!({"accent":null,"border":null,"caption":null,"caption_text":null,"corners":null,"backdrop":null,"apps":"as-is","cursors":null});
         assert!(windows_matches(&json!({}), &as_is));

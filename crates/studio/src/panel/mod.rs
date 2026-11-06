@@ -694,6 +694,9 @@ pub fn fit_height(app: &mut App, surface: &mypaper_ui::Surface, built: &Built) -
 
 /// One additive bridge into the legacy action dispatcher, shared with desktop picking.
 pub fn before_action(app: &mut App, action: &Action) {
+    if matches!(action, Action::LookReset) && let Some(panel) = &app.panel {
+        app.nav.look_windows = panel.page == Page::Windows;
+    }
     if app.panel.is_some() && matches!(action, Action::AddWidget(_) | Action::DuplicateWidget) {
         editors::prepare_widget_grid(app);
     }
