@@ -175,7 +175,7 @@ impl Helper {
                 accent: mypaper_config::Color(accent),
                 dominant: mypaper_config::Color(dominant),
             }),
-            system_dark(),
+            mypaper_tweaks::system_prefers_dark(),
         );
         let colors = Colors {
             accent: shared.accent.map(|c| c.0),
@@ -375,27 +375,6 @@ fn root_class(hwnd: HWND) -> Option<String> {
     // SAFETY: the buffer is passed with its length.
     let len = unsafe { GetClassNameW(root, &mut buffer) } as usize;
     (len > 0).then(|| String::from_utf16_lossy(&buffer[..len]))
-}
-
-/// Whether Windows apps are in dark mode (`AppsUseLightTheme` is 0). Only read when the rules
-/// are resolved; swap for `mypaper_tweaks::system_prefers_dark()` once that is public.
-fn system_dark() -> bool {
-    use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
-    let mut value = 1u32;
-    let mut size = size_of::<u32>() as u32;
-    // SAFETY: a DWORD-sized out buffer and its size.
-    let read = unsafe {
-        RegGetValueW(
-            HKEY_CURRENT_USER,
-            w!(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"),
-            w!("AppsUseLightTheme"),
-            RRF_RT_REG_DWORD,
-            None,
-            Some((&raw mut value).cast()),
-            Some(&mut size),
-        )
-    };
-    read.is_ok() && value == 0
 }
 
 /// The wallpaper's (accent, dominant) colours, if `palette.json` is for the active theme.

@@ -1687,6 +1687,7 @@ dependencies = [
  "mypaper-desktop",
  "mypaper-inject",
  "mypaper-theme",
+ "mypaper-tweaks",
  "serde",
  "serde_json",
  "windows",
