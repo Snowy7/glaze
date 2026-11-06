@@ -145,6 +145,43 @@ impl<S: Store> Undo<S> {
     /// call even if `writes` is empty. Returns whether any value changed.
     /// Ownership retains committed and pending values until the batch succeeds.
     pub fn apply(&mut self, writes: &[Write]) -> Result<bool> {
+        let mut journal = self.prepared(writes)?;
+
+        let mut changed = false;
+        for w in writes {
+            if self.store.read(w.key, w.name)?.as_ref() != Some(&w.value) {
+                self.store.write(w.key, w.name, &w.value)?;
+                changed = true;
+            }
+        }
+
+        // Only retire previous ownership after the entire batch succeeded. A crash,
+        // failed write or failed commit save retains all possible owned values on disk.
+        let mut committed = false;
+        for entry in &mut journal.entries {
+            if let Some(w) = writes
+                .iter()
+                .rev()
+                .find(|w| entry.key == w.key && entry.name == w.name)
+                && (entry.written.as_ref() != Some(&w.value) || !entry.pending.is_empty())
+            {
+                entry.written = Some(w.value.clone());
+                entry.pending.clear();
+                committed = true;
+            }
+        }
+        if committed {
+            self.save(&journal)?;
+        }
+        Ok(changed)
+    }
+
+    /// Makes a forthcoming registry/window transition recoverable before either is touched.
+    pub fn prepare(&mut self, writes: &[Write]) -> Result<()> {
+        self.prepared(writes).map(|_| ())
+    }
+
+    fn prepared(&self, writes: &[Write]) -> Result<Journal> {
         let mut journal = self.load()?.unwrap_or_default();
         let mut grown = !self.path.exists();
         for w in writes {
@@ -174,30 +211,38 @@ impl<S: Store> Undo<S> {
             self.save(&journal)?;
         }
 
-        let mut changed = false;
-        for w in writes {
-            if self.store.read(w.key, w.name)?.as_ref() != Some(&w.value) {
-                self.store.write(w.key, w.name, &w.value)?;
-                changed = true;
-            }
-        }
+        Ok(journal)
+    }
 
-        // Only retire previous ownership after the entire batch succeeded. A crash,
-        // failed write or failed commit save retains all possible owned values on disk.
-        let mut committed = false;
-        for entry in &mut journal.entries {
-            if let Some(w) = writes
+    /// Replaces the managed set without restoring values that remain managed. New originals
+    /// and pending writes are durable before mutation, as in `apply`. Released entries stay
+    /// journaled until their originals have survived Windows' reaction to the single broadcast.
+    /// An interruption at any boundary therefore leaves a complete recovery journal.
+    pub fn transition(&mut self, writes: &[Write], announce: impl FnOnce()) -> Result<bool> {
+        let mut changed = self.apply(writes)?;
+        let mut journal = self.load()?.context("transition journal disappeared")?;
+        let released = Journal {
+            entries: journal
+                .entries
                 .iter()
-                .rev()
-                .find(|w| entry.key == w.key && entry.name == w.name)
-                && (entry.written.as_ref() != Some(&w.value) || !entry.pending.is_empty())
-            {
-                entry.written = Some(w.value.clone());
-                entry.pending.clear();
-                committed = true;
+                .filter(|e| !writes.iter().any(|w| e.key == w.key && e.name == w.name))
+                .cloned()
+                .collect(),
+        };
+        changed |= self.put_back_all(&released)?;
+        if changed {
+            announce();
+            if !released.entries.is_empty() {
+                for _ in 0..SETTLE_ROUNDS {
+                    std::thread::sleep(self.settle);
+                    if !self.put_back_all(&released)? {
+                        break;
+                    }
+                }
             }
         }
-        if committed {
+        if !released.entries.is_empty() {
+            journal.entries.retain(|e| writes.iter().any(|w| e.key == w.key && e.name == w.name));
             self.save(&journal)?;
         }
         Ok(changed)
@@ -342,6 +387,7 @@ pub(crate) mod tests {
     struct Data {
         values: HashMap<(String, String), Value>,
         keys: BTreeSet<String>,
+        mutations: Vec<(String, String)>,
     }
 
     /// An in-memory registry. Clones share the data, so a test can play
@@ -351,6 +397,9 @@ pub(crate) mod tests {
     pub(crate) struct Memory(Rc<RefCell<Data>>);
 
     impl Memory {
+        pub(crate) fn take_mutations(&self) -> Vec<(String, String)> {
+            std::mem::take(&mut self.0.borrow_mut().mutations)
+        }
         /// Makes `key` and its parents exist, like a key Windows ships.
         pub(crate) fn create_key(&self, key: &str) {
             let mut data = self.0.borrow_mut();
@@ -380,6 +429,7 @@ pub(crate) mod tests {
         }
         fn write(&mut self, key: &str, name: &str, value: &Value) -> Result<()> {
             self.create_key(key);
+            self.0.borrow_mut().mutations.push((key.into(), name.into()));
             self.0
                 .borrow_mut()
                 .values
@@ -387,6 +437,7 @@ pub(crate) mod tests {
             Ok(())
         }
         fn delete(&mut self, key: &str, name: &str) -> Result<()> {
+            self.0.borrow_mut().mutations.push((key.into(), name.into()));
             self.0
                 .borrow_mut()
                 .values
@@ -638,12 +689,8 @@ pub(crate) mod tests {
         interrupt: Rc<Cell<Option<(usize, Interruption)>>>,
     }
 
-    impl Store for Interrupting {
-        fn read(&self, key: &str, name: &str) -> Result<Option<Value>> {
-            self.memory.read(key, name)
-        }
-
-        fn write(&mut self, key: &str, name: &str, value: &Value) -> Result<()> {
+    impl Interrupting {
+        fn before_mutation(&self) -> Result<()> {
             if let Some((remaining, interruption)) = self.interrupt.get() {
                 if remaining == 0 {
                     self.interrupt.set(None);
@@ -654,10 +701,22 @@ pub(crate) mod tests {
                 }
                 self.interrupt.set(Some((remaining - 1, interruption)));
             }
+            Ok(())
+        }
+    }
+
+    impl Store for Interrupting {
+        fn read(&self, key: &str, name: &str) -> Result<Option<Value>> {
+            self.memory.read(key, name)
+        }
+
+        fn write(&mut self, key: &str, name: &str, value: &Value) -> Result<()> {
+            self.before_mutation()?;
             self.memory.write(key, name, value)
         }
 
         fn delete(&mut self, key: &str, name: &str) -> Result<()> {
+            self.before_mutation()?;
             self.memory.delete(key, name)
         }
 
@@ -994,5 +1053,80 @@ pub(crate) mod tests {
         );
         assert_eq!(memory.read("K", "unknown").unwrap(), Some(Value::Dword(9)));
         assert!(!undo.pending());
+    }
+
+    #[test]
+    fn transitions_release_only_removed_values_and_broadcast_once_when_changed() {
+        let scratch = Scratch::new("undo-transition");
+        let mut memory = Memory::default();
+        let original = Value::Raw { kind: 7, bytes: vec![65, 0, 0, 0] };
+        memory.write("K", "new", &original).unwrap();
+        let mut undo = Undo::new(memory.clone(), scratch.journal(), Duration::ZERO);
+        let a = [put("K", "kept", Value::Dword(1)), put("K", "released", Value::Dword(2))];
+        let b = [put("K", "kept", Value::Dword(3)), put("K", "new", Value::Dword(4))];
+        let broadcasts = Cell::new(0);
+        let announce = || broadcasts.set(broadcasts.get() + 1);
+        undo.transition(&a, announce).unwrap();
+        memory.take_mutations();
+        undo.transition(&b, announce).unwrap();
+        assert_eq!(memory.take_mutations(), [("K".into(), "kept".into()), ("K".into(), "new".into()), ("K".into(), "released".into())]);
+        assert_eq!(broadcasts.get(), 2);
+        assert_eq!(memory.read("K", "kept").unwrap(), Some(Value::Dword(3)));
+        assert_eq!(memory.read("K", "released").unwrap(), None);
+        assert!(!undo.journaled("K", "released"));
+        assert_eq!(undo.original("K", "kept").unwrap(), Some(None));
+        assert!(!undo.transition(&b, announce).unwrap());
+        assert!(memory.take_mutations().is_empty());
+        assert_eq!(broadcasts.get(), 2, "an identical transition sends no broadcast");
+        undo.transition(&a, announce).unwrap();
+        assert_eq!(memory.take_mutations(), [("K".into(), "kept".into()), ("K".into(), "released".into()), ("K".into(), "new".into())]);
+        assert_eq!(broadcasts.get(), 3);
+        assert_eq!(memory.read("K", "new").unwrap(), Some(original.clone()));
+        undo.restore(announce).unwrap();
+        assert_eq!(memory.read("K", "kept").unwrap(), None);
+        assert_eq!(memory.read("K", "released").unwrap(), None);
+        assert_eq!(memory.read("K", "new").unwrap(), Some(original));
+    }
+
+    #[test]
+    fn interrupted_transitions_recover_at_each_write_and_release_boundary() {
+        for how in [Interruption::Crash, Interruption::FailedWrite] {
+            for cut in 0..3 {
+                let scratch = Scratch::new(&format!("undo-transition-{how:?}-{cut}"));
+                let mut memory = Memory::default();
+                let original = Value::ExpandString("%ORIGINAL%".into());
+                memory.write("K", "new", &original).unwrap();
+                let interrupt = Rc::new(Cell::new(None));
+                let mut undo = Undo::new(Interrupting { memory: memory.clone(), interrupt: interrupt.clone() }, scratch.journal(), Duration::ZERO);
+                let a = [put("K", "kept", Value::Dword(1)), put("K", "released", Value::Dword(2))];
+                let b = [put("K", "kept", Value::Dword(3)), put("K", "new", Value::Dword(4))];
+                undo.transition(&a, || {}).unwrap();
+                interrupt.set(Some((cut, how)));
+                assert!(undo.transition(&b, || {}).is_err());
+                drop(undo);
+                let mut recovered = Undo::new(memory.clone(), scratch.journal(), Duration::ZERO);
+                recovered.restore(|| {}).unwrap();
+                assert_eq!(memory.read("K", "kept").unwrap(), None);
+                assert_eq!(memory.read("K", "released").unwrap(), None);
+                assert_eq!(memory.read("K", "new").unwrap(), Some(original));
+                assert!(!recovered.pending());
+            }
+        }
+    }
+
+    #[test]
+    fn released_originals_settle_after_one_broadcast_while_kept_values_stay_installed() {
+        let scratch = Scratch::new("undo-release-settle");
+        let mut memory = Memory::default();
+        memory.write("K", "released", &Value::Dword(7)).unwrap();
+        let mut undo = Undo::new(memory.clone(), scratch.journal(), Duration::ZERO);
+        undo.apply(&[put("K", "kept", Value::Dword(1)), put("K", "released", Value::Dword(2))]).unwrap();
+        undo.transition(&[put("K", "kept", Value::Dword(3))], || {
+            assert_eq!(memory.read("K", "kept").unwrap(), Some(Value::Dword(3)));
+            memory.write("K", "released", &Value::Dword(99)).unwrap();
+        }).unwrap();
+        assert_eq!(memory.read("K", "kept").unwrap(), Some(Value::Dword(3)));
+        assert_eq!(memory.read("K", "released").unwrap(), Some(Value::Dword(7)));
+        assert!(!undo.journaled("K", "released"));
     }
 }

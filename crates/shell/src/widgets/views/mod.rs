@@ -41,7 +41,7 @@ use super::time::Stamp;
 use mypaper_theme::Paint;
 use mypaper_ui::icons::Icon;
 use mypaper_ui::{
-    Align, DisplayList, HitId, Interaction, Op, Palette, Point, Rect, Rgba, Role, Scheme, Style,
+    Align, DisplayList, HitId, Interaction, Op, Palette, Point, Rect, Rgba, Role, Scheme,
     Text, TextRole, TextStyle, Theme, Tokens,
 };
 use serde_json::Value;
@@ -120,6 +120,9 @@ pub fn resize_edges(hit: HitId) -> Option<[bool; 4]> {
 
 /// The plate's corner radius in device px: the engine's glass uses the same shape.
 pub fn plate_radius(model: &Model, rect: Rect, scale: f32) -> f32 {
+    if let Some(radius) = model.corner_override {
+        return radius * scale;
+    }
     if model.placed.widget == "media-pill" {
         match model.str("variant", "pill").as_str() {
             "pill" | "mini" => rect.height() / 2.0,
@@ -132,12 +135,6 @@ pub fn plate_radius(model: &Model, rect: Rect, scale: f32) -> f32 {
             .get("radius")
             .and_then(Value::as_f64)
             .unwrap_or(22.0) as f32;
-        // The style shapes the corners: Windows 11's widgets are 8 px, One UI's rounder.
-        let radius = match mypaper_ui::theme::active() {
-            Style::Fluent => radius.min(8.0),
-            Style::OneUi => radius.max(26.0),
-            _ => radius,
-        };
         radius * scale
     }
 }
@@ -201,6 +198,9 @@ pub fn theme(model: &Model, tokens: &Tokens) -> Theme {
     if family.as_ref() != DEFAULT_FAMILY {
         theme.font.family = family;
     }
+    if let Some(set) = &tokens.icon_set { theme.icons = set.clone(); }
+    theme = theme.with_surface_radius(tokens.radius);
+    theme.border = tokens.border.then_some(theme.color.separator);
     theme
 }
 
@@ -246,6 +246,11 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
         // A glass widget in a style without glass (Solid, Mono) draws the style's own body.
         _ if theme.glass.is_none() => c.f.fill(rect, radius, theme.color.surface),
         _ => {}
+    }
+    if let Some(border) = theme.border.filter(|_| surface != "none") {
+        c.f.push(Op::Stroke {
+            rect: rect.inflate(-0.5), radius: (radius - 0.5).max(0.0), width: 1.0, color: border,
+        });
     }
     c.f.hit(BODY, rect, Role::Pane, &model.placed.widget, true, None);
     let body = c.body();

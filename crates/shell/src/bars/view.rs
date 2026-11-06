@@ -114,9 +114,7 @@ impl Out {
 fn panel(f: &mut kit::Frame, out: &mut Out, rect: Rect, radius: f32, tokens: &Tokens) {
     out.shapes.push((rect, radius));
     f.fill_continuous(rect, radius, tokens.glass_style.smoothing, Rgba::HIT);
-    if tokens.material.is_some() {
-        return;
-    }
+    let glass = tokens.material.is_some();
     let state = if f.input.pressed.is_some() {
         2
     } else if f.input.hover.is_some() {
@@ -124,7 +122,7 @@ fn panel(f: &mut kit::Frame, out: &mut Out, rect: Rect, radius: f32, tokens: &To
     } else {
         0
     };
-    if let Some(shadow) = tokens.styles.shadows[state].filter(|_| tokens.shadow) {
+    if let Some(shadow) = tokens.styles.shadows[state].filter(|_| tokens.shadow && !glass) {
         f.push(Op::Shadow {
             rect: rect
                 .offset(shadow.x * f.s, 0.0)
@@ -135,12 +133,12 @@ fn panel(f: &mut kit::Frame, out: &mut Out, rect: Rect, radius: f32, tokens: &To
             color: shadow.color,
         });
     }
-    f.fill_continuous(
+    if !glass { f.fill_continuous(
         rect,
         radius,
         tokens.glass_style.smoothing,
         tokens.fill.unwrap_or(tokens.theme.color.surface),
-    );
+    ); }
     let edge = tokens.styles.edges[state];
     let width = edge.width * f.s;
     if width > 0.0 {

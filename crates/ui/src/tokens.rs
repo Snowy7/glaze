@@ -14,6 +14,8 @@ pub struct Tokens {
     pub font: TextStyle,
     /// The icon font family (glyphs from [`crate::icons`]).
     pub icons: Arc<str>,
+    /// Opt into named kit icons in menus; `None` keeps the caller's legacy font glyphs.
+    pub icon_set: Option<crate::icons::IconSet>,
     pub colors: Colors,
     pub material: Material,
     /// Corner radius of a surface.
@@ -38,6 +40,7 @@ impl Default for Tokens {
         Self {
             font: TextStyle::new("Segoe UI Variable Text", 14.0),
             icons: crate::icons::SYSTEM_FAMILY.into(),
+            icon_set: None,
             colors: Colors::neutral(true),
             material: Material {
                 tint: Rgba::rgb8([0x16, 0x18, 0x1d], 0.94),

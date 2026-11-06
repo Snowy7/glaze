@@ -1,7 +1,8 @@
 //! Native Windows styling for the active theme: keeps `mypaper-tweaks`
 //! in step with `config.json` (which theme) and `palette.json` (what the
 //! wallpaper's `"auto"` colors resolve to). Both files are watched, so core
-//! stays idle until one changes.
+//! stays idle until one changes. Requests go to Tweaks' latest-request worker; core's
+//! supervisor never waits for registry settling, signature hashing or settings broadcasts.
 //!
 //! The wallpaper rewrites `palette.json` every time it (re)loads a theme,
 //! including hot reloads after a file edit, so that signal also re-reads the

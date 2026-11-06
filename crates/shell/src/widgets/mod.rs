@@ -156,6 +156,7 @@ pub struct Probe {
 /// Owned by the shell's UI thread. Call `poll` after dispatch, route queued UI events with
 /// `on_event`, and include `timeout_ms` in the message wait. All methods are non-reentrant.
 pub struct Widgets {
+    desktop_look: mypaper_config::Look,
     layout: Layout,
     layout_error: Option<String>,
     theme_path: Option<PathBuf>,
@@ -309,6 +310,7 @@ impl Widgets {
             studio_applied: Instant::now(),
             studio_pending: false,
             studio_resize: None,
+            desktop_look: config.look.clone(),
             layout,
             layout_error,
             theme_path: None,
@@ -482,6 +484,13 @@ impl Widgets {
         if let Ok(config) = Config::load() {
             self.studio_stamp.0 = None;
             if let Ok(path) = mypaper_config::path() { self.studio_config_raw = studio_raw(&path); }
+            if self.desktop_look != config.look {
+                self.desktop_look = config.look.clone();
+                for entry in self.entries.values_mut() {
+                    entry.model.dirty = true;
+                    entry.painted = false;
+                }
+            }
             self.holds.apply(&config);
             if apply_style(&config) {
                 for entry in self.entries.values_mut() {
@@ -1137,6 +1146,7 @@ impl Widgets {
             self.forget(&id);
             self.entries.remove(&id);
         }
+        let system = mypaper_bars::accent::read();
         for instance in &effective.instances {
             let Some(manifest) = self.registry.get(&instance.widget).map(|i| &i.manifest) else {
                 continue;
@@ -1147,10 +1157,18 @@ impl Widgets {
             let monitor = devices.iter().position(|d| d == device).unwrap();
             let screen = &self.monitors[monitor];
             let grid = grid_for_bars(&effective, screen, self.studio_bars.as_ref().unwrap_or(&self.bars));
+            let base = effective
+                .appearance
+                .over(&look::base(self.studio_skin.as_ref().unwrap_or(&self.skin)));
+            let bare = instance.appearance.surface.or(base.surface) == Some(mypaper_theme::Surface::None);
+            let mut global = crate::look::settings::appearance(&self.desktop_look, glass::Family::Widgets, &base, bare, &system);
+            if let Some(font) = global.font.as_mut() {
+                *font = crate::look::settings::font(font, |f| ui.text.has_family(f));
+            }
             let appearance = look::resolve(
                 &instance.appearance,
-                &effective.appearance,
-                &look::base(self.studio_skin.as_ref().unwrap_or(&self.skin)),
+                &mypaper_theme::Appearance::default(),
+                &global,
                 self.accent,
             );
             let placed = layout::place(instance, manifest, &grid, &appearance);
@@ -1226,6 +1244,8 @@ impl Widgets {
                 entry.model.dirty = true;
             }
             entry.tokens = tokens(&placed.appearance);
+            entry.tokens.icon_set = crate::look::settings::icons(&self.desktop_look, &ui.text);
+            entry.model.corner_override = instance.appearance.radius.or(self.desktop_look.shape.corners).or(self.layout.appearance.radius);
             entry.model.placed = placed;
             if !self.settling.contains_key(&instance.instance)
                 && !self
@@ -3878,6 +3898,7 @@ pub(crate) fn tokens(appearance: &serde_json::Map<String, Value>) -> Tokens {
             ),
         },
         radius: layer.radius.unwrap_or(22.0),
+        border: layer.border.unwrap_or(false),
         scale: layer.scale.unwrap_or(1.0),
         ..Tokens::default()
     }

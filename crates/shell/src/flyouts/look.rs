@@ -39,6 +39,8 @@ pub struct Look {
     pub switch_output: bool,
     pub scale: f32,
     pub shadow: bool,
+    /// An explicit surface radius is shared with menus, instead of the style's inset default.
+    pub menu_radius: Option<f32>,
     resolved: Theme,
     pub opening: mypaper_ui::transition::Timing,
     pub hover_motion: mypaper_ui::transition::Timing,
@@ -57,6 +59,7 @@ impl Look {
             })
             .inspect_err(|e| log::debug!("flyouts: bars.json: {e:#}"))
             .unwrap_or_default();
+        let desktop = Config::load().unwrap_or_default().look;
         let loaded = Config::load()
             .and_then(|c| mypaper_theme::locate(Some(&c.theme)))
             .and_then(LoadedTheme::load)
@@ -89,7 +92,9 @@ impl Look {
             &mut appearance,
         );
         let system = accent::read();
+        crate::look::settings::bar(&desktop, crate::glass::Family::Menus, &bars, "top", &mut bar_look, &mut appearance, &system, text);
         let mut look = Self::resolve_with(&bar_look, &appearance, &system, &knobs);
+        look.apply_settings(&desktop, text);
         let performance = bars.performance.active(mypaper_desktop::on_battery());
         look.opening = crate::bars::motion::resolve(
             &bars.top.animation,
@@ -169,6 +174,22 @@ impl Look {
             timing: self.opening,
             style: crate::bars::motion::reveal(self.opening_style),
         }));
+    }
+
+    /// The shared desktop controls, applied once on reload to both flyouts and their menus.
+    pub fn apply_settings(&mut self, desktop: &mypaper_config::Look, text: &Text) {
+        self.font = crate::look::settings::font(&self.font, |f| text.has_family(f)).into();
+        self.resolved.font.family = self.font.clone();
+        if let Some(set) = crate::look::settings::icons(desktop, text) {
+            self.resolved.icons = set;
+        }
+        if let Some(edge) = desktop.shape.edge {
+            self.resolved.border = edge.then_some(self.resolved.color.separator);
+        }
+        if desktop.shape.corners.is_some() {
+            self.resolved = self.resolved.clone().with_surface_radius(self.radius);
+            self.menu_radius = Some(self.radius);
+        }
     }
 
     /// The look of `bar` over `appearance`, as the bars resolve theirs (bars/look.rs).
@@ -298,6 +319,7 @@ impl Look {
             switch_output: false,
             scale: tokens.scale,
             shadow: tokens.shadow,
+            menu_radius: None,
             resolved,
             opening: crate::bars::motion::resolve(
                 &Default::default(),
@@ -334,8 +356,9 @@ impl Look {
     /// Menus share the active family, font, colors and material with the panels.
     pub fn menu_tokens(&self) -> mypaper_ui::Tokens {
         mypaper_ui::Tokens {
-            radius: Radii::concentric(self.radius, 6.0, 8.0),
+            radius: self.menu_radius.unwrap_or_else(|| Radii::concentric(self.radius, 6.0, 8.0)),
             icons: self.icons.clone(),
+            icon_set: Some(self.resolved.icons.clone()),
             scale: self.scale,
             shadow: self.shadow,
             glass_style: self.glass_style,
