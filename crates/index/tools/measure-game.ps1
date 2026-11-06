@@ -1,5 +1,5 @@
 # Owns only index_game.exe and the desktop lock; never moves another application's window.
-param([int]$Seconds = 60, [string]$FixtureExe = 'C:\mypaper-targets\index\release\examples\index_game.exe')
+param([int]$Seconds = 60, [string]$FixtureExe = 'C:\mypaper-targets\index\release\examples\index_game.exe', [switch]$TestCatchup)
 $ErrorActionPreference = 'Stop'
 $lockDir = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
 $signalPath = Join-Path $env:LOCALAPPDATA 'mypaper\game-activity.json'
@@ -68,10 +68,25 @@ while (-not (New-Item -ItemType Directory -Path $lockDir -ErrorAction SilentlyCo
   if ([DateTime]::UtcNow -ge $until) { throw 'Desktop lock remained busy' }
   Start-Sleep -Seconds 2
 }
+try { # Outer scope also cleans the optional filesystem fixture if activation fails.
 try {
   # Start from a loaded, exercised full index, rather than certifying a tiny startup stub.
   $status = & $deployed --status | ConvertFrom-Json
   if ($LASTEXITCODE -ne 0 -or $status.entries -lt 1000000) { throw 'Full cached index is not ready for the game test' }
+  if ($TestCatchup) {
+    if ($status.scanning) { throw 'Wait for initial reconciliation before the subtree catch-up test' }
+    $gameRoot = Join-Path $env:USERPROFILE ('mypaper-index-fixtures\game-' + [Guid]::NewGuid().ToString('N'))
+    $gameName = 'mypaper-game-resume-' + [Guid]::NewGuid().ToString('N') + '.txt'
+    $gameFile = Join-Path $gameRoot $gameName
+    [IO.Directory]::CreateDirectory($gameRoot) | Out-Null
+    $until = [DateTime]::UtcNow.AddSeconds(10)
+    do {
+      $directory = & $deployed --sizes $gameRoot | ConvertFrom-Json
+      if (@($directory.hits | Where-Object path -eq $gameRoot).Count -eq 1) { break }
+      if ([DateTime]::UtcNow -ge $until) { throw 'Filesystem fixture did not become indexed' }
+      Start-Sleep -Milliseconds 100
+    } while ($true)
+  }
   $warm = & $deployed --bench-query 1 | ConvertFrom-Json
   if ($LASTEXITCODE -ne 0 -or $warm.queries -ne 11) { throw 'Game test query warmup did not complete' }
   $index.Refresh()
@@ -85,8 +100,13 @@ try {
   Start-Sleep -Seconds 10
   & 'C:\Users\you\AppData\Local\Temp\mypaper-tools\shotall.ps1' -Out (Join-Path $evidence 'round2-game-fullscreen.png') | Out-Null
   $signal = Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json
+  if (-not $signal.activity.pause_background -or $signal.activity.foreground_pid -ne $fixture.Id -or [IndexGameThreads]::ForegroundPid() -ne $fixture.Id) {
+    [IndexGameThreads]::ActivateOwn($fixture.MainWindowHandle,$fixture.Id)
+    Start-Sleep -Seconds 2
+    $signal = Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json
+  }
   [pscustomobject]@{fixture_pid=$fixture.Id;foreground_pid=[IndexGameThreads]::ForegroundPid();signal=$signal} | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $evidence 'round2-game-activation.json')
-  if (-not $signal.activity.pause_background -or $signal.activity.foreground_pid -ne $fixture.Id) { throw 'Owned fullscreen fixture did not engage the real game hint' }
+  if (-not $signal.activity.pause_background -or $signal.activity.foreground_pid -ne $fixture.Id -or [IndexGameThreads]::ForegroundPid() -ne $fixture.Id) { throw 'Owned fullscreen fixture did not engage the real game hint' }
   Start-Sleep -Seconds 2
   $index.Refresh()
   $started = $index.StartTime
@@ -98,6 +118,10 @@ try {
     Start-Sleep -Seconds 1
     $signal = Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json
     if (-not $signal.activity.pause_background -or $signal.activity.foreground_pid -ne $fixture.Id) { throw 'Game hint changed during measurement' }
+    if ($TestCatchup -and $i -eq 10) {
+      [IO.File]::WriteAllBytes($gameFile,[byte[]]::new(32768))
+      $createdAt = Get-Date -Format o
+    }
     $index.Refresh()
     if ($index.HasExited -or $index.StartTime -ne $started) { throw 'Index restarted during game measurement' }
     $samples += [pscustomobject]@{second=$i+1;private_bytes=$index.PrivateMemorySize64;working_set_bytes=$index.WorkingSet64;pause_background=$signal.activity.pause_background;foreground_pid=$signal.activity.foreground_pid}
@@ -124,13 +148,35 @@ try {
     threads=$threadSwitches
     samples=$samples
   } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $evidence 'round2-game.json')
+  $validGame = $true
 } finally {
   try {
     if ($fixture -and -not $fixture.HasExited) {
       if ($fixture.Path -ne $FixtureExe) { throw 'Fixture process identity changed' }
       Stop-Process -InputObject $fixture
     }
+    if ($TestCatchup -and $validGame) {
+      $catchupClock = [Diagnostics.Stopwatch]::StartNew()
+      do {
+        $answer = & $deployed --query $gameName | ConvertFrom-Json
+        if (@($answer.hits | Where-Object path -eq $gameFile).Count -eq 1) { break }
+        if ($catchupClock.Elapsed.TotalSeconds -gt 30) { throw 'Subtree change did not catch up within 30 seconds' }
+        Start-Sleep -Milliseconds 100
+      } while ($true)
+      $catchupMs = $catchupClock.Elapsed.TotalMilliseconds
+      $sizes = & $deployed --sizes $gameRoot | ConvertFrom-Json
+      $aggregate = @($sizes.hits | Where-Object path -eq $gameRoot)
+      if ($aggregate.Count -ne 1 -or $aggregate[0].size -ne 32768 -or $aggregate[0].files -ne 1 -or $aggregate[0].size_unknown) { throw 'Resumed fixture size was incorrect' }
+      [pscustomobject]@{created_at=$createdAt;file=$gameFile;catchup_ms=$catchupMs;search=$answer;sizes=$sizes} | ConvertTo-Json -Depth 7 | Set-Content -Encoding utf8 (Join-Path $evidence 'round2-backed-game-catchup.json')
+    }
     Start-Sleep -Seconds 2
     & 'C:\Users\you\AppData\Local\Temp\mypaper-tools\shotall.ps1' -Out (Join-Path $evidence 'round2-game-restored.png') | Out-Null
   } finally { [IO.Directory]::Delete($lockDir) }
+}
+} finally {
+  if ($gameRoot) {
+    if (-not $gameRoot.StartsWith((Join-Path $env:USERPROFILE 'mypaper-index-fixtures\game-'),[StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe game fixture cleanup path' }
+    if (Test-Path -LiteralPath $gameFile) { Remove-Item -LiteralPath $gameFile }
+    [IO.Directory]::Delete($gameRoot)
+  }
 }
