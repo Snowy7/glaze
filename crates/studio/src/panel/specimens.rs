@@ -162,7 +162,7 @@ fn softened(app: &App, image: &Arc<Image>, radius: usize, size: (u32, u32)) -> A
         ),
         size,
     );
-    let pixels = blur_crop(&crop, radius);
+    let pixels = blur_crop(crop, radius);
     let image = Arc::new(Image {
         width: size.0,
         height: size.1,
@@ -213,8 +213,7 @@ fn material_backdrop_from(app: &App, size: (u32, u32), source: Option<Arc<Image>
         return image.clone();
     }
     let (width, height) = (size.0.max(1) as usize, size.1.max(1) as usize);
-    let mut pixels = vec![255; width * height * 4];
-    if let Some(source) = source {
+    let pixels = if let Some(source) = source {
         let aspect = width as f32 / height as f32;
         let sw = (source.width as f32 * 0.58).min(source.height as f32 * aspect);
         let sh = sw / aspect;
@@ -247,9 +246,10 @@ fn material_backdrop_from(app: &App, size: (u32, u32), source: Option<Arc<Image>
                 }
             }
         }
-        pixels = area_crop(&source, Rect::new(best.1, best.2, sw, sh), size).pixels;
+        area_crop(&source, Rect::new(best.1, best.2, sw, sh), size).pixels
     } else {
         // Neutral context makes the material legible without suggesting a different wallpaper.
+        let mut pixels = vec![255; width * height * 4];
         for y in 0..height {
             for x in 0..width {
                 let t = (x as f32 / width as f32 * 0.65 + y as f32 / height as f32 * 0.35)
@@ -262,7 +262,8 @@ fn material_backdrop_from(app: &App, size: (u32, u32), source: Option<Arc<Image>
                 pixels[(y * width + x) * 4..(y * width + x) * 4 + 3].fill(gray);
             }
         }
-    }
+        pixels
+    };
     let image = Arc::new(Image {
         width: width as u32,
         height: height as u32,
@@ -272,38 +273,45 @@ fn material_backdrop_from(app: &App, size: (u32, u32), source: Option<Arc<Image>
     image
 }
 
-fn blur_crop(source: &Image, radius: usize) -> Vec<u8> {
+/// Reuse the owned crop; only one row or column is copied for each separable pass.
+fn blur_crop(mut source: Image, radius: usize) -> Vec<u8> {
     let (width, height) = (source.width as usize, source.height as usize);
-    let mut pixels = source.pixels.clone();
+    if radius == 0 || width == 0 || height == 0 {
+        return source.pixels;
+    }
+    let mut line = vec![0; width.max(height) * 4];
     for horizontal in [true, false] {
-        let input = pixels.clone();
-        for y in 0..height {
-            for x in 0..width {
+        let (lines, length) = if horizontal {
+            (height, width)
+        } else {
+            (width, height)
+        };
+        for fixed in 0..lines {
+            let at = |i: usize| {
+                if horizontal {
+                    (fixed * width + i) * 4
+                } else {
+                    (i * width + fixed) * 4
+                }
+            };
+            for i in 0..length {
+                line[i * 4..i * 4 + 4].copy_from_slice(&source.pixels[at(i)..at(i) + 4]);
+            }
+            for i in 0..length {
                 let mut sum = [0usize; 3];
-                let mut count = 0;
                 for offset in -(radius as isize)..=radius as isize {
-                    let sx = if horizontal {
-                        (x as isize + offset).clamp(0, width as isize - 1) as usize
-                    } else {
-                        x
-                    };
-                    let sy = if horizontal {
-                        y
-                    } else {
-                        (y as isize + offset).clamp(0, height as isize - 1) as usize
-                    };
+                    let sample = (i as isize + offset).clamp(0, length as isize - 1) as usize;
                     for channel in 0..3 {
-                        sum[channel] += input[(sy * width + sx) * 4 + channel] as usize;
+                        sum[channel] += line[sample * 4 + channel] as usize;
                     }
-                    count += 1;
                 }
                 for channel in 0..3 {
-                    pixels[(y * width + x) * 4 + channel] = (sum[channel] / count) as u8;
+                    source.pixels[at(i) + channel] = (sum[channel] / (radius * 2 + 1)) as u8;
                 }
             }
         }
     }
-    pixels
+    source.pixels
 }
 
 pub fn frosted_wallpaper(app: &App, blur: f32) -> Option<Arc<Image>> {
@@ -420,7 +428,7 @@ pub fn material_sample(
     let image = cached.unwrap_or_else(|| {
         let (width, height) = (background.width as usize, background.height as usize);
         let alpha = 1.0 - sample.clarity;
-        let frosted = blur_crop(&background, (sample.blur * b.s * 0.35).round() as usize);
+        let frosted = blur_crop(background.as_ref().clone(), (sample.blur * b.s * 0.35).round() as usize);
         let mut pixels = background.pixels.clone();
         let radius = (sample.radius * b.s)
             .min(height as f32 * 0.36)
@@ -989,6 +997,26 @@ fn real_pinned_icons(app: &App, frame: &mut mypaper_shell::preview::bars::Frame)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn blur_keeps_clamped_edges_and_the_original_alpha() {
+        let source = Image {
+            width: 3,
+            height: 2,
+            pixels: vec![
+                0, 15, 30, 10, 30, 45, 60, 20, 60, 75, 90, 30, 90, 105, 120, 40, 120, 135, 150, 50,
+                150, 165, 180, 60,
+            ],
+        };
+        assert_eq!(blur_crop(source.clone(), 0), source.pixels);
+        assert_eq!(
+            blur_crop(source, 1),
+            [
+                40, 55, 70, 10, 60, 75, 90, 20, 80, 95, 110, 30, 70, 85, 100, 40, 90, 105, 120, 50,
+                110, 125, 140, 60,
+            ]
+        );
+    }
     use mypaper_ui::{Ui, controls::Builder};
 
     #[test]
