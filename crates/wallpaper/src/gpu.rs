@@ -427,6 +427,9 @@ fn instance() -> wgpu::Instance {
     let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
     desc.backends = wgpu::Backends::DX12;
     desc.backend_options.dx12.shader_compiler = wgpu::Dx12Compiler::Fxc;
+    // Labels stay in wgpu's own errors, but D3D12 gets none: wgpu opens a command list per render
+    // pass and named each labelled one, pass and resource (SetName), every frame, for debuggers only.
+    desc.flags |= wgpu::InstanceFlags::DISCARD_HAL_LABELS;
     wgpu::Instance::new(desc)
 }
 
