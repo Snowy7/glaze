@@ -261,9 +261,22 @@ impl Engine {
         }
     }
 
-    /// One turn of the loop: react to changes, draw what is due, and say
-    /// how long the thread may sleep.
+    /// One turn of the loop: react to changes, draw what is due, answer Studio's preview, and
+    /// say how long the thread may sleep.
     pub fn tick(&mut self, events: Option<&WindowEvents>) -> Flow {
+        let flow = self.step(events);
+        // After drawing, so a preview waiting for a frame gets the one just drawn. Any screen's
+        // will do: a covered first screen has none.
+        let kept = self
+            .screens
+            .iter()
+            .filter_map(|s| s.kept.as_ref())
+            .find(|k| k.drawn.get().is_some());
+        self.preview.serve(&self.gpu, kept.map(|k| &k.texture));
+        flow
+    }
+
+    fn step(&mut self, events: Option<&WindowEvents>) -> Flow {
         if self.restart_due {
             return Flow::Exit(EXIT_RESTART);
         }
@@ -311,8 +324,6 @@ impl Engine {
 
         self.sync_visibility();
         self.glass.reload();
-        let kept = self.screens.first().and_then(|s| s.kept.as_ref());
-        self.preview.serve(&self.gpu, kept.map(|k| &k.texture));
         for (index, screen) in self.screens.iter_mut().enumerate() {
             screen.dirty |= self.source.take_dirty(index);
             screen.glass_dirty |= self.glass.take_dirty(index);
