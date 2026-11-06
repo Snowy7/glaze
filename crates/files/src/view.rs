@@ -802,15 +802,16 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
         );
     }
 
+    let mut preview_body = Rect::default();
     if app.preferences.preview {
-        preview_panel(&mut f, app, preview, now, false);
+        preview_body = preview_panel(&mut f, app, preview, now, false);
     }
     if app.quick_look {
         f.fill(bounds, 0.0, color.shadow.with_alpha(0.46));
         let panel = bounds.inset(Insets::xy(px(64.0), px(40.0)));
         f.fill(panel, px(14.0), color.elevated);
         f.list.hits.clear();
-        preview_panel(&mut f, app, panel, now, true);
+        preview_body = preview_panel(&mut f, app, panel, now, true);
     } else if let Some(hit) = app
         .interaction
         .hover
@@ -879,7 +880,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     }
     app.geometry = Geometry {
         tabs,
-        preview,
+        preview: preview_body,
         viewport: content,
         address: address_inner,
         search: search_inner,
@@ -905,11 +906,12 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
             .present(ui, app.surface.origin(), (width, height), list)?;
     }
     app.painted();
+    app.place_preview_handler();
     app.request_images();
     Ok(())
 }
 
-fn preview_panel(f: &mut Frame<'_>, app: &App, area: Rect, now: Instant, large: bool) {
+fn preview_panel(f: &mut Frame<'_>, app: &App, area: Rect, now: Instant, large: bool) -> Rect {
     let s = app.surface.scale();
     let px = |v: f32| (v * s).round();
     let color = f.theme.color;
@@ -1039,6 +1041,7 @@ fn preview_panel(f: &mut Frame<'_>, app: &App, area: Rect, now: Instant, large: 
             );
         }
     }
+    body
 }
 
 fn breadcrumbs(location: &shell::Location) -> Vec<(String, String)> {

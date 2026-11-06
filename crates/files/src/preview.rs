@@ -17,6 +17,74 @@ use windows::Win32::{
 
 pub const TEXT_LIMIT: usize = 64 * 1024;
 
+/// Use the shell's surrogate for other formats. Never load a third-party preview DLL in Files.
+/// Missing/non-surrogated handlers simply keep the kit's unavailable-preview state.
+pub struct ShellHandler(windows::Win32::UI::Shell::IPreviewHandler);
+impl ShellHandler {
+    pub fn open(
+        path: &str,
+        hwnd: HWND,
+        rect: windows::Win32::Foundation::RECT,
+    ) -> anyhow::Result<Self> {
+        use windows::{
+            Win32::{
+                System::Com::*,
+                UI::Shell::{PropertiesSystem::*, *},
+            },
+            core::{HSTRING, Interface, PWSTR, w},
+        };
+        let extension = std::path::Path::new(path)
+            .extension()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| anyhow::anyhow!("No preview extension"))?;
+        let mut class = [0u16; 80];
+        let mut length = class.len() as u32;
+        // SAFETY: bounded association output and terminated names; our UI thread owns an OLE STA.
+        unsafe {
+            AssocQueryStringW(
+                ASSOCF_NONE,
+                ASSOCSTR_SHELLEXTENSION,
+                &HSTRING::from(format!(".{extension}")),
+                w!("{8895b1c6-b41f-4c1c-a562-0d564250836f}"),
+                Some(PWSTR(class.as_mut_ptr())),
+                &mut length,
+            )
+            .ok()?;
+            let clsid = CLSIDFromString(windows::core::PCWSTR(class.as_ptr()))?;
+            let handler: IPreviewHandler = CoCreateInstance(&clsid, None, CLSCTX_LOCAL_SERVER)?;
+            let handler = Self(handler);
+            if let Ok(initialize) = handler.0.cast::<IInitializeWithStream>() {
+                let stream = SHCreateStreamOnFileEx(
+                    &HSTRING::from(path),
+                    (STGM_READ | STGM_SHARE_DENY_NONE).0,
+                    0,
+                    false,
+                    None,
+                )?;
+                initialize.Initialize(&stream, STGM_READ.0)?;
+            } else {
+                handler
+                    .0
+                    .cast::<IInitializeWithFile>()?
+                    .Initialize(&HSTRING::from(path), STGM_READ.0)?;
+            }
+            handler.0.SetWindow(hwnd, &rect)?;
+            handler.0.DoPreview()?;
+            Ok(handler)
+        }
+    }
+    pub fn place(&self, rect: windows::Win32::Foundation::RECT) {
+        // SAFETY: the retained COM preview is live; the rectangle is copied by SetRect.
+        let _ = unsafe { self.0.SetRect(&rect) };
+    }
+}
+impl Drop for ShellHandler {
+    fn drop(&mut self) {
+        // SAFETY: unload before releasing the final interface, while the host HWND still exists.
+        let _ = unsafe { self.0.Unload() };
+    }
+}
+
 #[derive(Clone)]
 pub enum Content {
     Text { lines: Vec<String>, truncated: bool },
@@ -163,7 +231,9 @@ fn decode(bytes: &[u8]) -> Option<String> {
     if bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]) {
         let little = bytes[0] == 0xff;
         let units: Vec<_> = bytes[2..]
-            .as_chunks::<2>().0.iter()
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|p| {
                 if little {
                     u16::from_le_bytes([p[0], p[1]])

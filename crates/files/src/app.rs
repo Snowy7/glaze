@@ -120,6 +120,8 @@ pub struct App {
     pub preview_scroll: Scroll,
     preview_service: Option<crate::preview::Service>,
     preview_ticket: u64,
+    preview_handler: Option<crate::preview::ShellHandler>,
+    handler_attempted: String,
     pub tabs: Vec<crate::tabs::Tab>,
     pub active_tab: usize,
     cache: crate::tabs::FolderCache,
@@ -224,6 +226,8 @@ impl App {
             preview_scroll: Scroll::new(&theme.motion),
             preview_service: None,
             preview_ticket: 0,
+            preview_handler: None,
+            handler_attempted: String::new(),
             tabs: paths.into_iter().map(crate::tabs::Tab::new).collect(),
             active_tab,
             cache: crate::tabs::FolderCache::default(),
@@ -569,6 +573,8 @@ impl App {
             return Ok(());
         }
         self.preview_path = path.clone();
+        self.preview_handler = None;
+        self.handler_attempted.clear();
         self.preview_content = None;
         self.preview_scroll.reset();
         if path.is_empty() {
@@ -580,6 +586,33 @@ impl App {
             self.preview_ticket = self.preview_service.as_ref().unwrap().request(path);
         }
         Ok(())
+    }
+
+    pub fn place_preview_handler(&mut self) {
+        if self.geometry.preview.is_empty() {
+            self.preview_handler = None;
+            return;
+        }
+        if !matches!(self.preview_content, Some(crate::preview::Content::Other)) {
+            return;
+        }
+        let area = self.geometry.preview;
+        let rect = windows::Win32::Foundation::RECT {
+            left: area.left as i32,
+            top: area.top as i32,
+            right: area.right as i32,
+            bottom: area.bottom as i32,
+        };
+        if let Some(handler) = &self.preview_handler {
+            handler.place(rect);
+        } else if self.handler_attempted != self.preview_path {
+            self.handler_attempted = self.preview_path.clone();
+            match crate::preview::ShellHandler::open(&self.preview_path, self.surface.hwnd(), rect)
+            {
+                Ok(handler) => self.preview_handler = Some(handler),
+                Err(error) => log::debug!("Shell preview unavailable: {error:#}"),
+            }
+        }
     }
 
     fn quick_step(&mut self, forward: bool) {
