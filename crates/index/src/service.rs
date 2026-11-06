@@ -193,13 +193,14 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
         };
         match message {
             Ok(first) => {
+                let mut initial_finished = false;
                 let mut paths = BTreeSet::new();
                 let mut overflows = BTreeSet::new();
                 for change in std::iter::once(first).chain(rx.try_iter().take(255)) {
                     match change {
                         Change::InitialDone => {
                             initializing = false;
-                            state.write().expect("index state").scanning = false;
+                            initial_finished = true;
                             dirty = Some(Instant::now());
                         }
                         Change::Paths {
@@ -210,6 +211,9 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                         }
                         Change::Overflow(root) => {
                             overflows.insert(root);
+                        }
+                        Change::Failed { root, error } => {
+                            bail!("watch {} failed: {error}", root.display())
                         }
                     }
                 }
@@ -239,6 +243,10 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 if dirty.is_some_and(|t| t.elapsed() >= Duration::from_secs(120)) {
                     checkpoint(&state, &snapshot)?;
                     dirty = None;
+                }
+                if initial_finished {
+                    state.write().expect("index state").scanning = false;
+                    eprintln!("initial reconciliation and notification replay complete");
                 }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {

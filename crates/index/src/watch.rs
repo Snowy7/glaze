@@ -1,11 +1,14 @@
-//! Blocking directory notifications: no polling or periodic wakeups. A 1 MiB kernel buffer
-//! per watched root survives between reads. Bounded delivery turns backlog into reconciliation.
+//! Blocking notifications with a coalesced handoff independent of slow metadata work.
+//! Readers never block on the service queue and drain kernel notifications at normal CPU
+//! priority. Enumeration and delivery work remain background priority.
 
+use std::collections::HashSet;
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::path::PathBuf;
-use std::sync::mpsc::SyncSender;
+use std::sync::{Arc, Condvar, Mutex, mpsc::SyncSender};
 
 use anyhow::Result;
-use windows::Win32::Foundation::{CloseHandle, ERROR_INVALID_FUNCTION, ERROR_INVALID_PARAMETER};
+use windows::Win32::Foundation::{ERROR_INVALID_FUNCTION, ERROR_INVALID_PARAMETER, HANDLE};
 use windows::Win32::Storage::FileSystem::*;
 use windows::core::PCWSTR;
 
@@ -18,13 +21,37 @@ pub enum Change {
         root: PathBuf,
         paths: Vec<PathBuf>,
     },
-    /// Notifications no longer contain the lost names. The affected watched subtree is root.
+    /// Lost names cannot identify a narrower subtree than the watched root.
     Overflow(PathBuf),
+    Failed {
+        root: PathBuf,
+        error: String,
+    },
+}
+
+const MAX_PENDING: usize = 128_000;
+const BUFFER_BYTES: usize = 2 * 1024 * 1024;
+
+#[derive(Default)]
+struct Pending {
+    paths: HashSet<PathBuf>,
+    overflow: bool,
+    stopped: Option<String>,
+}
+
+impl Pending {
+    fn add(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
+        self.paths.extend(paths);
+        if self.paths.len() > MAX_PENDING {
+            self.paths.clear();
+            self.overflow = true;
+        }
+    }
 }
 
 pub fn start(root: PathBuf, tx: SyncSender<Change>) -> Result<()> {
     let name = long(&root);
-    // SAFETY: opens only directory-list access, with all sharing modes; no elevation required.
+    // SAFETY: directory-list access only, with all sharing modes; no elevation required.
     let handle = unsafe {
         CreateFileW(
             PCWSTR(name.as_ptr()),
@@ -36,14 +63,58 @@ pub fn start(root: PathBuf, tx: SyncSender<Change>) -> Result<()> {
             None,
         )?
     };
-    // A raw owned HANDLE is sent as an integer; the worker closes it exactly once.
-    let raw = handle.0 as usize;
+    // SAFETY: transfers a successful native handle to its Send-capable owner.
+    let owner = unsafe { OwnedHandle::from_raw_handle(handle.0) };
+    let pending = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
+    let delivery = pending.clone();
+    let watched = root.clone();
+    std::thread::Builder::new()
+        .name(format!("index-delivery-{}", root.display()))
+        .spawn(move || {
+            let _background = Background::enter();
+            loop {
+                let (paths, overflow, stopped) = {
+                    let mut state = delivery.0.lock().expect("watch handoff");
+                    while state.paths.is_empty() && !state.overflow && state.stopped.is_none() {
+                        state = delivery.1.wait(state).expect("watch wake");
+                    }
+                    (
+                        std::mem::take(&mut state.paths)
+                            .into_iter()
+                            .collect::<Vec<_>>(),
+                        std::mem::take(&mut state.overflow),
+                        state.stopped.take(),
+                    )
+                };
+                // Only delivery can wait on the bounded queue. Its reader keeps coalescing paths
+                // while enumeration or checkpointing is busy.
+                if overflow && tx.send(Change::Overflow(watched.clone())).is_err() {
+                    break;
+                }
+                if !paths.is_empty()
+                    && tx
+                        .send(Change::Paths {
+                            root: watched.clone(),
+                            paths,
+                        })
+                        .is_err()
+                {
+                    break;
+                }
+                if let Some(error) = stopped {
+                    let _ = tx.send(Change::Failed {
+                        root: watched.clone(),
+                        error,
+                    });
+                    break;
+                }
+            }
+        })?;
     std::thread::Builder::new()
         .name(format!("index-watch-{}", root.display()))
         .spawn(move || {
-            let _background = Background::enter();
-            let handle = windows::Win32::Foundation::HANDLE(raw as *mut _);
-            let mut buffer = vec![0u64; 1024 * 1024 / 8];
+            let handle = HANDLE(owner.as_raw_handle());
+            let mut buffer = vec![0u64; BUFFER_BYTES / 8];
             let mut extended = true;
             let filter = FILE_NOTIFY_CHANGE_FILE_NAME
                 | FILE_NOTIFY_CHANGE_DIR_NAME
@@ -52,13 +123,13 @@ pub fn start(root: PathBuf, tx: SyncSender<Change>) -> Result<()> {
                 | FILE_NOTIFY_CHANGE_ATTRIBUTES;
             loop {
                 let mut bytes = 0;
-                // SAFETY: aligned, live 1 MiB output; synchronous I/O keeps it alive until return.
+                // SAFETY: aligned 2 MiB output remains alive throughout synchronous I/O.
                 let read = unsafe {
                     if extended {
                         ReadDirectoryChangesExW(
                             handle,
                             buffer.as_mut_ptr().cast(),
-                            (buffer.len() * 8) as u32,
+                            BUFFER_BYTES as u32,
                             true,
                             filter,
                             Some(&mut bytes),
@@ -70,7 +141,7 @@ pub fn start(root: PathBuf, tx: SyncSender<Change>) -> Result<()> {
                         ReadDirectoryChangesW(
                             handle,
                             buffer.as_mut_ptr().cast(),
-                            (buffer.len() * 8) as u32,
+                            BUFFER_BYTES as u32,
                             true,
                             filter,
                             Some(&mut bytes),
@@ -90,14 +161,14 @@ pub fn start(root: PathBuf, tx: SyncSender<Change>) -> Result<()> {
                     if error.code()
                         != windows::Win32::Foundation::ERROR_NOTIFY_ENUM_DIR.to_hresult()
                     {
-                        eprintln!("watch {} stopped: {error}", root.display());
+                        pending.0.lock().expect("watch handoff").stopped = Some(error.to_string());
+                        pending.1.notify_one();
                         break;
                     }
                 }
                 if read.is_err() || bytes == 0 {
-                    if tx.send(Change::Overflow(root.clone())).is_err() {
-                        break;
-                    }
+                    pending.0.lock().expect("watch handoff").overflow = true;
+                    pending.1.notify_one();
                     continue;
                 }
                 let data: &[u8] = bytemuck::cast_slice(&buffer);
@@ -124,21 +195,28 @@ pub fn start(root: PathBuf, tx: SyncSender<Change>) -> Result<()> {
                     }
                     at += next;
                 }
-                match tx.try_send(Change::Paths {
-                    root: root.clone(),
-                    paths,
-                }) {
-                    Ok(()) => {}
-                    Err(std::sync::mpsc::TrySendError::Full(_)) => {
-                        if tx.send(Change::Overflow(root.clone())).is_err() {
-                            break;
-                        }
-                    }
-                    Err(std::sync::mpsc::TrySendError::Disconnected(_)) => break,
-                }
+                pending.0.lock().expect("watch handoff").add(paths);
+                pending.1.notify_one();
             }
-            // SAFETY: this worker owns the directory handle.
-            let _ = unsafe { CloseHandle(handle) };
+            drop(owner);
         })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slow_consumers_coalesce_paths_and_rescan_only_on_real_loss() {
+        let mut pending = Pending::default();
+        for _ in 0..1000 {
+            pending.add([PathBuf::from(r"C:\build\same.obj")]);
+        }
+        assert_eq!(pending.paths.len(), 1);
+        assert!(!pending.overflow);
+        pending.add((0..MAX_PENDING).map(|i| PathBuf::from(format!(r"C:\build\{i}.obj"))));
+        assert!(pending.overflow);
+        assert!(pending.paths.is_empty());
+    }
 }
