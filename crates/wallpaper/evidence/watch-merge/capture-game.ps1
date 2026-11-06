@@ -1,10 +1,11 @@
 param(
     [Parameter(Mandatory=$true)][string]$Label,
     [string]$Fixture = 'C:\mypaper-targets\watch-merge\debug\examples\game_primary.exe',
+    [string]$OutputRoot = 'C:\mypaper-targets\watch-merge\evidence',
     [int]$Seconds = 18
 )
 $ErrorActionPreference = 'Stop'
-$out = Join-Path $PSScriptRoot $Label
+$out = Join-Path $OutputRoot $Label
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
 if (-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) {
@@ -42,11 +43,16 @@ public static class HoldCaptureDpi {
     $offset = if (Test-Path -LiteralPath $log) { (Get-Item -LiteralPath $log).Length } else { 0 }
     Capture 'before'
     $game = Start-Process -FilePath $Fixture -ArgumentList $Seconds -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $out 'fixture.log') -RedirectStandardError (Join-Path $out 'fixture-error.log')
+    $null = $game.Handle # Retain the process handle so ExitCode is available after it exits.
     $timer.Restart()
-    foreach ($point in @(@('hold-start',2000), @('before-release',9000), @('released',12000))) {
-        while ($timer.ElapsedMilliseconds -lt $point[1]) { Start-Sleep -Milliseconds 50 }
+    $points = @([pscustomobject]@{ name='hold-start'; at=1000 })
+    if ($Seconds -gt 12) {
+        $points += @([pscustomobject]@{ name='before-release'; at=9000 }, [pscustomobject]@{ name='released'; at=12000 })
+    }
+    foreach ($point in $points) {
+        while ($timer.ElapsedMilliseconds -lt $point.at) { Start-Sleep -Milliseconds 50 }
         if ($game.HasExited) { throw 'The game fixture exited before the release capture.' }
-        Capture $point[0]
+        Capture $point.name
     }
     $game.WaitForExit(30000) | Out-Null
     if (-not $game.HasExited) { throw 'The game fixture did not exit on schedule.' }
