@@ -711,7 +711,11 @@ fn manifest_control(
                 .iter()
                 .map(|o| match o {
                     mypaper_widgets::manifest::SelectOption::Plain(value) => {
-                        (json!(value), value.clone())
+                        let mut letters = value.chars();
+                        let label = letters.next().map_or_else(String::new, |first| {
+                            first.to_uppercase().chain(letters).collect()
+                        });
+                        (json!(value), label)
                     }
                     mypaper_widgets::manifest::SelectOption::Detailed(value) => (
                         json!(value.value),
