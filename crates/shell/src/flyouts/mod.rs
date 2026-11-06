@@ -592,6 +592,7 @@ impl Flyouts {
     }
 
     fn follow_win_key(&mut self, main: HWND) {
+        WinKey::set_files_enabled(files_shortcut_enabled());
         let hidden = mypaper_bars::config::path()
             .and_then(|p| mypaper_bars::BarsConfig::load(&p))
             .is_ok_and(|c| c.taskbar.mode == mypaper_bars::TaskbarMode::Hide);
@@ -633,6 +634,7 @@ impl Flyouts {
                         self.win_key(ui, bars, target);
                     } else {
                         match target {
+                            winkey::Target::Files => open_files_shortcut(),
                             winkey::Target::Launcher => mypaper_bars::system::start_menu(),
                             winkey::Target::Quick => mypaper_bars::system::action_center(
                                 mypaper_bars::actions::Panel::Quick,
@@ -820,10 +822,15 @@ impl Flyouts {
     /// puts them (the top bar's right end). The launcher opens on the monitor under the mouse;
     /// the others on the monitor of the app in front.
     fn win_key(&mut self, ui: &mut Ui, bars: &mut Bars, target: winkey::Target) {
+        if target == winkey::Target::Files {
+            open_files_shortcut();
+            return;
+        }
         let kind = match target {
             winkey::Target::Launcher => Kind::Launcher,
             winkey::Target::Notifications => Kind::Notifications,
             winkey::Target::Quick => Kind::Quick,
+            winkey::Target::Files => return,
         };
         let (found, center) = if kind == Kind::Launcher {
             let mut cursor = windows::Win32::Foundation::POINT::default();
@@ -1622,3 +1629,23 @@ fn position(open: &Open, now: Instant) -> (i32, i32) {
 
 /// Hit ids: a panel's controls are small numbers; list items `LIST + index`.
 pub const LIST: HitId = 1000;
+
+/// Config reload supplies the hook's atomic gate; missing executables leave Win+E untouched.
+fn files_shortcut_enabled() -> bool {
+    mypaper_config::Config::load().is_ok_and(|c| c.experimental.files_default)
+        && std::env::current_exe().is_ok_and(|p| p.with_file_name("mypaper-files.exe").is_file())
+}
+
+fn open_files_shortcut() {
+    use std::os::windows::process::CommandExt;
+    if files_shortcut_enabled()
+        && let Ok(path) = std::env::current_exe()
+        && std::process::Command::new(path.with_file_name("mypaper-files.exe"))
+            .creation_flags(0x08000000)
+            .spawn()
+            .is_ok()
+    {
+        return;
+    }
+    mypaper_bars::system::open("shell:profile".into());
+}
