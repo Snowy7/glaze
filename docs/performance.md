@@ -264,9 +264,11 @@ a second tonight, 7 with the desktop quiet). Scoping its location hook to the fo
 covering windows' processes (as the shell's `win_events` does) would cut it further; that is left
 as a follow-up.
 
-Other processes still run notify watches, each a 10 Hz thread (counted per process after the
-deploy): shell 5 (bars, theme, flyouts' index, game signal), index 2, core 1 (tweaks), Studio 1.
-`DirWatch` is the drop-in for them.
+The other processes' notify watches (each a 10 Hz thread; after this deploy: shell 5, index 2,
+core 1 via tweaks, Studio 1) moved to the `fswatch` crate later the same morning (`3a3a29e` and
+the commits after it), which also sleeps on directory I/O. Two such watchers now exist
+(`mypaper_desktop::dir_watch` for `watch_file` and the engine's theme, `fswatch` for the rest);
+they should become one.
 
 ### Games (6 November 2026)
 
