@@ -285,6 +285,38 @@ fn websockets_round_trip_with_headers_and_subprotocols() {
     assert!(rig.lines["probe"].last().unwrap().contains("at most 8"), "{:?}", rig.lines["probe"].last());
 }
 
+#[test]
+fn game_pause_keeps_socket_connected_and_coalesces_its_events() {
+    let (port, heads) = ws_server(true);
+    let origin = format!("ws://127.0.0.1:{port}");
+    let mut rig = Rig::new("game-socket");
+    rig.install("probe", &[&format!("network:{origin}")], &[]);
+    rig.act("probe", "ws", &origin);
+    rig.wait("probe", "ws opened");
+    rig.act("probe", "ws-send", "first");
+    rig.act("probe", "ws-send", "latest");
+    rig.host.on_host(HostMsg::GameActivity(true), Instant::now());
+    rig.read();
+    let before = rig.lines["probe"].clone();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    for _ in 0..2 {
+        let input = rig.rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).unwrap();
+        assert!(matches!(input, Input::Socket { event: crate::runtime::mypaper::plugin::websocket::SocketEvent::Message(_), .. }));
+        rig.host.on_input(input, Instant::now());
+    }
+    rig.host.tick(Instant::now() + Duration::from_secs(600));
+    assert!(rig.host.deadline().is_none());
+    rig.read();
+    assert_eq!(rig.lines["probe"], before);
+    rig.host.on_host(HostMsg::GameActivity(false), Instant::now());
+    rig.read();
+    assert!(rig.has("probe", "ws text echo:latest"));
+    assert!(!rig.has("probe", "ws text echo:first"));
+    rig.act("probe", "ws-send", "after");
+    rig.wait("probe", "ws text echo:after");
+    assert_eq!(heads.lock().unwrap().len(), 1, "same connection after resume");
+}
+
 // ---------------------------------------------------------------------------------------------
 // Named-pipe servers
 

@@ -654,6 +654,7 @@ impl Plugins {
 
     /// Stops an idle helper and starts a dead one again when faces need it.
     fn tick_helper(&mut self, now: Instant) {
+        if self.game_active { return; }
         let placed = self.faces.values().any(|s| s.component.is_some() && !self.preferences.disabled.contains(&s.plugin));
         if let Some(helper) = &mut self.helper {
             if placed {
@@ -677,6 +678,7 @@ impl Plugins {
     }
 
     fn helper_deadline(&self) -> Option<Instant> {
+        if self.game_active { return None; }
         match &self.helper {
             Some(helper) => helper.idle_since.map(|t| t + IDLE_STOP),
             None if self.held => None,
@@ -1226,7 +1228,7 @@ impl Plugins {
         let restarts = self
             .restarts
             .iter()
-            .filter(|(id, _)| !self.held && self.listened(id))
+            .filter(|(id, _)| !self.held && !self.game_active && self.listened(id))
             .map(|(_, (at, _))| Some(*at));
         let dying = self.dying.iter().map(|(_, deadline)| Some(*deadline));
         per_process.chain(restarts).chain(dying).chain([self.helper_deadline()]).flatten().min()
@@ -1241,7 +1243,7 @@ impl Plugins {
         if let Some(helper) = &self.helper {
             let _ = helper.frames.send(wire::HostMsg::Held(held));
         }
-        let note = rpc::notification(if held { "suspend" } else { "resume" });
+        let note = rpc::notification(if held || self.game_active { "suspend" } else { "resume" });
         for process in self
             .procs
             .values()
@@ -1258,6 +1260,10 @@ impl Plugins {
         if let Some(helper) = &self.helper {
             let _ = helper.frames.send(wire::HostMsg::GameActivity(active));
         }
+        let note = rpc::notification(if active || self.held { "suspend" } else { "resume" });
+        for process in self.procs.values().filter(|p| matches!(p.state, State::Ready)) {
+            process.write(note.clone());
+        }
     }
 
     /// Forwards a system event (window, monitor, notification, media, power, theme) to the WASM
@@ -1272,7 +1278,7 @@ impl Plugins {
     /// Whether a visible plugin subscribes to system topic `topic` (`windows`, `monitors`,
     /// `media`, `power`, `theme`): the shell runs that source only while this holds.
     pub fn wants(&self, topic: &str) -> bool {
-        !self.held && self.helper.as_ref().is_some_and(|h| h.demand.iter().any(|t| t == topic))
+        !self.held && !self.game_active && self.helper.as_ref().is_some_and(|h| h.demand.iter().any(|t| t == topic))
     }
 
     /// Invokes `plugin`'s `commands`/`menu` contribution `id` (a shortcut, a desktop-menu item),
@@ -1292,7 +1298,7 @@ impl Plugins {
     /// Instances of permitted notification subscribers. The shell checks actual visibility
     /// before acquiring its shared Windows notification lease.
     pub fn notification_instances(&self) -> Vec<&str> {
-        if self.held { return Vec::new(); }
+        if self.held || self.game_active { return Vec::new(); }
         let Some(helper) = &self.helper else { return Vec::new() };
         self.faces.iter().filter(|(_, slot)| helper.notification_plugins.contains(&slot.plugin))
             .map(|(instance, _)| instance.as_str()).collect()

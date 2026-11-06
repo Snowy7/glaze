@@ -53,3 +53,15 @@ pub(crate) fn credit(input: &Input) -> Option<(&str, u64)> {
         _ => None,
     }
 }
+
+pub(crate) fn belongs_to(input: &Input, plugin: &str, instances: &[String]) -> bool {
+    match input {
+        Input::Host(HostMsg::Open { plugin: owner, .. } | HostMsg::Command { plugin: owner, .. })
+        | Input::Http { plugin: owner, .. } | Input::PipeHttp { plugin: owner, .. }
+        | Input::Native { plugin: owner, .. } | Input::Socket { plugin: owner, .. }
+        | Input::Pipe { plugin: owner, .. } | Input::Toast { plugin: owner, .. } => owner == plugin,
+        Input::NativeEvent(event) => event.plugin == plugin,
+        Input::Host(HostMsg::Close { instance } | HostMsg::Options { instance, .. } | HostMsg::Action { instance, .. }) => instances.contains(instance),
+        _ => false,
+    }
+}

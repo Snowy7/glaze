@@ -249,6 +249,12 @@ impl<W: Write> Host<W> {
                 return false;
             }
             HostMsg::Remove { plugin, acknowledge } => {
+                let mut instances: Vec<_> = self.owners.iter().filter(|(_, owner)| **owner == plugin).map(|(id, _)| id.clone()).collect();
+                instances.extend(self.deferred.iter().filter_map(|input| match input {
+                    Input::Host(HostMsg::Open { plugin: owner, instance, .. }) if *owner == plugin => Some(instance.clone()),
+                    _ => None,
+                }));
+                self.deferred.retain(|input| !crate::quiet::belongs_to(input, &plugin, &instances));
                 let native = self.plugins.get(&plugin).is_some_and(|p| !p.manifest.native.is_empty());
                 self.unload(&plugin);
                 self.plugins.remove(&plugin);
