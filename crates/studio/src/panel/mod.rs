@@ -618,6 +618,7 @@ pub fn build(app: &App, text: &mut Text) -> Built {
         colors::finish(app, b);
         c.y + b.px(16.0)
     });
+    lists::drop_overlay(app, &mut b);
     editors::footer(
         app,
         &mut b,
