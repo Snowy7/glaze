@@ -95,9 +95,21 @@ try {
  if($LASTEXITCODE -ne 0){throw 'measure.ps1 failed'}
  Copy-Item -LiteralPath 'C:\Users\you\AppData\Local\Temp\mypaper-tools\measure-look-settings.json' -Destination (Join-Path $evidence 'idle.json') -Force
  Copy-Item -LiteralPath (Join-Path $configRoot 'revisions.jsonl') -Destination (Join-Path $evidence 'revisions.jsonl') -Force
- $result=@{fixture_pid=$fixture.Id;config_unchanged=((Get-FileHash -LiteralPath $realConfig -Algorithm SHA256).Hash -eq $beforeHash);foreground_before=$foreground;foreground_after=$foregroundAfter;foreground_owner_before=$foregroundOwner;foreground_owner_after=(Foreground-Owner);synthetic_input=$false;observations=$observations}
+ $sameWindows=$true
+ $firstWindows=@($observations[0].revision.surfaces | ForEach-Object {$_.hwnd}) -join ','
+ foreach($observation in $observations) {
+  $sameWindows=$sameWindows -and ($observation.revision.pid -eq $fixture.Id) -and ((@($observation.revision.surfaces | ForEach-Object {$_.hwnd}) -join ',') -eq $firstWindows)
+ }
+ $visualChanges=@{}
+ foreach($pair in @(@('corners','01-square-top.png','02-corners-top.png'),@('edge','02-corners-top.png','03-edge-top.png'),@('font','03-edge-widget.png','04-font-widget.png'),@('size','04-font-widget.png','05-size-widget.png'),@('tone','05-size-bare.png','06-tone-bare.png'),@('shadow','06-tone-bare.png','07-shadow-bare.png'),@('icons','07-shadow-menu.png','08-icons-menu.png'),@('bars_style','09-style-top.png','10-bars_style-top.png'),@('menus_style','10-bars_style-menu.png','11-menus_style-menu.png'))) {
+  $visualChanges[$pair[0]]=(Get-FileHash -LiteralPath (Join-Path $evidence $pair[1])).Hash -ne (Get-FileHash -LiteralPath (Join-Path $evidence $pair[2])).Hash
+ }
+ $result=@{head=(& git -C $repo rev-parse HEAD);fixture_sha256=(Get-FileHash -LiteralPath (Join-Path $runRoot 'mypaper-look-fixture.exe')).Hash;deployed_shell_sha256=(Get-FileHash -LiteralPath (Join-Path $repo 'target/release/mypaper-shell.exe')).Hash;fixture_pid=$fixture.Id;config_unchanged=((Get-FileHash -LiteralPath $realConfig -Algorithm SHA256).Hash -eq $beforeHash);foreground_before=$foreground;foreground_after=$foregroundAfter;foreground_owner_before=$foregroundOwner;foreground_owner_after=(Foreground-Owner);synthetic_input=$false;same_windows_all_revisions=$sameWindows;visual_changes=$visualChanges;observations=$observations}
  $result | ConvertTo-Json -Depth 18 | Set-Content -LiteralPath (Join-Path $evidence 'verification.json') -Encoding UTF8
  if(-not $result.config_unchanged){throw 'User config hash changed during verification'}
+ if(-not $sameWindows){throw 'A live restyle replaced a fixture window'}
+ if(@($visualChanges.Values | Where-Object {-not $_}).Count -gt 0){throw 'A control failed to change its captured surface'}
+ if($result.foreground_owner_after -eq 'mypaper-look-fixture'){throw 'The no-activate fixture became foreground'}
  [pscustomobject]$result | Select-Object fixture_pid,config_unchanged,foreground_before,foreground_after | Format-List
 } finally {
  if($fixture -and -not $fixture.HasExited) {

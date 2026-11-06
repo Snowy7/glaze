@@ -178,7 +178,11 @@ fn view(
     let body = Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32);
     let radius = f.px(tokens.radius);
     f.fill(body, radius, Rgba::HIT);
-    f.surface_shaped(body, radius, glass(tokens, scale, size).is_some());
+    let has_glass = glass(tokens, scale, size).is_some();
+    f.surface_shaped(body, radius, has_glass);
+    if has_glass && let Some(color) = tokens.theme.border {
+        f.push(Op::Stroke {rect:body.inflate(-0.5), radius:(radius-0.5).max(0.0), width:1.0, color});
+    }
     let c = tokens.theme.color;
     let corner = corner(tokens, scale);
     for (k, cell) in cells.iter().enumerate() {

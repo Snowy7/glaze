@@ -349,6 +349,12 @@ fn explicit_widget_corners_and_edge_reach_the_drawn_body_even_for_pill_variants(
             assert_eq!(list.ops.iter().any(|op| matches!(op, Op::Stroke {rect:r,..} if *r == rect.inflate(-0.5))), edge);
         }
     }
+    let user: mypaper_config::Look = serde_json::from_value(json!({"shape":{"corners":0,"edge":true},"text":{"font":"Consolas","icons":"lucide"}})).unwrap();
+    let theme = edit::chrome_look(&user, &ui.text);
+    let (list, _) = edit::pill(&theme, 1.0, &Default::default(), &mut ui.text, user.shape.corners);
+    assert!(list.ops.iter().any(|op| matches!(op, Op::Fill {radius,..} if *radius==0.0)));
+    assert!(theme.border.is_some());
+    assert_eq!(theme.font.family.as_ref(), "Consolas");
 }
 
 #[test]

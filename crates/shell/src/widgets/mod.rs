@@ -157,6 +157,7 @@ pub struct Probe {
 /// `on_event`, and include `timeout_ms` in the message wait. All methods are non-reentrant.
 pub struct Widgets {
     desktop_look: mypaper_config::Look,
+    look_chrome_dirty: bool,
     layout: Layout,
     layout_error: Option<String>,
     theme_path: Option<PathBuf>,
@@ -311,6 +312,7 @@ impl Widgets {
             studio_pending: false,
             studio_resize: None,
             desktop_look: config.look.clone(),
+            look_chrome_dirty: false,
             layout,
             layout_error,
             theme_path: None,
@@ -485,6 +487,7 @@ impl Widgets {
             self.studio_stamp.0 = None;
             if let Ok(path) = mypaper_config::path() { self.studio_config_raw = studio_raw(&path); }
             if self.desktop_look != config.look {
+                self.look_chrome_dirty = true;
                 self.desktop_look = config.look.clone();
                 for entry in self.entries.values_mut() {
                     entry.model.dirty = true;
@@ -854,6 +857,10 @@ impl Widgets {
         }
         if stats_visibility_changed {
             self.subscribe_stats(instant);
+        }
+        if std::mem::take(&mut self.look_chrome_dirty) {
+            self.repaint_palette(ui);
+            self.repaint_picker(ui, None);
         }
         if self.order_due.is_some_and(|at| at <= instant) {
             let measured = Instant::now();
@@ -2579,9 +2586,9 @@ impl Widgets {
             }
         }
         if let Some((index, monitor)) = self.monitors.iter().enumerate().find(|(_, m)| m.primary) {
-            let scale = monitor.dpi as f32 / 96.0;
+            let scale = monitor.dpi as f32 / 96.0 * self.desktop_look.text.size.unwrap_or(1.0);
             let (list, size) =
-                edit::pill(&edit::chrome_theme(), scale, &Default::default(), &mut ui.text);
+                edit::pill(&edit::chrome_look(&self.desktop_look, &ui.text), scale, &Default::default(), &mut ui.text, self.desktop_look.shape.corners);
             let widgets: Vec<_> = self
                 .entries
                 .values()
@@ -2621,10 +2628,11 @@ impl Widgets {
             return;
         };
         let (list, size) = edit::pill(
-            &edit::chrome_theme(),
-            monitor.dpi as f32 / 96.0,
+            &edit::chrome_look(&self.desktop_look, &ui.text),
+            monitor.dpi as f32 / 96.0 * self.desktop_look.text.size.unwrap_or(1.0),
             &palette.hot,
             &mut ui.text,
+            self.desktop_look.shape.corners,
         );
         let origin = palette.surface.origin();
         if let Err(e) = palette.surface.present(ui, origin, size, list) {
@@ -2663,8 +2671,8 @@ impl Widgets {
         let (Some(host), Some(screen)) = (self.host, self.monitors.get(monitor)) else {
             return;
         };
-        let theme = edit::chrome_theme();
-        let s = screen.dpi as f32 / 96.0;
+        let theme = edit::chrome_look(&self.desktop_look, &ui.text);
+        let s = screen.dpi as f32 / 96.0 * self.desktop_look.text.size.unwrap_or(1.0);
         let size = edit::picker_size(s);
         let bounds = usable_screen(screen, &self.bars).inflate(-8.0 * s);
         let (x, y) = anchor.unwrap_or((
@@ -2764,17 +2772,18 @@ impl Widgets {
             settings: Default::default(),
             appearance: Default::default(),
         };
-        let appearance = look::resolve(
-            &instance.appearance,
-            &self.layout.appearance,
-            &look::base(&self.skin),
-            self.accent,
-        );
+        let base = self.layout.appearance.over(&look::base(&self.skin));
+        let mut global = crate::look::settings::appearance(&self.desktop_look, glass::Family::Widgets, &base, base.surface == Some(mypaper_theme::Surface::None), &mypaper_bars::accent::read());
+        if let Some(font) = global.font.as_mut() { *font = crate::look::settings::font(font, |f| ui.text.has_family(f)); }
+        let appearance = look::resolve(&instance.appearance, &Default::default(), &global, self.accent);
         let placed = layout::place(&instance, manifest, &grid, &appearance);
         let span = grid.rect(placed.cell, placed.size);
         let mut model = Model::new(placed, &mut self.storage, Stamp::now()).ok()?;
+        model.corner_override = self.desktop_look.shape.corners;
+        model.edge_override = self.desktop_look.shape.edge;
         model.visible = true;
-        let tokens = tokens(&model.placed.appearance);
+        let mut tokens = tokens(&model.placed.appearance);
+        tokens.icon_set = crate::look::settings::icons(&self.desktop_look, &ui.text);
         // Fit the pane (310 × 220 design px), never above life size.
         let k = (310.0 / span.width as f32)
             .min(220.0 / span.height as f32)
@@ -2812,13 +2821,13 @@ impl Widgets {
         let Some(screen) = self.monitors.get(picker.monitor) else {
             return;
         };
-        let s = screen.dpi as f32 / 96.0;
+        let s = screen.dpi as f32 / 96.0 * self.desktop_look.text.size.unwrap_or(1.0);
         let selected = edit::filter(&picker.choices, &picker.query)
             .get(picker.selected)
             .map(|c| c.id.clone());
         let preview = selected.and_then(|id| self.picker_preview(ui, &id, s));
         let Some(picker) = &mut self.picker else { return };
-        let theme = edit::chrome_theme();
+        let theme = edit::chrome_look(&self.desktop_look, &ui.text);
         let shown = edit::filter(&picker.choices, &picker.query);
         let list = edit::picker(
             &theme,
