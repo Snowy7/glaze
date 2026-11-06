@@ -26,7 +26,7 @@ fn toggles(c: &Ctx) -> Vec<Toggle> {
                     Some(n) if n.kind == LinkKind::Wifi => {
                         let signal = n.signal.unwrap_or(0);
                         (
-                            Icon::Wifi((signal / 26).min(3) as u8),
+                            Icon::Wifi((signal / 26).min(3)),
                             n.name.clone().unwrap_or_else(|| "Connected".into()),
                             true,
                         )
@@ -43,7 +43,7 @@ fn toggles(c: &Ctx) -> Vec<Toggle> {
                 "display" => (Icon::Brightness, "Brightness".into(), false),
                 _ => match stats.and_then(|s| s.battery) {
                     Some(b) => (
-                        if b.charging { Icon::Charging } else { Icon::Battery((b.percent / 10) as u8) },
+                        if b.charging { Icon::Charging } else { Icon::Battery(b.percent / 10) },
                         format!("{}%{}", b.percent, if b.charging { " · Charging" } else { "" }),
                         b.charging,
                     ),

@@ -139,7 +139,7 @@ impl Wakes {
                 *messages.entry(key).or_default() += n;
             }
             causes.extend(messages.into_iter().map(|(k, n)| (n, k)));
-            causes.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+            causes.sort_unstable_by_key(|a| std::cmp::Reverse(a.0));
             let top: Vec<_> = causes
                 .iter()
                 .take(16)

@@ -393,7 +393,7 @@ impl Panel for Quick {
                 let level = if b.charging {
                     Icon::Charging
                 } else {
-                    Icon::Battery((b.percent / 10).min(10) as u8)
+                    Icon::Battery((b.percent / 10).min(10))
                 };
                 f.icon(icon, level, 16.0, c.secondary);
                 f.text_in(text_rect, &text, TextRole::Callout, c.secondary, Align::Start);

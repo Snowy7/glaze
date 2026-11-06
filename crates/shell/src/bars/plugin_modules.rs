@@ -199,8 +199,10 @@ pub fn sync(view: impl Fn(&str) -> Option<Face>) -> Sync {
         let mut changed = false;
         for id in &s.placed {
             let latest = view(&instance(id));
-            if latest.is_some() && s.views.get(id) != latest.as_ref() {
-                s.views.insert(id.clone(), latest.expect("checked"));
+            if let Some(latest) = latest
+                && s.views.get(id) != Some(&latest)
+            {
+                s.views.insert(id.clone(), latest);
                 changed = true;
             }
         }

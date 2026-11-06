@@ -10,9 +10,11 @@ use mypaper_plugin_sdk::View;
 use mypaper_ui::kit::Frame;
 use mypaper_ui::{HitId, Rect, Spring, Tween};
 
+type NodeSprings = HashMap<(i32, i32, i32), Vec<(f32, Tween)>>;
+
 thread_local! {
     /// Springs by where their node sits (a face's layout keeps a node in place between views).
-    static SPRINGS: RefCell<HashMap<(i32, i32, i32), Vec<(f32, Tween)>>> = RefCell::new(HashMap::new());
+    static SPRINGS: RefCell<NodeSprings> = RefCell::new(HashMap::new());
     static MOVING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 

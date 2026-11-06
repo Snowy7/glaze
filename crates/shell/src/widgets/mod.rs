@@ -1530,13 +1530,13 @@ impl Widgets {
             }
             return;
         }
-        if let Some(menu) = &mut self.plugin_menu {
-            if menu.owns(surface) {
-                if let Some(mypaper_ui::menu::Outcome::Chosen((instance, action, value))) = menu.handle(ui, surface, event) {
-                    self.plugins.face_action(&instance, &action, Some(value));
-                }
-                return;
+        if let Some(menu) = &mut self.plugin_menu
+            && menu.owns(surface)
+        {
+            if let Some(mypaper_ui::menu::Outcome::Chosen((instance, action, value))) = menu.handle(ui, surface, event) {
+                self.plugins.face_action(&instance, &action, Some(value));
             }
+            return;
         }
         if matches!(event, Event::DpiChanged(_)) {
             self.monitors = monitor_infos();
@@ -3374,33 +3374,6 @@ fn left_button(pressed: &mut Option<HitId>, event: &Event, over: Option<HitId>, 
     None
 }
 
-#[cfg(test)]
-mod left_button_tests {
-    use super::left_button;
-    use mypaper_ui::{Button, Event, HitId, Point, Pointer};
-
-    /// Runs `events` over hit `row` and counts the clicks that fire.
-    fn clicks(events: &[Event], single: bool) -> usize {
-        let row: HitId = 800_002;
-        let mut pressed = None;
-        events.iter().filter(|e| left_button(&mut pressed, e, Some(row), single) == Some(row)).count()
-    }
-
-    #[test]
-    fn one_click_one_action() {
-        let p = Pointer { at: Point::new(10.0, 10.0), screen: (10, 10) };
-        let (press, release, double) = (Event::Press(p, Button::Left), Event::Release(p, Button::Left), Event::DoubleClick(p, Button::Left));
-        assert_eq!(clicks(&[press, release], true), 1);
-        assert_eq!(clicks(&[release, press, release, release], true), 1, "button-ups with no press of ours");
-        // What a double-click delivers: down, up, then WM_LBUTTONDBLCLK (a press and a double-click), up.
-        let double_click = [press, release, press, double, release];
-        assert_eq!(clicks(&double_click, true), 1, "a plugin widget's double-click is one action");
-        assert_eq!(clicks(&double_click, false), 2, "built-in widgets keep two");
-        let mut pressed = None;
-        left_button(&mut pressed, &press, Some(1), true);
-        assert_eq!(left_button(&mut pressed, &release, Some(2), true), None, "released over another hit");
-    }
-}
 
 /// Edit guides are visual only. A monitor-sized layered window must never take a widget's drag.
 fn click_through(surface: &Surface) {
@@ -3949,4 +3922,32 @@ fn moved_faces(layout: &mut Layout, path: &std::path::Path) -> bool {
         let _ = files::backup_tagged(path, "faces", &bytes);
     }
     moved
+}
+
+#[cfg(test)]
+mod left_button_tests {
+    use super::left_button;
+    use mypaper_ui::{Button, Event, HitId, Point, Pointer};
+
+    /// Runs `events` over hit `row` and counts the clicks that fire.
+    fn clicks(events: &[Event], single: bool) -> usize {
+        let row: HitId = 800_002;
+        let mut pressed = None;
+        events.iter().filter(|e| left_button(&mut pressed, e, Some(row), single) == Some(row)).count()
+    }
+
+    #[test]
+    fn one_click_one_action() {
+        let p = Pointer { at: Point::new(10.0, 10.0), screen: (10, 10) };
+        let (press, release, double) = (Event::Press(p, Button::Left), Event::Release(p, Button::Left), Event::DoubleClick(p, Button::Left));
+        assert_eq!(clicks(&[press, release], true), 1);
+        assert_eq!(clicks(&[release, press, release, release], true), 1, "button-ups with no press of ours");
+        // What a double-click delivers: down, up, then WM_LBUTTONDBLCLK (a press and a double-click), up.
+        let double_click = [press, release, press, double, release];
+        assert_eq!(clicks(&double_click, true), 1, "a plugin widget's double-click is one action");
+        assert_eq!(clicks(&double_click, false), 2, "built-in widgets keep two");
+        let mut pressed = None;
+        left_button(&mut pressed, &press, Some(1), true);
+        assert_eq!(left_button(&mut pressed, &release, Some(2), true), None, "released over another hit");
+    }
 }

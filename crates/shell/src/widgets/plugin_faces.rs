@@ -102,10 +102,10 @@ impl Widgets {
                 if self.plugin_menu.is_none() {
                     self.plugin_menu = Menu::new("Plugin selection").ok();
                 }
-                if let Some(menu) = &mut self.plugin_menu {
-                    if let Err(error) = menu.open(ui, items, at, screen_at(at.0, at.1), &entry.tokens) {
-                        log::warn!("Plugin selection: {error:#}");
-                    }
+                if let Some(menu) = &mut self.plugin_menu
+                    && let Err(error) = menu.open(ui, items, at, screen_at(at.0, at.1), &entry.tokens)
+                {
+                    log::warn!("Plugin selection: {error:#}");
                 }
             }
             None => {}
