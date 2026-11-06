@@ -144,6 +144,7 @@ unsafe extern "system" fn on_event(
         // second during builds. A window counts once it is shown (EVENT_OBJECT_SHOW).
         // SAFETY: a read-only query; a stale handle is just not visible.
         EVENT_OBJECT_CREATE | EVENT_OBJECT_NAMECHANGE => {
+            // SAFETY: visibility queries accept any HWND; a destroyed window returns false.
             top_level(hwnd) && unsafe { IsWindowVisible(hwnd) }.as_bool()
         }
         _ => top_level(hwnd),

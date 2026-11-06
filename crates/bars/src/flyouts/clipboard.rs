@@ -169,6 +169,13 @@ fn bitmap(content: &windows::ApplicationModel::DataTransfer::DataPackageView) ->
     ))
 }
 
+
+impl Default for ClipboardLane {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,11 +194,5 @@ mod tests {
         assert!(is_link("https://example.com/a?b=c"));
         assert!(!is_link("see https://example.com"));
         assert!(!is_link("example.com"));
-    }
-}
-
-impl Default for ClipboardLane {
-    fn default() -> Self {
-        Self::new()
     }
 }
