@@ -223,8 +223,25 @@ pub fn subtree(root: &Path, fetch: Fetch) -> Result<Scanned> {
 /// Four workers share a directory queue; enumeration happens outside the short store lock.
 /// TODO: optional elevated MFT bootstrap / USN replay, in a separate explicit admin path.
 pub fn scan(root: &Path, fetch: Fetch) -> Result<Scanned> {
+    scan_with_store(root, fetch, Store::new(), None)
+}
+
+pub fn scan_cached(root: &Path, fetch: Fetch, cache: &Path) -> Result<Scanned> {
+    scan_with_store(
+        root,
+        fetch,
+        Store::temporary(&cache.join("scan"))?,
+        Some(cache),
+    )
+}
+
+fn scan_with_store(
+    root: &Path,
+    fetch: Fetch,
+    mut store: Store,
+    exclude: Option<&Path>,
+) -> Result<Scanned> {
     let started = Instant::now();
-    let mut store = Store::new();
     let root_id = store.insert(
         0,
         root.to_string_lossy().trim_end_matches('\\'),
@@ -271,6 +288,11 @@ pub fn scan(root: &Path, fetch: Fetch) -> Result<Scanned> {
                     match entries {
                         Ok(entries) => {
                             for entry in entries {
+                                if exclude.is_some_and(|excluded| {
+                                    path.join(&entry.name).starts_with(excluded)
+                                }) {
+                                    continue;
+                                }
                                 let child = work.store.insert(
                                     id,
                                     &entry.name,

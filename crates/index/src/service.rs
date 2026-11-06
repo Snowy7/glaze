@@ -17,6 +17,7 @@ use crate::{
 pub struct State {
     pub store: Store,
     pub scanning: bool,
+    cache: PathBuf,
 }
 
 pub fn cache_dir() -> Result<PathBuf> {
@@ -84,7 +85,8 @@ fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
     // Measured warm trees on this machine favor Basic over LARGE_FETCH; the CLI retains both
     // so the choice can be remeasured on another disk or Windows version.
     let scanned = if parallel {
-        scan::scan(root, Fetch::Basic)?
+        let cache = state.read().expect("index state").cache.clone();
+        scan::scan_cached(root, Fetch::Basic, &cache)?
     } else {
         scan::subtree(root, Fetch::Basic)?
     };
@@ -98,17 +100,23 @@ fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
         );
     }
     if parallel {
-        let mut replacement = state.read().expect("index state").store.fork()?;
-        if replacement.is_empty() {
-            replacement = scanned.store;
-        } else {
-            merge(&mut replacement, &scanned.store, root)?;
-        }
+        let snapshot = state
+            .read()
+            .expect("index state")
+            .cache
+            .join("snapshot.bin");
+        state
+            .read()
+            .expect("index state")
+            .store
+            .save_replacing_volume(&snapshot, &scanned.store, root)?;
+        let replacement = Store::open(&snapshot)?;
         let old = {
             let mut state = state.write().expect("index state");
             std::mem::replace(&mut state.store, replacement)
         };
         drop(old);
+        let _ = std::fs::remove_file(snapshot.with_file_name("changes.json"));
         return Ok(());
     }
     let mut state = state.write().expect("index state");
@@ -200,8 +208,10 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     let state = Arc::new(RwLock::new(State {
         store,
         scanning: true,
+        cache: cache.clone(),
     }));
     pipe::start(state.clone())?;
+    crate::spool::cleanup(&cache.join("scan"));
     let (tx, rx) = mpsc::sync_channel(256);
     for root in &roots {
         watch::start(root.clone(), tx.clone())
@@ -211,7 +221,6 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     // non-admin snapshot cannot know what changed while the service was off: reconcile once
     // in the background while cached queries are already available (USN replay is future work).
     let initial = state.clone();
-    let initial_snapshot = snapshot.clone();
     std::thread::Builder::new()
         .name("index-initial".into())
         .spawn(move || {
@@ -219,8 +228,6 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
             for root in roots {
                 if let Err(error) = reconcile(&initial, &root, true) {
                     eprintln!("scan {}: {error:#}", root.display());
-                } else if let Err(error) = checkpoint(&initial, &initial_snapshot) {
-                    eprintln!("checkpoint after {}: {error:#}", root.display());
                 }
             }
             let _ = tx.send(Change::InitialDone);
@@ -518,6 +525,7 @@ mod tests {
         let state = RwLock::new(State {
             store: scanned.store,
             scanning: false,
+            cache: dir.join("cache"),
         });
         std::fs::write(dir.join("a/test.txt"), b"1234567").unwrap();
         assert_eq!(scan::metadata(&dir.join("a/test.txt")).unwrap().size, 7);

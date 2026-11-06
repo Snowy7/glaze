@@ -72,6 +72,7 @@ struct Changes<'a> {
 
 #[derive(Default)]
 pub struct Store {
+    spool: Option<crate::spool::Spool>,
     mapping: Option<Mmap>,
     source: Option<std::sync::Arc<File>>,
     mapped_count: usize,
@@ -88,13 +89,15 @@ pub struct Store {
 impl Store {
     /// An independent view for volume reconciliation. The immutable mapping is shared by the
     /// OS; only the bounded overlay is copied. Readers keep the old view until the final swap.
-    pub(crate) fn fork(&self) -> Result<Self> {
+    pub fn fork(&self) -> Result<Self> {
+        ensure!(self.spool.is_none(), "cannot fork unfinished scan scratch");
         let mapping = match &self.source {
             // SAFETY: snapshots are immutable, replaced by rename, never truncated in place.
             Some(file) => Some(unsafe { Mmap::map(file.as_ref())? }),
             None => None,
         };
         Ok(Self {
+            spool: None,
             mapping,
             source: self.source.clone(),
             mapped_count: self.mapped_count,
@@ -119,7 +122,18 @@ impl Store {
         store
     }
 
+    pub fn temporary(directory: &Path) -> Result<Self> {
+        let mut store = Self::new();
+        let mut spool = crate::spool::Spool::new(directory)?;
+        spool.push(store.records.pop().expect("virtual root"));
+        store.spool = Some(spool);
+        Ok(store)
+    }
+
     pub fn len(&self) -> usize {
+        if let Some(spool) = &self.spool {
+            return spool.count;
+        }
         self.mapped_count + self.records.len()
     }
     pub fn is_empty(&self) -> bool {
@@ -255,6 +269,9 @@ impl Store {
     }
 
     pub fn record(&self, id: u32) -> Record {
+        if let Some(spool) = &self.spool {
+            return spool.record(id as usize);
+        }
         self.changed.get(&id).copied().unwrap_or_else(|| {
             if (id as usize) < self.mapped_count {
                 self.base()[id as usize]
@@ -265,6 +282,10 @@ impl Store {
     }
 
     pub fn set(&mut self, id: u32, record: Record) {
+        if let Some(spool) = &mut self.spool {
+            spool.set(id as usize, record);
+            return;
+        }
         if (id as usize) < self.mapped_count {
             self.changed.insert(id, record);
         } else {
@@ -278,6 +299,8 @@ impl Store {
         (start..end).map(move |id| {
             let record = if changes.peek().is_some_and(|(key, _)| **key == id as u32) {
                 *changes.next().expect("peeked").1
+            } else if let Some(spool) = &self.spool {
+                spool.record(id)
             } else if id < self.mapped_count {
                 self.base()[id]
             } else {
@@ -302,6 +325,8 @@ impl Store {
         (start..end).rev().map(move |id| {
             let record = if changes.peek().is_some_and(|(key, _)| **key == id as u32) {
                 *changes.next().expect("peeked").1
+            } else if let Some(spool) = &self.spool {
+                spool.record(id)
             } else if id < self.mapped_count {
                 self.base()[id]
             } else {
@@ -312,6 +337,9 @@ impl Store {
     }
 
     fn bytes(&self, offset: usize, len: usize) -> &[u8] {
+        if let Some(spool) = &self.spool {
+            return spool.bytes(offset, len);
+        }
         if offset < self.mapped_names {
             let start = HEADER + self.mapped_count * size_of::<Record>() + offset;
             &self.mapping.as_ref().expect("mapped names")[start..start + len]
@@ -339,6 +367,18 @@ impl Store {
 
     fn intern(&mut self, name: &str) -> (u32, u16, u16) {
         let lower = fold(name);
+        if let Some(spool) = &mut self.spool {
+            let offset = spool.names_len as u32;
+            let len = u16::try_from(name.len()).expect("name exceeds UTF-8 path limit");
+            spool.append(name.as_bytes());
+            let folded = if name == lower {
+                0
+            } else {
+                spool.append(lower.as_bytes());
+                u16::try_from(lower.len()).expect("folded name exceeds path limit")
+            };
+            return (offset, len, folded);
+        }
         let offset =
             u32::try_from(self.mapped_names + self.names.len()).expect("name blob exceeds 4 GiB");
         let len = u16::try_from(name.len()).expect("name exceeds UTF-8 path limit");
@@ -364,7 +404,7 @@ impl Store {
         let id = u32::try_from(self.len()).expect("index exceeds four billion entries");
         let (name, name_len, fold_len) = self.intern(name);
         let mut p = self.record(parent);
-        self.records.push(Record {
+        let record = Record {
             name,
             name_len,
             fold_len,
@@ -375,7 +415,12 @@ impl Store {
             size: if attributes & DIRECTORY == 0 { size } else { 0 },
             files: u32::from(attributes & DIRECTORY == 0),
             modified,
-        });
+        };
+        if let Some(spool) = &mut self.spool {
+            spool.push(record);
+        } else {
+            self.records.push(record);
+        }
         p.first = id;
         self.set(parent, p);
         if self
@@ -617,6 +662,27 @@ impl Store {
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
+        self.save_snapshot(path, None)
+    }
+
+    /// Streams a freshly scanned volume beside the other cached volumes. A four-byte ID
+    /// map replaces the former private copy plus millions of deletion overlay entries.
+    pub fn save_replacing_volume(&self, path: &Path, source: &Store, root: &Path) -> Result<()> {
+        let excluded = self.find(&root.to_string_lossy());
+        if let Some(id) = excluded {
+            ensure!(
+                self.record(id).parent == 0,
+                "replacement must be a volume root"
+            );
+        }
+        ensure!(
+            source.record(0).first == 1,
+            "replacement must contain one scanned root"
+        );
+        self.save_snapshot(path, Some((source, excluded)))
+    }
+
+    fn save_snapshot(&self, path: &Path, replacement: Option<(&Store, Option<u32>)>) -> Result<()> {
         let temporary = path.with_extension("tmp");
         let mut out = BufWriter::new(File::create(&temporary)?);
         let mut header = [0; HEADER];
@@ -627,9 +693,21 @@ impl Store {
         let mut count = 0u32;
         let mut names = 0u64;
         for (id, r) in self.range(0, self.len()) {
-            if r.live() {
+            if r.live()
+                && replacement.is_none_or(|(_, excluded)| excluded != Some(id))
+                && (id == 0 || ids[r.parent as usize] != NONE)
+            {
                 ids[id as usize] = count;
                 count += 1;
+                names += u64::from(r.name_len) + u64::from(r.fold_len);
+            }
+        }
+        let kept = count;
+        if let Some((source, _)) = replacement {
+            count = count
+                .checked_add(source.len() as u32 - 1)
+                .context("too many records")?;
+            for (_, r) in source.range(1, source.len()) {
                 names += u64::from(r.name_len) + u64::from(r.fold_len);
             }
         }
@@ -648,7 +726,10 @@ impl Store {
             if at == NONE { NONE } else { ids[at as usize] }
         };
         let mut name = 0;
-        for (_, mut record) in self.range(0, self.len()).filter(|(_, r)| r.live()) {
+        for (id, mut record) in self
+            .range(0, self.len())
+            .filter(|(id, _)| ids[*id as usize] != NONE)
+        {
             record.name = name;
             name += u32::from(record.name_len) + u32::from(record.fold_len);
             record.parent = if record.parent == NONE {
@@ -658,13 +739,61 @@ impl Store {
             };
             record.first = skip_dead(record.first);
             record.next = skip_dead(record.next);
+            if id == 0
+                && let Some((source, excluded)) = replacement
+            {
+                let previous = excluded.map(|id| self.record(id)).unwrap_or_default();
+                record.size = record
+                    .size
+                    .saturating_sub(previous.size)
+                    .saturating_add(source.record(0).size);
+                record.files = record
+                    .files
+                    .saturating_sub(previous.files)
+                    .saturating_add(source.record(0).files);
+                record.first = kept;
+            }
             out.write_all(bytemuck::bytes_of(&record))?;
         }
-        for (_, record) in self.range(0, self.len()).filter(|(_, r)| r.live()) {
+        if let Some((source, _)) = replacement {
+            let offset = kept - 1;
+            for (id, mut record) in source.range(1, source.len()) {
+                record.name = name;
+                name += u32::from(record.name_len) + u32::from(record.fold_len);
+                record.parent = if record.parent == 0 {
+                    0
+                } else {
+                    record.parent + offset
+                };
+                if record.first != NONE {
+                    record.first += offset;
+                }
+                record.next = if id == 1 {
+                    skip_dead(self.record(0).first)
+                } else if record.next == NONE {
+                    NONE
+                } else {
+                    record.next + offset
+                };
+                out.write_all(bytemuck::bytes_of(&record))?;
+            }
+        }
+        for (_, record) in self
+            .range(0, self.len())
+            .filter(|(id, _)| ids[*id as usize] != NONE)
+        {
             out.write_all(self.bytes(
                 record.name as usize,
                 record.name_len as usize + record.fold_len as usize,
             ))?;
+        }
+        if let Some((source, _)) = replacement {
+            for (_, record) in source.range(1, source.len()) {
+                out.write_all(source.bytes(
+                    record.name as usize,
+                    record.name_len as usize + record.fold_len as usize,
+                ))?;
+            }
         }
         out.flush()?;
         out.get_ref().sync_all()?;
@@ -916,6 +1045,53 @@ mod tests {
         drop(compact);
         std::fs::remove_file(&base).unwrap();
         std::fs::remove_file(&delta).unwrap();
+    }
+
+    #[test]
+    fn streamed_volume_replacement_keeps_other_volumes_and_old_readers() {
+        let directory =
+            std::env::temp_dir().join(format!("mypaper-index-stream-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("snapshot.bin");
+        let mut original = Store::new();
+        let c = original.insert(0, "C:", DIRECTORY, 0, 0);
+        original.upsert(c, "old.txt", 128, 3, 1);
+        let d = original.insert(0, "D:", DIRECTORY, 0, 0);
+        original.upsert(d, "keep.txt", 128, 5, 1);
+        original.save(&path).unwrap();
+        let old_reader = Store::open(&path).unwrap();
+        let mut source = Store::temporary(&directory.join("scan")).unwrap();
+        let c = source.insert(0, "C:", DIRECTORY, 0, 0);
+        let folder = source.insert(c, "folder", DIRECTORY, 0, 0);
+        source.insert(folder, "new.txt", 128, 7, 2);
+        source.roll_up();
+        old_reader
+            .save_replacing_volume(&path, &source, Path::new(r"C:\"))
+            .unwrap();
+        let latest = Store::open(&path).unwrap();
+        assert_eq!((latest.record(0).size, latest.record(0).files), (12, 2));
+        assert!(latest.find(r"C:\old.txt").is_none());
+        assert!(latest.find(r"C:\folder\new.txt").is_some());
+        assert!(latest.find(r"D:\keep.txt").is_some());
+        assert!(old_reader.find(r"C:\old.txt").is_some());
+        assert!(old_reader.find(r"C:\folder").is_none());
+        Store::new()
+            .save_replacing_volume(&directory.join("empty.bin"), &source, Path::new(r"C:\"))
+            .unwrap();
+        let empty = Store::open(&directory.join("empty.bin")).unwrap();
+        assert_eq!(empty.record(0).size, 7);
+        drop(empty);
+        drop(source);
+        assert_eq!(
+            std::fs::read_dir(directory.join("scan")).unwrap().count(),
+            0
+        );
+        drop(latest);
+        drop(old_reader);
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_file(directory.join("empty.bin")).unwrap();
+        std::fs::remove_dir(directory.join("scan")).unwrap();
+        std::fs::remove_dir(directory).unwrap();
     }
 
     #[test]

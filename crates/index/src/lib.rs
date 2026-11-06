@@ -4,6 +4,7 @@
 pub mod pipe;
 pub mod query;
 pub mod scan;
+mod spool;
 pub mod service;
 pub mod store;
 pub mod watch;
