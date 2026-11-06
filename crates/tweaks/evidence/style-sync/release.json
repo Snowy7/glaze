@@ -1,0 +1,202 @@
+﻿{
+    "accent":  "#2e42b8",
+    "appearance":  null,
+    "colour_readback":  "DWM documents border/caption/text colours as set-only; inspect the captured pixels.",
+    "dominant":  "#424b7f",
+    "expected_window_attributes":  {
+
+                                   },
+    "journal_mismatches":  [
+
+                           ],
+    "matching_windows":  4,
+    "registry":  [
+                     {
+                         "key":  "Software\\Microsoft\\Windows\\DWM",
+                         "name":  "AccentColor",
+                         "value":  {
+                                       "raw":  {
+                                                   "bytes":  [
+                                                                 0,
+                                                                 120,
+                                                                 212,
+                                                                 255
+                                                             ],
+                                                   "kind":  4
+                                               }
+                                   }
+                     },
+                     {
+                         "key":  "Software\\Microsoft\\Windows\\DWM",
+                         "name":  "ColorizationColor",
+                         "value":  {
+                                       "raw":  {
+                                                   "bytes":  [
+                                                                 212,
+                                                                 120,
+                                                                 0,
+                                                                 196
+                                                             ],
+                                                   "kind":  4
+                                               }
+                                   }
+                     },
+                     {
+                         "key":  "Software\\Microsoft\\Windows\\DWM",
+                         "name":  "ColorPrevalence",
+                         "value":  {
+                                       "raw":  {
+                                                   "bytes":  [
+                                                                 0,
+                                                                 0,
+                                                                 0,
+                                                                 0
+                                                             ],
+                                                   "kind":  4
+                                               }
+                                   }
+                     },
+                     {
+                         "key":  "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent",
+                         "name":  "AccentColorMenu",
+                         "value":  {
+                                       "raw":  {
+                                                   "bytes":  [
+                                                                 80,
+                                                                 103,
+                                                                 115,
+                                                                 255
+                                                             ],
+                                                   "kind":  4
+                                               }
+                                   }
+                     },
+                     {
+                         "key":  "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent",
+                         "name":  "AccentPalette",
+                         "value":  {
+                                       "raw":  {
+                                                   "bytes":  [
+                                                                 209,
+                                                                 231,
+                                                                 233,
+                                                                 0,
+                                                                 176,
+                                                                 198,
+                                                                 203,
+                                                                 0,
+                                                                 117,
+                                                                 143,
+                                                                 154,
+                                                                 0,
+                                                                 97,
+                                                                 120,
+                                                                 132,
+                                                                 0,
+                                                                 76,
+                                                                 95,
+                                                                 107,
+                                                                 0,
+                                                                 49,
+                                                                 63,
+                                                                 76,
+                                                                 0,
+                                                                 17,
+                                                                 26,
+                                                                 40,
+                                                                 0,
+                                                                 136,
+                                                                 23,
+                                                                 152,
+                                                                 0
+                                                             ],
+                                                   "kind":  3
+                                               }
+                                   }
+                     },
+                     {
+                         "key":  "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                         "name":  "AppsUseLightTheme",
+                         "value":  {
+                                       "raw":  {
+                                                   "bytes":  [
+                                                                 0,
+                                                                 0,
+                                                                 0,
+                                                                 0
+                                                             ],
+                                                   "kind":  4
+                                               }
+                                   }
+                     },
+                     {
+                         "key":  "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                         "name":  "SystemUsesLightTheme",
+                         "value":  {
+                                       "raw":  {
+                                                   "bytes":  [
+                                                                 0,
+                                                                 0,
+                                                                 0,
+                                                                 0
+                                                             ],
+                                                   "kind":  4
+                                               }
+                                   }
+                     },
+                     {
+                         "key":  "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                         "name":  "ColorPrevalence",
+                         "value":  {
+                                       "raw":  {
+                                                   "bytes":  [
+                                                                 0,
+                                                                 0,
+                                                                 0,
+                                                                 0
+                                                             ],
+                                                   "kind":  4
+                                               }
+                                   }
+                     }
+                 ],
+    "registry_mismatches":  [
+
+                            ],
+    "style":  null,
+    "windows":  [
+                    {
+                        "backdrop":  1,
+                        "class":  "ApplicationFrameWindow",
+                        "corners":  0,
+                        "dark":  1,
+                        "hwnd":  94965818,
+                        "title":  "Settings"
+                    },
+                    {
+                        "backdrop":  0,
+                        "class":  "CabinetWClass",
+                        "corners":  0,
+                        "dark":  1,
+                        "hwnd":  20578534,
+                        "title":  "Public - File Explorer"
+                    },
+                    {
+                        "backdrop":  0,
+                        "class":  "CabinetWClass",
+                        "corners":  0,
+                        "dark":  1,
+                        "hwnd":  1639770,
+                        "title":  "Public - File Explorer"
+                    },
+                    {
+                        "backdrop":  0,
+                        "class":  "CabinetWClass",
+                        "corners":  0,
+                        "dark":  1,
+                        "hwnd":  1378782,
+                        "title":  "Windows - File Explorer"
+                    }
+                ],
+    "windows_style":  null
+}

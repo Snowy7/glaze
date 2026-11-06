@@ -8,7 +8,7 @@ use mypaper_theme::LoadedTheme;
 use mypaper_tweaks::palette;
 use mypaper_tweaks::plan::{self, WindowStyle};
 use mypaper_tweaks::registry::Registry;
-use mypaper_tweaks::undo::Store;
+use mypaper_tweaks::undo::{Store, Undo};
 use serde_json::{Value, json};
 use windows::Win32::Foundation::{HWND, LPARAM};
 use windows::Win32::Graphics::Dwm::{DWMWINDOWATTRIBUTE, DwmGetWindowAttribute};
@@ -48,7 +48,11 @@ fn main() -> Result<()> {
     let config = Config::load()?;
     let loaded = mypaper_theme::locate(Some(&config.theme))
         .and_then(LoadedTheme::load)
-        .or_else(|_| LoadedTheme::load(std::path::Path::new("themes").join(&config.theme)))?;
+        .or_else(|_| {
+            LoadedTheme::load(std::path::absolute(
+                std::path::Path::new("themes").join(&config.theme),
+            )?)
+        })?;
     let palette = palette::read()
         .filter(|p| p.is_for(&loaded.dir))
         .map(|p| p.palette);
@@ -69,6 +73,19 @@ fn main() -> Result<()> {
             failures.push(format!("{}\\{}", write.key, write.name));
         }
     }
+    let journal = Undo::new(
+        Registry,
+        palette::local_dir()?.join("undo.json"),
+        std::time::Duration::ZERO,
+    );
+    let journal_mismatches: Vec<_> = VALUES
+        .iter()
+        .filter(|(key, name)| {
+            journal.journaled(key, name)
+                != expected.iter().any(|w| w.key == *key && w.name == *name)
+        })
+        .map(|(key, name)| format!("{key}\\{name}"))
+        .collect();
     let registry = VALUES
         .into_iter()
         .map(|(key, name)| {
@@ -88,6 +105,7 @@ fn main() -> Result<()> {
         .filter(|window| {
             attributes
                 .iter()
+                .filter(|(name, _)| !matches!(name.as_str(), "border" | "caption" | "text"))
                 .all(|(name, expected)| window[name].as_u64() == Some(u64::from(*expected)))
         })
         .count();
@@ -101,15 +119,21 @@ fn main() -> Result<()> {
             "dominant": resolved.dominant,
             "registry": registry,
             "registry_mismatches": failures,
+            "journal_mismatches": journal_mismatches,
         "expected_window_attributes": attributes.into_iter().map(|(k, v)| (k, json!(v))).collect::<serde_json::Map<_, _>>(),
             "windows": windows,
             "matching_windows": matching,
+        "colour_readback": "DWM documents border/caption/text colours as set-only; inspect the captured pixels.",
         }))?
     );
     if check {
         ensure!(
             failures.is_empty(),
             "registry did not match the resolved style: {failures:?}"
+        );
+        ensure!(
+            journal_mismatches.is_empty(),
+            "core has not journaled/released the resolved fields yet: {journal_mismatches:?}"
         );
         if frame.is_some() {
             ensure!(
@@ -177,14 +201,7 @@ unsafe extern "system" fn visit(hwnd: HWND, data: LPARAM) -> BOOL {
             return true.into();
         }
         let mut result = json!({ "hwnd": hwnd.0 as usize, "class": class, "title": title });
-        for (name, attribute) in [
-            ("dark", 20),
-            ("corners", 33),
-            ("border", 34),
-            ("caption", 35),
-            ("text", 36),
-            ("backdrop", 38),
-        ] {
+        for (name, attribute) in [("dark", 20), ("corners", 33), ("backdrop", 38)] {
             let mut value = 0u32;
             if DwmGetWindowAttribute(
                 hwnd,

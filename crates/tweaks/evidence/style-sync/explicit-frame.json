@@ -1,0 +1,9 @@
+﻿{
+    "screenshot":  "explicit-frame.png",
+    "caption_pixels_matching":  9177,
+    "expected_rgb":  [
+                         226,
+                         228,
+                         239
+                     ]
+}
