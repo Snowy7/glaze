@@ -562,7 +562,7 @@ fn manifest_control(
                                 );
                             }
                             Some("select") => {
-                                let options = schema["options"]
+                                let options: Vec<_> = schema["options"]
                                     .as_array()
                                     .into_iter()
                                     .flatten()
@@ -577,7 +577,8 @@ fn manifest_control(
                                         (value, label)
                                     })
                                     .collect();
-                                select(
+                                let control = if options.len() <= 4 { segments } else { select };
+                                control(
                                     b,
                                     c,
                                     label,
@@ -587,20 +588,11 @@ fn manifest_control(
                                 );
                             }
                             Some("number" | "slider") => {
-                                text(
-                                    b,
-                                    Rect::new(c.x, c.y, c.w, height(b, 24.0)),
-                                    label,
-                                    13.0,
-                                    400,
-                                    b.p.ink1,
-                                    Align::Start,
-                                );
-                                c.y += height(b, 24.0);
                                 let value = value.as_f64().unwrap_or(0.0);
-                                b.slider(
-                                    key(("panel-list-number", field_path.as_str())),
-                                    Rect::new(c.x, c.y, c.w, height(b, 36.0)),
+                                crate::panel::material::row(
+                                    b,
+                                    c,
+                                    label,
                                     value,
                                     (
                                         schema["min"].as_f64().unwrap_or(0.0),
@@ -608,11 +600,8 @@ fn manifest_control(
                                         schema["step"].as_f64().unwrap_or(1.0),
                                     ),
                                     &number_readout(value, &number_unit(name, schema)),
-                                    b.px(48.0),
-                                    label,
-                                    Action::Slider(Edit::new(DocId::Widgets, field_path, label)),
+                                    Edit::new(DocId::Widgets, field_path, label),
                                 );
-                                c.y += height(b, 40.0);
                             }
                             _ => field(
                                 app,
@@ -703,13 +692,13 @@ fn manifest_control(
             label,
             options,
             ..
-        } if c.w < b.px(360.0) || b.t.text_scale > 1.0 => {
+        } => {
             let edit = Edit::new(
                 DocId::Widgets,
                 format!("{base}/settings/{}", crate::docs::token(name)),
                 label.as_str(),
             );
-            let options = options
+            let options: Vec<_> = options
                 .iter()
                 .map(|o| match o {
                     mypaper_widgets::manifest::SelectOption::Plain(value) => {
@@ -721,7 +710,8 @@ fn manifest_control(
                     ),
                 })
                 .collect();
-            select(
+            let control = if options.len() <= 4 { segments } else { select };
+            control(
                 b,
                 c,
                 label,
