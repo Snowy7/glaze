@@ -337,12 +337,13 @@ fn run() -> Result<()> {
 }
 
 /// Starts an optional child when its executable is there. `None` when it's missing or didn't
-/// start.
+/// start. The index and the app styler get `--parent <core's pid>` and exit with core, however
+/// core ends (the styler's exit is what puts Explorer and Settings back).
 fn start_optional(name: &'static str, exe: PathBuf) -> Option<Supervised> {
     if !exe.exists() {
         return None;
     }
-    let args = if name == "index" {
+    let args = if matches!(name, "index" | "styler") {
         vec![
             PathBuf::from("--parent"),
             PathBuf::from(std::process::id().to_string()),
