@@ -452,6 +452,7 @@ pub fn run(app: &mut App, command: Command) {
 /// Panel shortcuts are resolved before the legacy app's page shortcuts.
 pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) -> bool {
     if colors::on_key(app, vk, ctrl, shift, alt) { return true; }
+    if choosers::on_key(app, vk, ctrl, shift, alt) { return true; }
     if vk == 0x1B && choosers::end(app) { app.dirty = true; return true; }
     if pick_client::on_key(app, vk) {
         return true;
