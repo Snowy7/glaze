@@ -223,6 +223,32 @@ core visible, of which the main thread's frame is ~0.8 ms and recording plus sub
 0.22 ms (lab, RTX): the rest is acquire, present and the driver (round 1's profile), one of each
 per frame; and the device's ~100 MiB, which needs the patched wgpu-hal.
 
+### Games (6 November 2026)
+
+Core now publishes the conservative fullscreen/game hint by default; explicit
+`system.game_activity: false` drops the publisher and the shell's signal subscription. The
+[Games contract](system.md#games) defines the lifetime-checked core → child snapshot and
+`HostMsg::GameActivity(bool)` relay. Index background work uses the same snapshot.
+
+During a game the shell releases background provider subscriptions and freezes widget work;
+clock alignment, stats and custom-command deadlines are absent on every bar. The helper blocks
+with no background deadline: plugin timers, retries, move coalescing and idle unloads wait.
+Incoming state coalesces, ordered pipe data uses its existing read-credit bound, and polling
+writes wait without closing connections. Resume delivers retained state and fires an overdue
+periodic timer once, without a catch-up burst. Independent user/session holds remain in force.
+
+The focused tests cover a 10-minute logical hold without events/deadlines, latest state on
+resume, one overdue timer, deferred opens/removal, independent holds, an unchanged real
+websocket connection, and 32 pipe pause/resume cycles with no incoming peer traffic. All five
+pass. Core/config/wire tests pass; shell has 143 passing tests. Widgets has 146 passing tests
+with one unrelated registry-count assertion excluded (`registry.widgets.len() >= 23`).
+
+**Limits:** no application background deadline is different from no OS/driver wake. The engine
+keeps its GPU device when covered (the ~66 wakes/s driver thread described above). WinHTTP's
+transport keepalives and external incoming events remain while sockets stay connected; changing
+keepalive on an upgraded live socket was rejected with `ERROR_WINHTTP_INCORRECT_HANDLE_STATE`.
+Processes retain memory. No FPS or game frame-time improvement is inferred from quiescence.
+
 ### Engine hillclimb (5 November 2026)
 
 Same machine, fixture and harness as the N0.3 measurements below (two visible 2560 x 1440
