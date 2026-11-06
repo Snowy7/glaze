@@ -817,6 +817,9 @@ pub fn run(app: &mut App, action: Action) {
             }
         }
         Action::ResizeWidget(dw, dh) => nudge(app, 0, 0, dw, dh),
+        Action::ArrangeOnDesktop if app.panel.as_ref().is_some_and(|state| state.windowed) => {
+            app.run(Action::Panel(crate::panel::Command::Open(crate::panel::Page::Widgets)));
+        }
         Action::ArrangeOnDesktop => arrange(),
         Action::ListAdd(path) => {
             let new_id = FieldId::Text(DocId::Studio, format!("/list_new{path}").into());

@@ -305,6 +305,16 @@ fn stage_selection_and_zoom_only_change_navigation_and_keep_the_inspector_in_pla
     assert_eq!(crate::view::regions(&app).inspector.unwrap(), inspector);
     assert_eq!(app.docs.doc(crate::docs::DocId::Widgets).raw, before);
     assert!(!app.docs.can_undo());
+    app.run(Action::ArrangeOnDesktop);
+    assert_eq!(crate::panel::current_page(&app), Page::Widgets);
+    assert!(!app.docs.can_undo());
+    app.texts
+        .insert(crate::actions::FieldId::Palette, "Arrange widgets".into());
+    assert!(
+        !crate::search::results(&app)
+            .iter()
+            .any(|entry| entry.action == Action::ArrangeOnDesktop)
+    );
     for page in [
         Page::Connections,
         Page::Settings,

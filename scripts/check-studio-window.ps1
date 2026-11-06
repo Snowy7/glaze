@@ -45,9 +45,9 @@ if ($Mode -eq 'Start') {
     foreach ($pair in @(@('CONFIG','config'), @('BARS','bars'), @('WIDGETS','widgets'))) {
         $match = [regex]::Match($source, ('(?s)const ' + $pair[0] + ': &str = r##"(.*?)"##;'))
         if (!$match.Success) { throw "Missing $($pair[0]) fixture." }
-        $value = $match.Groups[1].Value | ConvertFrom-Json
-        if ($pair[0] -eq 'CONFIG') { $value.theme = Join-Path $checkout 'themes\rain-city' }
-        [IO.File]::WriteAllText((Join-Path $settings ($pair[1] + '.json')), ($value | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+        $fixtureValue = $match.Groups[1].Value | ConvertFrom-Json
+        if ($pair[0] -eq 'CONFIG') { $fixtureValue.theme = Join-Path $checkout 'themes\rain-city' }
+        [IO.File]::WriteAllText((Join-Path $settings ($pair[1] + '.json')), ($fixtureValue | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
     }
     [IO.File]::WriteAllText((Join-Path $settings 'studio.json'), (@{ first_run_done = $false; appearance = 'dark' } | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
     [void][IO.Directory]::CreateDirectory($Shots)
@@ -100,16 +100,14 @@ function WheelOwn([int]$Delta) {
         $point.X = $client.Right - 150
         $point.Y = 180
         [void][StudioPanelCheck]::ClientToScreen($script:window, [ref]$point)
-        $owner = [uint32]0
-        [void][StudioPanelCheck]::GetWindowThreadProcessId([StudioPanelCheck]::WindowFromPoint($point), [ref]$owner)
-        if ($owner -ne $script:process.Id) { throw 'Our gallery is covered; no scroll was sent.' }
         $position = [IntPtr](([int64]($point.Y -band 65535) -shl 16) -bor ($point.X -band 65535))
+        # Address only the verified HWND, even when another window covers our inspector.
         [void][StudioMemoryTour]::PostMessage($script:window, 0x020A, [UIntPtr]([uint64]($Delta -band 65535) * 65536), $position)
     }
 }
 
 switch ($Mode) {
-    'Start' { MeasureReview $review 'First run'; OwnAll | ForEach-Object { $_.Current.Name } }
+    'Start' { MeasureReview $review 'Startup'; OwnAll | ForEach-Object { $_.Current.Name } }
     'Inspect' { OwnAll | ForEach-Object { "$($_.Current.ControlType.ProgrammaticName): $($_.Current.Name)" } }
     'Invoke' {
         InvokePanel $Name -Exact:(!$Prefix)
@@ -148,6 +146,7 @@ switch ($Mode) {
         $review.changedUserSettings = @($review.settingsBefore.psobject.Properties | Where-Object { $_.Value -ne $after[$_.Name] } | ForEach-Object { $_.Name })
         SaveReview $review
         $review | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $Shots 'live-window-check.json') -Encoding utf8
-        $review | ConvertTo-Json -Depth 8
+        $review | Select-Object process, closed, finalMemory, peakWorkingSetMB, changedUserSettings,
+            originalPid32732AtStart, originalPid32732AtFinish | ConvertTo-Json -Depth 5
     }
 }

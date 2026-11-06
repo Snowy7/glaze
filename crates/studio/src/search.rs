@@ -96,6 +96,11 @@ fn all(app: &App) -> Vec<Entry> {
         ("Undo", glyph::UNDO, Action::Undo),
         ("Redo", glyph::REDO, Action::Redo),
     ] {
+        if action == Action::ArrangeOnDesktop
+            && app.panel.as_ref().is_some_and(|state| state.windowed)
+        {
+            continue;
+        }
         out.push(Entry {
             title: title.into(),
             section: String::new(),
