@@ -397,6 +397,36 @@ fn pipes_round_trip_and_refuse_undeclared_names() {
 }
 
 #[test]
+fn game_pause_pipe_writes_resume_without_peer_traffic() {
+    use crate::runtime::mypaper::plugin::{pipes::PipeEvent, websocket::Message};
+    let name = format!("mypaper-game-pipe-{}", std::process::id());
+    let server = pipe_server::listen(&name);
+    let (seen, received) = mpsc::channel();
+    std::thread::spawn(move || {
+        server.accept();
+        while let Some(bytes) = server.read() { if seen.send(bytes).is_err() { break; } }
+    });
+    let conn = crate::io::pipe().unwrap();
+    let (tx, rx) = mpsc::channel();
+    conn.set_game_activity(true);
+    crate::io::start_pipe(&conn, 1, "game-pipe".into(), name, tx);
+    conn.send(Message::Binary(b"held".to_vec())).unwrap();
+    assert!(received.recv_timeout(Duration::from_millis(100)).is_err(), "a paused polling write stays queued");
+    conn.set_game_activity(false);
+    assert_eq!(received.recv_timeout(Duration::from_secs(2)).unwrap(), b"held");
+    // No peer read completion can wake the client here. Resume must reliably signal its
+    // event even when it races the worker's queue inspection and next blocking wait.
+    for n in 0..32u8 {
+        conn.set_game_activity(true);
+        conn.send(Message::Binary(vec![n])).unwrap();
+        conn.set_game_activity(false);
+        assert_eq!(received.recv_timeout(Duration::from_secs(2)).unwrap(), vec![n]);
+    }
+    drop(conn);
+    assert!(matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Input::Pipe { event: PipeEvent::Closed(1), .. }));
+}
+
+#[test]
 fn http_over_a_pipe_reads_chunked_replies() {
     let name = format!("mypaper-probe-http-{}", std::process::id());
     let server = pipe_server::listen(&name);
