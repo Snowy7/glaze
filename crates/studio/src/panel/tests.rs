@@ -49,6 +49,7 @@ fn render_panel_pages() {
             (Page::Root, "root"),
             (Page::Widgets, "widgets"),
             (Page::Bars, "bars"),
+            (Page::BarDesign, "bars-design"),
             (Page::Performance, "performance"),
             (Page::Top, "top-bar"),
             (Page::Top, "top-bar-designs"),
@@ -309,6 +310,7 @@ fn render_panel_pages() {
                 }
                 "top-bar" => app.nav.bar = Some(crate::actions::Bar::Top),
                 "top-bar-designs" => {
+                    app.panel.as_mut().unwrap().page = Page::BarDesign;
                     app.nav.bar = Some(crate::actions::Bar::Top);
                     app.nav.more.insert(mypaper_ui::controls::key((
                         "panel-bar-designs",
@@ -317,6 +319,7 @@ fn render_panel_pages() {
                 }
                 "dock" => app.nav.bar = Some(crate::actions::Bar::Dock),
                 "dock-designs" => {
+                    app.panel.as_mut().unwrap().page = Page::BarDesign;
                     app.nav.bar = Some(crate::actions::Bar::Dock);
                     app.nav.more.insert(mypaper_ui::controls::key((
                         "panel-bar-designs",
@@ -337,6 +340,8 @@ fn render_panel_pages() {
                         )));
                     }
                     if name == "module-program" {
+                        app.texts.insert(crate::actions::FieldId::Text(DocId::Studio, "/panel/draft/gesture/modules/media/click/left".into()), "program".into());
+                        app.run(Action::Set(crate::actions::Edit::new(DocId::Bars, "/modules/media/click/left", "Program"), json!({"exec":"notepad.exe","args":[]})));
                         app.nav.more.insert(mypaper_ui::controls::key((
                             "panel-trigger",
                             "/modules/media/click/left",
@@ -452,6 +457,7 @@ fn panel_controls_use_the_existing_validated_documents_and_undo() {
     app.run(gpu);
     assert_eq!(app.get(DocId::Config, "/engine/gpu"), Some(&json!("auto")));
     app.panel.as_mut().unwrap().page = Page::Bars;
+    app.run(Action::Panel(Command::Design(None)));
     let built = super::build(&app, &mut ui.text);
     let preset = built
         .targets
