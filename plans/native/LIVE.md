@@ -33,6 +33,9 @@ lock, leave the desktop restored, kill headless browsers) still applies.
   you release it. The lock is a **directory**: take it with `New-Item -ItemType Directory` (fails if
   it exists), release it with `Remove-Item -Recurse`. Never create it as a file: a file blocks every
   other agent's deploy (2026-11-06 03:19).
+- Hold the lock for one action at a time (at most ~2 minutes), then release it and wait at least
+  30 s before taking it again, so others get a turn. A long soak or sampling run doesn't hold the
+  lock between its steps.
 - Never run an exe from `C:\mypaper-targets\main\release`: a running exe is locked and breaks every
   other agent's workspace build there. Run test instances from your own target dir or the deployed
   `target\release`.
