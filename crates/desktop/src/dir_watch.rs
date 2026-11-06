@@ -166,8 +166,10 @@ fn paths(records: &[u8]) -> Vec<PathBuf> {
             break;
         };
         let wide: Vec<u16> = name
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&c| u16::from_le_bytes(c))
             .collect();
         out.push(PathBuf::from(OsString::from_wide(&wide)));
         if next == 0 {
