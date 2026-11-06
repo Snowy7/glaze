@@ -23,6 +23,7 @@ struct Client {
     sequence: u64,
     preview: Option<PreviewDrag>,
     choice_preview: Option<ChoicePreview>,
+    snapshot_preview: Option<SnapshotPreview>,
     color_open: bool,
     undo_serial: u64,
     undo_step: Option<UndoGuard>,
@@ -41,6 +42,12 @@ struct ChoicePreview {
     action: Action,
     version: u64,
     display: usize,
+}
+
+struct SnapshotPreview {
+    revisions: [u64; 4],
+    theme_dir: Option<std::path::PathBuf>,
+    version: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -76,7 +83,9 @@ impl Client {
     }
 
     fn finish_choice(&mut self, app: &App) {
-        if self.choice_preview.take().is_none() { return; }
+        let choice = self.choice_preview.take().is_some();
+        let history = self.snapshot_preview.take().is_some();
+        if !choice && !history { return; }
         let Some(shell) = self.shell else { return };
         self.sequence += 1;
         let message = if matches!(app.docs.saved, crate::docs::Saved::Failed(_)) {
@@ -99,6 +108,7 @@ impl Client {
         let Some(shell) = self.shell else { return };
         if let Some(crate::app::Drag::Slider { edit, .. }) = &app.drag {
             self.choice_preview = None;
+            self.snapshot_preview = None;
             let documents = preview_documents(&self.observed, app);
             if self
                 .preview
@@ -174,9 +184,10 @@ impl Client {
     }
 
     fn announce(&mut self, app: &App, text: String) {
-        let (Some(shell), Some(display)) = (self.shell, app.display()) else {
+        let Some(shell) = self.shell else {
             return;
         };
+        let Some(display) = panel_display(self.panel).or_else(|| app.display().map(|d| d.device.clone())) else { return };
         self.undo_serial += 1;
         let step = self.undo_serial;
         self.undo_step = Some(UndoGuard {
@@ -188,11 +199,23 @@ impl Client {
             shell,
             self.endpoint.hwnd(),
             &Message::UndoNotice {
-                display: display.device.clone(),
+                display,
                 text,
                 step,
             },
         );
+    }
+}
+
+/// The panel's HWND is the authority; the inspected desktop may be another monitor.
+fn panel_display(panel: HWND) -> Option<String> {
+    use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST, MonitorFromWindow};
+    let mut info = MONITORINFOEXW::default();
+    info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
+    // SAFETY: read-only monitor query for our panel; the initialized struct has the Win32 size.
+    unsafe {
+        GetMonitorInfoW(MonitorFromWindow(panel, MONITOR_DEFAULTTONEAREST), &mut info.monitorInfo).as_bool()
+            .then(|| String::from_utf16_lossy(&info.szDevice[..info.szDevice.iter().position(|c| *c == 0).unwrap_or(info.szDevice.len())]))
     }
 }
 
@@ -556,6 +579,7 @@ pub fn preview_action(app: &App, action: &Action) -> bool {
         let mut client = client.borrow_mut();
         let Some(client) = client.as_mut() else { return false };
         let Some(shell) = client.shell.filter(|_| client.begun && !client.color_open) else { return false };
+        client.snapshot_preview = None;
         client.sequence += 1;
         let message = if documents.is_empty() {
             Message::PreviewCancel { session: client.session, sequence: client.sequence }
@@ -570,13 +594,60 @@ pub fn preview_action(app: &App, action: &Action) -> bool {
     })
 }
 
+/// Show a History desktop on every display using frozen theme data, without changing files.
+/// End with `end_preview` on Now, Cancel or navigation. Wallpaper playback stays engine-owned.
+pub fn preview_snapshot(
+    app: &App,
+    config: &Value,
+    bars: &Value,
+    widgets: &Value,
+    theme: &Value,
+    theme_dir: Option<&std::path::Path>,
+) -> bool {
+    if app.fixture || app.drag.is_some() { return false; }
+    connect(app);
+    let revisions = [config, bars, widgets, theme].map(wire::revision);
+    if CLIENT.with(|client| client.borrow().as_ref().is_some_and(|c|
+        c.snapshot_preview.as_ref().is_some_and(|p| p.revisions == revisions
+            && p.theme_dir.as_deref() == theme_dir && p.version == app.docs.version))) {
+        return true;
+    }
+    let documents = [(DocId::Config, config), (DocId::Bars, bars), (DocId::Widgets, widgets)]
+        .map(|(id, raw)| wire::SnapshotDocument {
+            document: document(id), base_revision: wire::revision(&app.docs.doc(id).raw), raw: raw.clone(),
+        });
+    let theme = wire::SnapshotTheme { raw: theme.clone(), dir: theme_dir.map(std::path::Path::to_path_buf) };
+    if documents.iter().any(|d| !d.valid()) || theme.loaded().is_err() {
+        end_preview();
+        return false;
+    }
+    let sent = CLIENT.with(|client| {
+        let mut client = client.borrow_mut();
+        let Some(client) = client.as_mut() else { return false };
+        let Some(shell) = client.shell.filter(|_| client.begun && !client.color_open) else { return false };
+        client.sequence += 1;
+        if !wire::send(shell, client.endpoint.hwnd(), &Message::PreviewSnapshot {
+            session: client.session, sequence: client.sequence, documents: documents.into(), theme,
+        }) { return false; }
+        client.choice_preview = None;
+        client.snapshot_preview = Some(SnapshotPreview {
+            revisions, theme_dir: theme_dir.map(std::path::Path::to_path_buf), version: app.docs.version,
+        });
+        true
+    });
+    if !sent { end_preview(); }
+    sent
+}
+
 /// Restores the saved desktop after leaving a chooser, Esc, or navigation.
 /// Safe to call repeatedly; ending a preview never discards a committed pick.
 pub fn end_preview() {
     CLIENT.with(|client| {
         let mut client = client.borrow_mut();
         let Some(client) = client.as_mut() else { return };
-        if client.choice_preview.take().is_some() && let Some(shell) = client.shell {
+        let choice = client.choice_preview.take().is_some();
+        let snapshot = client.snapshot_preview.take().is_some();
+        if (choice || snapshot) && let Some(shell) = client.shell {
             client.sequence += 1;
             wire::send(shell, client.endpoint.hwnd(), &Message::PreviewCancel {
                 session: client.session, sequence: client.sequence,
@@ -696,6 +767,7 @@ pub fn connect(app: &App) {
                 sequence: 0,
                 preview: None,
                 choice_preview: None,
+                snapshot_preview: None,
                 color_open: false,
                 undo_serial: 0,
                 undo_step: None,
@@ -712,6 +784,7 @@ pub fn connect(app: &App) {
             client.highlighted = None;
             client.preview = None;
             client.choice_preview = None;
+            client.snapshot_preview = None;
             client.color_open = false;
             client.page_selection = None;
             client.desktop_selected = false;
@@ -739,7 +812,7 @@ pub fn connect(app: &App) {
         }
         client.warm_preview(app);
         client.stream_preview(app);
-        if client.choice_preview.is_some() && client.observed_version != app.docs.version && app.drag.is_none() {
+        if (client.choice_preview.is_some() || client.snapshot_preview.is_some()) && client.observed_version != app.docs.version && app.drag.is_none() {
             client.finish_choice(app);
         }
         let selection = page_selection(app);
@@ -856,6 +929,8 @@ pub fn record_pick(app: &App, label: &str, ops: &[Op], checkpoint: usize, merge:
         if let Some((before, after)) = choice {
             let text = client.undo_chain.record(before, after, merge);
             client.announce(app, text);
+        } else if ops.iter().any(|op| matches!(op.doc, DocId::Theme(_))) {
+            client.announce(app, format!("{label} · Undo"));
         }
         client.observed = snapshot(app);
         client.observed_version = app.docs.version;
@@ -1454,6 +1529,7 @@ mod tests {
             sequence: 0,
             preview: None,
             choice_preview: None,
+            snapshot_preview: None,
             color_open: false,
             undo_serial: 0,
             undo_step: None,
@@ -1763,6 +1839,7 @@ mod tests {
                 sequence: 0,
                 preview: None,
                 choice_preview: None,
+                snapshot_preview: None,
                 color_open: false,
                 undo_serial: 12,
                 undo_step: Some(guard),

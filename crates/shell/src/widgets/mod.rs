@@ -179,6 +179,8 @@ pub struct Widgets {
     studio_active: bool,
     studio_lift: BTreeSet<String>,
     studio_layout: Option<Layout>,
+    studio_skin: Option<look::Skin>,
+    studio_bars: Option<BarsConfig>,
     studio_raw: Value,
     studio_config_raw: Value,
     studio_stamp: (Option<u64>, Option<u64>, u64, u64),
@@ -296,6 +298,8 @@ impl Widgets {
             studio_active: false,
             studio_lift: BTreeSet::new(),
             studio_layout: None,
+            studio_skin: None,
+            studio_bars: None,
             studio_raw: studio_raw(&path),
             studio_config_raw: mypaper_config::path().ok().map_or_else(|| serde_json::json!({}), |p| studio_raw(&p)),
             studio_stamp: (None, None, 0, 0),
@@ -558,6 +562,16 @@ impl Widgets {
         }
         self.studio_layout = widgets.and_then(|(_, ops)| wire::patched(&self.studio_raw, ops))
             .and_then(|raw| Layout::parse(&raw.to_string()).ok());
+        self.studio_skin = preview.snapshot_theme().map(|theme| {
+            let skin = theme.and_then(|theme| theme.theme.widgets.as_ref());
+            look::Skin {
+                appearance: skin.and_then(|skin| skin.appearance.clone()).unwrap_or_default(),
+                css: None,
+                glass: skin.and_then(|skin| skin.glass).unwrap_or_default(),
+            }
+        });
+        self.studio_bars = preview.snapshot_raw(Document::Bars)
+            .and_then(|raw| BarsConfig::parse(&raw.to_string()).ok());
         if let Some(resize) = resize {
             let layout = self.studio_layout.get_or_insert_with(|| self.layout.clone());
             resize.apply(layout);
@@ -1081,7 +1095,7 @@ impl Widgets {
         let mut effective = self.studio_layout.clone().unwrap_or_else(|| self.layout.clone());
         let mut constrained = effective.clone();
         for monitor in &self.monitors {
-            let grid = grid_for_bars(&effective, monitor, &self.bars);
+            let grid = grid_for_bars(&effective, monitor, self.studio_bars.as_ref().unwrap_or(&self.bars));
             constrained.instances = edit::constrain(
                 &grid,
                 &constrained.instances,
@@ -1117,11 +1131,11 @@ impl Widgets {
             };
             let monitor = devices.iter().position(|d| d == device).unwrap();
             let screen = &self.monitors[monitor];
-            let grid = grid_for_bars(&effective, screen, &self.bars);
+            let grid = grid_for_bars(&effective, screen, self.studio_bars.as_ref().unwrap_or(&self.bars));
             let appearance = look::resolve(
                 &instance.appearance,
                 &effective.appearance,
-                &look::base(&self.skin),
+                &look::base(self.studio_skin.as_ref().unwrap_or(&self.skin)),
                 self.accent,
             );
             let placed = layout::place(instance, manifest, &grid, &appearance);
@@ -3394,7 +3408,7 @@ impl Widgets {
                     }
                     let material = plate_material(
                         &e.model.placed,
-                        &self.skin,
+                        self.studio_skin.as_ref().unwrap_or(&self.skin),
                         &self.knobs,
                         monitor.dpi as f32 / 96.0,
                     );

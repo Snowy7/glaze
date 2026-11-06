@@ -72,6 +72,8 @@ struct Press {
 pub struct Bars {
     studio_active: bool,
     studio_config: Option<BarsConfig>,
+    studio_theme: Option<Option<LoadedTheme>>,
+    studio_image_root: Option<std::path::PathBuf>,
     studio_stamp: (Option<u64>, u64),
     studio_dock_pending: bool,
     studio_dock_applied: Instant,
@@ -149,6 +151,8 @@ impl Bars {
         let mut bars = Self {
             studio_active: false,
             studio_config: None,
+            studio_theme: None,
+            studio_image_root: None,
             studio_stamp: (None, 0),
             studio_dock_pending: false,
             studio_dock_applied: Instant::now(),
@@ -773,6 +777,10 @@ impl Bars {
                 self.bars.retain(|bar| !bar.studio_only);
             }
             let effective = self.studio_config.as_ref().unwrap_or(&self.config);
+            let appearance = self.studio_theme.as_ref().map(|theme| look::theme_appearance(theme.as_ref()))
+                .unwrap_or_else(|| self.appearance.clone());
+            let theme_glass = self.studio_theme.as_ref().map(|theme| theme.as_ref()
+                .and_then(|t| t.theme.bars.as_ref()).and_then(|s| s.glass)).unwrap_or(self.theme_glass);
             if self.studio_config.is_some() {
                 for monitor in &self.monitors {
                     let mut config = effective.for_monitor(&monitor.device, monitor.primary)?;
@@ -785,7 +793,7 @@ impl Bars {
                         if !enabled || !included || self.bars.iter().any(|b| b.kind == kind && b.monitor.device == monitor.device) { continue; }
                         let mut bar = Bar::new(kind, config.clone(), monitor.clone(), look::Tokens::resolve(
                             if kind == BarKind::Top { &config.top.look } else { &config.dock.look },
-                            &config.appearance.over(&self.appearance), &self.system), false)?;
+                            &config.appearance.over(&appearance), &self.system), false)?;
                         bar.studio_only = true;
                         bar.studio_session(self.studio_active);
                         bar.hidden = self.asleep || self.fullscreen.as_deref() == Some(&monitor.device);
@@ -800,10 +808,10 @@ impl Bars {
                 let mut config = effective.for_monitor(&bar.monitor.device, bar.monitor.primary)?;
                 config.resolve(services::default_pins);
                 let key = if bar.kind == BarKind::Top { "top" } else { "dock" };
-                let mut appearance = config.appearance.over(&self.appearance);
+                let mut appearance = config.appearance.over(&appearance);
                 let mut look = if bar.kind == BarKind::Top { config.top.look.clone() } else { config.dock.look.clone() };
                 look::appearance_layer(&config, key, &mut look, &appearance);
-                look::glass_layer(&config, key, &mut look, self.theme_glass);
+                look::glass_layer(&config, key, &mut look, theme_glass);
                 let colors = plugin_style::patch_look(if bar.kind == BarKind::Top { "top-bar" } else { "dock" }, key, effective.raw(), &mut look, &mut appearance);
                 let mut tokens = look::Tokens::resolve(&look, &appearance, &self.system);
                 plugin_style::colors(&colors, effective.raw(), &mut tokens.theme.color);
@@ -925,6 +933,14 @@ impl Bars {
         if self.studio_stamp == stamp { return; }
         self.studio_stamp = stamp;
         self.studio_config = value.and_then(|(_, ops)| Self::studio_preview_config(&self.config, ops));
+        self.studio_theme = preview.snapshot_theme().map(|theme| theme.cloned());
+        if let Some(theme) = &self.studio_theme {
+            self.studio_image_root.get_or_insert_with(|| self.images.theme.clone());
+            let config = self.studio_config.as_ref().unwrap_or(&self.config);
+            self.images.configure(config.icons.as_deref(), theme.as_ref().map(|t| t.dir.clone()).unwrap_or_default());
+        } else if let Some(dir) = self.studio_image_root.take() {
+            self.images.configure(self.config.icons.as_deref(), dir);
+        }
         self.studio_dock_pending = true;
     }
 

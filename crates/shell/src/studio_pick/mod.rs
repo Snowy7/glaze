@@ -222,6 +222,8 @@ impl StudioPick {
                 Message::WarmPreview if self.owns(source) => self.warm_preview = true,
                 Message::Preview { session, sequence, documents }
                     if self.owns(source) => self.preview.update(session, sequence, documents),
+                Message::PreviewSnapshot { session, sequence, documents, theme }
+                    if self.owns(source) => self.preview.snapshot(session, sequence, documents, theme),
                 Message::PreviewCommit { session, sequence, revisions }
                     if self.owns(source) => self.preview.saved(session, sequence, &revisions),
                 Message::PreviewDock {
@@ -415,7 +417,7 @@ impl StudioPick {
             let _ = catcher.surface.keep_above_desktop();
         }
         if let Some(notice) = &mut self.notice {
-            match notice.tick(ui, &self.monitors, bars) {
+            match notice.tick(ui, &self.monitors, bars, self.panel) {
                 Ok(true) => {}
                 Ok(false) => self.notice = None,
                 Err(e) => {

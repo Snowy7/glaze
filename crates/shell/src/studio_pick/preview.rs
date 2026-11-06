@@ -1,11 +1,12 @@
 //! Latest-value overrides. Durable revisions, cancellation and disconnect retire them.
-use super::wire::{Document, PreviewDocument, PreviewOp, Revision};
+use super::wire::{Document, PreviewDocument, PreviewOp, Revision, SnapshotDocument, SnapshotTheme};
 
 #[derive(Default)]
 pub struct Preview {
     session: Option<u64>,
     sequence: u64,
     values: Vec<Value>,
+    snapshot: Option<Option<mypaper_theme::LoadedTheme>>,
 }
 
 struct Value {
@@ -40,6 +41,7 @@ impl Preview {
         {
             return;
         }
+        self.snapshot = None;
         self.values = documents
             .into_iter()
             .map(|document| Value {
@@ -48,6 +50,34 @@ impl Preview {
                 saved: None,
             })
             .collect();
+    }
+
+    /// A snapshot is atomic across all three documents and the frozen wallpaper skin.
+    pub fn snapshot(&mut self, session: u64, sequence: u64, documents: Vec<SnapshotDocument>, theme: SnapshotTheme) {
+        if documents.len() != 3 || documents.iter().enumerate().any(|(i, d)|
+            !d.valid() || documents[..i].iter().any(|old| old.document == d.document)) {
+            return;
+        }
+        let Ok(theme) = theme.loaded() else { return };
+        if !self.accepts(session, sequence) { return; }
+        self.snapshot = Some(theme);
+        self.values = documents.into_iter().map(|d| Value {
+            document: PreviewDocument {
+                document: d.document, base_revision: d.base_revision,
+                ops: vec![PreviewOp { path: String::new(), value: d.raw }],
+            },
+            sequence, saved: None,
+        }).collect();
+    }
+
+    pub fn snapshot_theme(&self) -> Option<Option<&mypaper_theme::LoadedTheme>> {
+        self.snapshot.as_ref().map(Option::as_ref)
+    }
+
+    pub fn snapshot_raw(&self, document: Document) -> Option<&serde_json::Value> {
+        self.snapshot.as_ref()?;
+        self.values.iter().find(|v| v.document.document == document)
+            .and_then(|v| v.document.ops.first()).map(|op| &op.value)
     }
 
     pub fn dock(&mut self, session: u64, sequence: u64, base: u64, size: f64) {
@@ -83,6 +113,7 @@ impl Preview {
     pub fn cancel(&mut self, session: u64, sequence: u64) {
         if self.accepts(session, sequence) {
             self.values.clear();
+            self.snapshot = None;
         }
     }
 
@@ -95,7 +126,11 @@ impl Preview {
         let value = &self.values[index];
         if value.saved == Some(durable) || value.document.base_revision != durable {
             // An external edit wins too. An old drag must never overwrite newer saved state.
-            self.values.remove(index);
+            if self.snapshot.take().is_some() {
+                self.values.clear();
+            } else {
+                self.values.remove(index);
+            }
             return None;
         }
         let value = &self.values[index];
@@ -108,6 +143,75 @@ mod tests {
     use super::super::wire::patched;
     use super::*;
     use serde_json::json;
+
+    fn desktop() -> Vec<SnapshotDocument> {
+        vec![
+            SnapshotDocument { document: Document::Config, base_revision: 10, raw: json!({"look":{"style":"fluent"}}) },
+            SnapshotDocument { document: Document::Bars, base_revision: 11, raw: json!({"preset":"islands"}) },
+            SnapshotDocument { document: Document::Widgets, base_revision: 12, raw: json!({"version":2,"instances":[]}) },
+        ]
+    }
+
+    fn frozen_theme() -> SnapshotTheme {
+        SnapshotTheme {
+            raw: json!({"name":"Before", "wallpaper":{"kind":"image","source":"wallpaper.png"},
+                "bars":{"appearance":{"tint":"#123456"}}, "widgets":{"glass":{"blur":17}}}),
+            // No such file is needed: parsing never reads today's theme.json.
+            dir: Some(std::path::PathBuf::from("frozen-theme-with-no-files")),
+        }
+    }
+
+    #[test]
+    fn history_replaces_complete_documents_and_freezes_theme_without_reading_files() {
+        let durable = json!({"version":2,"instances":[{"instance":"newer"}],"appearance":{"blur":30}});
+        let mut preview = Preview::default();
+        let mut theme = frozen_theme();
+        preview.snapshot(7, 1, desktop(), theme.clone());
+        theme.raw["widgets"]["glass"]["blur"] = json!(31);
+        let loaded = preview.snapshot_theme().unwrap().unwrap();
+        assert_eq!(loaded.theme.widgets.as_ref().unwrap().glass.unwrap().blur, Some(17.0));
+        assert_eq!(loaded.dir, std::path::Path::new("frozen-theme-with-no-files"));
+        let ops = preview.effective(Document::Widgets, 12).unwrap().1;
+        let shown = patched(&durable, ops).unwrap();
+        assert_eq!(shown, json!({"version":2,"instances":[]}));
+        assert_eq!(durable["appearance"]["blur"], 30);
+        assert!(!ops[0].valid(Document::Widgets), "root replacement is unavailable to ordinary patches");
+        preview.cancel(7, 2);
+        assert!(!preview.has(Document::Widgets));
+        assert!(preview.snapshot_theme().is_none());
+    }
+
+    #[test]
+    fn history_validates_atomically_and_retires_all_parts_on_conflict_or_matching_save() {
+        let mut preview = Preview::default();
+        preview.snapshot(7, 1, desktop(), frozen_theme());
+        let mut invalid = desktop();
+        invalid[2].raw["new_future_field"] = json!(true);
+        preview.snapshot(7, 2, invalid, frozen_theme());
+        assert_eq!(preview.effective(Document::Bars, 11).unwrap().0, 1);
+        preview.snapshot(7, 2, desktop(), SnapshotTheme { raw: json!({"broken":true}), dir: None });
+        assert_eq!(preview.effective(Document::Bars, 11).unwrap().0, 1);
+        assert!(preview.effective(Document::Config, 20).is_none());
+        assert!(!preview.has(Document::Bars));
+        assert!(preview.snapshot_theme().is_none());
+        preview.snapshot(7, 2, desktop(), frozen_theme());
+        preview.saved(7, 3, &[Revision { document: Document::Bars, revision: 21 }]);
+        assert!(preview.effective(Document::Bars, 11).is_some());
+        assert!(preview.effective(Document::Bars, 21).is_none());
+        assert!(!preview.has(Document::Widgets));
+    }
+
+    #[test]
+    fn newer_choices_replace_history_and_stale_snapshots_cannot_reopen_it() {
+        let mut preview = Preview::default();
+        preview.snapshot(7, 1, desktop(), frozen_theme());
+        preview.dock(7, 2, 11, 48.0);
+        assert!(preview.snapshot_theme().is_none());
+        preview.snapshot(7, 1, desktop(), frozen_theme());
+        preview.snapshot(8, 3, desktop(), frozen_theme());
+        assert!(preview.snapshot_theme().is_none());
+        assert_eq!(preview.effective(Document::Bars, 11).unwrap().0, 2);
+    }
 
     fn document(
         document: Document,

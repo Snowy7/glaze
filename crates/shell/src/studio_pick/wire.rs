@@ -16,6 +16,7 @@ use windows::core::{HSTRING, w};
 pub const SHELL_CLASS: windows::core::PCWSTR = w!("mypaper.shell.studio-pick.v1");
 const TAG: usize = 0x4d505331;
 const MAX_BYTES: usize = 16 * 1024;
+const MAX_SNAPSHOT_BYTES: usize = 512 * 1024;
 /// Semantic wake queued directly into mypaper-ui, never sent to the keyboard queue.
 pub const PICK_EVENT: u16 = 0xffff;
 
@@ -56,6 +57,42 @@ pub struct PreviewDocument {
     pub document: Document,
     pub base_revision: u64,
     pub ops: Vec<PreviewOp>,
+}
+
+/// Complete, parser-checked shell state for History. Never persisted by the receiver.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SnapshotDocument {
+    pub document: Document,
+    pub base_revision: u64,
+    pub raw: serde_json::Value,
+}
+
+impl SnapshotDocument {
+    pub fn valid(&self) -> bool {
+        if !self.raw.is_object() { return false; }
+        let text = self.raw.to_string();
+        match self.document {
+            Document::Config => mypaper_config::Config::parse(&text).is_ok(),
+            Document::Bars => mypaper_bars::BarsConfig::parse(&text).is_ok(),
+            Document::Widgets => mypaper_widgets::layout::Layout::parse(&text).is_ok(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SnapshotTheme {
+    pub raw: serde_json::Value,
+    pub dir: Option<std::path::PathBuf>,
+}
+
+impl SnapshotTheme {
+    /// Parse frozen JSON only: later theme-file edits cannot change this preview.
+    pub fn loaded(&self) -> anyhow::Result<Option<mypaper_theme::LoadedTheme>> {
+        if self.raw.is_null() { return Ok(None); }
+        mypaper_theme::LoadedTheme::parse(
+            self.dir.clone().unwrap_or_default(), &self.raw.to_string(),
+        ).map(Some)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -200,6 +237,11 @@ pub fn patched(raw: &serde_json::Value, ops: &[PreviewOp]) -> Option<serde_json:
     }
     let mut result = raw.clone();
     for op in ops {
+        // Root replacements come only from validated SnapshotDocument, never PreviewOp::valid.
+        if op.path.is_empty() {
+            result = op.value.clone();
+            continue;
+        }
         let tokens: Vec<_> = op.path.strip_prefix('/')?.split('/')
             .map(|part| part.replace("~1", "/").replace("~0", "~"))
             .collect();
@@ -214,6 +256,12 @@ pub fn patched(raw: &serde_json::Value, ops: &[PreviewOp]) -> Option<serde_json:
 pub enum Message {
     /// Prime the existing preview machinery at saved values, without an override or save.
     WarmPreview,
+    PreviewSnapshot {
+        session: u64,
+        sequence: u64,
+        documents: Vec<SnapshotDocument>,
+        theme: SnapshotTheme,
+    },
     Preview {
         session: u64,
         sequence: u64,
@@ -291,6 +339,7 @@ impl Queue {
             Message::Preview {
                 session, sequence, ..
             }
+            | Message::PreviewSnapshot { session, sequence, .. }
             | Message::PreviewDock {
                 session, sequence, ..
             } => Some((*session, *sequence)),
@@ -394,7 +443,8 @@ pub fn send(to: HWND, from: HWND, message: &Message) -> bool {
     let Ok(bytes) = serde_json::to_vec(message) else {
         return false;
     };
-    if bytes.len() > MAX_BYTES {
+    let limit = if matches!(message, Message::PreviewSnapshot { .. }) { MAX_SNAPSHOT_BYTES } else { MAX_BYTES };
+    if bytes.len() > limit {
         return false;
     }
     let data = COPYDATASTRUCT {
@@ -449,14 +499,17 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, wp: WPARAM, lp: LP
         let data = unsafe { &*(lp.0 as *const COPYDATASTRUCT) };
         if data.dwData == TAG
             && data.cbData > 0
-            && (data.cbData as usize) <= MAX_BYTES
+            && (data.cbData as usize) <= MAX_SNAPSHOT_BYTES
             && !data.lpData.is_null()
         {
             // SAFETY: validated COPYDATA length and pointer; parse to owned data now.
             let bytes = unsafe {
                 std::slice::from_raw_parts(data.lpData.cast::<u8>(), data.cbData as usize)
             };
-            if let Ok(message) = serde_json::from_slice(bytes) {
+            if let Ok(message) = serde_json::from_slice::<Message>(bytes) {
+                if bytes.len() > MAX_BYTES && !matches!(message, Message::PreviewSnapshot { .. }) {
+                    return LRESULT(0);
+                }
                 // SAFETY: queue lives until this window is destroyed on this same thread.
                 let queue = unsafe { &*queue };
                 if queue.enqueue(HWND(wp.0 as _), message) {
