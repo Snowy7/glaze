@@ -185,11 +185,11 @@ pub fn keyboard(app: &mut App, delta: i32) -> bool {
 
 fn values(app: &App, list: &List) -> Vec<Value> {
     match list {
-        List::Modules(bar, side) => app
-            .get(DocId::Bars, &format!("/{}/{side}", bar.key()))
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default(),
+        List::Modules(bar, side) => {
+            super::editors::bar_value(app, &format!("/{}/{side}", bar.key()))
+                .and_then(|v| v.as_array().cloned())
+                .unwrap_or_default()
+        }
         List::Pins(pins) => app
             .get(DocId::Bars, pins.path())
             .and_then(Value::as_array)
@@ -251,7 +251,10 @@ fn values(app: &App, list: &List) -> Vec<Value> {
 
 fn store(app: &mut App, list: &List, items: Vec<Value>, label: &str) {
     let (doc, path) = match list {
-        List::Modules(bar, side) => (DocId::Bars, format!("/{}/{side}", bar.key())),
+        List::Modules(bar, side) => (
+            DocId::Bars,
+            super::editors::bar_path(app, &format!("/{}/{side}", bar.key())),
+        ),
         List::Pins(pins) => (DocId::Bars, pins.path().into()),
         List::Menu => (DocId::Config, "/desktop_menu/items".into()),
         List::Widget(path) => (DocId::Widgets, path.clone()),

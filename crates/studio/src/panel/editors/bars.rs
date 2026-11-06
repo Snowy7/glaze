@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::actions::{Bar, Panel, Pins, Slot};
-use crate::panel::controls::{more, setting};
+use crate::panel::controls::more;
 
 const MODULES: [(&str, &str); 15] = [
     ("start", "Start"),
@@ -34,6 +34,777 @@ fn name(id: &str) -> &str {
         .map_or(id.strip_prefix("custom:").unwrap_or(id), |(_, name)| *name)
 }
 
+fn display_key(app: &App) -> String {
+    app.display().map_or_else(
+        || format!("DISPLAY{}", app.nav.display + 1),
+        |m| m.device.trim_start_matches(r"\\.\").to_owned(),
+    )
+}
+
+fn shared(path: &str) -> bool {
+    path.starts_with("/taskbar")
+        || path.starts_with("/icons")
+        || path == "/dock/pinned"
+        || path.ends_with("/clock/format")
+        || path.starts_with("/performance")
+}
+
+/// Each display edits its own layer; Windows taskbar and pinned apps remain shared.
+pub fn bar_path(app: &App, path: &str) -> String {
+    if app.monitors.len() > 1 && !shared(path) {
+        format!("/overrides/{}{path}", crate::docs::token(&display_key(app)))
+    } else {
+        path.into()
+    }
+}
+
+fn resolved(app: &App) -> Value {
+    resolved_for(app, app.nav.display)
+}
+
+fn resolved_for(app: &App, index: usize) -> Value {
+    let raw = &app.docs.doc(DocId::Bars).raw;
+    mypaper_bars::BarsConfig::parse(&raw.to_string())
+        .ok()
+        .and_then(|mut config| {
+            config.resolve(Vec::new);
+            let config = if let Some(monitor) = app.monitors.get(index) {
+                config.for_monitor(&monitor.device, monitor.primary).ok()?
+            } else {
+                config
+            };
+            serde_json::to_value(config).ok()
+        })
+        .unwrap_or_else(|| raw.clone())
+}
+
+pub fn bar_value(app: &App, path: &str) -> Option<Value> {
+    resolved(app).pointer(path).cloned()
+}
+
+fn design_name(app: &App, bar: Option<Bar>) -> String {
+    let path = bar.map_or_else(|| "/preset".into(), |bar| format!("/{}/design", bar.key()));
+    let value = bar_value(app, &path)
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_else(|| "monochrome".into());
+    let designs: &[(&str, &str)] = match bar {
+        Some(Bar::Top) => &crate::pages::bars::TOP_DESIGNS,
+        Some(Bar::Dock) => &crate::pages::bars::DOCK_DESIGNS,
+        None => &crate::pages::bars::PRESETS,
+    };
+    designs
+        .iter()
+        .find(|(id, _)| *id == value)
+        .map_or(value.clone(), |(_, label)| (*label).into())
+}
+
+fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str, caption: &str) {
+    use crate::settings::Kind;
+    let s = crate::settings::Setting::get(id).expect("bar setting");
+    if s.doc != DocId::Bars
+        || shared(s.path)
+        || matches!(s.place, crate::settings::Place::BarsPanel(_))
+    {
+        crate::panel::controls::setting(
+            app,
+            b,
+            c,
+            id,
+            label,
+            if s.doc == DocId::Bars {
+                "All displays"
+            } else {
+                caption
+            },
+        );
+        return;
+    }
+    crate::ui::anchor(app, id, c.view, c.y);
+    let value = bar_value(app, s.path).unwrap_or_else(|| app.value(s));
+    let edit = Edit::new(DocId::Bars, bar_path(app, s.path), s.label);
+    match s.kind {
+        Kind::Switch { default } => toggle(
+            b,
+            c,
+            label,
+            caption,
+            value.as_bool().unwrap_or(default),
+            Action::Toggle(edit, value.as_bool().unwrap_or(default)),
+        ),
+        Kind::Choice { options, .. } | Kind::Select { options, .. } => select(
+            b,
+            c,
+            label,
+            value,
+            edit,
+            options
+                .iter()
+                .map(|(value, label)| {
+                    (
+                        serde_json::from_str(value).expect("setting option"),
+                        (*label).into(),
+                    )
+                })
+                .collect(),
+        ),
+        Kind::Slider {
+            min,
+            max,
+            step,
+            factor,
+            unit,
+            default,
+        } => {
+            text(
+                b,
+                Rect::new(c.x, c.y, c.w, height(b, 25.0)),
+                label,
+                13.0,
+                400,
+                b.p.ink1,
+                Align::Start,
+            );
+            c.y += height(b, 25.0);
+            let value = value.as_f64().unwrap_or(default);
+            let r = Rect::new(c.x, c.y, c.w, height(b, 36.0));
+            b.slider(
+                key(("panel-bar-setting", id)),
+                r,
+                value,
+                (min, max, step),
+                &format!("{:.0}{unit}", value * factor),
+                b.px(60.0),
+                label,
+                Action::Slider(edit),
+            );
+            c.y = r.bottom + b.px(4.0);
+        }
+        Kind::Text { placeholder } => field(
+            app,
+            b,
+            c,
+            FieldId::Text(DocId::Bars, edit.path),
+            label,
+            placeholder,
+            value.as_str().unwrap_or(""),
+        ),
+        Kind::Custom => {}
+    }
+}
+
+pub fn overview(app: &App, b: &mut B, c: &mut Col) {
+    title(
+        b,
+        c,
+        "Bars",
+        &format!("Top bar and dock · Display {}", app.nav.display + 1),
+    );
+    crate::panel::controls::displays(app, b, c);
+    group(b, c, "", |b, c| {
+        for (bar, page, label) in [
+            (Bar::Top, Page::Top, "Top bar"),
+            (Bar::Dock, Page::Dock, "Dock"),
+        ] {
+            let on = bar_value(app, &format!("/{}/enabled", bar.key()))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            row(
+                b,
+                c,
+                None,
+                label,
+                &format!(
+                    "{} · {}",
+                    if on { "On" } else { "Off" },
+                    design_name(app, Some(bar))
+                ),
+                "",
+                None,
+                open(page),
+            );
+        }
+        crate::panel::controls::setting(
+            app,
+            b,
+            c,
+            "taskbar_mode",
+            "Windows' taskbar",
+            "All displays",
+        );
+    });
+    group(b, c, "", |b, c| {
+        row(
+            b,
+            c,
+            Some(glyph::BARS),
+            "Design",
+            &design_name(app, None),
+            "",
+            None,
+            Action::Panel(Command::Design(None)),
+        );
+    });
+    display_differences(app, b, c);
+    if more(app, b, c, "Panels and Windows' taskbar") {
+        group(b, c, "", |b, c| {
+            row(
+                b,
+                c,
+                Some(glyph::TOGGLES),
+                "Panels",
+                "",
+                "Start, sound, calendar, tray and notifications · All displays",
+                None,
+                open(Page::Panels),
+            )
+        });
+        group(b, c, "Windows' taskbar", |b, c| {
+            crate::panel::controls::setting(app, b, c, "taskbar_alignment", "Icons", "All displays")
+        });
+    }
+}
+
+fn display_differences(app: &App, b: &mut B, c: &mut Col) {
+    if app.monitors.len() < 2 {
+        return;
+    }
+    if app.nav.display == 0 {
+        notice(b, c, "Changes here apply to Display 1.");
+        return;
+    }
+    let first = resolved_for(app, 0);
+    let current = resolved(app);
+    let difference = differences(&first, &current, "");
+    let mut changed = Vec::new();
+    collect_differences(&difference, "", &mut changed);
+    changed.sort();
+    changed.dedup();
+    if changed.is_empty() {
+        notice(b, c, "Same as Display 1");
+    } else {
+        notice(b, c, &format!("Different here: {}", changed.join(", ")));
+        action_button(
+            b,
+            c,
+            "Use the same as Display 1",
+            Action::Panel(Command::SameBars),
+        );
+    }
+}
+
+fn collect_differences(value: &Value, parent: &str, out: &mut Vec<String>) {
+    if let Some(map) = value.as_object() {
+        for (key, value) in map {
+            let path = format!("{parent}/{key}");
+            if let Some(setting) = crate::settings::SETTINGS
+                .iter()
+                .find(|s| s.doc == DocId::Bars && s.path == path)
+            {
+                out.push(setting.label.into());
+            } else if matches!(
+                key.as_str(),
+                "design" | "preset" | "left" | "center" | "right" | "look" | "animation"
+            ) {
+                out.push(
+                    match key.as_str() {
+                        "design" | "preset" => "Design",
+                        "look" => "Look",
+                        "animation" => "Motion",
+                        _ => "Modules",
+                    }
+                    .into(),
+                );
+            } else {
+                collect_differences(value, &path, out);
+            }
+        }
+    }
+}
+
+// Partial objects keep only fields whose resolved values differ from the reference display.
+fn differences(base: &Value, current: &Value, path: &str) -> Value {
+    if let (Some(base), Some(current)) = (base.as_object(), current.as_object()) {
+        let mut out = serde_json::Map::new();
+        for (key, value) in current {
+            let at = format!("{path}/{key}");
+            if shared(&at)
+                || path.is_empty()
+                    && matches!(key.as_str(), "version" | "overrides" | "vars" | "icons")
+            {
+                continue;
+            }
+            let reference = base.get(key).unwrap_or(&Value::Null);
+            if value == reference {
+                continue;
+            }
+            let difference = differences(reference, value, &at);
+            if difference.as_object().is_none_or(|v| !v.is_empty()) {
+                out.insert(key.clone(), difference);
+            }
+        }
+        Value::Object(out)
+    } else {
+        current.clone()
+    }
+}
+
+fn merge(target: &mut Value, layer: &Value) {
+    if let (Some(target), Some(layer)) = (target.as_object_mut(), layer.as_object()) {
+        for (key, value) in layer {
+            merge(target.entry(key.clone()).or_insert(Value::Null), value);
+        }
+    } else {
+        *target = layer.clone();
+    }
+}
+
+fn same_device(a: &str, b: &str) -> bool {
+    a.trim_start_matches(r"\\.\")
+        .eq_ignore_ascii_case(b.trim_start_matches(r"\\.\"))
+}
+
+/// Make Display 1 the inherited baseline, remove this display's differences, and preserve
+/// every other connected display, including configs that used primary/secondary aliases.
+pub fn same_bars(app: &mut App) {
+    if app.nav.display == 0 || app.monitors.len() < 2 {
+        return;
+    }
+    let raw = &app.docs.doc(DocId::Bars).raw;
+    let original = raw
+        .get("overrides")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let first = &app.monitors[0];
+    let role = if first.primary {
+        "primary"
+    } else {
+        "secondary"
+    };
+    let mut baseline = raw.clone();
+    baseline.as_object_mut().unwrap().remove("overrides");
+    // Role first, then the device, matching BarsConfig::for_monitor's precedence.
+    for (_, layer) in original
+        .iter()
+        .filter(|(key, _)| key.eq_ignore_ascii_case(role))
+    {
+        merge(&mut baseline, layer);
+    }
+    for (_, layer) in original
+        .iter()
+        .filter(|(key, _)| same_device(key, &first.device))
+    {
+        merge(&mut baseline, layer);
+    }
+    let Some(mut base_config) = mypaper_bars::BarsConfig::parse(&baseline.to_string()).ok() else {
+        return;
+    };
+    base_config.resolve(Vec::new);
+    let reference = serde_json::to_value(base_config).unwrap();
+    let mut overrides: serde_json::Map<_, _> = original
+        .into_iter()
+        .filter(|(key, _)| {
+            !key.eq_ignore_ascii_case("primary")
+                && !key.eq_ignore_ascii_case("secondary")
+                && !app.monitors.iter().any(|m| same_device(key, &m.device))
+        })
+        .collect();
+    for (index, monitor) in app.monitors.iter().enumerate() {
+        if index == 0 || index == app.nav.display {
+            continue;
+        }
+        let difference = differences(&reference, &resolved_for(app, index), "");
+        if difference.as_object().is_some_and(|v| !v.is_empty()) {
+            overrides.insert(
+                monitor.device.trim_start_matches(r"\\.\").into(),
+                difference,
+            );
+        }
+    }
+    if !overrides.is_empty() {
+        baseline["overrides"] = Value::Object(overrides);
+    }
+    app.apply(
+        "Use the same as Display 1",
+        vec![crate::docs::Op {
+            doc: DocId::Bars,
+            path: String::new(),
+            value: Some(baseline),
+        }],
+    );
+}
+
+pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
+    if edit.doc == DocId::Bars
+        && edit.path.ends_with("/interval")
+        && let Some(text) = value.as_str()
+    {
+        match text
+            .parse::<f64>()
+            .ok()
+            .and_then(serde_json::Number::from_f64)
+        {
+            Some(number) => app.apply(
+                &edit.label,
+                vec![crate::docs::Op {
+                    doc: edit.doc,
+                    path: edit.path.to_string(),
+                    value: Some(Value::Number(number)),
+                }],
+            ),
+            None => app.alert("Enter the interval as a number of seconds"),
+        }
+        return true;
+    }
+    if edit.doc != DocId::Studio {
+        return false;
+    }
+    if let Some(module) = edit.path.strip_prefix("/panel/module-args/") {
+        match crate::library::split_args(value.as_str().unwrap_or("")) {
+            Ok(args) => app.set(
+                &Edit::new(
+                    DocId::Bars,
+                    bar_path(app, &format!("/modules/{module}/args")),
+                    "Module arguments",
+                ),
+                json!(args),
+            ),
+            Err(error) => app.alert(error.to_string()),
+        }
+        return true;
+    }
+    if let Some(path) = edit.path.strip_prefix("/panel/gesture") {
+        if let Some(path) = path.strip_prefix("-target/") {
+            let Some((kind, tail)) = path.split_once('/') else {
+                return false;
+            };
+            if !matches!(kind, "exec" | "open") {
+                return false;
+            }
+            let target = value.as_str().unwrap_or("").trim();
+            if !target.is_empty() {
+                let value = if kind == "exec" {
+                    json!({"exec":target,"args":[]})
+                } else {
+                    json!({"open":target})
+                };
+                app.set(
+                    &Edit::new(
+                        DocId::Bars,
+                        bar_path(app, &format!("/{tail}")),
+                        edit.label.clone(),
+                    ),
+                    value,
+                );
+            }
+        } else {
+            let mode = value.as_str().unwrap_or("default");
+            app.texts.insert(
+                FieldId::Text(DocId::Studio, format!("/panel/draft/gesture{path}").into()),
+                mode.into(),
+            );
+            if !matches!(mode, "program" | "open") {
+                app.set(
+                    &Edit::new(DocId::Bars, bar_path(app, path), edit.label.clone()),
+                    json!(mode),
+                );
+            }
+        }
+        return true;
+    }
+    if edit.path.as_ref() == "/panel/bar-preset" {
+        let mut ops = vec![crate::docs::Op {
+            doc: DocId::Bars,
+            path: bar_path(app, "/preset"),
+            value: Some(value.clone()),
+        }];
+        let id = value.as_str().unwrap_or("monochrome");
+        let base = mypaper_bars::BarsConfig::parse(&json!({"preset":id}).to_string())
+            .ok()
+            .and_then(|v| serde_json::to_value(v).ok());
+        for bar in ["top", "dock"] {
+            for field in ["design", "enabled"] {
+                let path = format!("/{bar}/{field}");
+                ops.push(crate::docs::Op {
+                    doc: DocId::Bars,
+                    path: bar_path(app, &path),
+                    value: base.as_ref().and_then(|v| v.pointer(&path)).cloned(),
+                });
+            }
+        }
+        app.apply(&edit.label, ops);
+        return true;
+    }
+    let Some(bar) = edit
+        .path
+        .strip_prefix("/panel/bar-reset/")
+        .filter(|bar| matches!(*bar, "top" | "dock"))
+    else {
+        return false;
+    };
+    app.apply(
+        &edit.label,
+        ["look", "animation"]
+            .into_iter()
+            .map(|part| crate::docs::Op {
+                doc: DocId::Bars,
+                path: bar_path(app, &format!("/{bar}/{part}")),
+                value: None,
+            })
+            .collect(),
+    );
+    true
+}
+
+pub fn designs(app: &App, b: &mut B, c: &mut Col) {
+    let bar = app.nav.bar;
+    title(
+        b,
+        c,
+        "Design",
+        &format!(
+            "{} · Display {}",
+            match bar {
+                Some(Bar::Top) => "Top bar",
+                Some(Bar::Dock) => "Dock",
+                None => "Top bar and dock",
+            },
+            app.nav.display + 1
+        ),
+    );
+    let designs: &[(&str, &str)] = match bar {
+        Some(Bar::Top) => &crate::pages::bars::TOP_DESIGNS,
+        Some(Bar::Dock) => &crate::pages::bars::DOCK_DESIGNS,
+        None => &crate::pages::bars::PRESETS,
+    };
+    let path = bar.map_or_else(|| "/preset".into(), |bar| format!("/{}/design", bar.key()));
+    let current = bar_value(app, &path).unwrap_or(json!("monochrome"));
+    let choices: Vec<_> = designs
+        .iter()
+        .map(|(id, label)| {
+            (
+                *label,
+                current == *id,
+                if bar.is_none() {
+                    if app.monitors.len() < 2 {
+                        Action::Preset(id)
+                    } else {
+                        Action::Set(
+                            Edit::new(DocId::Studio, "/panel/bar-preset", "Bar design"),
+                            json!(id),
+                        )
+                    }
+                } else {
+                    Action::Set(
+                        Edit::new(DocId::Bars, bar_path(app, &path), "Bar design"),
+                        json!(id),
+                    )
+                },
+            )
+        })
+        .collect();
+    let gap = b.px(10.0);
+    let width = (c.w - gap) / 2.0;
+    let picture_height = b.px(match bar {
+        Some(Bar::Top) => 92.0,
+        Some(Bar::Dock) => 136.0,
+        None => 208.0,
+    });
+    let row_height = picture_height + b.px(32.0);
+    let top = c.y;
+    for (index, (label, on, action)) in choices.iter().enumerate() {
+        let pic = Rect::new(
+            c.x + (index % 2) as f32 * (width + gap),
+            top + (index / 2) as f32 * row_height,
+            width,
+            picture_height,
+        );
+        let k = key(("panel-bar-design-grid", bar, index));
+        let tile = Rect::new(
+            pic.left - b.px(4.0),
+            pic.top - b.px(4.0),
+            pic.width() + b.px(8.0),
+            pic.height() + b.px(32.0),
+        );
+        b.plate(k, tile, b.px(10.0), *on);
+        let mut raw = match bar {
+            Some(bar) => json!({bar.key(): {"design":designs[index].0,"enabled":true}}),
+            None => json!({"preset":designs[index].0}),
+        };
+        raw["dock"]["pinned"] = bar_value(app, "/dock/pinned").filter(|v| v.as_array().is_some_and(|pins| !pins.is_empty()))
+            .unwrap_or_else(|| json!([{"path":"C:\\Windows\\explorer.exe","name":"Files"},{"path":"C:\\Windows\\System32\\notepad.exe","name":"Notes"}]));
+        crate::panel::specimens::backdrop(app, b, pic);
+        if let Some(bar) = bar {
+            bar_crop(app, b, pic, &raw, bar);
+        } else {
+            let has_top = mypaper_bars::BarsConfig::parse(&raw.to_string())
+                .is_ok_and(|config| config.top.enabled);
+            if has_top {
+                let h = b.px(68.0);
+                bar_crop(
+                    app,
+                    b,
+                    Rect::new(pic.left, pic.top, pic.width(), h),
+                    &raw,
+                    Bar::Top,
+                );
+                bar_crop(
+                    app,
+                    b,
+                    Rect::new(
+                        pic.left,
+                        pic.top + h + b.px(4.0),
+                        pic.width(),
+                        pic.height() - h - b.px(4.0),
+                    ),
+                    &raw,
+                    Bar::Dock,
+                );
+            } else {
+                bar_crop(app, b, pic, &raw, Bar::Dock);
+            }
+        }
+        text(
+            b,
+            Rect::new(pic.left, pic.bottom + b.px(5.0), pic.width(), b.px(22.0)),
+            label,
+            12.0,
+            500,
+            if *on { b.p.ink1 } else { b.p.ink3 },
+            Align::Center,
+        );
+        b.hit_checked(
+            k,
+            tile,
+            Role::RadioButton,
+            label,
+            Some(*on),
+            action.clone(),
+            Behavior::Click,
+        );
+        b.focus_ring(k, tile, b.px(10.0));
+    }
+    c.y = top + choices.len().div_ceil(2) as f32 * row_height;
+}
+
+/// Rasterize the shell's real bar vectors at twice their desktop size, without enlarging a thumbnail.
+fn bar_crop(app: &App, b: &mut B, pic: Rect, raw: &Value, bar: Bar) {
+    use mypaper_shell::preview::bars as shell;
+    use mypaper_ui::{DisplayList, Op, Ui};
+    let width = pic.width().ceil() as u32;
+    let height = pic.height().ceil() as u32;
+    let dark = crate::panel::specimens::desktop_dark(app);
+    let cache_key = format!("bar-detail:{raw}:{bar:?}:{width}:{height}:{}:{dark}", b.s);
+    let state = app.panel.as_ref().unwrap();
+    let cached = state.specimens.borrow().get(&cache_key).cloned();
+    let image = cached.or_else(|| {
+        let mut config = mypaper_bars::BarsConfig::parse(&raw.to_string()).ok()?;
+        config.resolve(Vec::new);
+        let look = if bar == Bar::Top {
+            &config.top.look
+        } else {
+            &config.dock.look
+        };
+        let mut system = mypaper_bars::accent::read();
+        system.scheme = if dark {
+            mypaper_bars::accent::Scheme::Dark
+        } else {
+            mypaper_bars::accent::Scheme::Light
+        };
+        let tokens = shell::Tokens::resolve(look, &config.appearance, &system);
+        let model = shell::sample_model(
+            windows::Win32::Foundation::SYSTEMTIME {
+                wHour: 10,
+                wMinute: 42,
+                wYear: 2026,
+                wMonth: 11,
+                wDay: 6,
+                ..Default::default()
+            },
+            "Files",
+        );
+        let mut ui = Ui::new().ok()?;
+        let mut images = shell::Images::default();
+        let scale = 2.0 * b.s;
+        let extent = ((800.0 * scale) as u32, (360.0 * scale) as u32);
+        let frame = if bar == Bar::Top {
+            shell::top(
+                extent.0,
+                &config,
+                &model,
+                &tokens,
+                scale,
+                &mut ui,
+                &mut images,
+                None,
+            )
+        } else {
+            let apps: Vec<_> = config
+                .dock
+                .pinned
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .take(8)
+                .map(|pin| mypaper_bars::apps::Item {
+                    key: mypaper_bars::apps::pin_key(&pin.path),
+                    name: pin
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path)),
+                    path: pin.path,
+                    icon: None,
+                    pinned: true,
+                    windows: vec![],
+                    aumid: None,
+                    exe: None,
+                })
+                .collect();
+            shell::dock(
+                &config,
+                &model,
+                &apps,
+                &tokens,
+                scale,
+                extent,
+                &[],
+                &[],
+                &mut ui,
+                &mut images,
+                None,
+            )
+        };
+        // Empty centers (the macOS menu bar, for example) show their clock and status end.
+        let x = if bar == Bar::Top && config.top.center.is_empty() {
+            width as f32 - frame.size.0 as f32 + b.px(6.0)
+        } else {
+            (width as f32 - frame.size.0 as f32) / 2.0
+        };
+        let y = (height as f32 - frame.size.1 as f32) / 2.0;
+        let mut list = DisplayList::default();
+        for (shape, radius) in &frame.shapes {
+            let color = tokens.material.map_or(tokens.theme.color.surface, |m| {
+                m.tint.with_alpha((1.0 - m.clarity).max(0.35))
+            });
+            list.ops.push(Op::Fill {
+                rect: shape.offset(x, y),
+                radius: *radius,
+                color,
+            });
+        }
+        list.ops.extend(crate::stage::offset(&frame.list.ops, x, y));
+        let image = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, width, height).ok()?);
+        state
+            .specimens
+            .borrow_mut()
+            .insert(cache_key, image.clone());
+        Some(image)
+    });
+    if let Some(image) = image {
+        crate::stage::image_round(b, pic, &image, 1.0, b.px(6.0));
+    }
+}
+
 pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
     let bar = if page == Page::Dock {
         Bar::Dock
@@ -46,7 +817,7 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
         page.title(),
         &format!(
             "{} · Display {}",
-            crate::pages::bars::design_name(app, bar),
+            design_name(app, Some(bar)),
             app.nav.display + 1
         ),
     );
@@ -57,7 +828,6 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
         } else {
             &[
                 "dock_enabled",
-                "dock_style",
                 "dock_edge",
                 "dock_size",
                 "dock_magnify",
@@ -79,46 +849,36 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
                 "",
             );
         }
+        let path = format!("/{}/look/shadow/rest", bar.key());
+        let shadow = bar_value(app, &path).unwrap_or(Value::Null);
+        let on = shadow.get("color").and_then(Value::as_str) != Some("transparent");
+        toggle(
+            b,
+            c,
+            "Shadow",
+            "",
+            on,
+            Action::Set(
+                Edit::new(DocId::Bars, bar_path(app, &path), "Bar shadow"),
+                if on {
+                    json!({"color":"transparent"})
+                } else {
+                    json!({"color":"#00000059","y":4,"blur":16})
+                },
+            ),
+        );
     });
-    let designs_open = key(("panel-bar-designs", bar));
     row(
         b,
         c,
         Some(glyph::BARS),
         "Design",
-        &crate::pages::bars::design_name(app, bar),
+        &design_name(app, Some(bar)),
         "This bar only",
         None,
-        Action::More(designs_open),
+        Action::Panel(Command::Design(Some(bar))),
     );
-    if app.is_open(designs_open) {
-        group(b, c, "Design · this bar only", |b, c| {
-            let designs: &[(&str, &str)] = if bar == Bar::Top {
-                &crate::pages::bars::TOP_DESIGNS
-            } else {
-                &crate::pages::bars::DOCK_DESIGNS
-            };
-            let path = format!("/{}/design", bar.key());
-            let current = app
-                .get(DocId::Bars, &path)
-                .and_then(Value::as_str)
-                .unwrap_or("monochrome");
-            for &(id, label) in designs {
-                design_row(
-                    app,
-                    b,
-                    c,
-                    id,
-                    label,
-                    current == id,
-                    Action::Set(
-                        Edit::new(DocId::Bars, path.clone(), "Bar design"),
-                        json!(id),
-                    ),
-                );
-            }
-        });
-    }
+    display_differences(app, b, c);
     if bar == Bar::Dock {
         pinned_apps(app, b, c, Pins::Dock);
     }
@@ -137,10 +897,8 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
                 Align::Start,
             );
             c.y += b.px(28.0);
-            let modules = app
-                .get(DocId::Bars, &format!("/{}/{list}", bar.key()))
-                .and_then(Value::as_array)
-                .cloned()
+            let modules = bar_value(app, &format!("/{}/{list}", bar.key()))
+                .and_then(|v| v.as_array().cloned())
                 .unwrap_or_default();
             module_rows(app, b, c, bar, list, &modules);
             if modules.is_empty() {
@@ -156,7 +914,7 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
                 b,
                 c,
                 DocId::Bars,
-                "/top/look/radius",
+                &bar_path(app, "/top/look/radius"),
                 "Corners",
                 (0.0, 64.0, 1.0),
                 8.0,
@@ -180,6 +938,14 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
                     s.place == place
                         && s.more == Some(heading)
                         && !matches!(s.kind, crate::settings::Kind::Custom)
+                        && !matches!(
+                            s.id,
+                            "top_shadow"
+                                | "dock_shadow"
+                                | "dock_style_own"
+                                | "top_displays"
+                                | "dock_displays"
+                        )
                 }) {
                     setting(app, b, c, s.id, s.label, "");
                 }
@@ -189,7 +955,14 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
             b,
             c,
             "Follow the design's look and motion",
-            Action::ResetBar(bar),
+            Action::Set(
+                Edit::new(
+                    DocId::Studio,
+                    format!("/panel/bar-reset/{}", bar.key()),
+                    "Follow bar design",
+                ),
+                Value::Null,
+            ),
         );
     }
 }
@@ -221,10 +994,13 @@ fn module_rows(app: &App, b: &mut B, c: &mut Col, bar: Bar, list: &'static str, 
 
 pub fn module(app: &App, b: &mut B, c: &mut Col) {
     let Some(slot) = &app.nav.module else { return };
-    let list = app
-        .get(DocId::Bars, &format!("/{}/{}", slot.bar.key(), slot.list))
-        .and_then(Value::as_array);
-    let Some(id) = list.and_then(|l| l.get(slot.index)).and_then(Value::as_str) else {
+    let list = bar_value(app, &format!("/{}/{}", slot.bar.key(), slot.list));
+    let Some(id) = list
+        .as_ref()
+        .and_then(Value::as_array)
+        .and_then(|l| l.get(slot.index))
+        .and_then(Value::as_str)
+    else {
         return;
     };
     title(
@@ -266,6 +1042,7 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
         }
     });
     let base = format!("/modules/{}", crate::docs::token(id));
+    let document = resolved(app);
     if id == "clock" {
         group(b, c, "Shows", |b, c| {
             setting(app, b, c, "top_clock_seconds", "Seconds", "");
@@ -281,73 +1058,78 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
             ("wheelDown", "Scroll down"),
         ] {
             let path = format!("{base}/click/{trigger}");
+            let current = bar_value(app, &path).unwrap_or(Value::Null);
+            let mode_key = format!("/panel/draft/gesture{path}");
+            let mode = app
+                .texts
+                .get(&FieldId::Text(DocId::Studio, mode_key.into()))
+                .map(String::as_str)
+                .unwrap_or_else(|| {
+                    if current.get("exec").is_some() {
+                        "program"
+                    } else if current.get("open").is_some() {
+                        "open"
+                    } else {
+                        current.as_str().unwrap_or("default")
+                    }
+                });
+            let mut options: Vec<_> = [
+                ("default", "Its own action"),
+                ("open", "Open…"),
+                ("program", "A program…"),
+                ("none", "Nothing"),
+                ("start", "Start menu"),
+                ("search", "Search"),
+                ("calendar", "Calendar"),
+                ("notifications", "Notifications"),
+                ("quick-settings", "Quick settings"),
+                ("mixer", "Volume mixer"),
+                ("network", "Network"),
+                ("task-manager", "Task Manager"),
+                ("settings", "Windows Settings"),
+                ("show-desktop", "Show desktop"),
+                ("media-toggle", "Play or pause"),
+                ("lock", "Lock"),
+                ("explorer", "File Explorer"),
+            ]
+            .into_iter()
+            .map(|(value, label)| (json!(value), label.into()))
+            .collect();
+            if !options.iter().any(|(value, _)| value == mode) {
+                options.push((json!(mode), click_label(app, id, slot.bar)));
+            }
             select(
                 b,
                 c,
                 label,
-                app.get(DocId::Bars, &path).cloned().unwrap_or(Value::Null),
-                Edit::new(DocId::Bars, path.clone(), label),
-                [
-                    ("", "Its own"),
-                    ("none", "Nothing"),
-                    ("start", "Start menu"),
-                    ("search", "Search"),
-                    ("calendar", "Calendar"),
-                    ("notifications", "Notifications"),
-                    ("quick-settings", "Quick settings"),
-                    ("mixer", "Volume mixer"),
-                    ("network", "Network"),
-                    ("task-manager", "Task Manager"),
-                    ("settings", "Windows Settings"),
-                    ("show-desktop", "Show desktop"),
-                    ("media-toggle", "Play or pause"),
-                    ("lock", "Lock"),
-                    ("explorer", "File Explorer"),
-                ]
-                .into_iter()
-                .map(|(value, label)| {
-                    (
-                        if value.is_empty() {
-                            Value::Null
-                        } else {
-                            json!(value)
-                        },
-                        label.into(),
-                    )
-                })
-                .collect(),
+                json!(mode),
+                Edit::new(DocId::Studio, format!("/panel/gesture{path}"), label),
+                options,
             );
-            let current = app.get(DocId::Bars, &path);
-            let program = current
-                .and_then(|value| value.get("exec"))
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            let draft = format!(
-                "/panel/draft/module-trigger/{}/{trigger}",
-                crate::docs::token(id)
-            );
-            if current.is_some_and(Value::is_object) || app.is_open(key(("panel-trigger", &path))) {
-                let id = FieldId::Text(DocId::Studio, draft.clone().into());
-                let value = app.texts.get(&id).map(String::as_str).unwrap_or(program);
-                field(app, b, c, id, "Program", "notepad.exe", value);
-                if !value.trim().is_empty() {
-                    action_button(
-                        b,
-                        c,
-                        &format!("Use for {label}"),
-                        Action::Set(
-                            Edit::new(DocId::Bars, path.clone(), label),
-                            json!({"exec":value,"args":[]}),
-                        ),
-                    );
-                }
+            if matches!(mode, "program" | "open") {
+                let key = if mode == "program" { "exec" } else { "open" };
+                let value = current.get(key).and_then(Value::as_str).unwrap_or("");
+                field(
+                    app,
+                    b,
+                    c,
+                    FieldId::Text(
+                        DocId::Studio,
+                        format!("/panel/gesture-target/{key}{path}").into(),
+                    ),
+                    if mode == "program" {
+                        "Program"
+                    } else {
+                        "File, folder or link"
+                    },
+                    if mode == "program" {
+                        "notepad.exe"
+                    } else {
+                        "https:// or a file path"
+                    },
+                    value,
+                );
             }
-            action_button(
-                b,
-                c,
-                &format!("Run a program for {}", label.to_lowercase()),
-                Action::More(key(("panel-trigger", &path))),
-            );
         }
     });
     if id.starts_with("custom:") {
@@ -358,10 +1140,11 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
                     app,
                     b,
                     c,
-                    FieldId::Text(DocId::Bars, path.clone().into()),
+                    FieldId::Text(DocId::Bars, bar_path(app, &path).into()),
                     label,
                     "",
-                    app.get(DocId::Bars, &path)
+                    document
+                        .pointer(&path)
                         .map(|value| {
                             value
                                 .as_str()
@@ -371,24 +1154,32 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
                         .unwrap_or(""),
                 );
             }
+            let args = document
+                .pointer(&format!("{base}/args"))
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(|arg| {
+                    if arg.contains(' ') {
+                        format!("\"{arg}\"")
+                    } else {
+                        arg.into()
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join(" ");
             field(
                 app,
                 b,
                 c,
                 FieldId::Text(
                     DocId::Studio,
-                    format!("/module_args/{}", crate::docs::token(id)).into(),
+                    format!("/panel/module-args/{}", crate::docs::token(id)).into(),
                 ),
                 "Arguments",
                 "No arguments",
-                &crate::panel::field_initial(
-                    app,
-                    &FieldId::Text(
-                        DocId::Studio,
-                        format!("/module_args/{}", crate::docs::token(id)).into(),
-                    ),
-                )
-                .unwrap_or_default(),
+                &args,
             );
         });
     }
@@ -399,10 +1190,11 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
                 app,
                 b,
                 c,
-                FieldId::Text(DocId::Bars, path.clone().into()),
+                FieldId::Text(DocId::Bars, bar_path(app, &path).into()),
                 "Icon",
                 "From the bar",
-                app.get(DocId::Bars, &path)
+                document
+                    .pointer(&path)
                     .and_then(Value::as_str)
                     .unwrap_or(""),
             );
@@ -426,8 +1218,8 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
                     app,
                     b,
                     c,
-                    &Edit::new(DocId::Bars, path.clone(), label),
-                    app.get(DocId::Bars, &path),
+                    &Edit::new(DocId::Bars, bar_path(app, &path), label),
+                    document.pointer(&path),
                     false,
                     false,
                     &[
@@ -449,7 +1241,7 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
                     b,
                     c,
                     DocId::Bars,
-                    &format!("{base}/style/{field}"),
+                    &bar_path(app, &format!("{base}/style/{field}")),
                     label,
                     range,
                     default,
@@ -461,6 +1253,7 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
 
 pub fn add(app: &App, b: &mut B, c: &mut Col) {
     let bar = app.nav.bar.unwrap_or(Bar::Top);
+    let document = resolved(app);
     title(
         b,
         c,
@@ -486,7 +1279,8 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
     let present: Vec<_> = ["left", "center", "right"]
         .into_iter()
         .flat_map(|side| {
-            app.get(DocId::Bars, &format!("/{}/{side}", bar.key()))
+            document
+                .pointer(&format!("/{}/{side}", bar.key()))
                 .and_then(Value::as_array)
                 .into_iter()
                 .flatten()
@@ -577,7 +1371,21 @@ pub fn insert_module(app: &mut App) {
     if let Some(id) = app.panel.as_ref().unwrap().add_module.clone()
         && can_insert_module(app, &id)
     {
-        app.run(Action::InsertModule(bar, list, id));
+        let path = format!("/{}/{list}", bar.key());
+        let mut items = bar_value(app, &path)
+            .and_then(|v| v.as_array().cloned())
+            .unwrap_or_default();
+        items.push(json!(id));
+        let before = app.docs.version;
+        app.set(
+            &Edit::new(DocId::Bars, bar_path(app, &path), "Add module"),
+            json!(items),
+        );
+        if app.docs.version == before {
+            return;
+        }
+        app.overlay = None;
+        app.toast_undo("Added a module");
         app.panel.as_mut().unwrap().page = if bar == Bar::Top {
             Page::Top
         } else {
@@ -588,10 +1396,12 @@ pub fn insert_module(app: &mut App) {
 
 pub fn can_insert_module(app: &App, id: &str) -> bool {
     let bar = app.nav.bar.unwrap_or(Bar::Top);
+    let document = resolved(app);
     !id.is_empty()
         && (id == "|"
             || ["left", "center", "right"].into_iter().all(|side| {
-                !app.get(DocId::Bars, &format!("/{}/{side}", bar.key()))
+                !document
+                    .pointer(&format!("/{}/{side}", bar.key()))
                     .and_then(Value::as_array)
                     .into_iter()
                     .flatten()
@@ -655,7 +1465,7 @@ pub fn panel(app: &App, b: &mut B, c: &mut Col) {
         Panel::Tray => ("Tray", &["tray_host"]),
         Panel::Notifications => ("Notifications", &[]),
     };
-    title(b, c, name, "A panel the bars open");
+    title(b, c, name, "A panel the bars open · All displays");
     if panel == Panel::Start {
         pinned_apps(app, b, c, Pins::Start);
     }
@@ -714,7 +1524,7 @@ pub fn panel(app: &App, b: &mut B, c: &mut Col) {
 }
 
 fn pinned_apps(app: &App, b: &mut B, c: &mut Col, which: Pins) {
-    group(b, c, "Pinned apps", |b, c| {
+    group(b, c, "Pinned apps · All displays", |b, c| {
         let own = app
             .get(DocId::Bars, which.path())
             .is_some_and(Value::is_array);
@@ -838,19 +1648,15 @@ pub fn move_module(app: &mut App, bar: Bar, zone: &'static str) {
     }
     let source = format!("/{}/{}", slot.bar.key(), slot.list);
     let destination = format!("/{}/{zone}", bar.key());
-    let mut from = app
-        .get(DocId::Bars, &source)
-        .and_then(Value::as_array)
-        .cloned()
+    let mut from = bar_value(app, &source)
+        .and_then(|v| v.as_array().cloned())
         .unwrap_or_default();
     if slot.index >= from.len() {
         return;
     }
     let module = from.remove(slot.index);
-    let mut to = app
-        .get(DocId::Bars, &destination)
-        .and_then(Value::as_array)
-        .cloned()
+    let mut to = bar_value(app, &destination)
+        .and_then(|v| v.as_array().cloned())
         .unwrap_or_default();
     let index = to.len();
     to.push(module);
@@ -860,12 +1666,12 @@ pub fn move_module(app: &mut App, bar: Bar, zone: &'static str) {
         vec![
             crate::docs::Op {
                 doc: DocId::Bars,
-                path: source,
+                path: bar_path(app, &source),
                 value: Some(json!(from)),
             },
             crate::docs::Op {
                 doc: DocId::Bars,
-                path: destination,
+                path: bar_path(app, &destination),
                 value: Some(json!(to)),
             },
         ],
@@ -881,10 +1687,8 @@ pub fn move_module(app: &mut App, bar: Bar, zone: &'static str) {
 }
 
 fn click_label(app: &App, id: &str, bar: Bar) -> String {
-    let own = app.get(
-        DocId::Bars,
-        &format!("/modules/{}/click/left", crate::docs::token(id)),
-    );
+    let document = resolved(app);
+    let own = document.pointer(&format!("/modules/{}/click/left", crate::docs::token(id)));
     if let Some(program) = own
         .and_then(|value| value.get("exec"))
         .and_then(Value::as_str)
@@ -897,8 +1701,8 @@ fn click_label(app: &App, id: &str, bar: Bar) -> String {
     {
         return format!("Click: Open {target}");
     }
-    let grouped = app
-        .get(DocId::Bars, &format!("/{}/look/family", bar.key()))
+    let grouped = document
+        .pointer(&format!("/{}/look/family", bar.key()))
         .and_then(Value::as_str)
         == Some("fluent");
     let default = match id {
@@ -953,6 +1757,102 @@ fn click_label(app: &App, id: &str, bar: Bar) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    fn fixture(ui: &mypaper_ui::Ui, bars: Value) -> App {
+        let mut app = crate::goldens::app(true, ui);
+        app.docs = crate::docs::Docs::fixture(["{}", &bars.to_string(), "{}", "{}"]);
+        app.panel = Some(crate::panel::State::default());
+        app
+    }
+
+    #[test]
+    fn display_edits_are_isolated_and_reset_removes_layers_without_changing_other_displays() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = fixture(
+            &ui,
+            json!({"top":{"height":32},"overrides":{"primary":{"top":{"height":40}},"secondary":{"top":{"height":60}},"DISPLAY2":{"top":{"height":72}}}}),
+        );
+        let mut third = app.monitors[1].clone();
+        third.device = r"\\.\DISPLAY3".into();
+        app.monitors.push(third);
+        app.nav.display = 0;
+        assert_eq!(
+            bar_path(&app, "/top/height"),
+            "/overrides/DISPLAY1/top/height"
+        );
+        app.nav.display = 1;
+        let before_first = resolved_for(&app, 0);
+        let before_third = resolved_for(&app, 2);
+        let edit = Edit::new(DocId::Bars, bar_path(&app, "/top/height"), "Height");
+        app.set(&edit, json!(80));
+        assert_eq!(bar_value(&app, "/top/height"), Some(json!(80.0)));
+        assert_eq!(resolved_for(&app, 0), before_first);
+        assert_eq!(resolved_for(&app, 2), before_third);
+        same_bars(&mut app);
+        assert!(app.get(DocId::Bars, "/overrides/DISPLAY2").is_none());
+        assert_eq!(resolved_for(&app, 1), before_first);
+        assert_eq!(resolved_for(&app, 2), before_third);
+        assert_eq!(bar_path(&app, "/dock/pinned"), "/dock/pinned");
+        assert_eq!(bar_path(&app, "/taskbar/mode"), "/taskbar/mode");
+        app.run(Action::Undo);
+        assert_eq!(bar_value(&app, "/top/height"), Some(json!(80.0)));
+    }
+
+    #[test]
+    fn program_gestures_stay_drafts_until_valid_and_save_on_the_selected_display() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = fixture(&ui, json!({}));
+        app.nav.display = 1;
+        let version = app.docs.version;
+        app.set(
+            &Edit::new(
+                DocId::Studio,
+                "/panel/gesture/modules/start/click/left",
+                "Click",
+            ),
+            json!("program"),
+        );
+        assert_eq!(app.docs.version, version);
+        app.set(
+            &Edit::new(
+                DocId::Studio,
+                "/panel/gesture-target/exec/modules/start/click/left",
+                "Program",
+            ),
+            json!("notepad.exe"),
+        );
+        assert_eq!(
+            app.get(DocId::Bars, "/overrides/DISPLAY2/modules/start/click/left"),
+            Some(&json!({"exec":"notepad.exe","args":[]}))
+        );
+        assert!(app.get(DocId::Bars, "/modules/start/click/left").is_none());
+        app.run(Action::Undo);
+        assert!(
+            app.get(DocId::Bars, "/overrides/DISPLAY2/modules/start/click/left")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn module_creation_uses_the_display_list_and_leaves_the_other_display_intact() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = fixture(
+            &ui,
+            json!({"top":{"left":["start"],"center":[],"right":[]}}),
+        );
+        let first = resolved_for(&app, 0);
+        app.nav.display = 1;
+        app.nav.bar = Some(Bar::Top);
+        app.panel.as_mut().unwrap().add_module = Some("clock".into());
+        insert_module(&mut app);
+        assert_eq!(
+            app.get(DocId::Bars, "/overrides/DISPLAY2/top/right"),
+            Some(&json!(["clock"]))
+        );
+        assert_eq!(resolved_for(&app, 0), first);
+    }
+
     #[test]
     fn free_module_names_produce_valid_bounded_ids() {
         assert_eq!(super::module_id(" Weather & CPU! (2) "), "weather-cpu-2");
