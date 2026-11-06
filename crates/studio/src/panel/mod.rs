@@ -19,6 +19,7 @@ mod peek;
 mod pickers;
 mod saving;
 mod specimens;
+mod wallpaper_look;
 mod widget_look;
 pub(crate) use widget_look::slider_edit;
 pub use colors::swatches;
@@ -176,6 +177,7 @@ pub enum Command {
     PickWidget(String),
     AddWidget,
     Wallpaper(usize),
+    WallpaperLook(usize),
     Connection(usize),
     Scope(bool),
     Category(Option<String>),
@@ -416,11 +418,19 @@ pub fn run(app: &mut App, command: Command) {
             app.nav.wallpaper = Some(i);
             app.panel.as_mut().unwrap().page = Page::Wallpaper;
         }
+        Command::WallpaperLook(i) => {
+            if i < app.library.items.len() {
+                app.nav.wallpaper = Some(i);
+                app.nav.look_theme = true;
+                app.panel.as_mut().unwrap().page = Page::Look;
+            }
+        }
         Command::Connection(i) => {
             app.nav.integration = i;
             app.panel.as_mut().unwrap().page = Page::Connection;
         }
         Command::Scope(theme) => {
+            if theme && !app.nav.look_theme { app.nav.wallpaper = app.library.active(); }
             app.nav.look_theme = theme;
             app.panel.as_mut().unwrap().page = Page::Look;
         }
@@ -904,6 +914,7 @@ pub fn intercept_set(
         return true;
     }
     if app.panel.is_some() && colors::intercept_set(app, edit, value) { return true; }
+    if app.panel.is_some() && wallpaper_look::intercept_set(app, edit, value) { return true; }
     if app.panel.is_some() && editors::intercept_page_set(app, edit, value) { return true; }
     if app.panel.is_some()
         && edit.doc == crate::docs::DocId::Studio
