@@ -102,13 +102,21 @@ impl Tweaks {
             scheme.store(controller.unmanaged_dark_mode(), Ordering::Release);
             Ok(move |request: Option<Applied>| {
                 match request {
-                    Some(applied) => controller.activate(&applied.style, applied.palette.as_ref(), &applied.theme_dir),
+                    Some(applied) => controller.activate(
+                        &applied.style,
+                        applied.palette.as_ref(),
+                        &applied.theme_dir,
+                    ),
                     None => controller.deactivate(),
                 }
                 scheme.store(controller.unmanaged_dark_mode(), Ordering::Release);
             })
         })?;
-        Ok(Self { worker, unmanaged_dark, forcing_mode: false })
+        Ok(Self {
+            worker,
+            unmanaged_dark,
+            forcing_mode: false,
+        })
     }
 
     /// Pending releases still use the pre-override scheme, until the worker has restored it.
@@ -122,11 +130,14 @@ impl Tweaks {
 
     pub fn activate(&mut self, style: &WindowsStyle, palette: Option<&Palette>, theme_dir: &Path) {
         if self.worker.is_idle() && !self.forcing_mode {
-            self.unmanaged_dark.store(system_prefers_dark(), Ordering::Release);
+            self.unmanaged_dark
+                .store(system_prefers_dark(), Ordering::Release);
         }
         self.forcing_mode = style.dark_mode.is_some();
         self.worker.submit(Some(Applied {
-            style: style.clone(), palette: palette.copied(), theme_dir: theme_dir.to_owned(),
+            style: style.clone(),
+            palette: palette.copied(),
+            theme_dir: theme_dir.to_owned(),
         }));
     }
 
@@ -219,11 +230,13 @@ impl Controller {
         let had_cursors = self.system.journaled_key(cursors::CURSORS_KEY);
         match self.system.transition(&writes, || {
             broadcast_settings_changed();
-            if scheme.is_some() || had_cursors { cursors::reload(); }
+            if scheme.is_some() || had_cursors {
+                cursors::reload();
+            }
         }) {
             Ok(_) => self.active = Some(applied),
             Err(e) => {
-                // Keep the previous request so the same event can retry a partial transition.
+                // Do not suppress a retry of the same request after a partial transition.
                 log::warn!("system accent/dark mode not applied: {e:#}");
                 self.active = None;
             }

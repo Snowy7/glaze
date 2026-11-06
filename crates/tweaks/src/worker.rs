@@ -58,61 +58,93 @@ impl<T: Send + 'static> Worker<T> {
         // SAFETY: unnamed auto-reset event, owned by Shared.
         let event = Event(unsafe { CreateEventW(None, false, false, None)? });
         let shared = Arc::new(Shared {
-            mailbox: Mutex::new(Mailbox { latest: None, revision: 0, stop: false }),
+            mailbox: Mutex::new(Mailbox {
+                latest: None,
+                revision: 0,
+                stop: false,
+            }),
             event,
             completed: AtomicU64::new(0),
         });
         let worker = shared.clone();
         let (ready, receive) = mpsc::sync_channel(1);
-        let thread = thread::Builder::new().name("windows-style".into()).spawn(move || {
-            let mut apply = match init() {
-                Ok(apply) => { let _ = ready.send(Ok(())); apply }
-                Err(error) => { let _ = ready.send(Err(error)); return; }
-            };
-            let mut deadline = None::<Instant>;
-            let mut seen = 0;
-            loop {
-                let timeout = deadline.map_or(INFINITE, |at| {
-                    at.saturating_duration_since(Instant::now()).as_millis().min(u32::MAX as u128) as u32
-                });
-                // SAFETY: the event remains open; this thread owns the message queue/hooks.
-                let wait = unsafe {
-                    MsgWaitForMultipleObjects(Some(&[worker.event.0]), false, timeout, QS_ALLINPUT)
+        let thread = thread::Builder::new()
+            .name("windows-style".into())
+            .spawn(move || {
+                let mut apply = match init() {
+                    Ok(apply) => {
+                        let _ = ready.send(Ok(()));
+                        apply
+                    }
+                    Err(error) => {
+                        let _ = ready.send(Err(error));
+                        return;
+                    }
                 };
-                if wait == WAIT_FAILED {
-                    log::error!("Windows styling worker wait failed");
-                    break;
-                }
-                let mut message = MSG::default();
-                // SAFETY: removes and dispatches only this worker's messages. PeekMessage
-                // also delivers out-of-context WinEvent callbacks on their owning thread.
-                unsafe {
-                    while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
-                        let _ = TranslateMessage(&message);
-                        DispatchMessageW(&message);
+                let mut deadline = None::<Instant>;
+                let mut seen = 0;
+                loop {
+                    let timeout = deadline.map_or(INFINITE, |at| {
+                        let remaining = at.saturating_duration_since(Instant::now());
+                        if remaining.is_zero() {
+                            0
+                        } else {
+                            remaining.as_millis().max(1).min(u32::MAX as u128) as u32
+                        }
+                    });
+                    // SAFETY: the event remains open; this thread owns the message queue/hooks.
+                    let wait = unsafe {
+                        MsgWaitForMultipleObjects(
+                            Some(&[worker.event.0]),
+                            false,
+                            timeout,
+                            QS_ALLINPUT,
+                        )
+                    };
+                    if wait == WAIT_FAILED {
+                        log::error!("Windows styling worker wait failed");
+                        break;
+                    }
+                    let mut message = MSG::default();
+                    // SAFETY: removes and dispatches only this worker's messages. PeekMessage
+                    // also delivers out-of-context WinEvent callbacks on their owning thread.
+                    unsafe {
+                        while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
+                            let _ = TranslateMessage(&message);
+                            DispatchMessageW(&message);
+                        }
+                    }
+                    let task = {
+                        let mut mailbox = worker.mailbox.lock().unwrap();
+                        if mailbox.stop {
+                            break;
+                        }
+                        if mailbox.revision != seen {
+                            seen = mailbox.revision;
+                            deadline = Some(Instant::now() + DEBOUNCE);
+                        }
+                        if deadline.is_some_and(|at| Instant::now() >= at) {
+                            deadline = None;
+                            mailbox.latest.take()
+                        } else {
+                            None
+                        }
+                    };
+                    if let Some((revision, task)) = task {
+                        apply(task);
+                        worker.completed.store(revision, Ordering::Release);
                     }
                 }
-                let task = {
-                    let mut mailbox = worker.mailbox.lock().unwrap();
-                    if mailbox.stop { break; }
-                    if mailbox.revision != seen {
-                        seen = mailbox.revision;
-                        deadline = Some(Instant::now() + DEBOUNCE);
-                    }
-                    if deadline.is_some_and(|at| Instant::now() >= at) {
-                        deadline = None;
-                        mailbox.latest.take()
-                    } else { None }
-                };
-                if let Some((revision, task)) = task {
-                    apply(task);
-                    worker.completed.store(revision, Ordering::Release);
-                }
-            }
-            // `apply` owns the controller: dropping it restores before this thread exits.
-        }).context("starting Windows styling worker")?;
-        receive.recv().context("Windows styling worker initialization")??;
-        Ok(Self { shared, thread: Some(thread) })
+                // `apply` owns the controller: dropping it restores before this thread exits.
+            })
+            .context("starting Windows styling worker")?;
+        receive
+            .recv()
+            .context("Windows styling worker initialization")??;
+        Ok(Self {
+            shared,
+            thread: Some(thread),
+        })
     }
 
     /// Replaces an unprocessed request. No IO or receiver waits run on the caller.
@@ -127,7 +159,8 @@ impl<T: Send + 'static> Worker<T> {
     }
 
     pub fn is_idle(&self) -> bool {
-        self.shared.completed.load(Ordering::Acquire) == self.shared.mailbox.lock().unwrap().revision
+        self.shared.completed.load(Ordering::Acquire)
+            == self.shared.mailbox.lock().unwrap().revision
     }
 }
 
@@ -150,14 +183,21 @@ mod tests {
     fn latest_request_replaces_changes_arriving_during_a_slow_receiver() {
         let (seen, receive) = mpsc::channel();
         let (release, gate) = mpsc::channel();
-        let worker = Worker::start(move || Ok(move |value| {
-            seen.send(value).unwrap();
-            if value == 0 { gate.recv().unwrap(); }
-        })).unwrap();
+        let worker = Worker::start(move || {
+            Ok(move |value| {
+                seen.send(value).unwrap();
+                if value == 0 {
+                    gate.recv().unwrap();
+                }
+            })
+        })
+        .unwrap();
         worker.submit(0);
         assert_eq!(receive.recv_timeout(Duration::from_secs(2)).unwrap(), 0);
         // The consumer is deliberately blocked. None of these submissions may wait on it.
-        for value in 1..=100 { worker.submit(value); }
+        for value in 1..=100 {
+            worker.submit(value);
+        }
         release.send(()).unwrap();
         assert_eq!(receive.recv_timeout(Duration::from_secs(2)).unwrap(), 100);
         drop(worker);
