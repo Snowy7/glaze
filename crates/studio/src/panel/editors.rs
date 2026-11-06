@@ -414,7 +414,8 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
     let mut visible_pictures = std::collections::HashSet::new();
     group(b, c, "Desktop changes", |b, c| {
         for (i, entry) in history.entries.iter().enumerate().rev() {
-            let r = Rect::new(c.x - b.px(8.0), c.y, c.w + b.px(16.0), height(b, 84.0));
+            let row_h = height(b, 84.0);
+            let r = b.list_row_area(Rect::new(c.x, c.y, c.w, row_h));
             let k = key(("panel-history", i));
             if history.selected == Some(i) {
                 b.fill(r, b.px(8.0), b.p.selected);
@@ -466,7 +467,7 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
                 Behavior::Click,
             );
             b.focus_ring(k, r, b.px(8.0));
-            c.y = r.bottom;
+            c.y += row_h;
         }
     });
     if let Some((i, entry)) = history

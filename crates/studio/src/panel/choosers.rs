@@ -114,11 +114,12 @@ pub fn draw(
         {
             let k = key((id, index));
             let rect = row_rect(index);
+            let area = b.list_row_area(rect);
             let hovered = highlighted == Some(index);
             if hovered {
-                b.fill(rect, b.px(7.0), b.p.hover);
+                b.fill(area, b.px(7.0), b.p.hover);
             } else if *applied {
-                b.fill(rect, b.px(7.0), b.p.selected);
+                b.fill(area, b.px(7.0), b.p.selected);
             }
             if b.clip_rect().is_none_or(|clip| rect.intersects(&clip)) {
                 picture(
@@ -180,7 +181,7 @@ pub fn draw(
                     b.icon(
                         Rect::new(rect.right - b.px(26.0), rect.top, b.px(20.0), rect.height()),
                         crate::theme::glyph::CHECK,
-                        13.0 * b.t.text_scale,
+                        13.0,
                         b.p.ink1,
                     );
                 }
@@ -194,7 +195,7 @@ pub fn draw(
                 action.clone(),
                 Behavior::Click,
             );
-            b.focus_ring(k, rect, b.px(7.0));
+            b.focus_ring(k, area, b.px(7.0));
         }
     });
     c.y = top + count as f32 * row_height + b.px(6.0);
@@ -278,7 +279,7 @@ pub fn tiles(
                         height(b, 32.0),
                     ),
                     crate::theme::glyph::CHECK,
-                    13.0 * b.t.text_scale,
+                    13.0,
                     b.p.ink1,
                 );
             }

@@ -763,18 +763,7 @@ fn number_unit(name: &str, schema: &Value) -> String {
     .into()
 }
 
-fn number_readout(value: f64, unit: &str) -> String {
-    let number = if value.fract().abs() < 0.001 {
-        format!("{value:.0}")
-    } else {
-        format!("{value:.1}")
-    };
-    if unit.is_empty() {
-        number
-    } else {
-        format!("{number} {unit}")
-    }
-}
+use crate::panel::controls::unit as number_readout;
 
 /// Face tiles use the actual shell view with an isolated sample model; no services or writes.
 pub(super) fn face(

@@ -248,10 +248,11 @@ pub fn row(
     let h = super::controls::height(b, if caption.is_empty() { 40.0 } else { 72.0 });
     let r = Rect::new(c.x, c.y, c.w, h);
     let k = mypaper_ui::controls::key(("catalog-row", c.view, id));
+    let area = b.list_row_area(r);
     if checked {
-        b.fill(r, b.px(8.0), b.p.selected);
+        b.fill(area, b.px(8.0), b.p.selected);
     } else {
-        b.wash(k, r, b.px(8.0));
+        b.wash(k, area, b.px(8.0));
     }
     let icon = Rect::new(r.left, r.top + b.px(10.0), b.px(28.0), b.px(28.0));
     if let Some(image) = image {
@@ -293,7 +294,7 @@ pub fn row(
         action,
         mypaper_ui::controls::Behavior::Click,
     );
-    b.focus_ring(k, r, b.px(8.0));
+    b.focus_ring(k, area, b.px(8.0));
     c.y = r.bottom;
 }
 

@@ -59,7 +59,7 @@ pub fn row(
     let inset = if stacked {
         0.0
     } else {
-        label_width + b.px(4.0)
+        label_width + b.px(8.0)
     };
     b.slider(
         key(("panel-material", edit.doc, edit.path.as_ref())),
