@@ -98,6 +98,7 @@ impl Studio {
             return;
         }
         app.size = size;
+        panel::prepare_frame(app, surface);
         if app.panel.is_none() && let Some((frame, show)) = pages::stage(app) {
             stage::prepare(app, ui, (frame.width() as u32, frame.height() as u32), show);
         }

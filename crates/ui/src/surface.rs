@@ -743,6 +743,9 @@ impl Surface {
     /// Frees the bitmaps (a hidden surface keeps none); the next [`present`](Self::present)
     /// draws everything again.
     pub fn release(&mut self) {
+        if let Some(app) = &self.shared.app {
+            app.release_canvas();
+        }
         self.pixels = None;
         self.shown = DisplayList::default();
         self.size = (0, 0);

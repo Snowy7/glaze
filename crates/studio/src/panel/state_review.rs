@@ -1,0 +1,213 @@
+//! State fixtures rendered through the real panel; never changes Windows settings.
+use super::{Page, State};
+use crate::{
+    actions::{Action, Edit, FieldId},
+    app::App,
+    docs::{DocId, Op},
+};
+use mypaper_ui::{Rgba, Ui, golden, render};
+use serde_json::json;
+
+fn fixture(ui: &Ui, dark: bool, page: Page) -> App {
+    let mut app = crate::goldens::app(dark, ui);
+    app.panel = Some(State {
+        page,
+        ..Default::default()
+    });
+    app.size = (480, 760);
+    if app.library.active().is_none() && !app.library.items.is_empty() {
+        let i = app
+            .library
+            .items
+            .iter()
+            .position(|item| item.id == "rain-city")
+            .unwrap_or(0);
+        app.library.items[i].active = true;
+    }
+    app
+}
+
+#[test]
+fn first_run_choices_are_independent_of_the_previous_choice() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = fixture(&ui, true, Page::Root);
+    super::run(&mut app, super::Command::Open(Page::FirstRun));
+    app.run(Action::FirstRunPick(0));
+    let expected =
+        [DocId::Config, DocId::Bars, DocId::Widgets].map(|id| app.docs.doc(id).raw.clone());
+    app.run(Action::FirstRunTaskbar(2));
+    assert!(crate::pages::widgets::layout(&app).instances.is_empty());
+    app.run(Action::FirstRunTaskbar(0));
+    assert_eq!(
+        [DocId::Config, DocId::Bars, DocId::Widgets].map(|id| app.docs.doc(id).raw.clone()),
+        expected
+    );
+    app.run(Action::FirstRunTaskbar(1));
+    app.run(Action::FirstRunPick(2));
+    assert_eq!(app.get(DocId::Bars, "/top/enabled"), Some(&json!(false)));
+    app.run(Action::FirstRunTaskbar(0));
+    assert_eq!(app.get(DocId::Bars, "/preset"), Some(&json!("islands")));
+    assert_eq!(app.get(DocId::Bars, "/dock/enabled"), Some(&json!(true)));
+    assert!(!crate::pages::widgets::layout(&app).instances.is_empty());
+    for step in 0..3 {
+        app.overlay = Some(crate::app::Overlay::FirstRun {
+            step,
+            starter: 2,
+            taskbar: 0,
+        });
+        let built = super::build(&app, &mut ui.text);
+        assert_eq!(
+            built.list.ops.iter().any(
+                |op| matches!(op, mypaper_ui::Op::Text {text,..} if text.as_ref() == "Recovery")
+            ),
+            step == 2
+        );
+        assert!(
+            built
+                .list
+                .hits
+                .iter()
+                .any(|hit| hit.label.as_ref() == "Skip remaining steps")
+        );
+    }
+}
+
+#[test]
+fn release_state_routes_and_shared_units_are_exposed() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = fixture(&ui, true, Page::Root);
+    app.system.parts[1].running = false;
+    let built = super::build(&app, &mut ui.text);
+    assert!(
+        built
+            .targets
+            .iter()
+            .any(|target| target.action == Action::Panel(super::Command::Open(Page::Troubleshoot)))
+    );
+    app.system.parts = Default::default();
+    let built = super::build(&app, &mut ui.text);
+    let header: Vec<_> = built
+        .list
+        .hits
+        .iter()
+        .filter(|hit| hit.rect.top < 48.0)
+        .map(|hit| hit.label.as_ref())
+        .collect();
+    assert_eq!(header.len(), 2);
+    assert!(header.contains(&"Back") && header.contains(&"Done"));
+    assert_eq!(super::controls::unit(12.0, "px"), "12 px");
+    assert_eq!(super::controls::unit(55.0, "%"), "55%");
+}
+
+#[test]
+fn render_panel_states() {
+    let out = std::env::var_os("MYPAPER_STUDIO_PANEL_SHOTS")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| r"C:\mypaper-targets\studio-panel\shots".into())
+        .join("states");
+    std::fs::create_dir_all(&out).unwrap();
+    let mut ui = Ui::new().unwrap();
+    for dark in [true, false] {
+        for (name, page) in [
+            ("off", Page::Root),
+            ("paused", Page::Root),
+            ("stopped-part", Page::Root),
+            ("bars-stopped", Page::Bars),
+            ("wallpapers-none-own", Page::Wallpapers),
+            ("search-empty", Page::Search),
+            ("widgets-empty", Page::Widgets),
+            ("no-room", Page::AddWidget),
+            ("large-home", Page::Root),
+            ("large-bars", Page::Bars),
+            ("large-widget", Page::Widget),
+            ("large-wallpapers", Page::Wallpapers),
+            ("high-contrast", Page::Root),
+        ] {
+            let mut app = fixture(&ui, dark, page);
+            match name {
+                "off" => app.system.parts = Default::default(),
+                "paused" => app.run(Action::Set(
+                    Edit::new(DocId::Config, "/paused", "Pause"),
+                    json!(true),
+                )),
+                "stopped-part" => app.system.parts[1].running = false,
+                "bars-stopped" => app.system.parts[2].running = false,
+                "wallpapers-none-own" => {
+                    app.nav.filter = 1;
+                    app.library.items.retain(|wallpaper| !wallpaper.editable());
+                }
+                "search-empty" => {
+                    app.texts
+                        .insert(FieldId::Palette, "no-such-setting-73921".into());
+                }
+                "widgets-empty" => app
+                    .docs
+                    .edit(
+                        "Fixture",
+                        &[Op {
+                            doc: DocId::Widgets,
+                            path: "/instances".into(),
+                            value: Some(json!([])),
+                        }],
+                    )
+                    .unwrap(),
+                "no-room" => {
+                    let grid = crate::stage::grid_for(
+                        &crate::pages::widgets::layout(&app),
+                        app.display().unwrap(),
+                    );
+                    app.docs.edit("Fixture", &[Op{doc:DocId::Widgets,path:"/instances".into(),value:Some(json!([{"instance":"cover","widget":"clock","monitor":"","cell":[0,0],"size":[grid.cols,grid.rows]}]))}]).unwrap();
+                    app.panel.as_mut().unwrap().add_widget = Some("clock".into());
+                }
+                "large-widget" => app.nav.widget = Some("clock-1".into()),
+                "high-contrast" => {
+                    app.theme.contrast = true;
+                    let (window, ink) = if dark {
+                        ([0, 0, 0], [255, 255, 255])
+                    } else {
+                        ([255, 255, 255], [0, 0, 0])
+                    };
+                    app.theme.palette = mypaper_ui::controls::Palette::contrast(
+                        Rgba::rgb8(window, 1.0),
+                        Rgba::rgb8(ink, 1.0),
+                        Rgba::rgb8(if dark { [26, 235, 255] } else { [0, 0, 128] }, 1.0),
+                        Rgba::rgb8([128, 128, 128], 1.0),
+                        Rgba::rgb8(window, 1.0),
+                    );
+                }
+                _ => {}
+            }
+            if name.starts_with("large-") {
+                app.theme.ty.text_scale = 1.5;
+            }
+            app.toast = None;
+            let built = super::build(&app, &mut ui.text);
+            let full = (built.scrolls.last().unwrap().content
+                + 48.0
+                + super::editors::footer_height(&app))
+            .ceil()
+            .max(160.0) as u32;
+            for full_page in [false, true] {
+                if full_page && full <= 760 {
+                    continue;
+                }
+                app.size.1 = if full_page { full } else { full.min(760) };
+                let built = super::build(&app, &mut ui.text);
+                for target in &built.targets {
+                    assert!(
+                        target.rect.left >= 0.0 && target.rect.right <= 480.0,
+                        "{name}: {:?}",
+                        target.rect
+                    );
+                }
+                let image = render(&mut ui, &built.list, 480, app.size.1).unwrap();
+                let file = format!(
+                    "{name}{}-{}.png",
+                    if full_page { "-full" } else { "" },
+                    if dark { "dark" } else { "light" }
+                );
+                golden::write(&image, &out.join(file)).unwrap();
+            }
+        }
+    }
+}

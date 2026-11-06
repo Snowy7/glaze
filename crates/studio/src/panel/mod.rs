@@ -13,6 +13,7 @@ pub(crate) use history::time_label as history_time;
 mod icons;
 mod lists;
 mod measure;
+pub(crate) use measure::prepare_frame;
 mod options;
 mod pages;
 mod peek;
@@ -1306,3 +1307,6 @@ pub fn remember_theme_edit(app: &mut App, path: &str, value: Option<&serde_json:
         ));
     }
 }
+
+#[cfg(test)]
+mod state_review;

@@ -25,7 +25,7 @@ enum Slot {
 }
 
 /// A decode for the worker: the cache key, the file, the size wanted.
-type Job = (String, PathBuf, (u32, u32));
+type Job = (u64, String, PathBuf, (u32, u32));
 
 #[derive(Default)]
 pub struct Images {
@@ -33,6 +33,7 @@ pub struct Images {
     clock: u64,
     budget: Option<usize>,
     worker: Option<Sender<Job>>,
+    generation: Arc<std::sync::atomic::AtomicU64>,
     /// Goldens decode synchronously, with their own WIC factory.
     sync: Option<mypaper_ui::Ui>,
 }
@@ -44,13 +45,22 @@ impl Images {
         self.trim();
     }
 
+    /// Release a page's decoded pixels and skip its queued work; the decoder stays connected.
+    pub fn clear_page(&mut self) {
+        self.generation.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.slots.clear();
+    }
+
     /// Decodes on a worker thread from now on, waking the UI thread when one is ready.
     pub fn connect(&mut self, inbox: Sender<crate::app::Msg>, thread: u32) {
         let (tx, rx) = channel::<Job>();
+        let generation = self.generation.clone();
         std::thread::spawn(move || {
             let Ok(ui) = mypaper_ui::Ui::new() else { return };
-            for (key, path, max) in rx {
+            for (page, key, path, max) in rx {
+                if page != generation.load(std::sync::atomic::Ordering::Relaxed) { continue; }
                 let image = decode(&ui, &path, max).map(Arc::new);
+                if page != generation.load(std::sync::atomic::Ordering::Relaxed) { continue; }
                 if inbox.send(crate::app::Msg::Image(Loaded { key, image })).is_err() {
                     break;
                 }
@@ -64,7 +74,8 @@ impl Images {
     pub fn get(&mut self, path: &Path, max: (u32, u32)) -> Option<Arc<Image>> {
         // Sizes are bucketed so a resizing window doesn't decode at every pixel.
         let max = (max.0.next_multiple_of(64), max.1.next_multiple_of(64));
-        let key = format!("{}|{}x{}", path.display(), max.0, max.1);
+        let page = self.generation.load(std::sync::atomic::Ordering::Relaxed);
+        let key = format!("{page}:{}|{}x{}", path.display(), max.0, max.1);
         self.clock += 1;
         match self.slots.get_mut(&key) {
             Some(Slot::Ready(image, used)) => {
@@ -76,7 +87,7 @@ impl Images {
         }
         if let Some(worker) = &self.worker {
             self.slots.insert(key.clone(), Slot::Pending);
-            let _ = worker.send((key, path.to_path_buf(), max));
+            let _ = worker.send((page, key, path.to_path_buf(), max));
             return None;
         }
         let ui = match &self.sync {
@@ -89,6 +100,7 @@ impl Images {
     }
 
     pub fn arrived(&mut self, loaded: Loaded) {
+        if !loaded.key.starts_with(&format!("{}:", self.generation.load(std::sync::atomic::Ordering::Relaxed))) { return; }
         self.clock += 1;
         let slot = match loaded.image {
             Some(image) => Slot::Ready(image, self.clock),

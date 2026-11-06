@@ -97,6 +97,11 @@ pub(crate) struct AppShared {
 }
 
 impl AppShared {
+    /// Drop retained software pixels while Windows keeps the last presented frame visible.
+    pub(crate) fn release_canvas(&self) {
+        self.canvas.borrow_mut().take();
+    }
+
     pub(crate) fn new(min: (u32, u32)) -> Self {
         Self {
             min,

@@ -574,6 +574,19 @@ impl Canvas {
         list: &DisplayList,
         areas: &[PixelRect],
     ) -> Result<()> {
+        // A canvas must not keep page artwork alive after its display list stops using it.
+        fn used_images(ops: &[Op], live: &mut std::collections::HashSet<usize>) {
+            for op in ops {
+                match op {
+                    Op::Image { image, .. } | Op::RoundedImage { image, .. } => { live.insert(Arc::as_ptr(image) as usize); }
+                    Op::Clipped { ops, .. } => used_images(ops, live),
+                    _ => {}
+                }
+            }
+        }
+        let mut live = std::collections::HashSet::new();
+        used_images(&list.ops, &mut live);
+        self.images.borrow_mut().retain(|key, _| live.contains(key));
         let t = &self.target;
         // SAFETY: drawing calls between BeginDraw and EndDraw on this thread's target; every
         // object passed in is alive for the call.
@@ -1322,4 +1335,19 @@ mod tests {
             "outside the damage: still the old red at half alpha"
         );
     }
+}
+
+#[test]
+fn canvas_releases_pictures_that_left_the_display_list() {
+    let mut ui = Ui::new().unwrap();
+    let canvas = Canvas::new(&ui, 8, 8).unwrap();
+    let image = Arc::new(Image { width: 8, height: 8, pixels: vec![255; 8 * 8 * 4] });
+    let old = Arc::downgrade(&image);
+    let mut list = DisplayList::default();
+    list.ops.push(Op::RoundedImage { rect: Rect::new(0.0,0.0,8.0,8.0), image, opacity:1.0, source:None, radius:1.0 });
+    canvas.draw(&mut ui.text, &list, PixelRect::full(8,8)).unwrap();
+    drop(list);
+    assert!(old.upgrade().is_some(), "canvas retained its live bitmap");
+    canvas.draw(&mut ui.text, &DisplayList::default(), PixelRect::full(8,8)).unwrap();
+    assert!(old.upgrade().is_none(), "the previous page's pixels were freed");
 }

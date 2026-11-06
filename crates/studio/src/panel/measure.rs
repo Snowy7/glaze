@@ -30,11 +30,25 @@ pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
     }
     app.panel.as_ref().unwrap().reclaim_heap.set(true);
     let mut images = app.images.borrow_mut();
-    images.set_budget(64 << 10);
-    images.set_budget(5 << 20);
+    images.clear_page();
     drop(images);
     *app.stage.borrow_mut() = Default::default();
     text.clear_cache();
+    optimize_heap();
+}
+
+/// Release the previous canvas and retained list before constructing the next page's pictures.
+pub fn prepare_frame(app: &crate::app::App, surface: &mut mypaper_ui::Surface) {
+    let Some(state) = &app.panel else { return };
+    let page =
+        if matches!(state.page, super::Page::Top | super::Page::Dock) && app.nav.module.is_some() {
+            super::Page::Module
+        } else {
+            state.page
+        };
+    if state.specimen_page.get() != Some(page) {
+        surface.release();
+    }
 }
 
 /// Ask the allocator to decommit freed pages, once per navigation rather than on hover.
