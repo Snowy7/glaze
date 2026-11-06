@@ -459,6 +459,34 @@ fn temp(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("mypaper-n4-{name}-{}", std::process::id()))
 }
 
+#[test]
+fn compact_flip_clock_keeps_seconds_and_period_clear_of_the_digit_cards() {
+    let mut ui = Ui::new().unwrap();
+    let mut model = fixture("clock", temp("compact-flip"));
+    model.placed.settings.insert("variant".into(), json!("flip"));
+    model.placed.settings.insert("format24".into(), json!(false));
+    model.placed.settings.insert("showSeconds".into(), json!(true));
+    let tokens = tokens(&model.placed.appearance);
+    for (size, scale) in [((200, 96), 1.0), ((140, 80), 1.0), ((300, 144), 1.5)] {
+        let list = view::view(&model, &tokens, view::Frame {
+            size, scale, now: now(), instant: Instant::now(), editing: false,
+        }, &mut ui.text);
+        let texts: Vec<_> = list.ops.iter().filter_map(|op| match op {
+            Op::Text { text, rect, .. } => Some((text.as_ref(), *rect)), _ => None,
+        }).collect();
+        let last_digit = texts.iter().filter(|(t, _)| matches!(*t, "2" | "3" | "7"))
+            .map(|(_, r)| r.right).reduce(f32::max).expect("flip numerals");
+        for label in ["00", "PM"] {
+            let side = texts.iter().find(|(t, _)| *t == label).expect("seconds and period remain readable").1;
+            assert!(side.left >= last_digit + 1.0, "{size:?} at {scale}: {label} overlaps digits: {side:?}, digit end {last_digit}");
+            assert!(side.right <= size.0 as f32, "{label} leaves the specimen");
+        }
+        let seconds = texts.iter().find(|(t, _)| *t == "00").unwrap().1;
+        let period = texts.iter().find(|(t, _)| *t == "PM").unwrap().1;
+        assert!(seconds.bottom < period.top, "secondary lines overlap at {size:?}");
+    }
+}
+
 /// A vertical gradient as an image (premultiplied BGRA), for a stand-in wallpaper.
 fn gradient(width: u32, height: u32, top: [u8; 3], bottom: [u8; 3]) -> mypaper_ui::Image {
     let mut pixels = Vec::with_capacity((width * height * 4) as usize);

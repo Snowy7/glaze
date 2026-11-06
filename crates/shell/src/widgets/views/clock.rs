@@ -81,18 +81,37 @@ fn digital(c: &mut Ctx, r: Rect, flip: bool) {
     };
     // The date column of the wide strip takes about a third.
     let room = if wide && show_date { r.width() * 0.62 } else { r.width() };
-    let size = ((room / (digits_w + small_w)) * 100.0 / s)
+    let mut size = ((room / (digits_w + small_w)) * 100.0 / s)
         .min(r.height() / s / ems)
         .clamp(12.0, 220.0)
         .floor();
+    // At specimen sizes the secondary font stops shrinking at 10 px. Reserve its actual
+    // measured width before sizing the digit cards, rather than scaling a 100 px template.
+    let side_gap = if side { 6.0 * s } else { 0.0 };
+    for _ in 0..3 {
+        let small = c.display((size * 0.22).max(10.0), 650);
+        let side_w = if side {
+            c.f.text.measure("00", &small).0.max(period.as_deref()
+                .map_or(0.0, |p| c.f.text.measure(p, &small).0))
+        } else { 0.0 };
+        size = size.min(((room - side_w - side_gap).max(0.0) / digits_w * 100.0).floor().max(12.0));
+    }
+    let small = c.display((size * 0.22).max(10.0), 650);
+    let side_w = if side {
+        c.f.text.measure("00", &small).0.max(period.as_deref()
+            .map_or(0.0, |p| c.f.text.measure(p, &small).0))
+    } else { 0.0 };
     let style = c.display(size, weight);
-    let line = (size * 0.92 * s).round();
+    let stack_line = c.f.text.measure("00", &small).1.ceil();
+    let stack_height = if seconds && period.is_some() { stack_line * 2.0 + s } else { stack_line };
+    let line = (size * 0.92 * s).round().max(if side { stack_height } else { 0.0 });
     let date_room = if show_date && !wide {
         r.height() - line
     } else {
         0.0
     };
-    let time_w = (digits_w + small_w) * size / 100.0;
+    let main_w = digits_w * size / 100.0;
+    let time_w = main_w + side_gap + side_w;
     let date_h = if show_date && !wide {
         (size * if short || narrow { 0.3 } else { 0.62 } * s).min(date_room)
     } else {
@@ -116,19 +135,17 @@ fn digital(c: &mut Ctx, r: Rect, flip: bool) {
     });
     let group = time_w + wide_date.as_ref().map_or(0.0, |d| c.px(18.0) + d.4);
     let left = r.left + ((r.width() - group) / 2.0).max(0.0).round();
-    let at = Rect::new(left, top, time_w, line);
+    let at = Rect::new(left, top, main_w, line);
     if flip {
         flip_digits(c, at, &digits, size, &style);
     } else {
         numerals(c, at, &digits, &style);
     }
     if side {
-        // Seconds over the day period, top-aligned with the numerals' cap height.
-        let small = c.display((size * 0.22).max(10.0), 650);
-        let x = left + digits_w * size / 100.0 + 6.0 * s;
-        let col = Rect::new(x, top + line * 0.12, small_w, line * 0.8);
+        // Seconds over the day period, with full line boxes even at the minimum font size.
+        let x = left + main_w + side_gap;
+        let stack = Rect::new(x, top + (line - stack_height) / 2.0, side_w + 1.0, stack_line);
         let color = c.color();
-        let (stack, _) = col.take_top(line * 0.3, 0.0);
         if seconds {
             c.styled(
                 stack,
@@ -140,7 +157,7 @@ fn digital(c: &mut Ctx, r: Rect, flip: bool) {
             );
         }
         if let Some(period) = &period {
-            let under = stack.offset(0.0, if seconds { line * 0.3 } else { 0.0 });
+            let under = stack.offset(0.0, if seconds { stack_line + s } else { 0.0 });
             c.styled(under, period, &small, color.secondary, Align::Start, Align::Center);
         }
     }
