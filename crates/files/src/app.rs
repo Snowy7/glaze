@@ -1672,9 +1672,18 @@ impl App {
                 }
                 Reply::Sizes { epoch, sizes } if epoch == self.epoch => {
                     self.sizes = sizes;
-                    if self.sort.column == Column::Size && self.query_text.is_empty() {
-                        self.backend
-                            .sort(self.entries.clone(), self.sort, self.sizes.clone());
+                    if self.sort.column == Column::Size {
+                        if self.query_text.is_empty() {
+                            self.backend
+                                .sort(self.entries.clone(), self.sort, self.sizes.clone());
+                        } else {
+                            self.query = self.backend.search(
+                                self.query_text.clone(),
+                                self.entries.clone(),
+                                self.sort,
+                                self.sizes.clone(),
+                            );
+                        }
                     }
                 }
                 Reply::Image {
