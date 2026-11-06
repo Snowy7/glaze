@@ -1,0 +1,17 @@
+[package]
+name = "mypaper-fswatch"
+description = "Native Windows directory notifications with no idle polling."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+log.workspace = true
+
+[dependencies.windows]
+workspace = true
+features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Threading"]
+
+[lints]
+workspace = true
