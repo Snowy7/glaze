@@ -393,7 +393,7 @@ fn set<T>(hwnd: HWND, attribute: DWMWINDOWATTRIBUTE, value: T) -> bool {
             size_of::<T>() as u32,
         )
     };
-    if let Err(e) = result {
+    if let Err(e) = &result {
         log::trace!("DWM attribute {} on {hwnd:?}: {e}", attribute.0);
     }
     result.is_ok()
