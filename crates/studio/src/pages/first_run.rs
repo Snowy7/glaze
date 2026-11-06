@@ -202,6 +202,10 @@ fn starter_tile(app: &App, b: &mut B, s: &Starter, pic: Rect, behind: Rgba) {
 }
 
 pub fn run(app: &mut App, action: Action) {
+    if app.panel.is_some() {
+        crate::panel::run_first_run(app, action);
+        return;
+    }
     let Some(Overlay::FirstRun { step, starter, taskbar }) = app.overlay.clone() else {
         if let Action::FirstRunPick(_) = action {
             app.overlay = Some(Overlay::FirstRun { step: 0, starter: 0, taskbar: 0 });

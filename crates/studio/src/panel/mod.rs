@@ -7,6 +7,7 @@ pub(crate) mod material;
 mod controls;
 mod editors;
 mod first_run;
+pub(crate) use first_run::run as run_first_run;
 mod history;
 pub(crate) use history::time_label as history_time;
 mod icons;
@@ -139,6 +140,7 @@ pub struct State {
     pub chooser: std::cell::RefCell<choosers::State>,
     reclaim_heap: std::cell::Cell<bool>,
     pub page: Page,
+    pub first_run: std::cell::RefCell<Option<first_run::Baseline>>,
     pub add_widget: Option<String>,
     pub category: Option<String>,
     pub add_module: Option<String>,
@@ -235,6 +237,8 @@ pub fn run(app: &mut App, command: Command) {
         Command::Open(page) => {
             app.overlay = None;
             if page == Page::FirstRun {
+                app.panel.as_ref().unwrap().first_run.borrow_mut().take();
+                first_run::begin(app);
                 app.overlay = Some(crate::app::Overlay::FirstRun {
                     step: 0,
                     starter: 0,
