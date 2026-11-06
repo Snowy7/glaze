@@ -958,6 +958,65 @@ fn idle() {
     phase("no device");
 }
 
+/// Like [`idle`], with a swapchain: which driver threads presenting adds and whether they outlive
+/// the swapchain (the engine releases it while every screen is covered, keeping the device). A
+/// hidden window of the engine's class, a few presented frames, then 12 s each: presented,
+/// swapchain released, no device.
+/// `cargo test -p mypaper-wallpaper --release lab::idle_present -- --ignored --exact --nocapture`
+#[test]
+#[ignore = "dev tool: sample this process's thread wakes while it runs"]
+fn idle_present() {
+    use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, WS_POPUP};
+    let phase = |name: &str| {
+        eprintln!("PHASE {name} pid {} at {:?}", std::process::id(), std::time::SystemTime::now());
+        std::thread::sleep(Duration::from_secs(12));
+    };
+    let _ = crate::window::register_class();
+    // SAFETY: the engine's registered class; a hidden popup this test owns (`Window` drops it).
+    let hwnd = unsafe {
+        CreateWindowExW(
+            Default::default(),
+            windows::core::w!("mypaper.wallpaper"),
+            windows::core::w!("lab present"),
+            WS_POPUP,
+            0,
+            0,
+            640,
+            360,
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+    .unwrap();
+    let windows = vec![crate::window::Window(hwnd)];
+    let opening = crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto);
+    let (gpu, surfaces) = Gpu::new(opening, &windows).unwrap();
+    let window = windows.into_iter().next().unwrap();
+    let surface = surfaces.into_iter().next().unwrap();
+    let mut screen = crate::gpu::Screen::new(&gpu, surface, window).unwrap();
+    for _ in 0..3 {
+        if let Some(texture) = screen.acquire(&gpu) {
+            let view = texture.texture.create_view(&Default::default());
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            drop(sources::begin(&mut encoder, &view, wgpu::LoadOp::Clear(wgpu::Color::BLACK)));
+            gpu.queue.submit([encoder.finish()]);
+            gpu.queue.present(texture);
+        }
+    }
+    gpu.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    phase("presented");
+    screen.release();
+    for _ in 0..2 {
+        gpu.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    }
+    phase("swapchain released");
+    drop(screen);
+    drop(gpu);
+    phase("no device");
+}
+
 /// Private bytes for screen-sized textures, freed and allocated again, under
 /// `MYPAPER_LAB_BLOCK=<MiB>` suballocation blocks (`MemoryHints::Manual`), or under
 /// `MemoryUsage` without it. On the integrated GPU a freed heap's memory stays committed.
