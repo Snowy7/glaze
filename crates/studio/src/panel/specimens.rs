@@ -11,10 +11,12 @@ pub fn remember(app: &App, key: String, image: &Arc<Image>) {
     if image.pixels.len() > 2 << 20 {
         return;
     }
-    let mut cache = app.panel.as_ref().unwrap().specimens.borrow_mut();
+    let state = app.panel.as_ref().unwrap();
+    let mut cache = state.specimens.borrow_mut();
     let bytes: usize = cache.values().map(|image| image.pixels.len()).sum();
     if cache.len() >= 48 || bytes + image.pixels.len() > 2 << 20 {
         cache.clear();
+        state.reclaim_heap.set(true);
     }
     cache.insert(key, image.clone());
 }
@@ -1037,11 +1039,14 @@ fn bars_at(
 ) {
     use mypaper_shell::preview::bars as shell;
     use mypaper_ui::{DisplayList, Op};
+    let compact = size.0 <= 560;
     let icon_stamp: Vec<_> = raw
         .pointer("/dock/pinned")
         .and_then(serde_json::Value::as_array)
         .into_iter()
         .flatten()
+        .filter(|_| only != Some(crate::actions::Bar::Top))
+        .take(if compact { 4 } else { 8 })
         .filter_map(|pin| pin["path"].as_str())
         .map(|path| {
             super::icons::image(app, path)
@@ -1049,12 +1054,13 @@ fn bars_at(
                 .map_or(0, |image| Arc::as_ptr(image) as usize)
         })
         .collect();
-    let cache_key = format!(
-        "bars:{raw}:{only:?}:{size:?}:{strip}:{icon_stamp:?}:{:.0}x{:.0}:{}",
+    let identity = format!(
+        "bars:{raw}:{only:?}:{size:?}:{strip}:{:.0}x{:.0}:{}:",
         rect.width(),
         rect.height(),
         desktop_dark(app)
     );
+    let cache_key = format!("{identity}{icon_stamp:?}");
     let cached = app
         .panel
         .as_ref()
@@ -1064,9 +1070,11 @@ fn bars_at(
         .get(&cache_key)
         .cloned();
     let image = cached.or_else(|| {
+        if !super::choosers::claim_raster(app) {
+            return None;
+        }
         let mut config = mypaper_bars::BarsConfig::parse(&raw.to_string()).ok()?;
         config.resolve(shell::default_pins);
-        let compact = size.0 <= 560;
         if compact {
             // Keep the design's native geometry with a small, plausible set of modules.
             // A monitor's entire status area cannot fit in a 200-DIP choice card.
@@ -1127,7 +1135,10 @@ fn bars_at(
             },
         );
         let mut list = DisplayList::default();
+        let mut vertical = None::<(f32, f32)>;
         let mut append = |mut frame: shell::Frame, x: f32, y: f32, tokens: &shell::Tokens| {
+            let (top, bottom) = (y - 8.0 * scale, y + frame.size.1 as f32 + 8.0 * scale);
+            vertical = Some(vertical.map_or((top, bottom), |(a, b)| (a.min(top), b.max(bottom))));
             real_pinned_icons(app, &mut frame);
             for (shape, radius) in &frame.shapes {
                 let color = tokens.material.map_or(tokens.theme.color.surface, |m| {
@@ -1214,23 +1225,52 @@ fn bars_at(
         }
         let output_height = rect.height().round().max(1.0) as u32;
         let vertical_offset = (output_height as f32 - raster.1 as f32) / 2.0;
+        // A single bar uses a narrow canvas. Its wallpaper already belongs to the card;
+        // retaining the transparent area above and below it only multiplies native copies.
+        let (crop_top, crop_height) = if strip {
+            let (top, bottom) = vertical.unwrap_or((0.0, 1.0));
+            let top = top.floor().clamp(0.0, output_height as f32 - 1.0);
+            let bottom = bottom.ceil().clamp(top + 1.0, output_height as f32);
+            (top, (bottom - top) as u32)
+        } else {
+            (0.0, output_height)
+        };
         let list = DisplayList {
-            ops: crate::stage::offset(&list.ops, 0.0, vertical_offset).collect(),
+            ops: crate::stage::offset(&list.ops, 0.0, vertical_offset - crop_top).collect(),
             ..Default::default()
         };
-        let image = Arc::new(mypaper_ui::render(&mut ui, &list, raster.0, output_height).ok()?);
+        let image = Arc::new(mypaper_ui::render(&mut ui, &list, raster.0, crop_height).ok()?);
         drop(ui);
         super::measure::finish_raster(app);
+        // An icon's arrival replaces this card; it must not retain every earlier version.
+        let state = app.panel.as_ref().unwrap();
+        let mut pictures = state.specimens.borrow_mut();
+        let before = pictures.len();
+        pictures.retain(|key, _| !key.starts_with(&identity));
+        if pictures.len() != before {
+            state.reclaim_heap.set(true);
+        }
+        drop(pictures);
         remember(app, cache_key, &image);
         Some(image)
     });
     if let Some(image) = image {
+        let target = if strip {
+            Rect::new(
+                rect.left,
+                rect.top + (rect.height() - image.height as f32) / 2.0,
+                rect.width(),
+                image.height as f32,
+            )
+        } else {
+            rect
+        };
         b.list.ops.push(Op::RoundedImage {
-            rect,
+            rect: target,
             image,
             opacity: 1.0,
             source: None,
-            radius: b.px(6.0),
+            radius: if strip { 0.0 } else { b.px(6.0) },
         });
     }
 }
@@ -1289,6 +1329,73 @@ fn real_pinned_icons(app: &App, frame: &mut mypaper_shell::preview::bars::Frame)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn individual_bar_rasters_do_not_keep_the_empty_card_canvas() {
+        let mut ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        for bar in [crate::actions::Bar::Top, crate::actions::Bar::Dock] {
+            let mut b = Builder::new(
+                &mut ui.text,
+                &app.theme.palette,
+                &app.theme.ty,
+                1.0,
+                &app.input,
+            );
+            bars(
+                &app,
+                &mut b,
+                Rect::new(0.0, 0.0, 200.0, 112.0),
+                &serde_json::json!({"version":1,"preset":"macos","dock":{"pinned":[]}}),
+                Some(bar),
+            );
+            let image = b
+                .list
+                .ops
+                .iter()
+                .rev()
+                .find_map(|op| match op {
+                    mypaper_ui::Op::RoundedImage { image, .. } => Some(image),
+                    _ => None,
+                })
+                .unwrap();
+            assert_eq!(image.width, 200);
+            assert!(
+                image.height < 70,
+                "{bar:?} kept a {}-pixel canvas",
+                image.height
+            );
+        }
+    }
+
+    #[test]
+    fn an_arriving_app_icon_replaces_the_bar_card_instead_of_caching_both_versions() {
+        let mut ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        let raw = serde_json::json!({"version":1,"preset":"macos",
+            "dock":{"pinned":[{"path":"raster-test-missing.exe","name":"Sample"}]}});
+        let draw = |text: &mut mypaper_ui::Text| {
+            let mut b = Builder::new(text, &app.theme.palette, &app.theme.ty, 1.0, &app.input);
+            bars(&app, &mut b, Rect::new(0.0, 0.0, 200.0, 112.0), &raw, None);
+        };
+        draw(&mut ui.text);
+        app.panel.as_ref().unwrap().specimens.borrow_mut().insert(
+            "app-icon:raster-test-missing.exe".into(),
+            Arc::new(Image {
+                width: 4,
+                height: 4,
+                pixels: vec![255; 64],
+            }),
+        );
+        draw(&mut ui.text);
+        let cache = app.panel.as_ref().unwrap().specimens.borrow();
+        assert_eq!(
+            cache.keys().filter(|key| key.starts_with("bars:")).count(),
+            1
+        );
+    }
 
     #[test]
     fn wallpaper_fits_preserve_the_still_and_center_uses_native_pixels() {

@@ -27,23 +27,37 @@ pub struct State {
     pending: Option<(Key, Action, Instant)>,
     previewed: Option<Action>,
     suppressed: Option<Key>,
-    rasters_left: u8,
+    rasters_left: Option<u8>,
 }
 
 pub fn begin(app: &App) {
     let mut state = app.panel.as_ref().unwrap().chooser.borrow_mut();
     state.requested = None;
     state.groups.clear();
-    state.rasters_left = 2;
+}
+
+pub fn presented(app: &App) {
+    app.panel
+        .as_ref()
+        .unwrap()
+        .chooser
+        .borrow_mut()
+        .rasters_left = None;
 }
 
 /// Limit new gallery canvases per presented frame; the next pair follows on an idle frame.
 pub fn claim_raster(app: &App) -> bool {
-    if app.fixture || app.panel.as_ref().unwrap().page != super::Page::AddWidget {
+    if app.fixture
+        || !matches!(
+            app.panel.as_ref().unwrap().page,
+            super::Page::AddWidget | super::Page::Widget | super::Page::BarDesign
+        )
+    {
         return true;
     }
     let mut state = app.panel.as_ref().unwrap().chooser.borrow_mut();
-    if state.rasters_left == 0 {
+    let remaining = state.rasters_left.get_or_insert(2);
+    if *remaining == 0 {
         if let Some(window) = app.window {
             // Separate from hover debounce: finishing a chooser must not cancel gallery work.
             unsafe {
@@ -57,7 +71,7 @@ pub fn claim_raster(app: &App) -> bool {
         }
         return false;
     }
-    state.rasters_left -= 1;
+    *remaining -= 1;
     true
 }
 
@@ -547,6 +561,26 @@ mod tests {
     };
     use mypaper_config::look::Style;
     use mypaper_ui::{Point, Ui};
+
+    #[test]
+    fn auto_height_rebuild_does_not_restart_the_raster_budget_before_presenting() {
+        let ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.fixture = false;
+        for page in [Page::AddWidget, Page::Widget, Page::BarDesign] {
+            app.panel = Some(PanelState {
+                page,
+                ..Default::default()
+            });
+            begin(&app);
+            assert!(claim_raster(&app));
+            assert!(claim_raster(&app));
+            begin(&app); // The same frame is rebuilt after fitting the window's height.
+            assert!(!claim_raster(&app));
+            presented(&app);
+            assert!(claim_raster(&app));
+        }
+    }
 
     #[test]
     fn style_hover_disables_material_and_color_until_leaving_or_applying() {

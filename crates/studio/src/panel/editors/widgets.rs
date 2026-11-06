@@ -913,7 +913,6 @@ pub(crate) fn face(
     let cached = state.specimens.borrow().get(&cache_key).cloned();
     // Construct the isolated runtime only on a bitmap miss; cached gallery rows own pixels.
     let image = cached.or_else(|| {
-    if !crate::panel::choosers::claim_raster(app) { return None; }
     let placed = mypaper_widgets::layout::Placed {
         instance: "panel-face-preview".into(),
         widget: instance.widget.clone(),
@@ -948,6 +947,8 @@ pub(crate) fn face(
         model.data = json!({"current":{"temperature":22,"condition":"Partly cloudy","code":2,"isDay":true,"location":{"name":"Hong Kong"}},"forecast":{"days":[{"date":"2026-11-06","max":24,"min":19,"code":2},{"date":"2026-11-07","max":23,"min":18,"code":3},{"date":"2026-11-08","max":25,"min":20,"code":0}]}});
     }
     model.photo.current = photo;
+        // Unavailable plugin artwork does not allocate a canvas or consume the frame's budget.
+        if !crate::panel::choosers::claim_raster(app) { return None; }
         let mut ui = crate::panel::measure::raster_ui(app)?;
         ui.text.clear_cache();
         let mut list = view(
