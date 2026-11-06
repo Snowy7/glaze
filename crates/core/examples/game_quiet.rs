@@ -1,7 +1,8 @@
 //! Owned borderless fullscreen fixture, no input injection and no render/timer loop.
 //! Run only under the desktop lock. Covers all monitors, logs the real core signal, and exits
 //! after the requested duration. Never moves/minimizes another application's windows.
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -11,6 +12,137 @@ use windows::core::w;
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     // SAFETY: forward the unchanged arguments for this owned window.
     unsafe { DefWindowProcW(hwnd, msg, wp, lp) }
+}
+
+fn pump(milliseconds: u32) {
+    // SAFETY: this fixture owns the thread's windows and queue; no foreign input is sent.
+    unsafe {
+        MsgWaitForMultipleObjects(None, false, milliseconds, QS_ALLINPUT);
+        let mut msg = MSG::default();
+        while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+            let _ = TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+}
+
+fn phase(
+    name: &str,
+    paused: bool,
+    publisher: u32,
+    results: &mut Vec<serde_json::Value>,
+) -> Result<()> {
+    let start = Instant::now();
+    loop {
+        pump(50);
+        let current = mypaper_tweaks::game_activity::read().map(|(snapshot, _)| snapshot);
+        ensure!(
+            current.is_some_and(|s| s.publisher_pid == publisher),
+            "publisher restarted during {name}: {current:?}"
+        );
+        let current = current.expect("checked above");
+        let owned_foreground = !matches!(name, "minimize" | "exit");
+        if current.activity.pause_background == paused
+            && (!owned_foreground || current.activity.foreground_pid == std::process::id())
+        {
+            println!(
+                "{name}: {:?} after {:.1}ms",
+                current.activity,
+                start.elapsed().as_secs_f64() * 1000.0
+            );
+            results.push(serde_json::json!({ "phase": name, "expected_pause": paused, "snapshot": current, "elapsed_ms": start.elapsed().as_secs_f64() * 1000.0 }));
+            // Let consumers actually apply every hold/resume before the next transition;
+            // otherwise the fixture could merely coalesce all phases into its final state.
+            let settle = Instant::now() + Duration::from_millis(1250);
+            while Instant::now() < settle {
+                pump(50);
+            }
+            return Ok(());
+        }
+        ensure!(
+            start.elapsed() < Duration::from_secs(5),
+            "{name} never became paused={paused}: {current:?}"
+        );
+    }
+}
+
+/// Real focus/minimize/destruction events, all in this fixture. Core stays alive throughout.
+unsafe fn lifecycle(
+    instance: windows::Win32::Foundation::HMODULE,
+    class: windows::core::PCWSTR,
+    mut full: Vec<HWND>,
+    output: PathBuf,
+) -> Result<()> {
+    let publisher = mypaper_tweaks::game_activity::read()
+        .context("core is not publishing activity")?
+        .0
+        .publisher_pid;
+    let r = mypaper_desktop::monitor_infos()[0].rect;
+    let mut results = Vec::new();
+    // SAFETY: creates/moves/minimizes/destroys only owned fixture windows.
+    unsafe {
+        let normal = CreateWindowExW(
+            WS_EX_TOPMOST,
+            class,
+            w!("mypaper normal-window resume fixture"),
+            WS_OVERLAPPEDWINDOW,
+            r.x + 100,
+            r.y + 100,
+            640,
+            400,
+            None,
+            None,
+            Some(instance.into()),
+            None,
+        )?;
+        let run = (|| -> Result<()> {
+            let focus = |window| -> Result<()> {
+                let _ = SetForegroundWindow(window);
+                ensure!(
+                    GetForegroundWindow() == window,
+                    "owned fixture could not take focus"
+                );
+                Ok(())
+            };
+            let _ = ShowWindow(normal, SW_SHOWNORMAL);
+            focus(normal)?;
+            phase("normal", false, publisher, &mut results)?;
+            focus(full[0])?;
+            phase(
+                "fullscreen-before-focus-away",
+                true,
+                publisher,
+                &mut results,
+            )?;
+            focus(normal)?;
+            phase("focus-away", false, publisher, &mut results)?;
+            focus(full[0])?;
+            phase("fullscreen-before-minimize", true, publisher, &mut results)?;
+            for &window in &full {
+                let _ = ShowWindow(window, SW_MINIMIZE);
+            }
+            phase("minimize", false, publisher, &mut results)?;
+            for &window in &full {
+                let _ = ShowWindow(window, SW_RESTORE);
+            }
+            focus(full[0])?;
+            phase("fullscreen-before-exit", true, publisher, &mut results)?;
+            for window in full.drain(..) {
+                DestroyWindow(window)?;
+            }
+            phase("exit", false, publisher, &mut results)?;
+            for _ in 0..20 {
+                pump(50);
+            }
+            std::fs::write(output, serde_json::to_vec_pretty(&results)?)?;
+            Ok(())
+        })();
+        for window in full {
+            let _ = DestroyWindow(window);
+        }
+        let _ = DestroyWindow(normal);
+        run
+    }
 }
 
 fn main() -> Result<()> {
@@ -66,6 +198,14 @@ fn main() -> Result<()> {
             std::process::id(),
             windows.len()
         );
+        if let Some(output) = std::env::args().nth(2) {
+            return lifecycle(
+                instance,
+                class.lpszClassName,
+                windows,
+                PathBuf::from(output),
+            );
+        }
         let until = Instant::now() + Duration::from_secs(seconds);
         let mut last = None;
         while Instant::now() < until {
