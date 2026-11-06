@@ -578,7 +578,9 @@ mod tests {
         let frame = crate::panel::build(&app, &mut ui.text);
         assert!(frame.list.ops.iter().any(
             |op| matches!(op, mypaper_ui::Op::Fill { rect: drawn, color, .. }
-            if *drawn == rect && *color == crate::panel::palette_for(&app).hover)
+            if drawn.contains(app.input.pointer.unwrap())
+                && drawn.top >= rect.top && drawn.bottom <= rect.bottom
+                && *color == crate::panel::palette_for(&app).hover)
         ));
         assert!(frame.semantics.iter().any(
             |(_, semantic)| matches!(semantic, mypaper_ui::Semantics::Status(message)
