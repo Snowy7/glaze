@@ -2,6 +2,11 @@
 //! to the shell. The engine waits on `Reader::wake_event` and the writer's process handle.
 //! A seqlock protects the snapshot; payload words are atomic too, so concurrent reads never
 //! create Rust data races. The session-local mapping is 5.7 KiB, with no files or polling.
+//!
+//! Each plate's finer knobs ([`Style`]) travel in a second section (`<channel>.style`, 1.9 KiB)
+//! stamped with the snapshot's sequence, written inside the same seqlock window. A writer or
+//! reader built before it simply doesn't touch it, and a stamp that doesn't match the snapshot
+//! reads as default styles, so either end can be older than the other.
 
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering, fence};
 
@@ -56,6 +61,76 @@ impl Default for Material {
             highlight: 0.75,
             tint: [0.0, 0.0, 0.0, 0.0],
         }
+    }
+}
+
+/// A plate's finer glass knobs beyond [`Material`] (parity C07, C10, C12), published with
+/// [`Writer::publish_styled`]. `Style::default()` draws exactly as a plate without one.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Style {
+    /// Brightness of what's behind the glass, a multiplier, `0..=2` (1: as is).
+    pub brightness: f32,
+    /// Saturation of what's behind the glass, `0..=3` (1: as is, 0: grey).
+    pub saturation: f32,
+    /// Corner smoothing, `0..=1`: 0 quarter circles (the default), 0.6 iOS's continuous
+    /// (squircle) corners. The surface must draw the same corners.
+    pub smoothing: f32,
+    /// Sheen: the soft light just inside the lit (top) edge, `0..=1`, 0.5 the kit's;
+    /// `None` follows the material's highlight (0.75 is the kit's).
+    pub sheen: Option<f32>,
+    /// Depth: the broad soft shade inside the glass under its lit edge, `0..=1`, 0.5 the kit's;
+    /// `None` follows the material's highlight.
+    pub depth: Option<f32>,
+}
+
+impl Default for Style {
+    fn default() -> Self {
+        Self {
+            brightness: 1.0,
+            saturation: 1.0,
+            smoothing: 0.0,
+            sheen: None,
+            depth: None,
+        }
+    }
+}
+
+const STYLE_WORDS: usize = 5;
+/// `None` on the wire.
+const UNSET: f32 = -1.0;
+
+impl Style {
+    fn words(self) -> [u32; STYLE_WORDS] {
+        [
+            self.brightness,
+            self.saturation,
+            self.smoothing,
+            self.sheen.unwrap_or(UNSET),
+            self.depth.unwrap_or(UNSET),
+        ]
+        .map(f32::to_bits)
+    }
+
+    fn from_words(words: [u32; STYLE_WORDS]) -> Self {
+        let [brightness, saturation, smoothing, sheen, depth] = words.map(f32::from_bits);
+        let set = |v: f32| (v != UNSET).then_some(v);
+        Self {
+            brightness,
+            saturation,
+            smoothing,
+            sheen: set(sheen),
+            depth: set(depth),
+        }
+    }
+
+    fn valid(self) -> bool {
+        let within = |v: f32, max: f32| (0.0..=max).contains(&v);
+        within(self.brightness, 2.0)
+            && within(self.saturation, 3.0)
+            && within(self.smoothing, 1.0)
+            && [self.sheen, self.depth]
+                .into_iter()
+                .all(|v| v.is_none_or(|v| within(v, 1.0)))
     }
 }
 
@@ -136,6 +211,13 @@ struct Shared {
     plates: [AtomicU32; MAX_PLATES * WORDS],
 }
 
+/// The plates' [`Style`]s, valid for the snapshot whose sequence `sequence` holds.
+#[repr(C)]
+struct Styles {
+    sequence: AtomicU64,
+    words: [AtomicU32; MAX_PLATES * STYLE_WORDS],
+}
+
 struct Handle(HANDLE);
 impl Drop for Handle {
     fn drop(&mut self) {
@@ -144,13 +226,13 @@ impl Drop for Handle {
     }
 }
 
-struct Mapping {
+/// A named page-file section of `T`, created or opened, mapped whole until drop.
+struct Section {
     view: MEMORY_MAPPED_VIEW_ADDRESS,
     _mapping: Handle,
-    wake: Handle,
 }
-impl Mapping {
-    fn open(name: &str) -> Result<Self> {
+impl Section {
+    fn open<T>(name: &str) -> Result<Self> {
         // SAFETY: a page-file mapping starts zeroed (valid atomic representations), is aligned
         // to an allocation boundary, and stays mapped until Drop. Named v1 fixes the ABI.
         unsafe {
@@ -159,39 +241,55 @@ impl Mapping {
                 None,
                 PAGE_READWRITE,
                 0,
-                size_of::<Shared>() as u32,
+                size_of::<T>() as u32,
                 &HSTRING::from(name),
             )?);
-            let view = MapViewOfFile(mapping.0, FILE_MAP_ALL_ACCESS, 0, 0, size_of::<Shared>());
+            let view = MapViewOfFile(mapping.0, FILE_MAP_ALL_ACCESS, 0, 0, size_of::<T>());
             ensure!(
                 !view.Value.is_null(),
                 "MapViewOfFile: {}",
                 windows::core::Error::from_thread()
             );
-            let wake =
-                match CreateEventW(None, false, false, &HSTRING::from(format!("{name}.wake"))) {
-                    Ok(handle) => Handle(handle),
-                    Err(error) => {
-                        let _ = UnmapViewOfFile(view);
-                        return Err(error.into());
-                    }
-                };
             Ok(Self {
                 view,
                 _mapping: mapping,
-                wake,
             })
         }
     }
-    fn shared(&self) -> &Shared {
-        // SAFETY: the mapping contains a correctly aligned Shared for our whole lifetime.
-        unsafe { &*self.view.Value.cast::<Shared>() }
-    }
 }
-impl Drop for Mapping {
+impl Drop for Section {
     fn drop(&mut self) {
         // SAFETY: this view belongs to us and is no longer referenced.
         let _ = unsafe { UnmapViewOfFile(self.view) };
+    }
+}
+
+struct Mapping {
+    plates: Section,
+    styles: Section,
+    wake: Handle,
+}
+impl Mapping {
+    fn open(name: &str) -> Result<Self> {
+        let plates = Section::open::<Shared>(name)?;
+        let styles = Section::open::<Styles>(&format!("{name}.style"))?;
+        // SAFETY: a named auto-reset event, owned until drop.
+        let wake = Handle(unsafe {
+            CreateEventW(None, false, false, &HSTRING::from(format!("{name}.wake")))?
+        });
+        Ok(Self {
+            plates,
+            styles,
+            wake,
+        })
+    }
+    fn shared(&self) -> &Shared {
+        // SAFETY: the section holds a correctly aligned Shared for our whole lifetime.
+        unsafe { &*self.plates.view.Value.cast::<Shared>() }
+    }
+    fn styles(&self) -> &Styles {
+        // SAFETY: the section holds a correctly aligned Styles for our whole lifetime.
+        unsafe { &*self.styles.view.Value.cast::<Styles>() }
     }
 }
 
@@ -237,15 +335,31 @@ impl Writer {
     /// Replaces all plates, signals the wake event, and returns the even snapshot sequence.
     /// Invalid geometry/materials or duplicate ids fail before changing shared memory.
     pub fn publish(&mut self, plates: &[Plate]) -> Result<u64> {
-        self.publish_as(plates, std::process::id())
+        self.publish_as(plates, &[], std::process::id())
     }
-    fn publish_as(&mut self, plates: &[Plate], pid: u32) -> Result<u64> {
+
+    /// [`publish`](Self::publish) with each plate's [`Style`] (`styles[i]` for `plates[i]`);
+    /// empty `styles` is every plate at `Style::default()`.
+    pub fn publish_styled(&mut self, plates: &[Plate], styles: &[Style]) -> Result<u64> {
+        self.publish_as(plates, styles, std::process::id())
+    }
+
+    fn publish_as(&mut self, plates: &[Plate], styles: &[Style], pid: u32) -> Result<u64> {
         ensure!(
             plates.len() <= MAX_PLATES,
             "at most {MAX_PLATES} glass plates"
         );
+        ensure!(
+            styles.is_empty() || styles.len() == plates.len(),
+            "one glass style per plate"
+        );
         for (i, plate) in plates.iter().enumerate() {
             ensure!(plate.valid(), "invalid glass plate {}", plate.id);
+            ensure!(
+                styles.get(i).is_none_or(|s| s.valid()),
+                "invalid glass style for plate {}",
+                plate.id
+            );
             ensure!(
                 !plates[..i].iter().any(|p| p.id == plate.id),
                 "duplicate glass id {}",
@@ -265,6 +379,15 @@ impl Writer {
             }
         }
         let sequence = base.wrapping_add(1);
+        // The styles, inside the same window: stamped with this snapshot, or with none.
+        let style = self.mapping.styles();
+        for (slot, s) in style.words.as_chunks::<STYLE_WORDS>().0.iter().zip(styles) {
+            for (word, value) in slot.iter().zip(s.words()) {
+                word.store(value, Ordering::Relaxed);
+            }
+        }
+        let stamp = if styles.is_empty() { 0 } else { sequence };
+        style.sequence.store(stamp, Ordering::Relaxed);
         shared.sequence.store(sequence, Ordering::Release);
         // SAFETY: valid event; auto-reset coalesces bursts without losing the latest snapshot.
         unsafe {
@@ -275,7 +398,7 @@ impl Writer {
 }
 impl Drop for Writer {
     fn drop(&mut self) {
-        let _ = self.publish_as(&[], 0);
+        let _ = self.publish_as(&[], &[], 0);
         // SAFETY: the creating thread owns the lease. Writer is intentionally not Send.
         let _ = unsafe { ReleaseMutex(self.lease.0) };
     }
@@ -286,6 +409,8 @@ pub struct Snapshot {
     pub sequence: u64,
     pub published_qpc: u64,
     pub plates: Vec<Plate>,
+    /// `styles[i]` is `plates[i]`'s; defaults when the writer published none.
+    pub styles: Vec<Style>,
 }
 
 pub struct Reader {
@@ -342,6 +467,21 @@ impl Reader {
                     Plate::from_words(std::array::from_fn(|i| slot[i].load(Ordering::Relaxed)))
                 })
                 .collect();
+            let style = self.mapping.styles();
+            let styles: Vec<_> = if style.sequence.load(Ordering::Relaxed) == sequence {
+                style
+                    .words
+                    .as_chunks::<STYLE_WORDS>()
+                    .0
+                    .iter()
+                    .take(count)
+                    .map(|slot| {
+                        Style::from_words(std::array::from_fn(|i| slot[i].load(Ordering::Relaxed)))
+                    })
+                    .collect()
+            } else {
+                vec![Style::default(); count]
+            };
             fence(Ordering::Acquire);
             if sequence != shared.sequence.load(Ordering::Acquire) {
                 continue;
@@ -359,15 +499,16 @@ impl Reader {
                     .flatten();
                 self.pid = pid;
             }
-            ensure!(plates.iter().all(|p| p.valid()), "invalid glass snapshot");
+            ensure!(
+                plates.iter().all(|p| p.valid()) && styles.iter().all(|s| s.valid()),
+                "invalid glass snapshot"
+            );
+            let live = self.process.is_some();
             return Ok(Some(Snapshot {
                 sequence,
                 published_qpc,
-                plates: if self.process.is_some() {
-                    plates
-                } else {
-                    Vec::new()
-                },
+                plates: if live { plates } else { Vec::new() },
+                styles: if live { styles } else { Vec::new() },
             }));
         }
         if self.process.as_ref().is_some_and(|p| {
@@ -379,6 +520,7 @@ impl Reader {
                 sequence: self.sequence,
                 published_qpc: qpc(),
                 plates: Vec::new(),
+                styles: Vec::new(),
             }));
         }
         Ok(None)
@@ -455,6 +597,43 @@ mod tests {
         worker.join().unwrap();
         assert!(reader.read_changed().unwrap().unwrap().plates.is_empty());
     }
+    #[test]
+    fn styles_travel_with_their_snapshot_and_default_without_one() {
+        let name = format!("{CHANNEL}.styles.{}", std::process::id());
+        let mut reader = Reader::named(&name).unwrap();
+        let mut writer = Writer::named(&name).unwrap();
+        let plates: Vec<_> = (0..2)
+            .map(|id| Plate {
+                id,
+                rect: [0.0, 40.0 * id as f32, 100.0, 40.0],
+                radius: 8.0,
+                material: Material::default(),
+            })
+            .collect();
+        let styled = Style {
+            brightness: 0.8,
+            saturation: 1.6,
+            smoothing: 0.6,
+            sheen: Some(0.3),
+            depth: None,
+        };
+        writer
+            .publish_styled(&plates, &[styled, Style::default()])
+            .unwrap();
+        let snapshot = reader.read_changed().unwrap().unwrap();
+        assert_eq!(snapshot.styles, [styled, Style::default()]);
+        // A plain publish (or a writer that predates styles) leaves the old stamp: defaults.
+        writer.publish(&plates).unwrap();
+        let snapshot = reader.read_changed().unwrap().unwrap();
+        assert_eq!(snapshot.styles, [Style::default(); 2]);
+        let bad = Style {
+            saturation: 4.0,
+            ..styled
+        };
+        assert!(writer.publish_styled(&plates, &[bad, styled]).is_err());
+        assert!(writer.publish_styled(&plates, &[styled]).is_err(), "one per plate");
+    }
+
     #[test]
     fn blur_takes_the_bars_full_range_at_high_dpi() {
         let plate = |blur| Plate {
