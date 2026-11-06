@@ -1,0 +1,18 @@
+{
+    "generation_checkpoint_seconds_approx":  80,
+    "peak_private_bytes":  88313856,
+    "snapshot_records":  11425084,
+    "peak_working_set_bytes":  148803584,
+    "c_scan_seconds":  380.691,
+    "background_generation_target_bytes":  268435456,
+    "counter_scope":  "OS process-lifetime high-water; startup, C enumeration, full generation rewrite/validation and partial D enumeration; no full-index queries",
+    "measured_pid":  83816,
+    "generation_bytes":  912417170,
+    "c_scan_entries":  4740391,
+    "at":  "2026-11-06T06:15:17.2167511+03:00",
+    "all_volumes_completed":  false,
+    "target_passed_for_observed_generation":  true,
+    "full_generation_rewrite_completed":  true,
+    "observation_seconds":  582.32,
+    "interruption":  "External core deployment restarted index during D scan"
+}

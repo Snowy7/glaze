@@ -33,6 +33,16 @@ but an 11M-entry query after resident-page trimming was measured above 100 ms.
   volume beside the other cached volumes into the next snapshot. Scan mappings are
   removed after use; recognizable leftovers from a killed service are removed only after
   exclusive pipe ownership. The service excludes its own cache tree from indexing.
+- Scan and checkpoint views retain four resident 8 MiB windows per view. Dirty scan
+  windows are flushed before range eviction; the snapshot writer uses a 1 MiB buffer
+  and `FILE_FLAG_SEQUENTIAL_SCAN`. Checkpoints read an independent view so their window
+  eviction does not target the live query view. Validation decodes UTF-8 in 4 MiB chunks
+  and uses four workers sharing twelve resident windows (96 MiB), then releases them.
+  Eviction follows the documented [VirtualUnlock behavior](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualunlock)
+  for unlocked pages. Virtual addresses stay valid; physical pages become reclaimable.
+  Ordinary searches retain their existing paging policy and can still touch the full
+  name index while active. The 256 MiB measurement target applies to background
+  scanning/replacement without concurrent full-index queries.
 - Substring terms are ANDed. Exact name matches rank first, then name prefix, word
   prefix, substring; newer modification times break ties. Filters: `ext:rs,toml`,
   `path:"Program Files"`, `folder:photos`, `file:report`. Quotes work within filters.
@@ -141,7 +151,52 @@ mypaper-index --bench-scan 'D:\some-representative-tree'
 `--root PATH [CACHE]` runs a standalone service for an isolated fixture. Core passes
 `--parent PID` in production. Only one server may own the pipe at a time.
 
-## Measurements (2026-11-06, Ryzen 7 7800X3D, Windows)
+## Resident-window follow-up (2026-11-06, 05:40–06:20 timebox)
+
+The first implementation's generation replacement briefly reached 2,252 MiB resident RAM.
+Releasing scan views earlier reduced a later sampled peak to 1,359 MiB, still too high.
+The windowed implementation (`801d661`, `48a78e7`, `bc4f8c5`) instead trims maintenance
+inputs as it goes and writes the output sequentially. Normal query views are unchanged.
+
+| Measurement | Windowed result |
+|---|---:|
+| OS working-set high-water, target <=256 MiB | **141.91 MiB** |
+| Private high-water in the same run | **84.22 MiB** |
+| Work observed | **582.32 s**: startup, complete C: enumeration, complete 11.425M-record / 912,417,170-byte generation rewrite and validation, then partial D: enumeration |
+| C: enumeration | **4,740,391 entries / 380.691 s**, 574 inaccessible directories |
+| C: generation checkpoint | Approximately **80 s** |
+| Validated cached startup in that run | **386.587 ms**, about **101.7 MiB** peak working set |
+| Standalone 11.42M-entry load | **362.509 ms**, **101.60 MiB** peak working set, **6.08 MiB** on return |
+| One million entries, 180 queries | p50 **3.488 ms**, p95 **6.190 ms**, max **7.158 ms**, first after trim **6.987 ms** |
+
+The OS high-water counter catches spikes between the one-second samples. The complete
+generation rewrite and validation met the 256 MiB target. **The three-volume run did not
+finish:** another deployment restarted core/index during D: enumeration at about 06:11.
+The sampler preserves this as `interrupted: true`, `completed: false`; its last residency
+was an active scan, not a settled-idle measurement. Evidence is `windowed-reconcile.json`,
+`windowed-generation-proof.json`, and `windowed-production.log` under `crates/index/evidence`.
+
+The time cost matters: this C: scan took 381 s versus 219 s in an earlier run, followed
+by about 80 s to checkpoint. Concurrent machine load varied, so that difference is not
+a controlled estimate of windowing overhead. The later external deployment's cached
+load took **3.212 s**, missing the one-second startup goal despite the measured run's
+387 ms load. The earlier single-worker windowed prototypes also took 1.6–1.8 s; four
+validators sharing a 96 MiB resident budget restored the fast warm load.
+
+To certify the whole startup sequence, leave one index/core instance uninterrupted for
+roughly **20–25 minutes** on this machine, record `PeakWorkingSet64` through all three
+volume swaps and notification replay, then take the settled sample. No further code is
+needed to repeat that measurement. A strict cap for arbitrary directory fanout or huge
+event bursts would additionally require batching directory enumeration (currently a
+per-directory `Vec<Entry>`) and bounding/spilling the initial notification backlog.
+Full-index queries still touch much of the snapshot; this 256 MiB result covers background
+generation, not a hard process limit during active searches.
+
+Eleven index tests, Clippy with warnings denied, and the final workspace release build
+passed. The deployed helper remains core-owned and enabled. Shared UI/Studio compile
+failures delayed deployment during this timebox; those files were left to their owners.
+
+## Earlier measurements (2026-11-06, Ryzen 7 7800X3D, Windows)
 
 Release mode; checks/tests use `C:\mypaper-targets\index`; the deployment build uses
 `C:\mypaper-targets\main`. Initial million-entry baseline missed the query gate and
@@ -200,7 +255,7 @@ build/temp-file activity. These are workload observations, not controlled idle c
 
 ## Validation and commits
 
-`cargo test -p mypaper-index`: 10 passed. `cargo clippy -p mypaper-index --all-targets
+`cargo test -p mypaper-index`: 11 passed. `cargo clippy -p mypaper-index --all-targets
 -- -D warnings`: passed. Focused launcher tests: 5 passed, 1 installed-app timing test
 intentionally ignored. `cargo check -p mypaper-config -p mypaper-core` and the release
 workspace build passed. Existing warnings in other crates remain outside this slice.
@@ -221,6 +276,7 @@ synthetic input during the skipped captures.
 | Snapshot validation and ranking correctness | `ec8463d`, `edb09a5` |
 | Sparse scan scratch and streamed volume replacement; release scratch before replacement validation | `1d26ffc`, `74a0dd1` |
 | Quiet resident-page trim and post-trim query measurement | `b29dc26` |
+| Bounded scan/checkpoint windows and startup validation | `801d661`, `48a78e7`, `bc4f8c5` |
 | Cold full-volume launcher deadline | `338c48b` |
 | Lifecycle and measurement tools | `8108b3b`, `788c014`, `47787ef` |
 
