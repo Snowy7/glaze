@@ -1754,10 +1754,12 @@ name = "mypaper-files"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytemuck",
  "env_logger",
  "log",
  "mypaper-bars",
  "mypaper-config",
+ "mypaper-desktop",
  "mypaper-index",
  "mypaper-theme",
  "mypaper-tweaks",

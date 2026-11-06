@@ -16,8 +16,13 @@ use windows::{
 thread_local! {
     static INPUT: RefCell<VecDeque<Input>> = const { RefCell::new(VecDeque::new()) };
     static FIELD: Cell<bool> = const { Cell::new(false) };
-    static CONTEXT: RefCell<Option<IContextMenu3>> = const { RefCell::new(None) };
+    static CONTEXT: RefCell<Option<Context>> = const { RefCell::new(None) };
     static GEOMETRY_HOOK: RefCell<Option<Box<dyn FnMut()>>> = const { RefCell::new(None) };
+}
+
+struct Context {
+    three: Option<IContextMenu3>,
+    two: Option<IContextMenu2>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -95,11 +100,19 @@ unsafe extern "system" fn subclass(
             menu.as_ref().map(|menu| {
                 let mut result = LRESULT(0);
                 // SAFETY: the original menu message is forwarded to its live COM handler with writable result storage.
-                let _ = unsafe { menu.HandleMenuMsg2(msg, w, l, Some(&mut result)) };
-                result
+                let handled = if let Some(menu) = &menu.three {
+                    // SAFETY: forwards this menu's original message with valid result storage.
+                    unsafe { menu.HandleMenuMsg2(msg, w, l, Some(&mut result)) }.is_ok()
+                } else if let Some(menu) = &menu.two {
+                    // SAFETY: forwards the original owner-draw/submenu message to its handler.
+                    unsafe { menu.HandleMenuMsg(msg, w, l) }.is_ok()
+                } else {
+                    false
+                };
+                handled.then_some(result)
             })
         });
-        if let Some(result) = result {
+        if let Some(Some(result)) = result {
             return result;
         }
     }
@@ -183,7 +196,12 @@ pub fn context_menu(
         let popup = Popup(CreatePopupMenu()?);
         menu.QueryContextMenu(popup.0, 0, 1, 0x7fff, CMF_NORMAL)
             .ok()?;
-        CONTEXT.with_borrow_mut(|slot| *slot = menu.cast().ok());
+        CONTEXT.with_borrow_mut(|slot| {
+            *slot = Some(Context {
+                three: menu.cast().ok(),
+                two: menu.cast().ok(),
+            })
+        });
         let command = TrackPopupMenuEx(
             popup.0,
             TPM_RETURNCMD.0 | TPM_RIGHTBUTTON.0,
