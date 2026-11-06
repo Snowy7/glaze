@@ -12,6 +12,30 @@ if ([IntPtr]::Size -ne 8) { throw '64-bit PowerShell required for native thread 
 Add-Type @'
 using System; using System.Collections.Generic; using System.Runtime.InteropServices;
 public static class IndexGameThreads {
+ [StructLayout(LayoutKind.Sequential)] public struct Point { public int X,Y; }
+ [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left,Top,Right,Bottom; }
+ [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr c);
+ [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h,out Rect r);
+ [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(Point p);
+ [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+ [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h,out uint pid);
+ [DllImport("user32.dll")] static extern bool GetCursorPos(out Point p);
+ [DllImport("user32.dll")] static extern bool SetCursorPos(int x,int y);
+ [DllImport("user32.dll")] static extern void mouse_event(uint flags,uint x,uint y,uint data,UIntPtr extra);
+ public static uint ForegroundPid() {uint pid;GetWindowThreadProcessId(GetForegroundWindow(),out pid);return pid;}
+ public static void ActivateOwn(IntPtr hwnd,int pid) {
+  SetProcessDpiAwarenessContext(new IntPtr(-4)); Rect r; Point before; uint owner;
+  if(!GetWindowRect(hwnd,out r))throw new Exception("fixture has no window");
+  var p=new Point{X=r.Left+(r.Right-r.Left)/2,Y=r.Top+(r.Bottom-r.Top)/2};
+  GetWindowThreadProcessId(WindowFromPoint(p),out owner);
+  if(owner!=pid)throw new Exception("fixture activation point is not owned; click skipped");
+  if(!GetCursorPos(out before))throw new Exception("cursor unavailable");
+  try {
+   SetCursorPos(p.X,p.Y);GetWindowThreadProcessId(WindowFromPoint(p),out owner);
+   if(owner!=pid)throw new Exception("fixture activation target changed; click skipped");
+   mouse_event(2,0,0,0,UIntPtr.Zero);mouse_event(4,0,0,0,UIntPtr.Zero);
+  }finally{SetCursorPos(before.X,before.Y);}
+ }
  [DllImport("ntdll.dll")] static extern int NtQuerySystemInformation(int c,IntPtr b,int n,out int r);
  public static Dictionary<long,long> Read(int pid) {
   var result=new Dictionary<long,long>(); int n=16<<20,r; IntPtr b=Marshal.AllocHGlobal(n);
@@ -38,10 +62,14 @@ while (-not (New-Item -ItemType Directory -Path $lockDir -ErrorAction SilentlyCo
 try {
   $fixture = Start-Process -FilePath $FixtureExe -ArgumentList '180' -WindowStyle Normal -PassThru
   $null = $fixture.Handle
+  Start-Sleep -Seconds 1
+  $fixture.Refresh()
+  [IndexGameThreads]::ActivateOwn($fixture.MainWindowHandle,$fixture.Id)
   Start-Sleep -Seconds 10
-  $signal = Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json
-  if (-not $signal.activity.pause_background -or $signal.activity.foreground_pid -ne $fixture.Id) { throw 'Owned fullscreen fixture did not engage the real game hint' }
   & 'C:\Users\you\AppData\Local\Temp\mypaper-tools\shotall.ps1' -Out (Join-Path $evidence 'round2-game-fullscreen.png') | Out-Null
+  $signal = Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json
+  [pscustomobject]@{fixture_pid=$fixture.Id;foreground_pid=[IndexGameThreads]::ForegroundPid();signal=$signal} | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $evidence 'round2-game-activation.json')
+  if (-not $signal.activity.pause_background -or $signal.activity.foreground_pid -ne $fixture.Id) { throw 'Owned fullscreen fixture did not engage the real game hint' }
   Start-Sleep -Seconds 2
   $index.Refresh()
   $started = $index.StartTime
