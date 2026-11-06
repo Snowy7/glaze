@@ -987,13 +987,19 @@ mod tests {
     #[test]
     fn cached_roots_absent_at_startup_stay_hidden_across_a_racing_scan_swap() {
         let mut store = Store::new();
+        // Older snapshots can also contain a phantom root shadowed by a later C: root.
+        let orphan = store.insert(0, r"C:\pruned\orphan", DIRECTORY, 0, 0);
+        store.insert(orphan, "report-phantom", 128, 1, 0);
         let c = store.insert(0, "C:", DIRECTORY, 0, 0);
         let z = store.insert(0, "Z:", DIRECTORY, 0, 0);
         store.insert(c, "report-live", 128, 1, 0);
         store.insert(z, "report-stale", 128, 1, 0);
         let stale_worker = store.fork().unwrap();
         let offline = hide_missing_roots(&mut store, &[PathBuf::from(r"C:\")]);
-        assert_eq!(offline, BTreeSet::from([PathBuf::from(r"Z:\")]));
+        assert_eq!(
+            offline,
+            BTreeSet::from([PathBuf::from(r"Z:\"), PathBuf::from(r"C:\pruned\orphan")])
+        );
         let state = RwLock::new(State {
             store,
             offline,

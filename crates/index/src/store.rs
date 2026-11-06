@@ -783,7 +783,7 @@ impl Store {
     /// Hide a failed root immediately with one overlay record, without tombstoning millions
     /// of descendants. The next streamed generation drops it through parent reachability.
     pub(crate) fn mark_offline(&mut self, root: &Path) {
-        if let Some(id) = self.find_any(&root.to_string_lossy()) {
+        if let Some(id) = self.root_id(root) {
             let mut record = self.record(id);
             if record.parent == 0 {
                 record.attributes |= OFFLINE;
@@ -791,6 +791,23 @@ impl Store {
                 self.offline.insert(id);
             }
         }
+    }
+
+    fn root_id(&self, root: &Path) -> Option<u32> {
+        let text = root
+            .to_string_lossy()
+            .trim_start_matches(r"\\?\")
+            .replace('/', "\\");
+        let text = fold(text.trim_end_matches('\\'));
+        let mut id = self.record(0).first;
+        while id != NONE {
+            let record = self.record(id);
+            if record.live() && self.folded(record) == text.as_bytes() {
+                return Some(id);
+            }
+            id = record.next;
+        }
+        None
     }
 
     pub(crate) fn roots(&self) -> Vec<std::path::PathBuf> {
@@ -1081,7 +1098,7 @@ impl Store {
     /// Streams a freshly scanned volume beside the other cached volumes. A four-byte ID
     /// map replaces the former private copy plus millions of deletion overlay entries.
     pub fn save_replacing_volume(&self, path: &Path, source: &Store, root: &Path) -> Result<()> {
-        let excluded = self.find_any(&root.to_string_lossy());
+        let excluded = self.root_id(root);
         if let Some(id) = excluded {
             ensure!(
                 self.record(id).parent == 0,
