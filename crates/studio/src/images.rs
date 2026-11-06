@@ -16,11 +16,13 @@ const BUDGET: usize = 20 << 20;
 pub struct Loaded {
     pub key: String,
     pub image: Option<Arc<Image>>,
+    source_size: Option<(u32, u32)>,
+    received: Option<Sender<()>>,
 }
 
 enum Slot {
     Pending,
-    Ready(Arc<Image>, u64),
+    Ready(Arc<Image>, u64, Option<(u32, u32)>),
     Failed,
 }
 
@@ -64,7 +66,9 @@ impl Images {
                 if page != generation.load(std::sync::atomic::Ordering::Relaxed) {
                     continue;
                 }
-                let image = decode(&decoder, &path, max).map(Arc::new);
+                let decoded = decode(&decoder, &path, max);
+                let source_size = decoded.as_ref().map(|(_, size)| *size);
+                let image = decoded.map(|(image, _)| Arc::new(image));
                 // The ready pixels outlive the decoder. Return its freed native buffers
                 // before the UI allocates a snapshot canvas or another specimen.
                 if release_decoders {
@@ -73,13 +77,29 @@ impl Images {
                 if page != generation.load(std::sync::atomic::Ordering::Relaxed) {
                     continue;
                 }
+                // A compact panel consumes one decode before the worker starts another.
+                // Otherwise ready rasters pile up while its UI is painting gallery faces.
+                let (received, wait) = if release_decoders {
+                    let (tx, rx) = channel();
+                    (Some(tx), Some(rx))
+                } else {
+                    (None, None)
+                };
                 if inbox
-                    .send(crate::app::Msg::Image(Loaded { key, image }))
+                    .send(crate::app::Msg::Image(Loaded {
+                        key,
+                        image,
+                        source_size,
+                        received,
+                    }))
                     .is_err()
                 {
                     break;
                 }
                 crate::wake(thread);
+                if let Some(wait) = wait {
+                    let _ = wait.recv();
+                }
             }
         });
         self.worker = Some(tx);
@@ -107,7 +127,7 @@ impl Images {
         let key = format!("{page}:{}|{}x{}", path.display(), max.0, max.1);
         self.clock += 1;
         match self.slots.get_mut(&key) {
-            Some(Slot::Ready(image, used)) => {
+            Some(Slot::Ready(image, used, _)) => {
                 *used = self.clock;
                 return Some(image.clone());
             }
@@ -123,15 +143,22 @@ impl Images {
             Some(decoder) => decoder,
             None => self.sync.insert(Decoder::new().ok()?),
         };
-        let image = decode(decoder, path, max).map(Arc::new);
+        let decoded = decode(decoder, path, max);
+        let source_size = decoded.as_ref().map(|(_, size)| *size);
+        let image = decoded.map(|(image, _)| Arc::new(image));
         self.arrived(Loaded {
             key,
             image: image.clone(),
+            source_size,
+            received: None,
         });
         image
     }
 
     pub fn arrived(&mut self, loaded: Loaded) {
+        if let Some(received) = loaded.received {
+            let _ = received.send(());
+        }
         if !loaded.key.starts_with(&format!(
             "{}:",
             self.generation.load(std::sync::atomic::Ordering::Relaxed)
@@ -140,17 +167,25 @@ impl Images {
         }
         self.clock += 1;
         let slot = match loaded.image {
-            Some(image) => Slot::Ready(image, self.clock),
+            Some(image) => Slot::Ready(image, self.clock, loaded.source_size),
             None => Slot::Failed,
         };
         self.slots.insert(loaded.key, slot);
         self.trim();
     }
 
+    /// Native still dimensions, retained alongside its reduced pixels for Center's 1:1 crop.
+    pub fn source_size(&self, image: &Arc<Image>) -> Option<(u32, u32)> {
+        self.slots.values().find_map(|slot| match slot {
+            Slot::Ready(ready, _, size) if Arc::ptr_eq(ready, image) => *size,
+            _ => None,
+        })
+    }
+
     /// Drops the least recently used pictures past the budget.
     fn trim(&mut self) {
         let size = |s: &Slot| match s {
-            Slot::Ready(i, _) => i.pixels.len(),
+            Slot::Ready(i, _, _) => i.pixels.len(),
             _ => 0,
         };
         let budget = self.budget.unwrap_or(BUDGET);
@@ -162,7 +197,7 @@ impl Images {
             .slots
             .iter()
             .filter_map(|(k, s)| match s {
-                Slot::Ready(i, used) => Some((*used, k.clone(), i.pixels.len())),
+                Slot::Ready(i, used, _) => Some((*used, k.clone(), i.pixels.len())),
                 _ => None,
             })
             .collect();
@@ -178,14 +213,18 @@ impl Images {
 }
 
 /// A picture with WIC, or a video's still from the shell.
-fn decode(decoder: &Decoder, path: &Path, max: (u32, u32)) -> Option<Image> {
+fn decode(decoder: &Decoder, path: &Path, max: (u32, u32)) -> Option<(Image, (u32, u32))> {
     let video = path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
         ["mp4", "mkv", "webm", "mov", "m4v"].contains(&e.to_ascii_lowercase().as_str())
     });
     if video {
         return shell_thumbnail(path, max)
             .inspect_err(|e| log::debug!("thumbnail {}: {e:#}", path.display()))
-            .ok();
+            .ok()
+            .map(|image| {
+                let size = (image.width, image.height);
+                (image, size)
+            });
     }
     decoder
         .image(path, max)
@@ -216,7 +255,7 @@ impl Decoder {
         }
     }
 
-    fn image(&self, path: &Path, max: (u32, u32)) -> anyhow::Result<Image> {
+    fn image(&self, path: &Path, max: (u32, u32)) -> anyhow::Result<(Image, (u32, u32))> {
         use windows::Win32::{
             Foundation::GENERIC_READ,
             Graphics::Imaging::{
@@ -236,6 +275,7 @@ impl Decoder {
             let frame = decoder.GetFrame(0)?;
             let (mut width, mut height) = (0, 0);
             frame.GetSize(&mut width, &mut height)?;
+            let source_size = (width, height);
             anyhow::ensure!(
                 width > 0 && height > 0 && width <= 32768 && height <= 32768,
                 "invalid image dimensions"
@@ -258,11 +298,14 @@ impl Decoder {
             )?;
             let mut pixels = vec![0; width as usize * height as usize * 4];
             converter.CopyPixels(std::ptr::null(), width * 4, &mut pixels)?;
-            Ok(Image {
-                width,
-                height,
-                pixels,
-            })
+            Ok((
+                Image {
+                    width,
+                    height,
+                    pixels,
+                },
+                source_size,
+            ))
         }
     }
 }
@@ -276,8 +319,7 @@ fn shell_thumbnail(path: &Path, max: (u32, u32)) -> anyhow::Result<Image> {
     };
     use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
     use windows::Win32::UI::Shell::{
-        IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK,
-        SIIGBF_THUMBNAILONLY,
+        IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_THUMBNAILONLY,
     };
     // SAFETY: COM on this worker thread (kept for its life); the bitmap is ours to delete; the
     // pixel buffer matches the header.
@@ -290,7 +332,7 @@ fn shell_thumbnail(path: &Path, max: (u32, u32)) -> anyhow::Result<Image> {
                 cx: max.0 as i32,
                 cy: max.1 as i32,
             },
-            SIIGBF_THUMBNAILONLY | SIIGBF_BIGGERSIZEOK,
+            SIIGBF_THUMBNAILONLY,
         )?;
         let mut info = BITMAP::default();
         GetObjectW(
@@ -349,7 +391,7 @@ mod tests {
         for size in [(16, 16), (48, 48)] {
             let expected = ui.decode_image(&bytes, size).unwrap();
             assert_eq!(
-                Decoder::new().unwrap().image(&path, size).unwrap(),
+                Decoder::new().unwrap().image(&path, size).unwrap().0,
                 expected
             );
         }
@@ -361,6 +403,8 @@ mod tests {
         images.set_budget(64 << 10);
         let loaded = |key: &str, bytes: u32| Loaded {
             key: key.into(),
+            source_size: None,
+            received: None,
             image: Some(Arc::new(Image {
                 width: 128,
                 height: bytes / 512,
@@ -382,5 +426,25 @@ mod tests {
         );
         images.arrived(loaded("1:current", 48 << 10));
         assert_eq!(images.slots.len(), 1);
+    }
+
+    #[test]
+    fn stale_page_results_release_the_worker_and_still_metadata_survives_reduction() {
+        let mut images = Images::default();
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/icon-32.png");
+        let image = images.get(&path, (16, 16)).unwrap();
+        assert_eq!(images.source_size(&image), Some((32, 32)));
+        images.clear_page();
+        assert_eq!(images.source_size(&image), None);
+        let (tx, rx) = channel();
+        images.arrived(Loaded {
+            key: "0:stale".into(),
+            image: Some(image),
+            source_size: Some((32, 32)),
+            received: Some(tx),
+        });
+        rx.try_recv()
+            .expect("discarded decode must unblock the next job");
+        assert!(images.slots.is_empty());
     }
 }
