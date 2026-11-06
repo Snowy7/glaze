@@ -15,6 +15,11 @@ fn thumbnail(app: &App, b: &mut B, r: Rect, i: usize) {
         b.icon(r, glyph::ALERT, 22.0, b.p.ink3);
         return;
     }
+    if b.clip_rect()
+        .is_some_and(|clip| r.bottom < clip.top || r.top > clip.bottom)
+    {
+        return;
+    }
     let image = wallpaper
         .preview
         .as_ref()
@@ -160,7 +165,12 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
         cards(app, b, c, &indices);
     }
     if count == 0 {
-        notice(b, c, "No wallpapers match. Try All or another search.");
+        if app.nav.filter == 1 && query.is_empty() && category.is_none() {
+            notice(b, c, "No wallpapers of your own yet.");
+            action_button(b, c, "Add a wallpaper", Action::AddWallpaper);
+        } else {
+            notice(b, c, "No wallpapers match. Try All or another search.");
+        }
     }
 }
 
@@ -169,7 +179,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
     let gap = b.px(12.0);
     let width = (c.w - gap) / 2.0;
     for chunk in indices.chunks(2) {
-        let row_height = width * 0.56 + height(b, 88.0);
+        let row_height = width * 0.56 + height(b, 76.0);
         for (column, &i) in chunk.iter().enumerate() {
             let wallpaper = &app.library.items[i];
             let x = c.x + column as f32 * (width + gap);
@@ -249,23 +259,30 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
                 b.p.ink3,
                 Align::Start,
             );
-            let badges = [
-                wallpaper
-                    .credit
-                    .as_ref()
-                    .is_some_and(|credit| credit.noncommercial)
-                    .then_some("Personal use"),
-                wallpaper.brings_look.then_some("Brings a look"),
-            ]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join(" \u{b7} ");
-            if !badges.is_empty() {
+            if wallpaper
+                .credit
+                .as_ref()
+                .is_some_and(|credit| credit.noncommercial)
+            {
+                let label = "Personal use";
+                let badge_w = b
+                    .measure(label, &crate::panel::controls::font(b, 10.0, 500))
+                    .0
+                    + b.px(12.0);
+                let badge = Rect::new(
+                    r.right - badge_w - b.px(5.0),
+                    r.bottom - height(b, 22.0) - b.px(5.0),
+                    badge_w,
+                    height(b, 22.0),
+                );
+                b.fill(badge, b.px(5.0), b.p.chrome);
+                text(b, badge, label, 10.0, 500, b.p.ink2, Align::Center);
+            }
+            if wallpaper.brings_look {
                 text(
                     b,
                     Rect::new(x, r.bottom + height(b, 47.0), width, height(b, 20.0)),
-                    &badges,
+                    "Brings a look",
                     10.5,
                     500,
                     b.p.ink2,
@@ -392,12 +409,12 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                 },
             );
             if w.editable() {
-                let k = key(("panel-wallpaper-look", &w.id));
-                action_button(b, c, "Edit the look it brings", Action::More(k));
-                if app.is_open(k) {
-                    notice(b, c, "Saved to this wallpaper. Your desktop keeps playing.");
-                    crate::panel::material::wallpaper(app, b, c, w, &theme);
-                }
+                action_button(
+                    b,
+                    c,
+                    "Edit the look it brings",
+                    Action::Panel(Command::WallpaperLook(i)),
+                );
             } else {
                 action_button(b, c, "Make a copy to edit", Action::CopyWallpaper(i));
             }

@@ -6,6 +6,18 @@ use serde_json::Value;
 use super::*;
 use crate::panel::controls::setting;
 
+const RESET_PARTS: &[(&str, DocId, Option<&str>)] = &[
+    ("Bars", DocId::Bars, None),
+    ("Widgets", DocId::Widgets, None),
+    ("Look", DocId::Config, Some("/look")),
+    ("Windows", DocId::Config, Some("/look/windows")),
+    ("Desktop menu", DocId::Config, Some("/desktop_menu")),
+    ("Built-in connections", DocId::Integrations, None),
+    ("App connections", DocId::Plugins, None),
+    ("Settings", DocId::Config, None),
+    ("Studio", DocId::Studio, None),
+];
+
 pub fn frame_cap(app: &App, b: &mut B, c: &mut Col, path: &str, inherit: &str) {
     let value = app.get(DocId::Config, path).cloned().unwrap_or(Value::Null);
     let custom_key = key(("panel-custom-fps", path));
@@ -60,6 +72,16 @@ pub fn frame_cap(app: &App, b: &mut B, c: &mut Col, path: &str, inherit: &str) {
 pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
     if edit.doc != DocId::Studio {
         return false;
+    }
+    if edit.path.as_ref() == "/panel/start-over" {
+        if let Some((_, doc, path)) = value.as_u64().and_then(|i| RESET_PARTS.get(i as usize)) {
+            if app.docs.doc(*doc).issue.is_some() {
+                app.run(Action::StartOver(*doc));
+            } else {
+                crate::panel::saving::reset_part(app, *doc, *path);
+            }
+        }
+        return true;
     }
     let Some(path) = edit.path.strip_prefix("/panel/frame-cap") else {
         return false;
@@ -371,46 +393,31 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
             "Ctrl Alt Shift Backspace restores the Windows desktop from anywhere.",
         );
         action_button(b, c, "Restore Windows desktop", Action::RestoreDesktop);
-        for (name, doc, path) in [
-            ("Start over: Bars", DocId::Bars, None),
-            ("Start over: Widgets", DocId::Widgets, None),
-            ("Start over: Look", DocId::Config, Some("/look")),
-            ("Start over: Windows", DocId::Config, Some("/look/windows")),
-            (
-                "Start over: Desktop menu",
-                DocId::Config,
-                Some("/desktop_menu"),
-            ),
-            (
-                "Start over: Built-in connections",
-                DocId::Integrations,
-                None,
-            ),
-            ("Start over: App connections", DocId::Plugins, None),
-            ("Start over: Settings", DocId::Config, None),
-            ("Start over: Studio", DocId::Studio, None),
-        ] {
-            if matches!(
-                app.docs.doc(doc).issue,
-                Some(crate::docs::ReadIssue::Newer | crate::docs::ReadIssue::Unavailable)
-            ) {
-                continue;
-            }
-            row(
-                b,
-                c,
-                Some(glyph::RESET),
-                name,
-                "",
-                "A backup is kept",
-                None,
-                if app.docs.doc(doc).issue.is_some() {
-                    Action::StartOver(doc)
-                } else {
-                    Action::Panel(Command::ResetPart(doc, path))
-                },
-            );
-        }
+        let options = RESET_PARTS
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, doc, _))| {
+                !matches!(
+                    app.docs.doc(*doc).issue,
+                    Some(crate::docs::ReadIssue::Newer | crate::docs::ReadIssue::Unavailable)
+                )
+            })
+            .map(|(index, (name, _, _))| (serde_json::json!(index), (*name).to_owned()))
+            .collect();
+        row(
+            b,
+            c,
+            Some(glyph::RESET),
+            "Start over…",
+            "",
+            "Choose a part · A backup is kept",
+            None,
+            Action::Choose(Choices {
+                edit: Edit::new(DocId::Studio, "/panel/start-over", "Start over"),
+                options,
+                current: None,
+            }),
+        );
     });
     group(b, c, "Help", |b, c| {
         action_button(b, c, "Copy diagnostics", Action::CopyDiagnostics);
@@ -692,16 +699,14 @@ fn menu_preview(app: &App, b: &mut B, c: &mut Col, items: &[Entry]) {
         b.text,
     );
     tokens.shadow = false;
-    let full = mypaper_ui::menu::layout(&items, &tokens, b.s, b.text);
-    let scale = b.s
-        * ((r.height() - b.px(16.0)) / full.height.max(1.0))
-            .min((r.width() - b.px(16.0)) / full.width.max(1.0));
-    let layout = mypaper_ui::menu::layout(&items, &tokens, scale, b.text);
+    let layout = mypaper_ui::menu::layout(&items, &tokens, b.s, b.text);
     let list = mypaper_ui::menu::view(&items, &layout, None, &tokens);
+    b.list.ops.push(mypaper_ui::Op::Clip { rect: r });
     b.list.ops.extend(crate::stage::offset(
         &list.ops,
         (r.left + (r.width() - layout.width) / 2.0).round(),
         (r.top + b.px(8.0)).round(),
     ));
+    b.list.ops.push(mypaper_ui::Op::Unclip);
     c.y = r.bottom + b.px(4.0);
 }

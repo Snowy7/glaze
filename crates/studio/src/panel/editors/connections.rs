@@ -123,27 +123,22 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
     {
         let status = plugin_status(app, &plugin.id);
         title(b, c, &plugin.name, status);
-        group(b, c, "Connection", |b, c| {
-            let disabled = app.plugins.preferences.disabled.contains(&plugin.id);
-            let needs_attention = status.starts_with("Stopped") || status.starts_with("Restarting");
-            let label = if needs_attention {
-                "Reconnect"
-            } else if disabled || status == "Available" {
-                "Connect"
-            } else {
-                "Disconnect"
-            };
-            action_button(
-                b,
-                c,
-                label,
-                if label == "Disconnect" {
-                    Action::Panel(Command::Disconnect(plugin.id.clone()))
-                } else {
-                    Action::Panel(Command::Connect(plugin.id.clone()))
-                },
-            );
-        });
+        let disabled = app.plugins.preferences.disabled.contains(&plugin.id);
+        let needs_attention = status.starts_with("Stopped") || status.starts_with("Restarting");
+        if disabled || needs_attention || status == "Available" {
+            group(b, c, "Connection", |b, c| {
+                action_button(
+                    b,
+                    c,
+                    if needs_attention {
+                        "Reconnect"
+                    } else {
+                        "Connect"
+                    },
+                    Action::Panel(Command::Connect(plugin.id.clone())),
+                );
+            });
+        }
         if !plugin.faces.is_empty() || !plugin.bars.is_empty() || !plugin.panels.is_empty() {
             group(b, c, "Shows in", |b, c| {
                 for face in &plugin.faces {
@@ -216,32 +211,23 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                         toggle(b, c, label, "", on, Action::Toggle(edit, on));
                     }
                     Some("number" | "slider") => {
-                        crate::panel::controls::text(
-                            b,
-                            mypaper_ui::Rect::new(c.x, c.y, c.w, height(b, 24.0)),
-                            label,
-                            13.0,
-                            400,
-                            b.p.ink1,
-                            mypaper_ui::controls::Align::Start,
-                        );
-                        c.y += height(b, 24.0);
                         let value = value.as_f64().unwrap_or(0.0);
-                        b.slider(
-                            mypaper_ui::controls::key(path.as_str()),
-                            mypaper_ui::Rect::new(c.x, c.y, c.w, height(b, 36.0)),
+                        crate::panel::material::row(
+                            b,
+                            c,
+                            label,
                             value,
                             (
                                 schema["min"].as_f64().unwrap_or(0.0),
                                 schema["max"].as_f64().unwrap_or(100.0),
                                 schema["step"].as_f64().unwrap_or(1.0),
                             ),
-                            &format!("{value:.0}"),
-                            b.px(48.0),
-                            label,
-                            Action::Slider(edit),
+                            &crate::panel::controls::unit(
+                                value,
+                                schema["unit"].as_str().unwrap_or(""),
+                            ),
+                            edit,
                         );
-                        c.y += height(b, 40.0);
                     }
                     Some("select") => {
                         let options = schema["options"]
@@ -287,6 +273,20 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                 notice(b, c, &line);
             }
         });
+        if !disabled && !needs_attention && status != "Available" {
+            group(b, c, "", |b, c| {
+                row(
+                    b,
+                    c,
+                    None,
+                    "Disconnect",
+                    "",
+                    "",
+                    None,
+                    Action::Panel(Command::Disconnect(plugin.id.clone())),
+                );
+            });
+        }
         return;
     }
     let Some(item) = legacy::LIST.get(index) else {

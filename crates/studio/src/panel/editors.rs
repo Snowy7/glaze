@@ -269,7 +269,7 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
     let state = app.panel.as_ref().unwrap();
     let (secondary, cancel, primary, commit, enabled) = match state.page {
         Page::FirstRun => (
-            "Cancel",
+            "Skip remaining steps",
             Action::FirstRunSkip,
             if matches!(
                 app.overlay,
@@ -780,39 +780,27 @@ pub fn number(
         app.get(doc, path).cloned()
     };
     let value = source.as_ref().and_then(Value::as_f64).unwrap_or(fallback);
-    let h = height(b, 38.0);
-    text(
+    super::material::row(
         b,
-        Rect::new(c.x, c.y, b.px(92.0), h),
+        c,
         label,
-        12.0,
-        400,
-        b.p.ink1,
-        Align::Start,
-    );
-    b.slider(
-        key(("panel-number", doc, path)),
-        Rect::new(c.x + b.px(96.0), c.y, c.w - b.px(96.0), h),
         value,
         range,
-        &format!(
-            "{value:.0}{}",
+        &super::controls::unit(
+            value,
             if matches!(label, "Corners" | "Padding" | "Text size") {
-                " px"
+                "px"
             } else {
                 ""
-            }
+            },
         ),
-        b.px(60.0),
-        label,
-        Action::Slider(Edit::new(doc, path, label)),
+        Edit::new(doc, path, label),
     );
-    c.y += h;
 }
 
 pub fn starter_preview(app: &App, b: &mut B, index: usize, rect: Rect) {
-    // The large specimen stretches one tile-sized raster; it never keeps a desktop canvas.
-    let width = rect.width().ceil().clamp(1.0, 224.0) as u32;
+    // Keep the one visible specimen at the panel's actual pixel resolution.
+    let width = rect.width().ceil().max(1.0) as u32;
     let size = (
         width,
         (rect.height() * width as f32 / rect.width().max(1.0))

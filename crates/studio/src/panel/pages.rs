@@ -21,6 +21,26 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
     if page == Page::FirstRun {
         return;
     }
+    if !app.system.running() {
+        button(
+            b,
+            Rect::new(r.right - b.px(68.0), b.px(10.0), b.px(60.0), b.px(28.0)),
+            "Done",
+            None,
+            true,
+            true,
+            Action::Panel(Command::Done),
+        );
+        icon_button(
+            b,
+            Rect::new(b.px(8.0), b.px(10.0), b.px(28.0), b.px(28.0)),
+            glyph::CHEVRON_LEFT,
+            "Back",
+            true,
+            Action::Panel(Command::Back),
+        );
+        return;
+    }
     let committing = matches!(page, Page::AddWidget | Page::AddModule | Page::AddWallpaper);
     let done_label = "Done";
     let done_style = ui::font(b, 13.0, 500);
@@ -285,6 +305,17 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
 pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
     let first_op = b.list.ops.len();
     let first_target = b.targets.len();
+    if app.system.running()
+        && !app.system.parts[2].running
+        && matches!(page, Page::Bars | Page::Top | Page::Dock | Page::BarDesign)
+    {
+        ui::feedback(
+            b,
+            c,
+            "Bars aren't running",
+            vec![("Troubleshoot", open(Page::Troubleshoot))],
+        );
+    }
     match page {
         Page::Root => root(app, b, c),
         Page::Widgets => widgets(app, b, c),
@@ -385,6 +416,14 @@ fn playback_status(app: &App) -> String {
 }
 
 fn root(app: &App, b: &mut B, c: &mut Col) {
+    if app.system.running() && app.system.parts.iter().any(|part| !part.running) {
+        ui::feedback(
+            b,
+            c,
+            &playback_status(app),
+            vec![("Troubleshoot", open(Page::Troubleshoot))],
+        );
+    }
     let h = height(b, 56.0);
     let status = Rect::new(c.x, c.y, c.w, h);
     b.fill(status, b.px(10.0), b.p.panel);
@@ -649,28 +688,7 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
                 .registry
                 .get(&instance.widget)
                 .map_or(instance.widget.as_str(), |w| w.manifest.name.as_str());
-            let position = super::editors::position(app, &layout, instance);
-            let area = position
-                .split(", column")
-                .next()
-                .unwrap_or("On this display");
-            let collision = items.iter().any(|other| {
-                other.instance != instance.instance
-                    && other.widget == instance.widget
-                    && super::editors::position(app, &layout, other)
-                        .starts_with(&format!("{area},"))
-            });
-            let caption = if collision {
-                format!(
-                    "{area} \u{b7} {} \u{d7} {} \u{b7} cell {}, {}",
-                    instance.size[0],
-                    instance.size[1],
-                    instance.cell[0] + 1,
-                    instance.cell[1] + 1
-                )
-            } else {
-                area.into()
-            };
+            let caption = super::options::summary(app, &layout, instance);
             row(
                 b,
                 c,
@@ -929,12 +947,13 @@ mod tests {
                 "{page:?}"
             );
             assert!(
-                built
-                    .list
-                    .hits
-                    .iter()
-                    .any(|hit| hit.label.as_ref() == "Cancel"
-                        && hit.rect.top >= app.size.1 as f32 - 64.0),
+                built.list.hits.iter().any(|hit| hit.label.as_ref()
+                    == if page == Page::FirstRun {
+                        "Skip remaining steps"
+                    } else {
+                        "Cancel"
+                    }
+                    && hit.rect.top >= app.size.1 as f32 - 64.0),
                 "{page:?}"
             );
             if page == Page::FirstRun {

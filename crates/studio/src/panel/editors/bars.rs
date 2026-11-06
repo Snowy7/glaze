@@ -320,8 +320,8 @@ pub fn overview(app: &App, b: &mut B, c: &mut Col) {
         row(
             b,
             c,
-            Some(glyph::BARS),
-            "Design",
+            None,
+            "Preset",
             &design_name(app, None),
             "",
             None,
@@ -353,7 +353,6 @@ fn display_differences(app: &App, b: &mut B, c: &mut Col) {
         return;
     }
     if app.nav.display == 0 {
-        notice(b, c, "Changes here apply to Display 1.");
         return;
     }
     let first = resolved_for(app, 0);
@@ -659,7 +658,7 @@ pub fn designs(app: &App, b: &mut B, c: &mut Col) {
     title(
         b,
         c,
-        "Design",
+        if bar.is_some() { "Design" } else { "Preset" },
         &format!(
             "{} · Display {}",
             match bar {
@@ -707,12 +706,15 @@ pub fn designs(app: &App, b: &mut B, c: &mut Col) {
         b,
         c,
         key(("panel-bar-designs", bar)),
-        b.px(196.0),
+        b.px(if bar == Some(Bar::Top) { 72.0 } else { 196.0 }),
         &choices,
         |b, index, pic| {
-            let mut raw = match bar {
-                Some(bar) => json!({bar.key(): {"design":designs[index].0,"enabled":true}}),
-                None => json!({"preset":designs[index].0}),
+            let mut raw = match (index, bar) {
+                (Some(index), Some(bar)) => {
+                    json!({bar.key(): {"design":designs[index].0,"enabled":true}})
+                }
+                (Some(index), None) => json!({"preset":designs[index].0}),
+                (None, _) => resolved(app),
             };
             raw["dock"]["pinned"] = bar_value(app, "/dock/pinned").unwrap_or(json!([]));
             crate::panel::specimens::backdrop(app, b, pic);
@@ -787,10 +789,10 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
     row(
         b,
         c,
-        Some(glyph::BARS),
+        None,
         "Design",
         &design_name(app, Some(bar)),
-        "This bar only",
+        "",
         None,
         Action::Panel(Command::Design(Some(bar))),
     );
