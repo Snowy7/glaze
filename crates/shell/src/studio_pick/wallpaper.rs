@@ -9,7 +9,8 @@ pub fn still_path(theme: &LoadedTheme) -> Option<PathBuf> {
         Wallpaper::Image(image) => Some(theme.asset(&image.source)),
         Wallpaper::Slideshow(slideshow) => {
             let mut files: Vec<_> = std::fs::read_dir(theme.asset(&slideshow.folder))
-                .ok()?
+                .into_iter()
+                .flatten()
                 .flatten()
                 .map(|e| e.path())
                 .filter(|p| {
@@ -32,6 +33,60 @@ pub fn still_path(theme: &LoadedTheme) -> Option<PathBuf> {
             .map(|name| theme.dir.join(name))
             .find(|p| p.is_file())
     })
+}
+
+/// Decode at a display-sized bound, retaining native dimensions for pixel-for-pixel Center.
+fn load_still(path: &std::path::Path, max: (u32, u32)) -> anyhow::Result<(Image, (f32, f32))> {
+    use windows::Win32::{
+        Foundation::GENERIC_READ,
+        Graphics::Imaging::*,
+        System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance},
+    };
+    // SAFETY: Ui initialized COM on this thread; local WIC objects copy into a bounded BGRA buffer.
+    unsafe {
+        let wic: IWICImagingFactory =
+            CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
+        let decoder = wic.CreateDecoderFromFilename(
+            &windows::core::HSTRING::from(path.as_os_str()),
+            None,
+            GENERIC_READ,
+            WICDecodeMetadataCacheOnLoad,
+        )?;
+        let frame = decoder.GetFrame(0)?;
+        let (mut w, mut h) = (0, 0);
+        frame.GetSize(&mut w, &mut h)?;
+        anyhow::ensure!(
+            w > 0 && h > 0 && w <= 65536 && h <= 65536,
+            "wallpaper still dimensions"
+        );
+        let native = (w as f32, h as f32);
+        let scale = (max.0.min(4096) as f64 / w as f64)
+            .min(max.1.min(4096) as f64 / h as f64)
+            .min(1.);
+        let width = (w as f64 * scale).round().max(1.) as u32;
+        let height = (h as f64 * scale).round().max(1.) as u32;
+        let scaler = wic.CreateBitmapScaler()?;
+        scaler.Initialize(&frame, width, height, WICBitmapInterpolationModeFant)?;
+        let converter = wic.CreateFormatConverter()?;
+        converter.Initialize(
+            &scaler,
+            &GUID_WICPixelFormat32bppPBGRA,
+            WICBitmapDitherTypeNone,
+            None,
+            0.,
+            WICBitmapPaletteTypeCustom,
+        )?;
+        let mut pixels = vec![0; width as usize * height as usize * 4];
+        converter.CopyPixels(std::ptr::null(), width * 4, &mut pixels)?;
+        Ok((
+            Image {
+                width,
+                height,
+                pixels,
+            },
+            native,
+        ))
+    }
 }
 
 fn fit(theme: &LoadedTheme) -> Fit {
@@ -98,7 +153,11 @@ impl Still {
         let Some(path) = still_path(theme) else {
             return Ok(());
         };
-        let image = Arc::new(Image::load(ui, &path)?);
+        let max = monitors.iter().fold((1, 1), |(w, h), m| {
+            (w.max(m.rect.width as u32), h.max(m.rect.height as u32))
+        });
+        let (image, native) = load_still(&path, max)?;
+        let image = Arc::new(image);
         for monitor in monitors {
             let r = monitor.rect;
             let screen = Rect::new(0., 0., r.width as f32, r.height as f32);
@@ -123,11 +182,7 @@ impl Still {
                         Op::Clipped {
                             rect: screen,
                             ops: vec![Op::Image {
-                                rect: image_rect(
-                                    (image.width as f32, image.height as f32),
-                                    screen,
-                                    fit(theme),
-                                ),
+                                rect: image_rect(native, screen, fit(theme)),
                                 image: image.clone(),
                                 opacity: 1.,
                                 source: None,
@@ -148,6 +203,33 @@ impl Still {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn large_stills_decode_with_bounded_pixels_and_retain_native_center_size() {
+        let _ui = Ui::new().unwrap();
+        let path =
+            std::env::temp_dir().join(format!("mypaper-history-still-{}.bmp", std::process::id()));
+        let mut bmp = vec![0u8; 54 + 8192 * 2 * 3];
+        bmp[..2].copy_from_slice(b"BM");
+        let len = bmp.len() as u32;
+        bmp[2..6].copy_from_slice(&len.to_le_bytes());
+        bmp[10..14].copy_from_slice(&54u32.to_le_bytes());
+        bmp[14..18].copy_from_slice(&40u32.to_le_bytes());
+        bmp[18..22].copy_from_slice(&8192u32.to_le_bytes());
+        bmp[22..26].copy_from_slice(&2u32.to_le_bytes());
+        bmp[26..28].copy_from_slice(&1u16.to_le_bytes());
+        bmp[28..30].copy_from_slice(&24u16.to_le_bytes());
+        std::fs::write(&path, bmp).unwrap();
+        let result = load_still(&path, (2560, 1440));
+        std::fs::remove_file(&path).unwrap();
+        let (image, native) = result.unwrap();
+        assert_eq!(native, (8192., 2.));
+        assert_eq!(image.width, 2560);
+        assert_eq!(image.height, 1);
+        assert_eq!(
+            image_rect(native, Rect::new(0., 0., 2560., 1440.), Fit::Center).width(),
+            8192.
+        );
+    }
     #[test]
     fn past_still_obeys_its_own_fit_on_each_display() {
         let screen = Rect::new(0., 0., 1920., 1080.);
