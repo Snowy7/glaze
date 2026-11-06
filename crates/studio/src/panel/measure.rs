@@ -5,7 +5,7 @@ pub struct Memory {
     pub private_mb: f64,
 }
 
-/// Software factories belong to the visible page; bitmap caches never retain widget models.
+/// Temporary picture factories; bitmap caches never retain widget models.
 #[derive(Default)]
 pub struct Raster(pub std::cell::RefCell<Option<mypaper_ui::Ui>>);
 impl std::fmt::Debug for Raster {
@@ -127,7 +127,7 @@ pub fn raster_finished(app: &crate::app::App) {
     }
 }
 
-/// A page owns its decoded thumbnails, preview artwork, icon descriptions and shaped text.
+/// A page owns its decoded thumbnails, preview artwork and shaped text.
 /// Keep the image worker connected while dropping its ready pixels, so the next page stays async.
 pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
     // Snapshot rasters live only while their History rows are on screen.
@@ -147,7 +147,7 @@ pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
     let mut images = app.images.borrow_mut();
     images.clear_page();
     drop(images);
-    *app.stage.borrow_mut() = Default::default();
+    app.stage.borrow_mut().clear_pictures();
     text.clear_cache();
     // Native thumbnail/icon providers are page-owned too. COM unloads only libraries
     // whose objects and calls have all been released; active UI factories stay live.

@@ -108,6 +108,15 @@ pub struct Cache {
 }
 
 impl Cache {
+    /// Release page pictures while keeping the process-lived native icon worker.
+    /// Recreating its COM apartment on every page also recreates shell provider resources.
+    pub(crate) fn clear_pictures(&mut self) {
+        self.key = 0;
+        self.content = Content::default();
+        self.designs = Designs::default();
+        self.images = None;
+    }
+
     /// Share the existing asynchronous shell icon worker with the panel's app lists.
     pub(crate) fn app_icon(&mut self, thread: u32, source: mypaper_bars::icons::Source) -> Option<PathBuf> {
         if self.icons.is_none() && thread != 0 {
