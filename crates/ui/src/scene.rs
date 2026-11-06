@@ -19,6 +19,8 @@ pub type HitId = u32;
 pub enum Op {
     /// A clipped group, used by windowless scroll views. Bounds never escape the viewport.
     Clipped { rect: Rect, ops: Arc<[Op]> },
+    /// An antialiased rounded clip for a composed card (picture, content and overlays).
+    RoundedClipped { rect: Rect, radius: f32, ops: Arc<[Op]> },
     /// Markdown emphasis without changing the shared text style contract.
     Emphasis {
         rect: Rect,
@@ -112,7 +114,7 @@ impl Op {
     /// Every pixel this operation may touch, antialiasing included.
     pub fn bounds(&self) -> Rect {
         match self {
-            Self::Clipped { rect, .. } => *rect,
+            Self::Clipped { rect, .. } | Self::RoundedClipped { rect, .. } => *rect,
             Self::Emphasis { rect, style, .. } => rect.inflate(2.0 + style.size * 0.1),
             Self::Arc {
                 center,
@@ -183,7 +185,7 @@ impl DisplayList {
         fn translate(ops: &mut [Op], dx: f32, dy: f32) {
             for op in ops {
                 match op {
-                    Op::Clipped { rect, ops } => {
+                    Op::Clipped { rect, ops } | Op::RoundedClipped { rect, ops, .. } => {
                         *rect = rect.offset(dx, dy);
                         translate(Arc::make_mut(ops), dx, dy);
                     }

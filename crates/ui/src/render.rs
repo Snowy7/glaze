@@ -89,6 +89,35 @@ fn a_sparse_read_keeps_row_offsets_inside_one_nonzero_origin_lock() {
 
 #[cfg(test)]
 #[test]
+fn rounded_groups_clip_composed_pictures_and_translate_without_losing_the_mask() {
+    let mut ui = Ui::new().unwrap();
+    let list = DisplayList {
+        ops: vec![Op::RoundedClipped {
+            rect: Rect::new(4.0, 4.0, 24.0, 28.0),
+            radius: 8.0,
+            ops: vec![
+                Op::Fill { rect: Rect::new(0.0, 0.0, 40.0, 40.0), radius: 0.0, color: Rgba::rgb8([255, 0, 0], 1.0) },
+                Op::Clipped { rect: Rect::new(4.0, 4.0, 24.0, 14.0), ops: vec![
+                    Op::Fill { rect: Rect::new(0.0, 0.0, 40.0, 40.0), radius: 0.0, color: Rgba::rgb8([0, 0, 255], 1.0) },
+                ].into() },
+            ].into(),
+        }],
+        ..Default::default()
+    };
+    let image = render(&mut ui, &list, 40, 40).unwrap();
+    assert_eq!(image.pixel(4, 4), [0, 0, 0, 0]);
+    assert_eq!(image.pixel(16, 4), [255, 0, 0, 255]);
+    assert_eq!(image.pixel(4, 17), [255, 0, 0, 255], "the picture's lower edge stays square");
+    assert_eq!(image.pixel(4, 18), [0, 0, 255, 255]);
+    assert_eq!(image.pixel(4, 31), [0, 0, 0, 0]);
+    let translated = render(&mut ui, &list.translated(3.0, 2.0), 48, 48).unwrap();
+    for y in 0..40 { for x in 0..40 {
+        assert_eq!(translated.pixel(x + 3, y + 2), image.pixel(x, y));
+    } }
+}
+
+#[cfg(test)]
+#[test]
 fn marker_and_retained_clips_are_nested_and_balanced() {
     let mut ui = Ui::new().unwrap();
     let fill = |color| Op::Fill {
@@ -591,7 +620,7 @@ impl Canvas {
             for op in ops {
                 match op {
                     Op::Image { image, .. } | Op::RoundedImage { image, .. } => { live.insert(Arc::as_ptr(image) as usize); }
-                    Op::Clipped { ops, .. } => used_images(ops, live),
+                    Op::Clipped { ops, .. } | Op::RoundedClipped { ops, .. } => used_images(ops, live),
                     _ => {}
                 }
             }
@@ -739,6 +768,30 @@ impl Canvas {
         // SAFETY: per this function's contract.
         unsafe {
             match op {
+                Op::RoundedClipped { rect, radius, ops } => {
+                    use windows::Win32::Graphics::Direct2D::{
+                        D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_LAYER_OPTIONS_NONE,
+                        D2D1_LAYER_PARAMETERS, ID2D1Layer,
+                    };
+                    let Ok(factory) = t.GetFactory() else { return };
+                    let Ok(mask) = factory.CreateRoundedRectangleGeometry(&D2D1_ROUNDED_RECT {
+                        rect: d2d(*rect), radiusX: *radius, radiusY: *radius,
+                    }) else { return };
+                    let geometry = mask.cast().ok();
+                    let mut parameters = D2D1_LAYER_PARAMETERS {
+                        contentBounds: d2d(*rect),
+                        geometricMask: std::mem::ManuallyDrop::new(geometry),
+                        maskAntialiasMode: D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                        maskTransform: windows_numerics::Matrix3x2::identity(),
+                        opacity: 1.0,
+                        opacityBrush: std::mem::ManuallyDrop::new(None),
+                        layerOptions: D2D1_LAYER_OPTIONS_NONE,
+                    };
+                    t.PushLayer(&parameters, None::<&ID2D1Layer>);
+                    self.ops(text, ops, *rect);
+                    t.PopLayer();
+                    std::mem::ManuallyDrop::drop(&mut parameters.geometricMask);
+                }
                 Op::Clipped { rect, ops } => {
                     t.PushAxisAlignedClip(&d2d(*rect), D2D1_ANTIALIAS_MODE_ALIASED);
                     let damage = Rect {
