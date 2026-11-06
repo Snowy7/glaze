@@ -443,6 +443,16 @@ pub fn same_bars(app: &mut App) {
     {
         merge(&mut baseline, layer);
     }
+    for path in ["/top/clock/format", "/dock/clock/format"] {
+        crate::docs::apply_op(
+            &mut baseline,
+            &crate::docs::Op {
+                doc: DocId::Bars,
+                path: path.into(),
+                value: raw.pointer(path).cloned(),
+            },
+        );
+    }
     let Some(mut base_config) = mypaper_bars::BarsConfig::parse(&baseline.to_string()).ok() else {
         return;
     };
