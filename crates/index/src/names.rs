@@ -91,8 +91,41 @@ impl Builder {
 }
 
 #[derive(Default)]
+pub(crate) struct Filter {
+    pub trigrams: Bloom,
+    pub extensions: u64,
+    pub directory: Option<bool>,
+}
+
+/// One bit is enough for an extension summary: a block usually has only one or two
+/// extensions. Collisions only admit extra blocks, never suppress a matching extension.
+pub(crate) fn extension_mask(extension: &[u8]) -> u64 {
+    let hash = extension.iter().fold(2_166_136_261u32, |hash, byte| {
+        (hash ^ u32::from(*byte)).wrapping_mul(16_777_619)
+    });
+    1 << (hash % 64)
+}
+
+pub(crate) struct Block {
+    pub offset: usize,
+    filter: Bloom,
+    extensions: u64,
+    kinds: u8,
+}
+
+impl Block {
+    pub fn may_match(&self, filter: &Filter) -> bool {
+        contains(&self.filter, &filter.trigrams)
+            && (filter.extensions == 0 || self.extensions & filter.extensions != 0)
+            && filter
+                .directory
+                .is_none_or(|directory| self.kinds & if directory { 2 } else { 1 } != 0)
+    }
+}
+
+#[derive(Default)]
 pub(crate) struct Column {
-    pub offsets: Vec<usize>,
+    pub blocks: Vec<Block>,
 }
 
 fn u32_at(bytes: &[u8], at: usize) -> u32 {
@@ -101,7 +134,7 @@ fn u32_at(bytes: &[u8], at: usize) -> u32 {
 
 impl Column {
     pub fn open(bytes: &[u8], count: usize, mut touch: impl FnMut(usize, usize)) -> Result<Self> {
-        let mut offsets = Vec::new();
+        let mut blocks = Vec::with_capacity(count.div_ceil(BLOCK_NAMES));
         let mut at = 0;
         let mut expected = 0;
         while at < bytes.len() {
@@ -119,6 +152,8 @@ impl Column {
             let block = &bytes[at..at + length];
             let mut cursor = HEADER;
             let mut actual = [0; BLOOM_WORDS];
+            let mut extensions = 0;
+            let mut kinds = 0;
             for _ in 0..records {
                 ensure!(block.len() - cursor >= 16, "truncated name entry");
                 ensure!(
@@ -130,11 +165,23 @@ impl Column {
                     (expected == 0 && parent == crate::store::NONE) || (parent as usize) < expected,
                     "bad names column parent"
                 );
-                let len = (u32_at(block, cursor + 12) & 0x3fff_ffff) as usize;
+                let flags = u32_at(block, cursor + 12);
+                let len = (flags & 0x3fff_ffff) as usize;
                 cursor += 16;
                 ensure!(len <= block.len() - cursor, "bad folded name length");
                 std::str::from_utf8(&block[cursor..cursor + len])?;
                 union(&mut actual, &bloom(&block[cursor..cursor + len]));
+                if flags & 0x4000_0000 == 0 {
+                    if flags & 0x8000_0000 != 0 {
+                        kinds |= 2;
+                    } else {
+                        kinds |= 1;
+                        let name = &block[cursor..cursor + len];
+                        if let Some(dot) = memchr::memrchr(b'.', name) {
+                            extensions |= extension_mask(&name[dot + 1..]);
+                        }
+                    }
+                }
                 cursor += len;
                 expected += 1;
             }
@@ -142,11 +189,16 @@ impl Column {
                 cursor == block.len() && Self::filter(block) == actual,
                 "bad name block filter"
             );
-            offsets.push(at);
+            blocks.push(Block {
+                offset: at,
+                filter: actual,
+                extensions,
+                kinds,
+            });
             at += length;
         }
         ensure!(expected == count, "incomplete names column");
-        Ok(Self { offsets })
+        Ok(Self { blocks })
     }
 
     fn filter(block: &[u8]) -> Bloom {
@@ -155,16 +207,7 @@ impl Column {
         })
     }
 
-    pub fn visit(
-        bytes: &[u8],
-        required: &Bloom,
-        mut touch: impl FnMut(usize),
-        mut visit: impl FnMut(u32, u32, u32, u32, &[u8]),
-    ) {
-        if !contains(&Self::filter(bytes), required) {
-            return;
-        }
-        touch(bytes.len());
+    pub fn visit(bytes: &[u8], mut visit: impl FnMut(u32, u32, u32, u32, &[u8])) {
         let mut at = HEADER;
         for _ in 0..u32_at(bytes, 4) {
             let id = u32_at(bytes, at);
@@ -226,7 +269,7 @@ mod tests {
         }
         builder.flush(&mut bytes).unwrap();
         let column = Column::open(&bytes, 75, |_, _| {}).unwrap();
-        assert_eq!(column.offsets.len(), 3);
+        assert_eq!(column.blocks.len(), 3);
         bytes[8] ^= 1;
         assert!(Column::open(&bytes, 75, |_, _| {}).is_err());
     }

@@ -163,7 +163,7 @@ impl Store {
     pub fn search_blocks(&self) -> usize {
         self.column
             .as_ref()
-            .map_or(self.len(), |column| column.offsets.len())
+            .map_or(self.len(), |column| column.blocks.len())
     }
 
     pub fn overridden(&self, id: u32) -> bool {
@@ -172,11 +172,11 @@ impl Store {
 
     /// Search reads only folded names and ranking fields. Overlay entries are searched once
     /// by the final shard; old versions are ignored before candidate ranking.
-    pub fn visit_names(
+    pub(crate) fn visit_names(
         &self,
         start: usize,
         end: usize,
-        required: &crate::names::Bloom,
+        filter: &crate::names::Filter,
         mut visit: impl FnMut(u32, u32, u32, u32, &[u8], bool),
     ) {
         if let Some(column) = &self.column {
@@ -187,23 +187,25 @@ impl Store {
                 }
             };
             for index in (start..end).rev() {
-                let offset = column.offsets[index];
+                let block = &column.blocks[index];
+                if !block.may_match(filter) {
+                    continue;
+                }
+                let offset = block.offset;
                 let next = column
-                    .offsets
+                    .blocks
                     .get(index + 1)
-                    .copied()
+                    .map(|block| block.offset)
                     .unwrap_or(map.len() - self.column_start);
-                touch(offset, 136.min(next - offset));
+                touch(offset, next - offset);
                 crate::names::Column::visit(
                     &map[self.column_start + offset..self.column_start + next],
-                    required,
-                    |len| touch(offset, len),
                     |id, parent, attr, modified, name| {
                         visit(id, parent, attr, modified, name, true)
                     },
                 );
             }
-            if end == column.offsets.len() {
+            if end == column.blocks.len() {
                 for (id, r) in self.changed.iter().map(|(id, r)| (*id, *r)).chain(
                     self.records
                         .iter()

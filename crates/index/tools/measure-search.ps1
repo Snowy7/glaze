@@ -1,16 +1,17 @@
 # Read-only full-pipe latency and active residency, against the deployed helper.
-param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\mypaper-index.exe', [switch]$Cold)
+param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\mypaper-index.exe', [switch]$Cold, [int]$Rounds = 100)
 $ErrorActionPreference = 'Stop'
 $index = Get-Process mypaper-index -ErrorAction Stop | Where-Object Path -eq $Exe | Select-Object -First 1
 if (-not $index) { throw 'No deployed helper' }
 $outputPath = Join-Path $env:TEMP ('mypaper-index-query-' + [Guid]::NewGuid().ToString('N') + '.json')
 $errorPath = $outputPath + '.err'
-$arguments = if ($Cold) { @('--bench-query','--cold') } else { @('--bench-query','100') }
+$arguments = if ($Cold) { @('--bench-query','--cold') } else { @('--bench-query',"$Rounds") }
 $cpuBefore = $index.TotalProcessorTime.TotalMilliseconds
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $samples = [Collections.Generic.List[object]]::new()
 try {
   $client = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru -WindowStyle Hidden -RedirectStandardOutput $outputPath -RedirectStandardError $errorPath
+  $null = $client.Handle
   do {
     $index.Refresh()
     if ($index.HasExited) { throw 'Index restarted during queries' }
@@ -19,7 +20,9 @@ try {
     $client.Refresh()
   } while (-not $client.HasExited)
   $client.WaitForExit()
-  if ($client.ExitCode -ne 0) { throw (Get-Content -LiteralPath $errorPath -Raw) }
+  if ($null -ne $client.ExitCode -and $client.ExitCode -ne 0) { throw (Get-Content -LiteralPath $errorPath -Raw) }
+  $benchmark = Get-Content -LiteralPath $outputPath -Raw | ConvertFrom-Json
+  if (-not $benchmark.queries) { throw 'Client did not finish a complete benchmark' }
   $index.Refresh()
   [pscustomobject]@{
     pid=$index.Id
@@ -29,7 +32,7 @@ try {
     max_sampled_working_set_bytes=($samples | Measure-Object working_set_bytes -Maximum).Maximum
     os_peak_working_set_bytes=$index.PeakWorkingSet64
     max_private_bytes=($samples | Measure-Object private_bytes -Maximum).Maximum
-    benchmark=Get-Content -LiteralPath $outputPath -Raw | ConvertFrom-Json
+    benchmark=$benchmark
     residency=$samples
   } | ConvertTo-Json -Depth 6
 } finally {

@@ -111,14 +111,20 @@ fn shard(store: &Store, query: &Query, start: usize, end: usize, limit: usize) -
     let mut last_parent = crate::store::NONE;
     let mut parent_path = String::new();
     let mut missing_filters = Vec::new();
-    let mut required = [0; 16];
+    let mut filter = crate::names::Filter {
+        extensions: query.extensions.iter().fold(0, |mask, ext| {
+            mask | crate::names::extension_mask(ext.as_bytes())
+        }),
+        directory: query.directory,
+        ..Default::default()
+    };
     for term in &query.terms {
-        crate::names::union(&mut required, &crate::names::bloom(term.as_bytes()));
+        crate::names::union(&mut filter.trigrams, &crate::names::bloom(term.as_bytes()));
     }
     store.visit_names(
         start,
         end,
-        &required,
+        &filter,
         |id, parent, attributes, modified, name, base| {
             let directory = attributes & crate::store::DIRECTORY != 0;
             if id == 0
