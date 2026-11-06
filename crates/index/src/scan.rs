@@ -210,7 +210,8 @@ pub(crate) fn subtree(
     let mut store = Store::new();
     store.set_quiet(quiet.clone());
     let info = metadata(root).ok();
-    let root_decision = rules.decide(root, true);
+    let conditional = crate::rules::Markers::default().directory(root);
+    let root_decision = rules.decide_known(root, true, conditional);
     let id = store.insert(
         0,
         root.to_string_lossy().trim_end_matches('\\'),
@@ -226,16 +227,32 @@ pub(crate) fn subtree(
     let mut pending = if root_decision == Decision::Excluded {
         vec![]
     } else {
-        vec![(id, root.to_owned())]
+        vec![(id, root.to_owned(), conditional)]
     };
     let mut denied = 0;
-    while let Some((parent, path)) = pending.pop() {
+    while let Some((parent, path, conditional)) = pending.pop() {
         quiet.wait();
         match enumerate_quiet(&path, fetch, Some(quiet)) {
             Ok(entries) => {
+                let has_project = entries.iter().any(|entry| {
+                    entry.attributes & DIRECTORY == 0
+                        && Path::new(&entry.name)
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("csproj"))
+                });
                 for entry in entries {
                     let path = path.join(&entry.name);
-                    let decision = rules.decide(&path, entry.attributes & DIRECTORY != 0);
+                    let child_condition = Rules::child_condition(
+                        &path,
+                        entry.attributes & DIRECTORY != 0,
+                        conditional,
+                        has_project,
+                    );
+                    let decision = rules.decide_known(
+                        &path,
+                        entry.attributes & DIRECTORY != 0,
+                        child_condition,
+                    );
                     let child = store.insert(
                         parent,
                         &entry.name,
@@ -253,7 +270,7 @@ pub(crate) fn subtree(
                         entry.modified,
                     );
                     if entry.attributes & DIRECTORY != 0 && decision != Decision::Excluded {
-                        pending.push((child, path));
+                        pending.push((child, path, child_condition));
                     }
                 }
             }
@@ -298,7 +315,8 @@ pub(crate) fn scan_cached(
 
 fn scan_with_store(root: &Path, fetch: Fetch, mut store: Store, rules: &Rules) -> Result<Scanned> {
     let started = Instant::now();
-    let root_decision = rules.decide(root, true);
+    let conditional = crate::rules::Markers::default().directory(root);
+    let root_decision = rules.decide_known(root, true, conditional);
     let root_id = store.insert(
         0,
         root.to_string_lossy().trim_end_matches('\\'),
@@ -313,7 +331,7 @@ fn scan_with_store(root: &Path, fetch: Fetch, mut store: Store, rules: &Rules) -
     );
     struct Work {
         store: Store,
-        pending: VecDeque<(u32, PathBuf)>,
+        pending: VecDeque<(u32, PathBuf, bool)>,
         active: usize,
         denied: usize,
     }
@@ -324,7 +342,7 @@ fn scan_with_store(root: &Path, fetch: Fetch, mut store: Store, rules: &Rules) -
             pending: if root_decision == Decision::Excluded {
                 VecDeque::new()
             } else {
-                VecDeque::from([(root_id, root.to_owned())])
+                VecDeque::from([(root_id, root.to_owned(), conditional)])
             },
             active: 0,
             denied: 0,
@@ -338,7 +356,7 @@ fn scan_with_store(root: &Path, fetch: Fetch, mut store: Store, rules: &Rules) -
             scope.spawn(move || {
                 let _background = Background::enter();
                 loop {
-                    let (id, path) = {
+                    let (id, path, conditional) = {
                         let mut work = shared.0.lock().expect("scan queue");
                         loop {
                             if let Some(task) = work.pending.pop_front() {
@@ -356,20 +374,35 @@ fn scan_with_store(root: &Path, fetch: Fetch, mut store: Store, rules: &Rules) -
                     }
                     let entries =
                         enumerate_quiet(&path, fetch, work_quiet.as_deref()).map(|entries| {
+                            let has_project = entries.iter().any(|entry| {
+                                entry.attributes & DIRECTORY == 0
+                                    && Path::new(&entry.name)
+                                        .extension()
+                                        .is_some_and(|ext| ext.eq_ignore_ascii_case("csproj"))
+                            });
                             entries
                                 .into_iter()
                                 .map(|entry| {
                                     let child_path = path.join(&entry.name);
-                                    let decision = rules
-                                        .decide(&child_path, entry.attributes & DIRECTORY != 0);
-                                    (entry, child_path, decision)
+                                    let child_condition = Rules::child_condition(
+                                        &child_path,
+                                        entry.attributes & DIRECTORY != 0,
+                                        conditional,
+                                        has_project,
+                                    );
+                                    let decision = rules.decide_known(
+                                        &child_path,
+                                        entry.attributes & DIRECTORY != 0,
+                                        child_condition,
+                                    );
+                                    (entry, child_path, decision, child_condition)
                                 })
                                 .collect::<Vec<_>>()
                         });
                     let mut work = shared.0.lock().expect("scan queue");
                     match entries {
                         Ok(entries) => {
-                            for (entry, child_path, decision) in entries {
+                            for (entry, child_path, decision, child_condition) in entries {
                                 let child = work.store.insert(
                                     id,
                                     &entry.name,
@@ -389,7 +422,7 @@ fn scan_with_store(root: &Path, fetch: Fetch, mut store: Store, rules: &Rules) -
                                 if entry.attributes & DIRECTORY != 0
                                     && decision != Decision::Excluded
                                 {
-                                    work.pending.push_back((child, child_path));
+                                    work.pending.push_back((child, child_path, child_condition));
                                 }
                             }
                         }

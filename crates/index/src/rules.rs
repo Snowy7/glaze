@@ -1,6 +1,7 @@
 //! Case-insensitive, component-aware glob rules. Include overrides both built-in and user
 //! exclusions; ancestors needed to reach an include are retained without scanning siblings.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -40,6 +41,51 @@ pub enum Decision {
     Index,
     Excluded,
     Traverse,
+}
+
+/// Notification batches reuse each directory's marker decision. Full scans instead pass
+/// the same boolean down their work queue, so they never retain a volume-sized cache.
+#[derive(Default)]
+pub(crate) struct Markers(HashMap<PathBuf, bool>);
+
+impl Markers {
+    pub(crate) fn directory(&mut self, path: &Path) -> bool {
+        if let Some(value) = self.0.get(path) {
+            return *value;
+        }
+        let inherited = path.parent().is_some_and(|parent| self.directory(parent));
+        let excluded = inherited || marker_directory(path, None);
+        // A wide notification batch cannot grow this cache without bound.
+        if self.0.len() >= 8192 {
+            self.0.clear();
+        }
+        self.0.insert(path.to_owned(), excluded);
+        excluded
+    }
+}
+
+fn marker_directory(path: &Path, has_project: Option<bool>) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    if name.eq_ignore_ascii_case("target") {
+        path.join("CACHEDIR.TAG").exists() || path.join(".rustc_info.json").exists()
+    } else if name.eq_ignore_ascii_case("bin") || name.eq_ignore_ascii_case("obj") {
+        has_project.unwrap_or_else(|| {
+            path.parent()
+                .and_then(|p| std::fs::read_dir(p).ok())
+                .is_some_and(|entries| {
+                    entries.filter_map(Result::ok).any(|entry| {
+                        entry
+                            .path()
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("csproj"))
+                    })
+                })
+        })
+    } else {
+        false
+    }
 }
 
 fn normalized(path: &Path) -> String {
@@ -118,6 +164,34 @@ impl Rules {
     }
 
     pub fn decide(&self, path: &Path, directory: bool) -> Decision {
+        self.decide_cached(path, directory, &mut Markers::default())
+    }
+
+    pub(crate) fn decide_cached(
+        &self,
+        path: &Path,
+        directory: bool,
+        markers: &mut Markers,
+    ) -> Decision {
+        let conditional = if directory {
+            markers.directory(path)
+        } else {
+            path.parent()
+                .is_some_and(|parent| markers.directory(parent))
+        };
+        self.decide_known(path, directory, conditional)
+    }
+
+    pub(crate) fn child_condition(
+        path: &Path,
+        directory: bool,
+        inherited: bool,
+        has_project: bool,
+    ) -> bool {
+        inherited || (directory && marker_directory(path, Some(has_project)))
+    }
+
+    pub(crate) fn decide_known(&self, path: &Path, directory: bool, conditional: bool) -> Decision {
         let text = normalized(path);
         if !self.cache.is_empty()
             && (text == self.cache || text.starts_with(&(self.cache.clone() + "/")))
@@ -127,33 +201,7 @@ impl Rules {
         if prefix_match(&self.include, &text) {
             return Decision::Index;
         }
-        let excluded = prefix_match(&self.exclude, &text)
-            || path.ancestors().any(|ancestor| {
-                if ancestor == path && !directory {
-                    return false;
-                }
-                let Some(name) = ancestor.file_name().and_then(|n| n.to_str()) else {
-                    return false;
-                };
-                if name.eq_ignore_ascii_case("target") {
-                    ancestor.join("CACHEDIR.TAG").exists()
-                        || ancestor.join(".rustc_info.json").exists()
-                } else if name.eq_ignore_ascii_case("bin") || name.eq_ignore_ascii_case("obj") {
-                    ancestor
-                        .parent()
-                        .and_then(|p| std::fs::read_dir(p).ok())
-                        .is_some_and(|entries| {
-                            entries.filter_map(Result::ok).any(|entry| {
-                                entry
-                                    .path()
-                                    .extension()
-                                    .is_some_and(|ext| ext.eq_ignore_ascii_case("csproj"))
-                            })
-                        })
-                } else {
-                    false
-                }
-            });
+        let excluded = prefix_match(&self.exclude, &text) || conditional;
         if !excluded {
             Decision::Index
         } else if directory && self.may_include(&text) {
@@ -184,6 +232,53 @@ impl Rules {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn marker_decisions_are_reused_per_directory_and_inherited_by_children() {
+        let root = std::env::temp_dir().join(format!("mypaper-markers-{}", std::process::id()));
+        let target = root.join("target");
+        let bin = root.join("bin");
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::create_dir_all(&bin).unwrap();
+        let tag = target.join("CACHEDIR.TAG");
+        let project = root.join("app.csproj");
+        std::fs::write(&tag, b"").unwrap();
+        std::fs::write(&project, b"").unwrap();
+        let rules = Rules::new(&IndexConfig::default(), Path::new("")).unwrap();
+        let mut markers = Markers::default();
+        assert_eq!(
+            rules.decide_cached(&target.join("first.txt"), false, &mut markers),
+            Decision::Excluded
+        );
+        assert_eq!(
+            rules.decide_cached(&bin.join("first.dll"), false, &mut markers),
+            Decision::Excluded
+        );
+        std::fs::remove_file(tag).unwrap();
+        std::fs::remove_file(project).unwrap();
+        // If each file probed the filesystem again these would now be Index. A fresh
+        // batch/scan observes marker removal, while a directory's children share its decision.
+        for i in 0..1000 {
+            for dir in [&target, &bin] {
+                let path = dir.join(format!("{i}.txt"));
+                assert_eq!(
+                    rules.decide_cached(&path, false, &mut markers),
+                    Decision::Excluded
+                );
+                let inherited = Rules::child_condition(&path, false, true, false);
+                assert_eq!(
+                    rules.decide_known(&path, false, inherited),
+                    Decision::Excluded
+                );
+            }
+        }
+        assert_eq!(
+            rules.decide(&target.join("fresh.txt"), false),
+            Decision::Index
+        );
+        assert_eq!(rules.decide(&bin.join("fresh.dll"), false), Decision::Index);
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn defaults_components_overrides_and_routes() {
         let config = IndexConfig {
