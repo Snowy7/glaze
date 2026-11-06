@@ -17,6 +17,11 @@ run-only appearance overrides, useful when checking a look without changing the 
 
 ## Browsing
 
+- Tabs have independent history, scroll, selection and search. `Ctrl+T` opens a tab, `Ctrl+W`
+  closes it, and `Ctrl+Tab` / `Ctrl+Shift+Tab` switch tabs. Middle-click a folder to open it in
+  a tab; middle-click a tab to close it. Drag a tab out of its strip to make a new window.
+  Launching without a path restores up to 32 saved tabs and the active tab; an explicit path
+  opens that folder in a fresh window. Only the active tab has a directory watcher.
 - Back, Forward, Up, clickable breadcrumbs and an editable address (`Ctrl+L`). Paths, relative
   paths and shell namespace locations are accepted. Home, Desktop, Downloads, Documents,
   Pictures, This PC, mounted drives and pinned folders are available in the sidebar.
@@ -46,13 +51,16 @@ The kit context menu puts common actions first. **Show more options** opens the 
 `IContextMenu`, with dynamic submenus and owner-drawn extensions. A search selection spanning
 different parent folders uses the first item's shell menu, because there is no shared parent.
 
-Pins, the chosen view and column widths are stored in `%APPDATA%\mypaper\files.json`:
+Pins, the chosen view, column widths, tabs, active tab and preview preference are stored in `%APPDATA%\mypaper\files.json`:
 
 ```json
 {
   "pins": ["C:\\Projects"],
   "view": "Details",
-  "widths": [400, 190, 170, 110]
+  "widths": [400, 190, 170, 110],
+  "tabs": ["C:\\Projects", "shell:Downloads"],
+  "active_tab": 0,
+  "preview": true
 }
 ```
 
@@ -68,6 +76,33 @@ Both calls have a 250 ms deadline. A response with `scanning: true` contains cac
 while the helper reconciles its snapshot. Sizes includes the requested folder followed by
 its immediate children; Files associates each logical byte count with the returned path.
 
+## Previews and toolbar
+
+`Alt+P` toggles the preview pane. Images use a bounded 768-pixel shell thumbnail; text and code
+read only the first 64 KiB, recognize UTF-8 and UTF-16 BOMs, and render in Cascadia Mono. Long
+lines wrap to the pane and the text scrolls. Preview reading and image extraction run on a lazy
+worker, released when the preview closes. No content is executed.
+
+Other formats try the registered `IPreviewHandler` through `CLSCTX_LOCAL_SERVER`, using the
+shell's surrogate, read-only initialization and `SetWindow`/`SetRect`. Files never loads a
+third-party preview DLL into its own process. A missing or non-surrogated handler leaves an
+unavailable-preview message. The PDF handler works on this machine; its Word RTF handler does
+not offer this route. The retained handler is unloaded on selection change or close.
+
+`Space` opens a large quick-look overlay. `Space` or `Esc` closes it; arrow keys and the overlay's
+buttons move between files, skipping directories. The preview content is shared with the pane.
+
+Toolbar icons use the kit's quiet icon button: no circle or outline at rest, a rounded hover wash,
+and tooltips. The menu includes **Copy path** (selected paths, or the current location) and
+**Open in Terminal** (Windows Terminal's `-d` argument). Selection count and known bytes appear
+in the status bar; selections with uncached directory sizes explicitly say so. Details shows a
+subtle relative size bar for the index's cached directory sizes.
+
+A bounded folder cache holds up to eight locations / 120,000 entries using shared row snapshots.
+Returning to a cached folder paints its rows immediately, then reconciles directory contents on
+the background worker. Failed loads do not enter the cache. Inactive tab snapshots retain their
+own rows until that tab closes; images remain bounded by the separate decoration cache.
+
 ## Experimental folder routing
 
 Manual launches work independently. This optional flag writes the per-user folder/Win+E
@@ -77,7 +112,13 @@ overrides and adds launch points to the launcher and desktop menu:
 { "experimental": { "files_default": true } }
 ```
 
-The default is `false`. Core reconciles the flag at startup and on config changes. Enabling
+The default is `false`. While the existing shell Windows-key hook is installed (native taskbar
+hidden and the launcher Windows-key option enabled), Win+E launches Files directly. Its atomic
+gate follows config changes and also checks for the Files executable. With the flag off, other
+modifiers held, a fullscreen app, a hung shell, or no installed hook, the chord passes to Windows.
+The folder registry route remains for folder double-clicks.
+
+Core reconciles the flag at startup and on config changes. Enabling
 requires `mypaper-files.exe` beside core. No Explorer restart or elevation is requested.
 
 The experiment writes the default command and `DelegateExecute` under these HKCU locations:
@@ -110,10 +151,10 @@ shell copy/move/rename/create/recycle in a private scratch tree, and ownership-a
 restoration. The kit's alpha-canvas test checks that native client geometry stays unchanged
 across alpha rendering and a return to the opaque path.
 
-Live checks on 6 November 2026 passed create, rename with extension preservation, shell-format
+Round-one live checks on 6 November 2026 passed create, rename with extension preservation, shell-format
 clipboard copy/cut/paste, recycle, external directory notifications, This PC navigation, indexed
 search and OLE copy/Shift-move between two Files windows. Operations touched only private scratch
-trees under `C:\mypaper-targets\files\scratch`. Nine Files tests, two folder-routing tests and
+trees under `C:\mypaper-targets\files\scratch`. The original nine Files tests, two folder-routing tests and
 the alpha-canvas test pass. Files has no clippy warnings; a separate existing bars hook warning
 remains in the dependency build.
 
@@ -121,8 +162,8 @@ The routing check briefly enabled the flag, double-clicked a shortcut to a scrat
 opened the deployed Files executable. Disabling restored all six registry values, their types
 and key absence exactly, removed the journal, and left the flag off. **Win+E still opened
 Explorer on this machine**, including after an association-cache notification and a test with
-the reference command's expandable-string type. Its compatibility remains unresolved; the
-folder/Win+E experiment is not fully verified.
+the reference command's expandable-string type. Those round-one observations left the
+registry-only Win+E route unresolved; the round-two hook check below closes that issue.
 
 The [interaction record](../crates/files/evidence/verification.json),
 [OLE record](../crates/files/evidence/ole.json),
@@ -157,10 +198,71 @@ DPI-aware captures, inspected against the kit's flat glass treatment:
 - [Indexed search and cached sizes](../crates/files/evidence/index-search.png)
 - [OLE destination after copy and move](../crates/files/evidence/ole-destination.png)
 
+## Round-two verification (6 November 2026)
+
+The focused suite now has **14 Files tests** (including restore defaults/bounds, cache invalidation,
+64 KiB decoding and Unicode wrapping) and **8 Windows-key machine tests**. Files checks and clippy
+pass. The full workspace release build completed after the other agents' kit edits settled.
+
+Win+E **passed with the flag on** through the installed shell hook; folder-shortcut double-clicks
+opened Files through the registry route. With the flag off, Win+E opened Explorer and created no
+Files process. All six registry values/types and key absence matched the pre-test snapshot; the
+journal was removed and the flag left off. The [routing record](../crates/files/evidence/round2/routing.json)
+and [final state](../crates/files/evidence/round2/final-state.json) retain those assertions.
+
+Live scratch-folder checks passed Ctrl+T/W/Tab/Shift+Tab, middle-click folder opening, tab tear-out,
+two-folder session restore, text/code and image previews, quick-look arrows/Space/Esc, and the shell's
+PDF preview handler. The RTF handler was unavailable through the surrogate and showed the expected
+fallback. Copy path was checked against clipboard text (then restored), long previews were scrolled
+to their last line, and the nonzero cached folder-size bar was inspected. Terminal menu presence
+and alias resolution were checked; launching a terminal was not exercised during UI automation.
+Test windows and the preview surrogate were gone after close; preferences were restored.
+
+| Measured observation | Result |
+|---|---:|
+| 10k entries in each of two tabs, preview open; 30-second idle CPU (one core) | **0.00%** |
+| Same sample, private / working set | **31 / 62 MiB** |
+| Same sample, Files GPU activity / GPU memory | **0 / 0 MiB** |
+| Closed Files processes / preview surrogates | **0 / 0** |
+| 10k first visit in an open window, first 128 / full enumeration | 3 / 11 ms |
+| 10k first content paint / cached Back paint | **8.2 / 4.3 ms** |
+| 100k first visit, first 128 / full enumeration | 202 / 268 ms |
+| 100k first content paint / cached Forward paint | **207.1 / 3.4 ms** |
+| 100k cached tab switch; visible rows drawn | 7.5 ms; 17 rows |
+
+Paint timestamps run from navigation entry to software display-list presentation, including the
+worker and UI queue; they are not enumeration-only timestamps. Cached rows appear before background
+reconciliation completes. These are individual desktop observations with uncontrolled filesystem
+caches and background builds, not percentiles or a cold-process startup guarantee. The idle sample
+used the night plan's 30-second `measure.ps1`. See the [cost](../crates/files/evidence/round2/cost.json),
+[latency](../crates/files/evidence/round2/latency.json),
+[tear-out](../crates/files/evidence/round2/tear-out.json),
+[session](../crates/files/evidence/round2/session-saved.json), and
+[closed](../crates/files/evidence/round2/closed.json) records.
+
+DPI-aware captures inspected directly:
+
+- [Dark Details/code preview](../crates/files/evidence/round2/details-preview-dark.png)
+- [Dark tabs](../crates/files/evidence/round2/tabs-dark.png)
+- [Middle-click folder tab](../crates/files/evidence/round2/middle-folder-tab.png)
+- [Dark image preview](../crates/files/evidence/round2/image-preview-dark.png)
+- [Light Icons/image preview](../crates/files/evidence/round2/icons-preview-light.png)
+- [Light Details/code preview](../crates/files/evidence/round2/details-preview-light.png)
+- [Dark Icons](../crates/files/evidence/round2/icons-dark.png)
+- [Dark code quick look](../crates/files/evidence/round2/quick-look-code-dark.png)
+- [Dark image quick look](../crates/files/evidence/round2/quick-look-image-dark.png)
+- [Light quick look](../crates/files/evidence/round2/quick-look-light.png)
+- [Wrapped text at the last line](../crates/files/evidence/round2/long-line-end.png)
+- [Cached folder-size bar and selected bytes](../crates/files/evidence/round2/folder-size-bar.png)
+- [Context menu](../crates/files/evidence/round2/context-dark.png)
+- [Shell PDF preview](../crates/files/evidence/round2/shell-handler-pdf.png)
+- [10k entries, two tabs and preview](../crates/files/evidence/round2/10k-two-tabs-preview.png)
+- [100k Details](../crates/files/evidence/round2/100k-details.png)
+
 ## Remaining work
 
-Win+E compatibility is the outstanding v1 routing issue. Later browser work can add tabs,
-preview/archive views, drag edge scrolling and broader network/cloud testing. A shell menu
+The registry-only Win+E issue recorded above is addressed by the opt-in shell hook.
+Further work can add archive views, drag edge scrolling and broader network/cloud testing. A shell menu
 for selections across different parent folders currently uses the first item. Search is by
 filename through the index, with current-folder filtering when its pipe is unavailable.
 
@@ -180,3 +282,24 @@ navigation ordering `f2c7a50`. The additive RichEdit helpers are `3c48247` and `
 Outside the brief's main crate, the core change only reconciles the routing journal at startup
 and config reload; package unregistration restores it before removing identity. Studio was not
 edited.
+
+
+Round two: `cf7214f` adds Win+E to the existing hook in `crates/bars/src/flyouts/winkey.rs` and
+its tiny shell dispatch/config gate. `76e7c63` adds the kit's
+`Frame::quiet_icon_button(id, rect, icon, label, enabled, selected)` without changing old components.
+`8e22dba` adds tabs, restore, the bounded folder cache and image/text previews; `33255b2` adds
+surrogated shell previews. Follow-ups are `6b61233` (capture/readability), `1f18b7a` (text wrapping /
+failed-cache exclusion), `766e928` (complete snapshots / selected-folder terminal target),
+`f11396a` (Terminal alias discovery), and `f6756ad` (unique preview-close accessibility ID).
+
+The hook exposes `WinKey::set_files_enabled(bool)` and the pure
+`Machine::on_key_with_files(vk, down, ours, files) -> Action`; `Target::Files` reuses the hook's
+mask/release/cancellation path. The only outside-main-crate edit for that route is the existing
+provider in `crates/bars`; no core, config or Studio source change was needed in this round.
+The 250 ms index pipe deadlines from the coordination change are preserved.
+
+The workspace was deployed before the 06:16 hold. Afterward only the closed, on-demand Files
+executable received its final small fixes; core and index were not restarted. The
+[installed record](../crates/files/evidence/round2/installed.json) identifies that executable and
+confirms unchanged core/index PIDs. All test windows were closed and the user's original Files
+preferences were restored exactly.

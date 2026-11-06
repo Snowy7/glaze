@@ -1,0 +1,11 @@
+{
+    "part":  "mypaper-files",
+    "pid":  94116,
+    "cpu_core_pct":  0,
+    "gpu3d_pct":  0,
+    "gpu_copy_pct":  0,
+    "gpu_video_pct":  0,
+    "gpu_mem_mb":  0,
+    "private_mb":  31,
+    "ws_mb":  62
+}

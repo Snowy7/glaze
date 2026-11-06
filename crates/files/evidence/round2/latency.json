@@ -1,0 +1,18 @@
+{
+    "measurement":  "Navigation entry to software display-list presentation; first visit in an already open process, filesystem cache not controlled, background builds present; single observations, not percentiles",
+    "ten_thousand":  {
+                         "first_paint_ms":  8.197,
+                         "enumeration_complete_ms":  11,
+                         "cached_back_ms":  4.261,
+                         "first_128_ms":  3
+                     },
+    "hundred_thousand":  {
+                             "first_paint_ms":  207.132,
+                             "enumeration_complete_ms":  268,
+                             "cached_tab_ms":  7.516,
+                             "cached_forward_ms":  3.365,
+                             "first_128_ms":  202
+                         },
+    "visible_rows":  17,
+    "cache_display_precedes_reconciliation":  true
+}
