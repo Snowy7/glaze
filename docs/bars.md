@@ -179,6 +179,49 @@ optional interaction timings add this behavior without changing existing kit cal
 flat-surface shadows reserve a bounded outset, including for cropped islands and docks; their
 screen anchors remain unchanged.
 
+### Night verification (2026-11-06)
+
+The release workspace build passed, followed by normal deployment. Focused library tests passed:
+bars 116 (one ignored), shell 140 (ten ignored), UI 60, config 20, theme 15, and widget layering 7.
+Clippy for the shell/UI/bars libraries passed with existing warnings. Resolver tests cover preset
+versus explicit appearance, monitor precedence, independent Windows accent shades, theme-glass
+resets, state inheritance, motion policy and curves. Reveal geometry also checks inverse pointer
+mapping; the real-window bar test covers multiple dock plates without island windows.
+
+Verified: DPI-aware captures on both 2560x1440 screens show solid/light Georgia text at 1.1x,
+frosted/dark glass and the flat performance-mode surface. Guarded input opened the native launcher
+with scale and the dock's commands menu with morph; opening and settled captures were inspected.
+No menu action was invoked. Other bar reveal styles have source/math coverage, not a separate
+live capture. Artifacts and the reproduction scripts are in `%TEMP%\mypaper-tools\bars-parity`:
+`solid-light-0-top.png`, `frosted-dark-1-dock.png`, `performance-0-top.png`,
+`launcher-scale-{opening,settled}.png`, and `menu-morph-{opening,settled}.png`.
+
+Each configuration experiment restored the user's original `bars.json` bytes. Its SHA-256 is
+`88032FB713BEDDF3D3B8386859655E7A0E2C05DCBDB2F8E9718C5607C0C61BA0`.
+The user's Studio window stayed open. Engine-owned crates were not edited.
+
+The prescribed 30-second live sampler produced the following shell results (CPU is percent of
+one core, not the whole 16-core machine):
+
+| State / artifact in `%TEMP%\mypaper-tools` | CPU % one core | Private MB |
+|---|---:|---:|
+| Before work, `measure-bars-before.json` | 0.42 | 34 |
+| After variants and launcher/menu interaction, `measure-bars-after.json` | 0.31 | 37 |
+| Restarted, settled default config, `measure-bars-after-settled.json` | 1.98 | 34 |
+
+The default-state memory increase is zero, but the exercised process exceeded the +1 MB
+allowance by retaining 3 MB above the cold baseline. These samples do **not** close the memory
+gate after interaction or establish ~0 idle CPU. Other live work changed window/service activity
+during this run, so the higher CPU sample is not attributed to this patch. A diagnostic minute
+reported 356 bar ticker wakes, 187 ms in bar paint and 96 ms in bar services; the frame source was
+not continuously busy, but a controlled quiescent comparison remains needed. The immediate
+startup sample (2.24%, 33 MB) is retained separately as `measure-bars-after-startup.json` and is
+not called idle. No performance improvement is claimed from these unlike desktop states.
+
+Studio follow-ups are recorded in `plans/night/2026-11-06.md`: expose the now-consumed appearance
+and state controls, separate motion leaves and show/open styles, and inheritance resets. Renderer
+knobs and the separate Windows-wide style synchronization remain explicitly pending.
+
 CSS, gradient/image **surface fills**, noise, glow, neon and shaped corners are ignored with one
 warning per process. Image app icons are retained. There is no CSS renderer or DWM blur fallback.
 
