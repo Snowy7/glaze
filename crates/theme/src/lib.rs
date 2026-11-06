@@ -13,6 +13,8 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
+pub mod windows;
+
 pub const MANIFEST: &str = "theme.json";
 
 /// Used when no theme is given on the command line.
