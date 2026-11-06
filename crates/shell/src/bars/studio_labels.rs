@@ -64,13 +64,10 @@ pub(super) fn label(module: &ModuleRef, config: &BarsConfig, fluent: bool) -> St
                 Module::App => "No action",
             }
             .into(),
-            ModuleRef::Custom(id) => super::plugin_modules::action_name(id)
-                .map(|a| title(&a))
-                .or_else(|| {
-                    super::plugin_modules::panel_of(id)
-                        .map(|p| format!("Open {}", title(p.rsplit("--").next().unwrap_or(&p))))
-                })
-                .unwrap_or_else(|| "Plugin action".into()),
+            ModuleRef::Custom(id) => super::plugin_modules::panel_of(id)
+                .map(|p| format!("Open {}", title(p.rsplit("--").next().unwrap_or(&p))))
+                .or_else(|| super::plugin_modules::action_name(id).map(|a| title(&a)))
+                .unwrap_or_else(|| "No action".into()),
             ModuleRef::Break => "No action".into(),
         },
     };
@@ -94,6 +91,10 @@ mod tests {
         assert_eq!(
             label(&ModuleRef::Builtin(Module::Network), &config, true),
             "Network · Bar click: Quick settings"
+        );
+        assert_eq!(
+            label(&ModuleRef::Custom("status".into()), &config, false),
+            "Status · Bar click: No action"
         );
     }
 }
