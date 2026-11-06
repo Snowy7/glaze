@@ -1,6 +1,8 @@
 //! Counts the shell loop's wake-ups by cause and logs them once a minute, on a wake (it never
 //! adds one). Quiet unless the loop's work ran more than 240 times a second on average (a stuck
-//! ticker, say); `MYPAPER_WAKES=1` logs every minute. Counting is a few integer bumps per wake.
+//! ticker, say); `MYPAPER_WAKES=1`, or a file `%LOCALAPPDATA%\mypaper\wakes.on` (looked for once
+//! a minute, so it survives restarts and can be switched live), logs every minute. Counting is a
+//! few integer bumps per wake.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -82,7 +84,10 @@ impl Wakes {
         if elapsed < PERIOD {
             return false;
         }
-        if self.always || self.worked as f32 > AUTO_REPORT_RATE * elapsed.as_secs_f32() {
+        if self.always
+            || switched_on()
+            || self.worked as f32 > AUTO_REPORT_RATE * elapsed.as_secs_f32()
+        {
             let mut causes: Vec<_> = self
                 .causes
                 .iter()
@@ -135,6 +140,12 @@ impl Wakes {
         self.spent.clear();
         true
     }
+}
+
+/// Whether `%LOCALAPPDATA%\mypaper\wakes.on` exists.
+fn switched_on() -> bool {
+    std::env::var_os("LOCALAPPDATA")
+        .is_some_and(|dir| std::path::Path::new(&dir).join("mypaper").join("wakes.on").exists())
 }
 
 /// A window's class, `thread` for thread messages, `?` once it is gone.
