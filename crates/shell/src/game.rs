@@ -11,7 +11,7 @@ use windows::Win32::System::Threading::WaitForSingleObject;
 pub const WM_GAME_ACTIVITY: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 12;
 
 pub struct GameControl {
-    watch: Option<(notify::RecommendedWatcher, Arc<AtomicBool>)>,
+    watch: Option<(mypaper_fswatch::Watch, Arc<AtomicBool>)>,
     enabled: bool,
     owner: Option<Owner>,
     pub active: bool,

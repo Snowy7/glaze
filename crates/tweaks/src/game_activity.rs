@@ -9,7 +9,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use anyhow::{Context, Result, bail, ensure};
-use notify::Watcher;
 use serde::{Deserialize, Serialize};
 use windows::Win32::Foundation::{
     CloseHandle, FILETIME, HANDLE, HWND, LPARAM, LRESULT, RECT, WAIT_ABANDONED, WAIT_OBJECT_0,
@@ -166,18 +165,11 @@ pub fn read() -> Option<(Snapshot, Owner)> {
 }
 
 /// Watches atomic replacement/removal. Dropping releases the directory watcher.
-pub fn watch(changed: impl Fn() + Send + 'static) -> Result<notify::RecommendedWatcher> {
+pub fn watch(changed: impl Fn() + Send + 'static) -> Result<mypaper_fswatch::Watch> {
     let file = path()?;
     let parent = file.parent().context("game signal path has no parent")?;
     std::fs::create_dir_all(parent)?;
-    let target = file.clone();
-    let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-        if event.is_ok_and(|event| event.paths.iter().any(|p| p == &target)) {
-            changed();
-        }
-    })?;
-    watcher.watch(parent, notify::RecursiveMode::NonRecursive)?;
-    Ok(watcher)
+    mypaper_fswatch::Watch::files(parent, &[FILE], changed)
 }
 
 struct State {
