@@ -1,6 +1,34 @@
 //! Opt-in popup presentation. A short-lived bitmap scales together with its hit regions and
 //! glass body; settlement restores the original list and releases the bitmap.
-use crate::{DisplayList, Hit, Image, Op, Rect, Ui};
+use crate::{DisplayList, Hit, Image, Op, Point, Rect, Ui};
+
+/// The same uniform transform for pixels, glass, hits and pointer coordinates.
+#[derive(Debug, Clone, Copy)]
+pub struct Transform {
+    pub from: Rect,
+    pub to: Rect,
+}
+impl Transform {
+    pub fn scale(self) -> f32 {
+        self.to.width() / self.from.width().max(1.0)
+    }
+    pub fn rect(self, rect: Rect) -> Rect {
+        let s = self.scale();
+        Rect::new(
+            self.to.left + (rect.left - self.from.left) * s,
+            self.to.top + (rect.top - self.from.top) * s,
+            rect.width() * s,
+            rect.height() * s,
+        )
+    }
+    pub fn inverse(self, point: Point) -> Point {
+        let s = self.scale().max(0.001);
+        Point::new(
+            self.from.left + (point.x - self.to.left) / s,
+            self.from.top + (point.y - self.to.top) / s,
+        )
+    }
+}
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,15 +95,11 @@ impl Snapshot {
     }
 
     pub fn frame(&self, full: Rect, body: Rect) -> DisplayList {
-        let scale = body.width() / full.width().max(1.0);
-        let rect = |r: Rect| {
-            Rect::new(
-                body.left + (r.left - full.left) * scale,
-                body.top + (r.top - full.top) * scale,
-                r.width() * scale,
-                r.height() * scale,
-            )
+        let transform = Transform {
+            from: full,
+            to: body,
         };
+        let rect = |r| transform.rect(r);
         DisplayList {
             ops: vec![Op::Image {
                 rect: rect(Rect::new(0.0, 0.0, self.size.0 as f32, self.size.1 as f32)),
@@ -122,5 +146,20 @@ mod tests {
             Reveal::Morph.body(full, anchor, 0.0).width()
                 < Reveal::Scale.body(full, anchor, 0.0).width()
         );
+    }
+
+    #[test]
+    fn pointer_coordinates_and_rectangles_follow_the_same_transform() {
+        let transform = Transform {
+            from: Rect::new(10.0, 10.0, 400.0, 600.0),
+            to: Rect::new(40.0, 70.0, 200.0, 300.0),
+        };
+        let hit = Rect::new(40.0, 50.0, 80.0, 30.0);
+        let painted = transform.rect(hit);
+        assert_eq!(
+            transform.inverse(Point::new(painted.left, painted.top)),
+            Point::new(hit.left, hit.top)
+        );
+        assert_eq!(painted.width(), hit.width() * 0.5);
     }
 }
