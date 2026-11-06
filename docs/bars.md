@@ -729,6 +729,8 @@ registration cost tens of microseconds. Recreating windows during recovery was s
 The callback trace recorded 299 location events over roughly 30 seconds, including child HWNDs
 and discarded sub-objects. Bar location hooks now follow the foreground process and Explorer;
 movement no longer dirties all bar data or re-hides the taskbar on an unrelated data update.
+(Since 6 November the hooks run on a `win-events` thread of their own; a data change marks only
+the bars showing that topic. See performance.md, "Shell idle hill-climb".)
 The separate shared widget coverage watcher was also treating child HWND moves as coverage
 changes, causing desktop enumeration/restacking. Its hierarchy filter has a real parent/child
 HWND test. The later `890ae82` change also excludes non-covering overlay styles, matching the

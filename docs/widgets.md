@@ -150,7 +150,9 @@ bar's `first_paint_ms`. Widget surfaces use the deferred-accessibility construct
 repair follows window events, coalesced by a one-shot 50 ms deadline, with a final repair 250 ms
 after foreground changes to settle Explorer's animation. Two ordered passes converge paired glass
 windows. There is no idle z-order timer. Coverage location hooks follow only the foreground process
-and Explorer; a cached top-level set distinguishes destroyed apps from child-window churn.
+and Explorer; a cached top-level set distinguishes destroyed apps from child-window churn. The
+hooks run on the shell's `win-events` thread, which wakes the UI loop once per 25 ms batch that
+changed something (cursor moves over the foreground app never reach it).
 
 ## Layout and existing data
 

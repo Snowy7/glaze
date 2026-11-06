@@ -61,6 +61,44 @@ pacing, so it is excluded from idle CPU samples. `--window <sample.json>` on the
 selects the exact CPU window and excludes startup/teardown publications. The async slots may omit a
 sample if all are still mapping, and no timestamp work runs when telemetry is disabled.
 
+### Shell idle hill-climb (6 November 2026)
+
+On the user's live desktop (two 2560x1440 screens, the left one with bars, dock and widgets, the
+right one covered by a maximized app; a seconds desk clock, a stats module and a now-playing
+widget visible), with other agents building and deploying throughout, so whole-process samples
+swing. The wake report is the measure: create `%LOCALAPPDATA%\mypaper\wakes.on` (or deploy with
+`MYPAPER_WAKES=1`) and every minute `mypaper.log` gets a `wakes in 60 s:` line with causes, each loop
+part's wall time and CPU cycles (`cpu Mcycles`, about 4.5 per ms here), and `bars.tick ms/Mcycles`
+by part. Delete the file to stop it; reading the switch costs one file check a minute.
+
+What woke the shell, and what each fix did (quiet minutes, UI thread):
+
+| Source | Before | After |
+|---|---|---|
+| Every data change (the clock each second) marked all four bars dirty, rebuilt dock items and re-read every app window's rectangle | items 15.3, windows 26.7, paint 62.2 ms/min | 1.0, 2.1, 51.9 ms/min (only bars showing the topic) |
+| Top bar clock `HH:mm` (macOS preset) with `seconds: true` ticked every second | bars.tick 270 Mcycles/min | 126-139 (ticks when the format shows seconds) |
+| Bars clock (+5 ms), stats (every 2 s from start) and widget clocks (+0 ms) woke separately | 41 bar clock/stats wakes/min | 13-16; the rest share the widgets' wake |
+| WinEvent hooks on the UI thread: every cursor move over the foreground app delivered there | UI thread 1,533 Mcycles in 15 s of mouse motion (146 still) | 89 (96 still); a `win-events` thread takes 173 in 25 ms batches |
+| Each window event read all 341 top-level windows' class, pid and cloak state (35 visible), up to three times | 0.46 ms per pass | hidden windows answered by one visibility check; the z-order stops at each bar monitor's front app |
+| Any `WM_SETTINGCHANGE` reloaded every setting (a tweak burst: 120-199/min, pump 4.9-7.2 s/min) | full reload each | only when accent, scheme or animation changed |
+| Media timeline updates (13/min) repainted every bar | 13 full repaints/min | none (only notifications changes repaint) |
+
+Whole UI thread in a quiet minute: 582 -> 444-478 Mcycles (about 0.1 s of CPU a minute). What is left
+is visible change: the seconds desk clock's repaint (~4 Mcycles each, about 260 a minute) and the
+stats module (every 2 s). No frame-ticker wakes at rest.
+
+Mouse motion still costs the desktop menu's `WH_MOUSE_LL` thread about 930 Mcycles per 15 s of fast
+motion (~33 µs a move, in the kernel round trip): the hook must see every mouse event to swallow
+right-clicks on the bare desktop, and is already off while a fullscreen app is in front.
+
+Memory: resting 35-37 MiB private. The first launcher open keeps about 2.5 MiB (text field, shell
+and icon state); further opens, the dock menu, hover and flyouts stay within it (39-40 MiB), and
+handles and GDI/USER objects return to their resting counts.
+
+Exit: the shell no longer crashes on every exit (0xc0000409, or 0xe06d7363 in unwinding debug
+builds): the integrations' thread-local state joined its workers after `ExitProcess` had killed
+them; `integrations::shutdown()` now joins them before `main` returns.
+
 ### Live engine hillclimb (6 November 2026)
 
 On the user's live desktop, not the fixture: rain-city at 30 fps and 0.65 scale on the RTX
