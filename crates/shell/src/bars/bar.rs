@@ -457,7 +457,7 @@ impl Bar {
     /// A visibility transition changes only this reservation. Explorer resizes maximized apps;
     /// restored windows keep their positions (no global work-area setter or window enumeration).
     pub fn tick_maximized(&mut self, now: Instant) -> Result<()> {
-        if self.studio_only { return Ok(()); }
+        if self.studio_only || self.studio_base.is_some() { return Ok(()); }
         if let Some(hidden) = self.maximized.take_due(now) {
             if hidden && self.edge_surface.is_none() {
                 self.edge_surface = Some(Surface::new_deferred_accessibility(
@@ -478,7 +478,7 @@ impl Bar {
         Ok(())
     }
     pub fn reserve(&mut self) {
-        if self.studio_only { return; }
+        if self.studio_only || self.studio_base.is_some() { return; }
         if self.reservation.is_none() && !self.auto_hides() {
             self.reservation = Reservation::new(edge(self.kind, &self.config))
                 .inspect_err(|e| log::error!("app-bar reservation: {e:#}"))
