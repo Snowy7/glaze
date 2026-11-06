@@ -56,6 +56,9 @@ run-only appearance overrides, useful when checking a look without changing the 
   The [deployment hashes](../crates/files/evidence/selection-refresh/deployed.json) match the
   approved `C:\mypaper-targets\main` build. The fixture's separate profile leaves the user's
   Files session/preferences untouched; desktop actions hold the lock individually.
+  A later shared deployment replaced the on-disk executables after the Enter check. The
+  [preserved running image](../crates/files/evidence/selection-refresh/shared-deployment.json)
+  hashes exactly to this test's deployed Files executable; the test process then closed normally.
 - Arrow keys, Home/End, Page Up/Down, type-to-select, Enter, Backspace, Alt+arrows, mouse Back/
   Forward, Ctrl/Shift selection and rubber-band selection are supported. `F5` refreshes.
 
