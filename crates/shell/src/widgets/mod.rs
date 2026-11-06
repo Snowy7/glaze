@@ -1012,6 +1012,7 @@ impl Widgets {
             self.forget(&id);
             self.entries.remove(&id);
         }
+        let system = mypaper_bars::accent::read();
         for instance in &self.layout.instances {
             let Some(manifest) = self.registry.get(&instance.widget).map(|i| &i.manifest) else {
                 continue;
@@ -1024,7 +1025,7 @@ impl Widgets {
             let grid = grid_for_bars(&self.layout, screen, &self.bars);
             let base = self.layout.appearance.over(&look::base(&self.skin));
             let bare = instance.appearance.surface.or(base.surface) == Some(mypaper_theme::Surface::None);
-            let mut global = crate::look::settings::appearance(&self.desktop_look, glass::Family::Widgets, &base, bare, &mypaper_bars::accent::read());
+            let mut global = crate::look::settings::appearance(&self.desktop_look, glass::Family::Widgets, &base, bare, &system);
             if let Some(font) = global.font.as_mut() {
                 *font = crate::look::settings::font(font, |f| ui.text.has_family(f));
             }
@@ -1106,6 +1107,7 @@ impl Widgets {
             }
             entry.tokens = tokens(&placed.appearance);
             entry.tokens.icon_set = crate::look::settings::icons(&self.desktop_look, &ui.text);
+            entry.model.corner_override = instance.appearance.radius.or(self.desktop_look.shape.corners).or(self.layout.appearance.radius);
             entry.model.placed = placed;
             if !self.settling.contains_key(&instance.instance)
                 && !self

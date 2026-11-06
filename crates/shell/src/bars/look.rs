@@ -123,6 +123,10 @@ impl Tokens {
     /// Production resolution under config.json's Look; previews may keep using `resolve`.
     pub fn resolve_settings(look: &Look, appearance: &Appearance, system: &accent::System, desktop: &mypaper_config::Look, text: &mypaper_ui::Text) -> Self {
         let mut tokens = Self::resolve(look, appearance, system);
+        if let Some(name) = look.font.family.as_deref().or(appearance.font.as_deref()) {
+            tokens.font.family = crate::look::settings::font(name, |f| text.has_family(f)).into();
+            tokens.theme.font.family = tokens.font.family.clone();
+        }
         if let Some(set) = crate::look::settings::icons(desktop, text) {
             tokens.theme.icons = set;
         }

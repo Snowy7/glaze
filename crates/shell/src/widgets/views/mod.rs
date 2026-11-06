@@ -120,6 +120,9 @@ pub fn resize_edges(hit: HitId) -> Option<[bool; 4]> {
 
 /// The plate's corner radius in device px: the engine's glass uses the same shape.
 pub fn plate_radius(model: &Model, rect: Rect, scale: f32) -> f32 {
+    if let Some(radius) = model.corner_override {
+        return radius * scale;
+    }
     if model.placed.widget == "media-pill" {
         match model.str("variant", "pill").as_str() {
             "pill" | "mini" => rect.height() / 2.0,

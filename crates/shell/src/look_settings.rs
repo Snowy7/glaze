@@ -6,6 +6,10 @@ use mypaper_config::look::{Icons, Look, Scheme, Style, Tone};
 use mypaper_theme::{Appearance, Paint, TextTone};
 use mypaper_ui::{Text, icons::IconSet};
 
+#[cfg(test)]
+#[path = "look_settings_tests.rs"]
+mod tests;
+
 pub fn family(look: &Look, surface: Family) -> Option<&mypaper_config::look::FamilyLook> {
     match surface {
         Family::Bars => look.bars.as_ref(),

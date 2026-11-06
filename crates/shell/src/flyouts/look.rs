@@ -178,6 +178,8 @@ impl Look {
 
     /// The shared desktop controls, applied once on reload to both flyouts and their menus.
     pub fn apply_settings(&mut self, desktop: &mypaper_config::Look, text: &Text) {
+        self.font = crate::look::settings::font(&self.font, |f| text.has_family(f)).into();
+        self.resolved.font.family = self.font.clone();
         if let Some(set) = crate::look::settings::icons(desktop, text) {
             self.resolved.icons = set;
         }
