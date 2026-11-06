@@ -338,8 +338,8 @@ impl Tokens {
     }
 }
 
-/// Optional optics shared by a bar and the popups it opens. The bottom inner-shadow meaning
-/// of legacy `depth` differs from the renderer's shade under the lit top rim (docs/bars.md).
+/// Optional optics shared by a bar and the popups it opens. Legacy `depth` means a bottom
+/// inner shadow, independently of the renderer's broad shade under the lit top rim.
 pub fn glass_style(look: &Look) -> mypaper_ui::glass::GlassStyle {
     mypaper_ui::glass::GlassStyle {
         brightness: match &look.background {
@@ -357,10 +357,10 @@ pub fn glass_style(look: &Look) -> mypaper_ui::glass::GlassStyle {
             .glass
             .sheen
             .map(|v| v * look.glass.intensity.unwrap_or(1.0)),
-        depth: look
+        inner_shadow: look
             .glass
             .depth
-            .map(|v| v * look.glass.intensity.unwrap_or(1.0)),
+            .map_or(0.0, |v| v * look.glass.intensity.unwrap_or(1.0)),
         ..Default::default()
     }
 }
@@ -370,10 +370,20 @@ pub fn fade_ms(
     style: mypaper_bars::style::MotionStyle,
 ) -> f32 {
     if timing.enabled && style != mypaper_bars::style::MotionStyle::None {
-        (timing.duration.as_secs_f32() * 1000.0).min(2000.0)
+        (timing.duration.as_secs_f32() * 1000.0).min(5000.0)
     } else {
         0.0
     }
+}
+
+/// Attach the resolved show/open timing to glass alongside the content's transition.
+pub fn glass_fade(
+    glass: &mut mypaper_ui::glass::GlassStyle,
+    timing: mypaper_ui::transition::Timing,
+    style: mypaper_bars::style::MotionStyle,
+) {
+    glass.fade_ms = fade_ms(timing, style);
+    glass.fade_curve = (glass.fade_ms > 0.0).then_some(timing.easing);
 }
 
 pub fn plate_style(style: mypaper_ui::glass::GlassStyle) -> mypaper_glass_ipc::Style {
@@ -383,6 +393,7 @@ pub fn plate_style(style: mypaper_ui::glass::GlassStyle) -> mypaper_glass_ipc::S
         smoothing: style.smoothing,
         sheen: style.sheen,
         depth: style.depth,
+        inner_shadow: style.inner_shadow,
     }
 }
 
@@ -679,7 +690,8 @@ mod tests {
                 saturation: 0.0,
                 smoothing: 0.6,
                 sheen: Some(0.7),
-                depth: Some(0.2),
+                depth: None,
+                inner_shadow: 0.2,
             }
         );
         let popup = crate::flyouts::look::Look::resolve(
@@ -707,7 +719,7 @@ mod tests {
                 serde_json::json!({"duration": 5000, "curve": "linear"}),
                 true,
                 false,
-                2000.0,
+                5000.0,
             ),
             (
                 serde_json::json!({"duration": 640, "curve": "linear"}),

@@ -117,7 +117,7 @@ impl Look {
             false,
             crate::bars::motion::Leaf::Open,
         );
-        look.glass_style.fade_ms = crate::bars::look::fade_ms(look.opening, look.opening_style);
+        crate::bars::look::glass_fade(&mut look.glass_style, look.opening, look.opening_style);
         if performance {
             look.glass = None;
             look.resolved.glass = None;

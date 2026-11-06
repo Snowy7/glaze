@@ -1717,7 +1717,8 @@ impl Bars {
                     if performance {
                         popup.glass = None;
                     }
-                    popup.glass_style.fade_ms = look::fade_ms(
+                    look::glass_fade(
+                        &mut popup.glass_style,
                         motion::resolve(
                             animation,
                             kind == BarKind::Dock,
@@ -1728,7 +1729,8 @@ impl Bars {
                         motion::presentation(animation, kind == BarKind::Dock, motion::Leaf::Open),
                     );
                     tokens.popup = Some(popup);
-                    tokens.glass_style.fade_ms = look::fade_ms(
+                    look::glass_fade(
+                        &mut tokens.glass_style,
                         motion::resolve(
                             animation,
                             kind == BarKind::Dock,

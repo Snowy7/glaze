@@ -180,6 +180,8 @@ impl Backdrop for Client {
                 sheen: style.sheen.unwrap_or(-1.0),
                 depth: style.depth.unwrap_or(-1.0),
                 fade_ms: style.fade_ms,
+                inner_shadow: style.inner_shadow,
+                fade_curve: fade_curve(style),
             },
         });
     }
@@ -230,6 +232,22 @@ impl Backdrop for Client {
     }
 }
 
+/// Translate the already-resolved kit curve once per style request; names and motion policy
+/// have been resolved with the surface's configuration, never in an animation frame.
+fn fade_curve(style: &GlassStyle) -> request::FadeCurve {
+    use mypaper_ui::transition::Easing;
+    match style.fade_curve {
+        None => request::FadeCurve::DEFAULT,
+        Some(Easing::Bezier(points)) => request::FadeCurve::bezier(points),
+        Some(Easing::Spring(s)) => {
+            request::FadeCurve::spring(s.mass, s.stiffness, s.damping, style.fade_ms / 1000.0)
+        }
+        Some(Easing::TimedSpring { spring: s, settle }) => {
+            request::FadeCurve::spring(s.mass, s.stiffness, s.damping, settle)
+        }
+    }
+}
+
 fn rect(shape: Shape) -> Rect {
     Rect {
         x: shape.x,
@@ -249,5 +267,55 @@ fn wire(material: &GlassMaterial) -> Material {
         refraction: material.refraction.clamp(0.0, 1.0),
         highlight: material.highlight.clamp(0.0, 1.0),
         tint: [byte(t.r), byte(t.g), byte(t.b), 0],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wire_curves_follow_the_resolved_content_transition() {
+        use crate::bars::{look::glass_fade, motion};
+        use mypaper_bars::style::{Curve, Motion, MotionStyle};
+        use std::time::{Duration, Instant};
+        let curves = mypaper_bars::style::NAMED_CURVES
+            .iter()
+            .map(|name| Curve::Named((*name).into()))
+            .chain([
+                Curve::Bezier([0.13, -0.4, 0.8, 1.7]),
+                Curve::Spring(mypaper_bars::style::Spring {
+                    mass: 1.0,
+                    stiffness: 80.0,
+                    damping: 25.0,
+                }),
+            ]);
+        for curve in curves {
+            let root = Motion {
+                duration: Some(5000.0),
+                curve: Some(curve.clone()),
+                ..Default::default()
+            };
+            let timing = motion::resolve(&root, false, motion::Leaf::Open, true, false);
+            let mut style = GlassStyle::default();
+            glass_fade(&mut style, timing, MotionStyle::Fade);
+            let wire = fade_curve(&style);
+            assert!(wire.valid(), "{curve:?}");
+            let now = Instant::now();
+            let content = timing.start(0.0, 1.0, now);
+            for i in 0..=100 {
+                let x = i as f32 / 100.0;
+                let at = Duration::from_secs_f32(x * timing.duration.as_secs_f32());
+                assert!(
+                    (wire.at(x) - content.value(now + at).clamp(0.0, 1.0)).abs() < 0.001,
+                    "{curve:?} at {x}"
+                );
+            }
+        }
+        let timing = motion::resolve(&Motion::default(), false, motion::Leaf::Open, false, false);
+        let mut style = GlassStyle::default();
+        glass_fade(&mut style, timing, MotionStyle::Fade);
+        assert_eq!(style.fade_ms, 0.0);
+        assert_eq!(style.fade_curve, None);
     }
 }
