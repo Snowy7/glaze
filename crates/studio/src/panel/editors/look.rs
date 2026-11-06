@@ -39,13 +39,22 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
     } else {
         "Your look".into()
     };
+    let reset = Rect::new(c.right() - b.px(28.0), c.y, b.px(28.0), b.px(28.0));
+    crate::panel::controls::icon_button(
+        b,
+        reset,
+        glyph::RESET,
+        "Return to the wallpaper's look",
+        true,
+        Action::LookReset,
+    );
     title(b, c, "Look", &subtitle);
     let r = Rect::new(c.x, c.y + b.px(6.0), c.w, b.px(30.0));
-    let wallpaper_scope = format!("{}'s", wallpaper.map_or("Wallpaper", |w| w.name.as_str()));
+    let wallpaper_label = format!("{}'s", wallpaper.map_or("Wallpaper", |w| w.name.as_str()));
     b.segmented(
         key("panel-look-scope"),
         r,
-        &["Yours", &wallpaper_scope],
+        &["Yours", &wallpaper_label],
         Some(usize::from(app.nav.look_theme)),
         "Look scope",
         wallpaper.is_some(),
@@ -55,7 +64,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
     c.y = r.bottom + b.px(4.0);
     if app.nav.look_theme {
         // Reuses the wallpaper editor's validated theme paths and built-in copy protection.
-        crate::pages::look::theme_scope(app, b, c);
+        wallpaper_scope(app, b, c);
         return;
     }
     let current: Style = app
@@ -69,35 +78,30 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         });
     });
     group(b, c, "Material", |b, c| {
-        for (id, uses) in ["clarity", "blur", "refraction", "highlight"]
+        let sliders: Vec<_> = ["clarity", "blur", "refraction", "highlight"]
             .into_iter()
             .zip(crate::look::uses(current))
-        {
-            if uses {
-                let s = crate::settings::Setting::get(id).unwrap();
-                setting(app, b, c, id, s.label, "");
-            }
-        }
-        text(
-            b,
-            Rect::new(c.x, c.y, c.w, height(b, 28.0)),
-            "Tint",
-            13.0,
-            400,
-            b.p.ink1,
-            Align::Start,
-        );
+            .filter(|(_, uses)| *uses)
+            .map(|(id, _)| {
+                let setting = crate::settings::Setting::get(id).unwrap();
+                crate::ui::anchor(app, id, c.view, c.y);
+                crate::panel::material::Slider {
+                    label: setting.label,
+                    value: crate::panel::material::look_value(app, current, id),
+                    max: if id == "blur" { 32.0 } else { 1.0 },
+                    edit: Edit::new(setting.doc, setting.path, setting.label),
+                }
+            })
+            .collect();
         crate::ui::anchor(app, "tint", c.view, c.y);
-        c.y += height(b, 28.0);
-        super::super::colors::swatches(
+        crate::panel::material::block(
             app,
             b,
             c,
-            &Edit::new(DocId::Config, "/look/material/tint", "Tint"),
+            &sliders,
+            Edit::new(DocId::Config, "/look/material/tint", "Tint"),
             app.get(DocId::Config, "/look/material/tint"),
             true,
-            true,
-            &COLORS,
         );
     });
     group(b, c, "Color", |b, c| {
@@ -175,7 +179,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
     }
 }
 
-/// The same five choices on Look and a widget's own look, always in one row.
+/// Look and widget overrides share one specimen and the same five names.
 pub(super) fn style_tiles(
     app: &App,
     b: &mut B,
@@ -183,52 +187,45 @@ pub(super) fn style_tiles(
     selected: Option<Style>,
     action: impl Fn(Style) -> Action,
 ) {
-    let gap = b.px(6.0);
-    let width = (c.w - gap * 4.0) / 5.0;
-    let picture_height = width * 0.8;
-    let label_height = height(b, 24.0);
-    b.group(key(("panel-look-styles", c.view)), |b| {
-        for (i, (style, name, _)) in STYLES.iter().enumerate() {
-            let rect = Rect::new(
-                c.x + i as f32 * (width + gap),
-                c.y,
-                width,
-                picture_height + label_height,
-            );
-            let k = key(("panel-look-style", c.view, i));
-            let on = selected == Some(*style);
-            b.plate(k, rect.inflate(b.px(2.0)), b.px(9.0), on);
-            super::super::specimens::material(
-                app,
-                b,
-                Rect::new(rect.left, rect.top, width, picture_height),
-                *style,
-            );
-            text(
-                b,
-                Rect::new(rect.left, rect.top + picture_height, width, label_height),
-                name,
-                11.0,
-                if on { 600 } else { 400 },
-                b.p.ink1,
-                Align::Center,
-            );
-            b.hit_checked(
-                k,
-                rect,
-                Role::RadioButton,
-                name,
-                Some(on),
-                action(*style),
-                Behavior::Click,
-            );
-            b.focus_ring(k, rect, b.px(9.0));
-        }
-    });
-    c.y += picture_height + label_height + b.px(8.0);
-    if let Some((_, _, sentence)) = STYLES.iter().find(|(style, _, _)| Some(*style) == selected) {
-        notice(b, c, sentence);
+    let choices: Vec<_> = STYLES
+        .iter()
+        .map(|(style, name, _)| (*name, selected == Some(*style), action(*style)))
+        .collect();
+    let picture_height = b.px(164.0);
+    let shown = crate::panel::choosers::draw(
+        app,
+        b,
+        c,
+        key(("panel-look-styles", c.view)),
+        picture_height,
+        &choices,
+        |b, index, rect| crate::panel::specimens::material(app, b, rect, STYLES[index].0),
+    );
+    if let Some(index) = shown {
+        notice(b, c, STYLES[index].2);
     }
+}
+
+fn wallpaper_scope(app: &App, b: &mut B, c: &mut Col) {
+    let Some(wallpaper) = app.library.active().and_then(|i| app.library.items.get(i)) else {
+        return;
+    };
+    if !wallpaper.editable() {
+        notice(b, c, "Built in. Make a copy to change the look it brings.");
+        if let Some(index) = app.library.active() {
+            action_button(b, c, "Make a copy to edit", Action::CopyWallpaper(index));
+        }
+        return;
+    }
+    let theme = crate::panel::saving::theme_value(app, wallpaper);
+    notice(
+        b,
+        c,
+        "Saved to this wallpaper. Your own look still wins where you set it.",
+    );
+    group(b, c, "Material", |b, c| {
+        crate::panel::material::wallpaper(app, b, c, wallpaper, &theme)
+    });
 }
 
 pub fn windows(app: &App, b: &mut B, c: &mut Col) {
@@ -281,14 +278,15 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
                 .enumerate()
                 .map(|(i, (name, _))| (*name, selected == Some(i), Action::WindowsLook(i)))
                 .collect();
-            crate::ui::tiles(
+            let picture_height = b.px(174.0);
+            crate::panel::choosers::draw(
+                app,
                 b,
                 c,
                 key("panel-windows-looks"),
-                2,
-                false,
+                picture_height,
                 &choices,
-                |b, i, pic| super::super::specimens::window(app, b, pic, i),
+                |b, index, rect| super::super::specimens::window(app, b, rect, index),
             );
         },
     );

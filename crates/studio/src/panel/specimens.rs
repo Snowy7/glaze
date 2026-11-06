@@ -160,11 +160,11 @@ fn material_backdrop(app: &App) -> Arc<Image> {
     {
         return image.clone();
     }
-    let (width, height) = (180usize, 144usize);
+    let (width, height) = (384usize, 144usize);
     let mut pixels = vec![255; width * height * 4];
     if let Some(source) = source {
-        let sw = (source.width as f32 * 0.58).min(source.height as f32 * 1.25);
-        let sh = sw / 1.25;
+        let sw = (source.width as f32 * 0.58).min(source.height as f32 * (384.0 / 144.0));
+        let sh = sw / (384.0 / 144.0);
         let mut best = (f32::MIN, 0.0, 0.0);
         for row in 0..4 {
             for col in 0..4 {
@@ -202,8 +202,7 @@ fn material_backdrop(app: &App) -> Arc<Image> {
                     + sx.min(source.width as usize - 1))
                     * 4;
                 for channel in 0..3 {
-                    pixels[(y * width + x) * 4 + channel] =
-                        (source.pixels[at + channel] as f32 * 1.32 + 12.0).min(255.0) as u8;
+                    pixels[(y * width + x) * 4 + channel] = source.pixels[at + channel];
                 }
             }
         }
@@ -302,12 +301,18 @@ pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
         );
         let frosted = blur_crop(&background, (blur * 0.35).round() as usize);
         let mut pixels = background.pixels.clone();
-        let radius = theme.radius.surface * 0.72;
+        let radius = theme.radius.surface;
         let tint = theme.color.surface;
         for y in 0..height {
             for x in 0..width {
-                let (dx, dy) = (x as f32 - 89.5, y as f32 - 71.5);
-                let (qx, qy) = (dx.abs() - (74.0 - radius), dy.abs() - (49.0 - radius));
+                let (dx, dy) = (
+                    x as f32 - width as f32 / 2.0,
+                    y as f32 - height as f32 / 2.0,
+                );
+                let (qx, qy) = (
+                    dx.abs() - (width as f32 * 0.39 - radius),
+                    dy.abs() - (height as f32 * 0.36 - radius),
+                );
                 let distance = qx.max(0.0).hypot(qy.max(0.0)) + qx.max(qy).min(0.0) - radius;
                 let at = (y * width + x) * 4;
                 if distance > 0.6 {
@@ -354,10 +359,16 @@ pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
         remember(app, cache_key, &image);
         image
     });
-    crate::stage::image_round(b, r, &image, 1.0, b.px(7.0));
+    b.list.ops.push(mypaper_ui::Op::RoundedImage {
+        rect: r,
+        image,
+        opacity: 1.0,
+        source: None,
+        radius: b.px(7.0),
+    });
     let surface = Rect::new(
         r.left + r.width() * 0.1,
-        r.top + r.height() * 0.24,
+        r.top + r.height() * 0.26,
         r.width() * 0.8,
         r.height() * 0.5,
     );
@@ -366,7 +377,7 @@ pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
         b,
         surface,
         "10:42",
-        (r.width() / b.s * 0.22).clamp(10.0, 21.0),
+        (r.width() / b.s * 0.10).clamp(10.0, 36.0),
         if style == Style::Mono { 400 } else { 600 },
         ink,
         Align::Center,
@@ -383,24 +394,64 @@ pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
         r.height() * 0.77,
     );
     let scale = win.width() / 180.0;
-    let radius = if look == 3 { 0.0 } else { 8.0 * scale };
+    let style = app
+        .get(DocId::Config, "/look/style")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+    let current_theme = style_theme(app, style);
+    let radius = if look == 3 {
+        0.0
+    } else if look == 1 {
+        app.get(DocId::Config, "/look/shape/corners")
+            .and_then(serde_json::Value::as_f64)
+            .map_or(current_theme.radius.surface, |v| v as f32)
+            * b.s
+    } else {
+        8.0 * scale
+    };
     let light = if look == 0 {
         !windows_dark(app)
     } else {
         !desktop_dark(app)
     };
     let ink = hex(if light { 0x1a1a1a } else { 0xf5f5f5 });
-    let plate = hex(if light { 0xf5f5f5 } else { 0x24262b });
+    let plate = if look == 1 {
+        app.get(DocId::Config, "/look/material/tint")
+            .and_then(serde_json::Value::as_str)
+            .and_then(mypaper_config::Color::parse)
+            .map_or(current_theme.color.surface, |color| {
+                Rgba::rgb8(color.0, 1.0)
+            })
+    } else {
+        hex(if light { 0xf5f5f5 } else { 0x24262b })
+    };
     let accent = wallpaper_color(app).unwrap_or(hex(0x8b9eb7));
-    if look == 2 {
-        crate::stage::image_round(b, win, &softened(app, &background, 7), 1.0, radius);
+    if look == 1 || look == 2 {
+        let blur = if look == 1 {
+            super::material::look_value(app, style, "blur") as f32
+        } else {
+            14.0
+        };
+        crate::stage::image_round(
+            b,
+            win,
+            &softened(app, &background, (blur / 2.0).round() as usize),
+            1.0,
+            radius,
+        );
     }
     b.fill(
         win,
         radius,
         plate.with_alpha(match look {
             0 | 3 => 1.0,
-            1 => 0.9,
+            1 => {
+                if style == Style::Solid {
+                    1.0
+                } else {
+                    1.0 - super::material::look_value(app, style, "clarity") as f32
+                }
+            }
             _ => 0.45,
         }),
     );
@@ -409,7 +460,7 @@ pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
         caption,
         radius,
         match look {
-            1 => accent.with_alpha(if light { 0.35 } else { 0.5 }),
+            1 => current_theme.color.label.with_alpha(0.06),
             2 => hex(0xffffff).with_alpha(0.12),
             _ => ink.with_alpha(0.06),
         },
@@ -511,7 +562,13 @@ pub fn bars(
     raw: &serde_json::Value,
     only: Option<crate::actions::Bar>,
 ) {
-    bars_at(app, b, rect, raw, only, (800, 360));
+    let width = (rect.width() / b.s).round().max(280.0) as u32;
+    let height = (rect.height() / b.s).round().max(64.0) as u32;
+    let mut specimen = raw.clone();
+    if only != Some(crate::actions::Bar::Top) {
+        specimen["dock"]["enabled"] = serde_json::json!(true);
+    }
+    bars_at(app, b, rect, &specimen, only, (width, height));
 }
 
 pub fn desktop_bars(app: &App, b: &mut B, rect: Rect, raw: &serde_json::Value) {
@@ -538,7 +595,22 @@ fn bars_at(
 ) {
     use mypaper_shell::preview::bars as shell;
     use mypaper_ui::{DisplayList, Op, Ui};
-    let cache_key = format!("bars:{raw}:{only:?}:{size:?}:{}", desktop_dark(app));
+    let icon_stamp: Vec<_> = raw
+        .pointer("/dock/pinned")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|pin| pin["path"].as_str())
+        .map(|path| {
+            super::icons::image(app, path)
+                .as_ref()
+                .map_or(0, |image| Arc::as_ptr(image) as usize)
+        })
+        .collect();
+    let cache_key = format!(
+        "bars:{raw}:{only:?}:{size:?}:{icon_stamp:?}:{}",
+        desktop_dark(app)
+    );
     let cached = app
         .panel
         .as_ref()
@@ -574,7 +646,8 @@ fn bars_at(
         let scale = raster_width as f32 / size.0.max(1) as f32;
         let raster = (raster_width, (size.1 as f32 * scale).ceil().max(1.0) as u32);
         let mut list = DisplayList::default();
-        let mut append = |frame: shell::Frame, x: f32, y: f32, tokens: &shell::Tokens| {
+        let mut append = |mut frame: shell::Frame, x: f32, y: f32, tokens: &shell::Tokens| {
+            real_pinned_icons(app, &mut frame);
             for (shape, radius) in &frame.shapes {
                 let color = tokens.material.map_or(tokens.theme.color.surface, |m| {
                     m.tint.with_alpha((1.0 - m.clarity).max(0.35))
@@ -621,8 +694,8 @@ fn bars_at(
                         .name
                         .clone()
                         .unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path)),
-                    path: pin.path,
                     icon: None,
+                    path: pin.path,
                     pinned: true,
                     windows: vec![],
                     aumid: None,
@@ -651,19 +724,78 @@ fn bars_at(
             append(frame, x, y, &tokens);
         }
         let native = Arc::new(mypaper_ui::render(&mut ui, &list, raster.0, raster.1).ok()?);
-        let reduced_height = (384 * size.1 / size.0).max(1);
+        let reduced_width = raster_width.min(480);
+        let reduced_height = (reduced_width * size.1 / size.0).max(1);
         let mut reduced = DisplayList::default();
         reduced.ops.push(Op::Image {
-            rect: Rect::new(0.0, 0.0, 384.0, reduced_height as f32),
+            rect: Rect::new(0.0, 0.0, reduced_width as f32, reduced_height as f32),
             image: native,
             opacity: 1.0,
             source: None,
         });
-        let image = Arc::new(mypaper_ui::render(&mut ui, &reduced, 384, reduced_height).ok()?);
+        let image =
+            Arc::new(mypaper_ui::render(&mut ui, &reduced, reduced_width, reduced_height).ok()?);
         remember(app, cache_key, &image);
         Some(image)
     });
     if let Some(image) = image {
-        crate::stage::image_round(b, rect, &image, 1.0, b.px(6.0));
+        b.list.ops.push(Op::RoundedImage {
+            rect,
+            image,
+            opacity: 1.0,
+            source: None,
+            radius: b.px(6.0),
+        });
+    }
+}
+
+/// Replace the shell's missing-icon initials with the panel's existing read-only app artwork.
+fn real_pinned_icons(app: &App, frame: &mut mypaper_shell::preview::bars::Frame) {
+    use mypaper_shell::preview::bars::Target;
+    use mypaper_ui::Op;
+    for (index, target) in frame.targets.iter().enumerate() {
+        let Target::Dock(item) = target else {
+            continue;
+        };
+        let Some(slot) = frame
+            .list
+            .hits
+            .iter()
+            .find(|hit| hit.id as usize == index + 1)
+            .map(|hit| hit.rect)
+        else {
+            continue;
+        };
+        let Some(image) = super::icons::image(app, &item.path) else {
+            continue;
+        };
+        let initial = item
+            .name
+            .chars()
+            .next()
+            .unwrap_or('?')
+            .to_uppercase()
+            .to_string();
+        let mut replaced = None;
+        for op in &mut frame.list.ops {
+            if let Op::Fill { rect, radius, .. } = op
+                && rect.intersects(&slot)
+                && (rect.width() - rect.height()).abs() < 0.1
+                && (*radius - rect.width() * 0.225).abs() < 0.2
+            {
+                let target = *rect;
+                *op = Op::Image {
+                    rect: target,
+                    image: image.clone(),
+                    opacity: 1.0,
+                    source: None,
+                };
+                replaced = Some(target);
+                break;
+            }
+        }
+        if let Some(icon) = replaced {
+            frame.list.ops.retain(|op| !matches!(op,Op::Text {rect,text,..} if text.as_ref() == initial && rect.intersects(&icon)));
+        }
     }
 }

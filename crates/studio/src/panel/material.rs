@@ -157,3 +157,38 @@ pub fn wallpaper(
         true,
     );
 }
+
+/// Unset knobs follow the wallpaper until a style is chosen, then that style's defaults.
+pub fn look_value(app: &App, style: mypaper_config::look::Style, id: &str) -> f64 {
+    use crate::docs::DocId;
+    if let Some(value) = app
+        .get(DocId::Config, &format!("/look/material/{id}"))
+        .and_then(Value::as_f64)
+    {
+        return value;
+    }
+    if app.get(DocId::Config, "/look/style").is_none()
+        && let Some(wallpaper) = app
+            .library
+            .active()
+            .and_then(|index| app.library.items.get(index))
+    {
+        let theme = super::saving::theme_value(app, wallpaper);
+        let field = if id == "clarity" { "tint" } else { id };
+        if let Some(value) = theme
+            .pointer(&format!("/widgets/glass/{field}"))
+            .and_then(Value::as_f64)
+        {
+            return if id == "clarity" { 1.0 - value } else { value };
+        }
+    }
+    let theme = super::specimens::style_theme(app, style);
+    let defaults = mypaper_ui::theme::material(theme.style, theme.color.surface);
+    (match id {
+        "clarity" => defaults.map_or(1.0 - theme.color.surface.a, |m| m.clarity),
+        "blur" => defaults.map_or(0.0, |m| m.blur),
+        "refraction" => defaults.map_or(0.0, |m| m.refraction),
+        "highlight" => defaults.map_or(0.0, |m| m.highlight),
+        _ => 0.0,
+    }) as f64
+}

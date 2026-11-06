@@ -15,8 +15,13 @@ use mypaper_ui::{
 const DELAY: Duration = Duration::from_millis(150);
 const TIMER: usize = 0x6A31;
 
+#[cfg(test)]
+#[path = "chooser_review.rs"]
+mod review;
+
 #[derive(Debug, Default)]
 pub struct State {
+    pointer_mode: bool,
     requested: Option<(Key, Action)>,
     pending: Option<(Key, Action, Instant)>,
     previewed: Option<Action>,
@@ -42,16 +47,26 @@ pub fn draw(
     }
     let rows_top = c.y + picture_height + b.px(8.0);
     let row_height = height(b, 34.0);
-    let hot = choices.iter().enumerate().find_map(|(index, _)| {
-        let rect = Rect::new(c.x, rows_top + index as f32 * row_height, c.w, row_height);
-        let k = key((id, index));
-        let visible = b.clip_rect().is_none_or(|clip| rect.intersects(&clip));
-        (visible
-            && (b.input.pointer.is_some_and(|point| {
-                rect.contains(point) && b.clip_rect().is_none_or(|clip| clip.contains(point))
-            }) || b.input.focus_visible && b.input.focus == Some(k)))
-        .then_some(index)
-    });
+    let row_rect = |index| Rect::new(c.x, rows_top + index as f32 * row_height, c.w, row_height);
+    let pointer = b
+        .input
+        .pointer
+        .filter(|point| b.clip_rect().is_none_or(|clip| clip.contains(*point)));
+    let keyboard =
+        b.input.focus_visible && !app.panel.as_ref().unwrap().chooser.borrow().pointer_mode;
+    let hot = pointer
+        .and_then(|point| (0..choices.len()).find(|index| row_rect(*index).contains(point)))
+        .or_else(|| {
+            if keyboard {
+                (0..choices.len()).find(|index| {
+                    b.input.focus == Some(key((id, *index)))
+                        && b.clip_rect()
+                            .is_none_or(|clip| row_rect(*index).intersects(&clip))
+                })
+            } else {
+                None
+            }
+        });
     let shown = hot
         .or_else(|| choices.iter().position(|(_, selected, _)| *selected))
         .unwrap_or(0);
@@ -161,6 +176,21 @@ pub fn end(app: &App) -> bool {
 
 pub fn event(app: &mut App, event: &Event) {
     match event {
+        Event::Move(_) => {
+            let mut state = app.panel.as_ref().unwrap().chooser.borrow_mut();
+            if !state.pointer_mode && state.pending.is_some() {
+                app.dirty = true;
+            }
+            state.pointer_mode = true;
+        }
+        Event::Key(_) | Event::Focus(_) => {
+            app.panel
+                .as_ref()
+                .unwrap()
+                .chooser
+                .borrow_mut()
+                .pointer_mode = false
+        }
         Event::Frame => app.dirty = true,
         Event::Leave | Event::Deactivated | Event::Close | Event::Cancelled => {
             end(app);
@@ -199,4 +229,116 @@ unsafe extern "system" fn wake(
     // SAFETY: a callback for our own one-shot HWND timer, delivered on the owning UI thread.
     let _ = unsafe { windows::Win32::UI::WindowsAndMessaging::KillTimer(Some(window), id) };
     mypaper_ui::queue_event(window, Event::Frame);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        docs::DocId,
+        panel::{Page, State as PanelState},
+    };
+    use mypaper_config::look::Style;
+    use mypaper_ui::{Point, Ui};
+
+    #[test]
+    fn pointer_and_keyboard_choices_preview_without_editing_and_escape_restores() {
+        let mut ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(PanelState {
+            page: Page::Look,
+            ..Default::default()
+        });
+        app.size = (480, 1200);
+        let before: Vec<_> = DocId::ALL
+            .into_iter()
+            .map(|id| app.docs.doc(id).raw.clone())
+            .collect();
+        let frame = crate::panel::build(&app, &mut ui.text);
+        let action = Action::SetStyle(Some(Style::Fluent));
+        let target = frame
+            .targets
+            .iter()
+            .find(|target| target.action == action)
+            .unwrap();
+        app.input.pointer = Some(Point::new(target.rect.left + 30.0, target.rect.top + 10.0));
+        app.input.hover = Some(target.key);
+        crate::panel::build(&app, &mut ui.text);
+        {
+            let mut state = app.panel.as_ref().unwrap().chooser.borrow_mut();
+            assert_eq!(
+                state.pending.as_ref().map(|(_, action, _)| action),
+                Some(&action)
+            );
+            assert!(state.previewed.is_none(), "stable hover must wait 150 ms");
+            state.pending.as_mut().unwrap().2 = Instant::now() - DELAY;
+        }
+        finish(&app);
+        assert_eq!(
+            app.panel
+                .as_ref()
+                .unwrap()
+                .chooser
+                .borrow()
+                .previewed
+                .as_ref(),
+            Some(&action)
+        );
+        assert!(crate::panel::on_key(&mut app, 0x1B, (false, false, false)));
+        assert_eq!(app.panel.as_ref().unwrap().page, Page::Look);
+        crate::panel::build(&app, &mut ui.text);
+        assert!(
+            app.panel
+                .as_ref()
+                .unwrap()
+                .chooser
+                .borrow()
+                .pending
+                .is_none(),
+            "Esc suppresses the same hovered row until it is left"
+        );
+        app.input.pointer = None;
+        app.input.focus = Some(target.key);
+        app.input.focus_visible = true;
+        app.panel.as_ref().unwrap().chooser.borrow_mut().suppressed = None;
+        crate::panel::build(&app, &mut ui.text);
+        assert_eq!(
+            app.panel
+                .as_ref()
+                .unwrap()
+                .chooser
+                .borrow()
+                .pending
+                .as_ref()
+                .map(|(_, action, _)| action),
+            Some(&action)
+        );
+        event(
+            &mut app,
+            &Event::Move(mypaper_ui::Pointer {
+                at: Point::new(475.0, 20.0),
+                screen: (0, 0),
+            }),
+        );
+        app.input.pointer = Some(Point::new(475.0, 20.0));
+        app.input.focus_visible = false;
+        crate::panel::build(&app, &mut ui.text);
+        assert!(
+            app.panel
+                .as_ref()
+                .unwrap()
+                .chooser
+                .borrow()
+                .pending
+                .is_none()
+        );
+        assert_eq!(app.docs.undo_count(), 0);
+        assert_eq!(
+            before,
+            DocId::ALL
+                .into_iter()
+                .map(|id| app.docs.doc(id).raw.clone())
+                .collect::<Vec<_>>()
+        );
+    }
 }
