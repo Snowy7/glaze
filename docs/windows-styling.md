@@ -6,8 +6,8 @@ Selecting `config.json` > `look.style` supplies Windows defaults as well as the 
 A wallpaper can refine those defaults with its `windows` section. Everything uses supported public
 APIs (`DwmSetWindowAttribute` and the same per-user registry values the Settings app writes). Frame
 styling runs in core; the separate [experimental App styler](#app-styler-experimental) is opt-in.
-Frame and preference changes are undone when the theme changes, mypaper quits, the
-panic hotkey fires, or core restarts after a crash.
+Style changes transition directly to the next values. Releasing fields restores only those
+fields; quitting, the panic hotkey and crash recovery restore all remaining changes.
 
 ```json
 {
@@ -69,8 +69,10 @@ Both accent-visibility fields accept absent, null, true and false independently.
 supports a coloured Start/taskbar in dark system mode, so light/automatic-light defaults keep
 that switch off. Explicit overrides are still honoured.
 
-Resolution runs only on the existing config/theme/palette events: no extra process, hook,
-thread, timer or polling. The experimental app styler uses the same resolved `$accent` (including
+Resolution runs only on the existing config/theme/palette events. A message-pumping styling
+worker coalesces pending requests for 35 ms, then applies the latest one; core's supervisor and
+panic hotkey do not wait on registry IO, signature verification or settings receivers. The worker
+waits indefinitely when idle, with no polling or idle timer. The experimental app styler uses the same resolved `$accent` (including
 explicit Windows accent overrides) and wallpaper `$dominant`. If Windows accent is explicitly
 unmanaged with null, app tokens fall back to the shared look/wallpaper accent. Without a matching
 palette, automatic colours wait; fixed colours and mono's neutral defaults work immediately.
@@ -113,12 +115,17 @@ A window is styled only if all of this holds:
   `WinVerifyTrust` on the file, falling back to the catalog (`CryptCATAdmin*`) lookup that covers most
   Windows binaries. The signer chain must also be Microsoft's (leaf `Microsoft…`, root
   `Microsoft Root…`), so a validly signed third-party file doesn't pass. It works offline, and
-  verdicts are cached per path.
+  the styling allowlist verdict (including a rejection) is cached per PID and process creation
+  time. Multiple windows, repeated show events and style changes do not hash that process again;
+  a reused PID gets a new verdict.
 - The expensive signature check only runs for processes the allowlist would accept anyway, so a game
   opening a window never gets its executable hashed.
 
 Existing windows are styled when the theme activates (`EnumWindows`). New windows are caught by an
-out-of-context `EVENT_OBJECT_SHOW` WinEvent hook on core's main thread, so nothing polls.
+out-of-context `EVENT_OBJECT_SHOW` WinEvent hook on the styling worker, so nothing polls.
+Destroy events retire remembered HWNDs before they can be reused. Each window keeps its first
+dark-mode value and its successfully applied attributes. Updates write only changed attributes;
+only released attributes receive defaults. No restore/reapply sweep runs during a style change.
 
 ## System accent and dark mode
 
@@ -168,11 +175,16 @@ Nothing is changed without a way back.
 - **Registry**: before the first write, the original of every value (including "absent", and its
   exact type: `REG_DWORD`, `REG_BINARY`, `REG_SZ`, `REG_EXPAND_SZ`) is saved to
   `%LOCALAPPDATA%\mypaper\undo.json`, written atomically. Registry keys the styling had to create are
-  recorded too and removed again. Later palette updates keep the first
-  originals. Restoring writes the originals back (deleting what was absent), announces the change,
+  recorded too and removed again. Later style and palette updates keep the first originals for
+  fields that remain managed. Transitions diff against the registry, restore originals only of
+  released values, and send one broadcast if anything changed (none for an unchanged registry).
+  Released entries remain journaled through the broadcast and settle passes; a partial write or
+  interrupted release keeps enough information for crash recovery, including the committed and
+  pending ownership added in commit `7234e88`. Reacquiring a released field journals its then-current
+  original. Restoring writes the originals back (deleting what was absent), announces the change,
   then re-checks and rewrites any value Windows changed in reaction (it keeps the DWM accent in sync
   with `AccentColorMenu`), so the registry ends up as it was. The journal is deleted after that.
-- **When it runs**: before applying a different resolved style, when all Windows styling is
+- **When it runs**: when all Windows styling is
   released (no selected native style, theme styling or explicit Windows fields), Quit, the
   panic hotkey, Ctrl+C and normal exit. Core's own drop does it too, so error exits are covered.
   A theme without a `windows` section still follows a selected native style's defaults.
@@ -190,10 +202,55 @@ Nothing is changed without a way back.
 - While a theme with `accent` or `dark_mode` is active, changing those in Settings by hand is
   overwritten the next time the theme changes colors, and undone at restore.
 - Apps that set their own title bar color or backdrop may override ours on their next paint.
+- Corners are a DWM **preference**, not a guaranteed shape. On this machine, cross-process writes
+  to Explorer and Settings returned `S_OK` and read back square/round/small correctly, without
+  injection. Production checks the corner HRESULT and reads successful writes back; failures or
+  mismatches are logged and are not remembered as successful applications. Actual visible rounding
+  remains unverified in this check because another window covered both target windows. Microsoft
+  also excludes maximized/snapped windows and some custom frames from rounding; see
+  [rounded-corner guidance](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-rounded-corners).
+  Suggested Studio wording: **Corner preference** — “Supported Windows frames only. Apps may
+  override this; maximized and snapped windows stay square.” No Studio files were changed.
 - Restyling the *inside* of File Explorer and Settings is the experimental [app styler](#app-styler-experimental)
   below; everything above is DWM and registry only.
 
-## Verification (2026-11-06)
+## Direct-transition verification (2026-11-06)
+
+The isolated [timing fixture](../crates/tweaks/examples/measure_style_transitions.rs) uses the real
+style resolver, transition plans, on-disk undo journal and latest-request worker. Its registry is
+in memory; it models two windows and two 20 ms settings receivers. The legacy path preserves the
+old deactivate/activate ordering and 100 ms restore settle. Medians of three samples:
+
+| Case | Config write → last fixture window settled, before → after | Main-thread blocked, before → after | Broadcasts | Attribute writes per window | Registry mutations |
+|---|---:|---:|---:|---:|---:|
+| Light → dark | 185.78 → 89.56 ms | 185.49 → 0.67 ms | 2 → 1 | 12 → 3 | 16 → 3 |
+| Dark → light | 185.81 → 88.97 ms | 185.53 → 0.61 ms | 2 → 1 | 12 → 3 | 16 → 3 |
+| One palette update | 43.74 → 88.33 ms | 43.44 → 0.70 ms | 1 → 1 | 6 → 1 | 4 → 4 |
+| 20 palette events, 2 ms apart | 935.04 → 153.61 ms | 876.73 → 13.57 ms total | 20 → 1 | 120 → 1 | 80 → 4 |
+
+Raw samples: [before](../crates/tweaks/evidence/style-sync/transition-before.json),
+[after](../crates/tweaks/evidence/style-sync/transition-after.json). These measure fixture completion,
+not Explorer/Settings paint latency, file-watcher scheduling or real signature IO. Main-thread time
+includes reading/parsing fixture config and submitting the request. One isolated palette change
+takes longer to settle because of the 35 ms debounce and Windows timer granularity; a drag avoids
+replaying intermediate palettes. An already-running transition finishes, then only the newest
+pending request runs. Shutdown joins the worker so final restoration finishes before core exits;
+startup waits for crash recovery. Those waits are outside ordinary config-event handling.
+
+64 tweaks tests pass, including A→B/B→A write/reset plans, palette-only diffs, identical no-ops,
+each interrupted write/delete boundary, a Windows reaction during release, PID reuse, and requests
+arriving while a receiver is blocked. Core's 19 tests pass with four existing desktop/Task Scheduler
+tests ignored. Core checks and strict all-target tweaks Clippy pass.
+
+The [corner probe](../crates/tweaks/evidence/style-sync/probe-corners.ps1) checks HRESULT/readback and
+restores each HWND in `finally`; [results](../crates/tweaks/evidence/style-sync/corner-probe.json)
+show both originals restored. Config SHA-256 stayed
+`924298ABF9167B58970BFD18FDE315822CE6BD6D72B813026BBC265C1C086E6A`; focus did not change. No real
+config or light/dark preference was written. Screen crops were inspected but showed the covering
+window, so they are not presented as evidence of the target corners. Deployment and an uncovered
+pixel-level corner check remain for the parent after the shared Studio merge.
+
+## Earlier style-sync verification (2026-11-06)
 
 `CARGO_TARGET_DIR=C:\mypaper-targets\style-sync`. Config 21, theme 21 and tweaks 43 library tests
 passed; core 16 passed with four existing Task Scheduler/tray tests ignored. Strict Clippy passed

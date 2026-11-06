@@ -135,6 +135,11 @@ pub fn plate_radius(model: &Model, rect: Rect, scale: f32) -> f32 {
             .get("radius")
             .and_then(Value::as_f64)
             .unwrap_or(22.0) as f32;
+        let radius = match mypaper_ui::theme::active() {
+            mypaper_ui::Style::Fluent => radius.min(8.0),
+            mypaper_ui::Style::OneUi => radius.max(26.0),
+            _ => radius,
+        };
         radius * scale
     }
 }
@@ -199,8 +204,8 @@ pub fn theme(model: &Model, tokens: &Tokens) -> Theme {
         theme.font.family = family;
     }
     if let Some(set) = &tokens.icon_set { theme.icons = set.clone(); }
-    theme = theme.with_surface_radius(tokens.radius);
-    theme.border = tokens.border.then_some(theme.color.separator);
+    if let Some(radius) = model.corner_override { theme = theme.with_surface_radius(radius); }
+    if let Some(edge) = model.edge_override { theme.border = edge.then_some(theme.color.separator); }
     theme
 }
 
@@ -247,7 +252,7 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
         _ if theme.glass.is_none() => c.f.fill(rect, radius, theme.color.surface),
         _ => {}
     }
-    if let Some(border) = theme.border.filter(|_| surface != "none") {
+    if let Some(border) = theme.border.filter(|_| surface != "none" && model.edge_override == Some(true)) {
         c.f.push(Op::Stroke {
             rect: rect.inflate(-0.5), radius: (radius - 0.5).max(0.0), width: 1.0, color: border,
         });

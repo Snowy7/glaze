@@ -33,13 +33,14 @@ use windows::Win32::Graphics::Dwm::{
 use windows::Win32::Storage::Packaging::Appx::GetPackageFamilyName;
 use windows::Win32::System::SystemInformation::GetWindowsDirectoryW;
 use windows::Win32::System::Threading::{
-    GetProcessTimes, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    GetProcessTimes, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    QueryFullProcessImageNameW,
 };
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CHILDID_SELF, EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, EnumWindows, GA_PARENT, GWL_STYLE, GetAncestor,
-    GetDesktopWindow, GetWindowLongPtrW, GetWindowThreadProcessId, IsWindow, IsWindowVisible,
-    OBJID_WINDOW, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WS_CAPTION,
+    CHILDID_SELF, EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, EnumWindows, GA_PARENT, GWL_STYLE,
+    GetAncestor, GetDesktopWindow, GetWindowLongPtrW, GetWindowThreadProcessId, IsWindow,
+    IsWindowVisible, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WS_CAPTION,
 };
 use windows::core::{BOOL, PWSTR};
 
@@ -55,7 +56,10 @@ thread_local! {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct ProcessKey { pid: u32, started: u64 }
+struct ProcessKey {
+    pid: u32,
+    started: u64,
+}
 
 #[derive(Default)]
 struct ProcessCache(HashMap<u32, (u64, bool)>);
@@ -80,8 +84,6 @@ struct Tracked {
 }
 
 struct State {
-    /// The theme's section as written: says which attributes are ours to restore.
-    raw: WindowsStyle,
     style: WindowStyle,
     windows_dir: PathBuf,
     /// Every window we styled, with the dark-mode value it had before.
@@ -98,7 +100,6 @@ impl Styler {
     /// `Styler` can exist per thread.
     pub fn start(raw: &WindowsStyle, palette: Option<&Palette>) -> Result<Self> {
         let state = State {
-            raw: raw.clone(),
             style: WindowStyle::resolve(raw, palette),
             windows_dir: windows_dir()?,
             originals: HashMap::new(),
@@ -135,16 +136,9 @@ impl Styler {
         Ok(styler)
     }
 
-    /// Re-applies the style with a new palette (an `"auto"` color changed).
-    pub fn restyle(&self, palette: Option<&Palette>) {
-        with_state(|s| s.style = WindowStyle::resolve(&s.raw, palette));
-        sweep();
-    }
-
     /// Updates attributes in place, retaining each window's first dark-mode value.
     pub fn update(&self, raw: &WindowsStyle, palette: Option<&Palette>) {
         with_state(|s| {
-            s.raw = raw.clone();
             s.style = WindowStyle::resolve(raw, palette);
         });
         sweep();
@@ -215,13 +209,24 @@ impl State {
         if !is_candidate(hwnd) {
             return false;
         }
-        let Some(process) = allowed_process(hwnd, &self.windows_dir) else { return false; };
+        let Some(process) = allowed_process(hwnd, &self.windows_dir) else {
+            return false;
+        };
         // Remember the dark-mode value from before our first change only.
-        let tracked = self.originals.entry(hwnd.0 as isize).or_insert_with(|| Tracked {
-            process, dark: read_dark(hwnd), applied: WindowStyle::default(),
-        });
+        let tracked = self
+            .originals
+            .entry(hwnd.0 as isize)
+            .or_insert_with(|| Tracked {
+                process,
+                dark: read_dark(hwnd),
+                applied: WindowStyle::default(),
+            });
         if tracked.process != process {
-            *tracked = Tracked { process, dark: read_dark(hwnd), applied: WindowStyle::default() };
+            *tracked = Tracked {
+                process,
+                dark: read_dark(hwnd),
+                applied: WindowStyle::default(),
+            };
         }
         tracked.applied = apply_transition(hwnd, tracked.applied, self.style, tracked.dark);
         true
@@ -303,14 +308,19 @@ fn allowed_process(hwnd: HWND, windows_dir: &Path) -> Option<ProcessKey> {
         return None;
     };
     let process = Process(handle);
-    let key = ProcessKey { pid, started: process.started()? };
-    ALLOWLIST.with_borrow_mut(|cache| {
-        cache.verdict(key, || evaluate_process(&process, windows_dir))
-    }).then_some(key)
+    let key = ProcessKey {
+        pid,
+        started: process.started()?,
+    };
+    ALLOWLIST
+        .with_borrow_mut(|cache| cache.verdict(key, || evaluate_process(&process, windows_dir)))
+        .then_some(key)
 }
 
 fn evaluate_process(process: &Process, windows_dir: &Path) -> bool {
-    let Some(image) = process.image() else { return false; };
+    let Some(image) = process.image() else {
+        return false;
+    };
     let family = process.package_family();
     let mut target = Target {
         image: &image,
@@ -398,7 +408,11 @@ fn set<T>(hwnd: HWND, attribute: DWMWINDOWATTRIBUTE, value: T) -> bool {
         )
     };
     if let Err(e) = &result {
-        log::trace!("DWM attribute {} on {hwnd:?}: {e}", attribute.0);
+        if attribute == DWMWA_WINDOW_CORNER_PREFERENCE {
+            log::warn!("DWM corner preference on {hwnd:?} was rejected: {e}");
+        } else {
+            log::trace!("DWM attribute {} on {hwnd:?}: {e}", attribute.0);
+        }
     }
     result.is_ok()
 }
@@ -417,31 +431,93 @@ fn read_dark(hwnd: HWND) -> bool {
     read.is_ok() && dark.as_bool()
 }
 
-fn apply_transition(hwnd: HWND, mut before: WindowStyle, next: WindowStyle, dark: bool) -> WindowStyle {
+fn apply_transition(
+    hwnd: HWND,
+    mut before: WindowStyle,
+    next: WindowStyle,
+    dark: bool,
+) -> WindowStyle {
     let delta = before.transition_to(next);
     fn update<T: Copy>(
-        field: &mut Option<T>, next: Option<T>, change: Change<T>,
+        field: &mut Option<T>,
+        next: Option<T>,
+        change: Change<T>,
         write: impl FnOnce(Option<T>) -> bool,
     ) {
-        if !matches!(change, Change::Keep) && write(next) { *field = next; }
+        if !matches!(change, Change::Keep) && write(next) {
+            *field = next;
+        }
     }
-    update(&mut before.border, next.border, delta.border, |v| set(hwnd, DWMWA_BORDER_COLOR, v.map_or(DWMWA_COLOR_DEFAULT, colorref)));
-    update(&mut before.caption, next.caption, delta.caption, |v| set(hwnd, DWMWA_CAPTION_COLOR, v.map_or(DWMWA_COLOR_DEFAULT, colorref)));
-    update(&mut before.caption_text, next.caption_text, delta.caption_text, |v| set(hwnd, DWMWA_TEXT_COLOR, v.map_or(DWMWA_COLOR_DEFAULT, colorref)));
+    update(&mut before.border, next.border, delta.border, |v| {
+        set(
+            hwnd,
+            DWMWA_BORDER_COLOR,
+            v.map_or(DWMWA_COLOR_DEFAULT, colorref),
+        )
+    });
+    update(&mut before.caption, next.caption, delta.caption, |v| {
+        set(
+            hwnd,
+            DWMWA_CAPTION_COLOR,
+            v.map_or(DWMWA_COLOR_DEFAULT, colorref),
+        )
+    });
+    update(
+        &mut before.caption_text,
+        next.caption_text,
+        delta.caption_text,
+        |v| {
+            set(
+                hwnd,
+                DWMWA_TEXT_COLOR,
+                v.map_or(DWMWA_COLOR_DEFAULT, colorref),
+            )
+        },
+    );
     update(&mut before.corners, next.corners, delta.corners, |v| {
         let requested = v.map_or(DWMWCP_DEFAULT, corner_preference);
-        if !set(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, requested) { return false; }
+        if !set(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, requested) {
+            return false;
+        }
         let mut actual = DWM_WINDOW_CORNER_PREFERENCE::default();
         // SAFETY: the output is the exact type/size of this DWM attribute.
-        let read = unsafe { DwmGetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, (&raw mut actual).cast(), size_of_val(&actual) as u32) };
+        let read = unsafe {
+            DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                (&raw mut actual).cast(),
+                size_of_val(&actual) as u32,
+            )
+        };
         if read.is_err() || actual != requested {
-            log::warn!("DWM corners on {hwnd:?}: requested {}, read {:?} ({read:?})", requested.0, actual.0);
+            log::warn!(
+                "DWM corners on {hwnd:?}: requested {}, read {:?} ({read:?})",
+                requested.0,
+                actual.0
+            );
             return false;
         }
         true
     });
-    update(&mut before.backdrop, next.backdrop, delta.backdrop, |v| set(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, v.map_or(DWMSBT_AUTO, backdrop_type)));
-    update(&mut before.dark_mode, next.dark_mode, delta.dark_mode, |v| set(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, BOOL::from(v.unwrap_or(dark))));
+    update(&mut before.backdrop, next.backdrop, delta.backdrop, |v| {
+        set(
+            hwnd,
+            DWMWA_SYSTEMBACKDROP_TYPE,
+            v.map_or(DWMSBT_AUTO, backdrop_type),
+        )
+    });
+    update(
+        &mut before.dark_mode,
+        next.dark_mode,
+        delta.dark_mode,
+        |v| {
+            set(
+                hwnd,
+                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                BOOL::from(v.unwrap_or(dark)),
+            )
+        },
+    );
     before
 }
 
@@ -494,10 +570,16 @@ mod tests {
     #[test]
     fn process_verdict_is_cached_once_and_pid_reuse_is_rechecked() {
         let mut cache = ProcessCache::default();
-        let process = ProcessKey { pid: 7, started: 100 };
+        let process = ProcessKey {
+            pid: 7,
+            started: 100,
+        };
         assert!(cache.verdict(process, || true));
         assert!(cache.verdict(process, || panic!("must not hash this executable twice")));
-        let reused = ProcessKey { started: 200, ..process };
+        let reused = ProcessKey {
+            started: 200,
+            ..process
+        };
         assert!(!cache.verdict(reused, || false));
         assert!(!cache.verdict(reused, || panic!("negative verdicts are cached too")));
     }

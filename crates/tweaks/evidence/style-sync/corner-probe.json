@@ -1,0 +1,88 @@
+﻿{
+    "config_sha256_before":  "924298ABF9167B58970BFD18FDE315822CE6BD6D72B813026BBC265C1C086E6A",
+    "config_sha256_after":  "924298ABF9167B58970BFD18FDE315822CE6BD6D72B813026BBC265C1C086E6A",
+    "foreground_before":  54461314,
+    "foreground_after":  54461314,
+    "windows":  [
+                    {
+                        "hwnd":  16124550,
+                        "process":  "explorer",
+                        "pid":  93384,
+                        "maximized":  false,
+                        "original":  2,
+                        "read_before_hresult":  "0x00000000",
+                        "attempts":  [
+                                         {
+                                             "requested":  1,
+                                             "set_hresult":  "0x00000000",
+                                             "read_hresult":  "0x00000000",
+                                             "actual":  1,
+                                             "corner_exposed":  false,
+                                             "screenshot":  null
+                                         },
+                                         {
+                                             "requested":  2,
+                                             "set_hresult":  "0x00000000",
+                                             "read_hresult":  "0x00000000",
+                                             "actual":  2,
+                                             "corner_exposed":  false,
+                                             "screenshot":  null
+                                         },
+                                         {
+                                             "requested":  3,
+                                             "set_hresult":  "0x00000000",
+                                             "read_hresult":  "0x00000000",
+                                             "actual":  3,
+                                             "corner_exposed":  false,
+                                             "screenshot":  null
+                                         }
+                                     ],
+                        "restore":  {
+                                        "set_hresult":  "0x00000000",
+                                        "read_hresult":  "0x00000000",
+                                        "actual":  2,
+                                        "matches_original":  true
+                                    }
+                    },
+                    {
+                        "hwnd":  12321274,
+                        "process":  "ApplicationFrameHost",
+                        "pid":  27116,
+                        "maximized":  false,
+                        "original":  2,
+                        "read_before_hresult":  "0x00000000",
+                        "attempts":  [
+                                         {
+                                             "requested":  1,
+                                             "set_hresult":  "0x00000000",
+                                             "read_hresult":  "0x00000000",
+                                             "actual":  1,
+                                             "corner_exposed":  false,
+                                             "screenshot":  null
+                                         },
+                                         {
+                                             "requested":  2,
+                                             "set_hresult":  "0x00000000",
+                                             "read_hresult":  "0x00000000",
+                                             "actual":  2,
+                                             "corner_exposed":  false,
+                                             "screenshot":  null
+                                         },
+                                         {
+                                             "requested":  3,
+                                             "set_hresult":  "0x00000000",
+                                             "read_hresult":  "0x00000000",
+                                             "actual":  3,
+                                             "corner_exposed":  false,
+                                             "screenshot":  null
+                                         }
+                                     ],
+                        "restore":  {
+                                        "set_hresult":  "0x00000000",
+                                        "read_hresult":  "0x00000000",
+                                        "actual":  2,
+                                        "matches_original":  true
+                                    }
+                    }
+                ]
+}

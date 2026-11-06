@@ -31,6 +31,8 @@ pub struct Tokens {
     pub fill: Option<Rgba>,
     /// Corner radius of the bar, its islands and the dock plate, design px.
     pub radius: f32,
+    /// An explicit corner setting overrides the strip layout's square fallback.
+    pub explicit_radius: bool,
     /// Engine glass under the body (blur in DIPs); `None` draws the theme's surface.
     pub material: Option<Material>,
     /// Optics resolved once with the look, copied to both plates and overlays.
@@ -138,6 +140,7 @@ impl Tokens {
             });
         }
         tokens.theme = tokens.theme.with_surface_radius(tokens.radius);
+        tokens.explicit_radius = desktop.shape.corners.is_some();
         tokens
     }
 
@@ -263,6 +266,7 @@ impl Tokens {
             font,
             fill,
             radius,
+            explicit_radius: false,
             material,
             glass_style,
             plate_style: plate_style(glass_style),

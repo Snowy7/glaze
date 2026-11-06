@@ -69,5 +69,9 @@ mypaper-ui = { workspace = true, features = ["golden"] }
 name = "mypaper-widget-fixture"
 path = "src/widgets/live.rs"
 
+[[example]]
+name = "mypaper-look-fixture"
+path = "examples/look_fixture.rs"
+
 [lints]
 workspace = true
