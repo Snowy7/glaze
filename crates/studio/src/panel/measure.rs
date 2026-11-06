@@ -131,6 +131,9 @@ pub fn raster_finished(app: &crate::app::App) {
 /// A page owns its decoded thumbnails, preview artwork and shaped text.
 /// Keep the image worker connected while dropping its ready pixels, so the next page stays async.
 pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
+    if app.panel.as_ref().unwrap().page != super::Page::History {
+        super::history::cancel(app);
+    }
     // Snapshot rasters live only while their History rows are on screen.
     app.panel
         .as_ref()
@@ -172,6 +175,17 @@ pub fn prepare_frame(app: &crate::app::App, surface: &mut mypaper_ui::Surface) {
 
 /// Ask the allocator to decommit freed pages, once per navigation rather than on hover.
 pub fn reclaim(app: &crate::app::App) {
+    if let Some(state) = &app.panel
+        && matches!(state.page, super::Page::AddWidget | super::Page::Widget)
+    {
+        // The surface has retired its previous display list and native image copies.
+        // Face rasters referenced only by this cache have scrolled out of view; retain
+        // shared source/frost intermediates, which are not themselves display-list images.
+        let mut pictures = state.specimens.borrow_mut();
+        let before = pictures.len();
+        pictures.retain(|key, image| !key.starts_with("face:") || std::sync::Arc::strong_count(image) > 1);
+        if pictures.len() != before { state.reclaim_heap.set(true); }
+    }
     if !app
         .panel
         .as_ref()
