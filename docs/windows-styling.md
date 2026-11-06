@@ -414,10 +414,19 @@ window behind the XAML, so they stay solid in `glass`.
   object's own UI thread (a thread that is gone leaks it instead).
 - **Crash guard**: if a styled app exits with an NTSTATUS-style code (`>= 0x80000000`: a crash, or
   being ended with `TerminateProcess(-1)` as `Stop-Process` and Task Manager's *End task* do)
-  within 60 s of being attached, that counts once. After two, the helper stops styling that app
-  for the session and logs it (`not styling settings again this session`); a fresh helper session
-  starts clean. Exercised 2026-11-06 with Settings. A process the allowlist rejects is never
-  attached.
+  within 60 s of being attached, that counts once. Deaths of one app within 5 s of each other are
+  one incident (an Explorer restart ends every Explorer process at once). After two incidents, the
+  helper stops styling that app for the session and logs it (`not styling settings again this
+  session`); a fresh helper session starts clean. Exercised 2026-11-06 with Settings. A process
+  the allowlist rejects is never attached.
+- The helper exits on its own only if `experimental.app_styler` reads off twice, a second apart:
+  a config writer that replaces the file non-atomically briefly shows no file (defaults, off).
+  Core stops the helper when the flag really goes off.
+- **Soak, 2026-11-06** (glass, live desktop, about 45 min with the flag on, 29 of them scripted):
+  Explorer windows and tabs opened, navigated (folders, Home, Gallery) and closed, Settings pages,
+  two Explorer restarts, several mypaper redeploys and flag off/on cycles. No Explorer or Settings
+  crash, no guard trip, bars and wallpaper back after each restart. Helper: 2.9–3.3 MB private,
+  47 ms CPU in 120 s idle (0.04 % of one core; it wakes only for window-show events).
 - Missing elements across Windows builds are not errors: a selector that matches nothing does
   nothing.
 - Nothing is persisted in the apps. If anything is ever stuck, closing and reopening the window
