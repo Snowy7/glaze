@@ -25,7 +25,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         done_width,
         b.px(28.0),
     );
-    button(
+    if page != Page::FirstRun { button(
         b,
         done,
         "Done",
@@ -33,7 +33,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         true,
         true,
         Action::Panel(Command::Done),
-    );
+    ); }
     let mut x = done.left - b.px(6.0);
     let editing = app.system.running();
     let compact = r.width() <= b.px(360.0) || b.t.text_scale > 1.0;
@@ -67,9 +67,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
     if editing {
         let status = if !app.panel.as_ref().unwrap().save_errors.borrow().is_empty()
             || !app.panel.as_ref().unwrap().theme_errors.borrow().is_empty()
-            || crate::docs::DocId::ALL
-                .into_iter()
-                .any(|id| app.docs.error(id).is_some())
+            
         {
             "Couldn't save"
         } else if app.drag.is_some() {

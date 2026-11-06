@@ -261,6 +261,7 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
             ("Start over: Widgets", DocId::Widgets),
             ("Start over: Look", DocId::Config),
         ] {
+            if !matches!(app.docs.doc(doc).issue, Some(crate::docs::ReadIssue::Malformed { .. })) { continue; }
             row(
                 b,
                 c,

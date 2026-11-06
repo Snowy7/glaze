@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use super::{
     Command, Page,
-    controls::{button, group, notice},
+    controls::button,
 };
 use crate::{
     actions::Action,
@@ -39,40 +39,15 @@ pub fn banner(app: &App, b: &mut B, c: &mut Col, page: Page) {
         _ => None,
     }
     .and_then(|i| app.library.items.get(i));
-    for (dir, error) in app.panel.as_ref().unwrap().theme_errors.borrow().iter() {
-        if !matches!(page, Page::Root | Page::Wallpapers | Page::Troubleshoot)
-            && !selected.is_some_and(|wallpaper| wallpaper.dir == *dir)
-        {
-            continue;
+    for (dir, _error) in app.panel.as_ref().unwrap().theme_errors.borrow().iter() {
+        if !selected.is_some_and(|wallpaper| wallpaper.dir == *dir) { continue; }
+        let r = Rect::new(c.x, c.y, c.w, b.px(36.0));
+        b.icon(Rect::new(r.left, r.top + b.px(10.0), b.px(16.0), b.px(16.0)), mypaper_ui::icons::Icon::Warning, 14.0, b.p.ink2);
+        super::controls::text(b, Rect::new(r.left + b.px(22.0), r.top, c.w - b.px(190.0), r.height()), "Couldn't save", 11.0, 400, b.p.ink2, mypaper_ui::controls::Align::Start);
+        for (index, label, command) in [(0, "Retry", Command::RetryTheme), (1, "Show folder", Command::ShowThemeFolder(dir.clone()))] {
+            button(b, Rect::new(r.right - b.px(160.0) + b.px(index as f32 * 80.0), r.top + b.px(4.0), b.px(76.0), b.px(28.0)), label, None, false, true, Action::Panel(command));
         }
-        group(b, c, "Couldn't save", |b, c| {
-            notice(
-                b,
-                c,
-                &format!("Wallpaper: {}", error.lines().next().unwrap_or(error)),
-            );
-            let width = (c.w - b.px(8.0)) / 2.0;
-            let r = Rect::new(c.x, c.y + b.px(4.0), width, b.px(30.0));
-            button(
-                b,
-                r,
-                "Show file",
-                None,
-                false,
-                true,
-                Action::Panel(Command::ShowTheme(dir.clone())),
-            );
-            button(
-                b,
-                Rect::new(r.right + b.px(8.0), r.top, width, r.height()),
-                "Start over",
-                None,
-                false,
-                true,
-                Action::Panel(Command::ResetTheme(dir.clone())),
-            );
-            c.y = r.bottom + b.px(8.0);
-        });
+        c.y = r.bottom;
     }
 }
 

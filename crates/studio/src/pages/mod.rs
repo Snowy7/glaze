@@ -161,7 +161,7 @@ pub fn intercept(app: &mut App, path: &str, value: Option<serde_json::Value>) ->
             }
             Err(e) => {
                 crate::panel::theme_failed(app, &dir, &format!("{e:#}"));
-                app.alert(format!("{e:#}"));
+                if app.panel.is_none() { app.alert(format!("{e:#}")); }
             }
         }
         return true;

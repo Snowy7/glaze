@@ -137,6 +137,7 @@ pub struct State {
     pub sort_drag: Option<lists::Drag>,
     pub fonts: std::cell::OnceCell<Vec<String>>,
     pub save_errors: std::cell::RefCell<std::collections::HashMap<crate::docs::DocId, String>>,
+    pub theme_retry: Option<crate::actions::Action>,
     pub theme_errors: std::cell::RefCell<std::collections::HashMap<std::path::PathBuf, String>>,
     reset_version: std::cell::Cell<Option<(crate::docs::DocId, u64)>>,
     auto_left: std::cell::Cell<Option<bool>>,
@@ -175,6 +176,10 @@ pub enum Command {
     HideConnectionWidget(String),
     ShowTheme(std::path::PathBuf),
     ResetTheme(std::path::PathBuf),
+    RetryTheme,
+    ShowThemeFolder(std::path::PathBuf),
+    RetryDoc(crate::docs::DocId),
+    ShowFolder(crate::docs::DocId),
 }
 
 pub fn run(app: &mut App, command: Command) {
@@ -320,6 +325,25 @@ pub fn run(app: &mut App, command: Command) {
         Command::HideConnectionWidget(id) => editors::hide_connection_widget(app, &id),
         Command::ShowTheme(dir) => crate::system::reveal(&dir.join(mypaper_theme::MANIFEST)),
         Command::ResetTheme(dir) => saving::reset_theme(app, &dir),
+        Command::ShowThemeFolder(dir) => crate::system::open(&dir.to_string_lossy()),
+        Command::RetryTheme => {
+            if let Some(action) = app.panel.as_ref().unwrap().theme_retry.clone() { app.run(action); }
+        }
+        Command::ShowFolder(doc) => {
+            if let Some(folder) = app.docs.doc(doc).path.as_deref().and_then(std::path::Path::parent) {
+                crate::system::open(&folder.to_string_lossy());
+            }
+        }
+        Command::RetryDoc(doc) => {
+            match app.docs.retry() {
+                Ok(()) => {
+                    app.panel.as_ref().unwrap().save_errors.borrow_mut().remove(&doc);
+                    app.retheme();
+                    app.library.set_active(crate::app::theme_name(&app.docs).as_deref());
+                }
+                Err(error) => save_failed(app, Some(doc), &format!("{error:#}")),
+            }
+        }
         Command::PickWidget(id) => {
             let state = app.panel.as_mut().unwrap();
             state.add_widget = Some(id);
@@ -610,6 +634,10 @@ pub fn fit_height(app: &mut App, surface: &mypaper_ui::Surface, built: &Built) -
 /// One additive bridge into the legacy action dispatcher, shared with desktop picking.
 pub fn before_action(app: &mut App, action: &Action) {
     history::observe(app);
+    if let Action::Set(edit, _) | Action::Unset(edit) = action
+        && edit.path.starts_with("/theme:") {
+        app.panel.as_mut().unwrap().theme_retry = Some(action.clone());
+    }
     if matches!(action, Action::Undo | Action::Redo) {
         app.texts.retain(
             |id, _| !matches!(id, FieldId::Text(doc, _) if *doc != crate::docs::DocId::Studio),

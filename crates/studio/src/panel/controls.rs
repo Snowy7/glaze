@@ -1,4 +1,4 @@
-//! Panel row anatomy on the existing kit's drawing, focus, accessibility and hit machinery.
+﻿//! Panel row anatomy on the existing kit's drawing, focus, accessibility and hit machinery.
 
 use mypaper_ui::controls::{Align, Behavior, Font, Glyph, key};
 use mypaper_ui::{Point, Rect, Rgba, Role, TextStyle};
@@ -49,84 +49,52 @@ pub fn displays(app: &App, b: &mut B, c: &mut Col) {
     c.y = r.bottom + b.px(4.0);
 }
 
-pub fn save_banner(app: &App, b: &mut B, c: &mut Col, page: super::Page) {
-    super::saving::banner(app, b, c, page);
+/// File feedback stays beside the pages that can edit that file.
+pub fn relevant_docs(page: super::Page) -> &'static [crate::docs::DocId] {
     use super::Page;
     use crate::docs::DocId;
-    let relevant: &[DocId] = match page {
+    match page {
         Page::Widgets | Page::Widget | Page::AddWidget => &[DocId::Widgets],
-        Page::Bars
-        | Page::Top
-        | Page::Dock
-        | Page::Module
-        | Page::AddModule
-        | Page::Panels
-        | Page::BarPanel => &[DocId::Bars],
-        Page::Connections | Page::Connection => &[DocId::Integrations, DocId::Bars, DocId::Widgets],
+        Page::Bars | Page::Top | Page::Dock | Page::Module | Page::AddModule | Page::Panels | Page::BarPanel => &[DocId::Bars],
+        Page::Connections | Page::Connection => &[DocId::Integrations],
         Page::General => &[DocId::Studio, DocId::Config],
-        Page::Keyboard | Page::About => &[DocId::Studio],
-        Page::Look | Page::Windows | Page::Performance => {
-            &[DocId::Config, DocId::Bars, DocId::Widgets]
-        }
-        Page::Root | Page::Troubleshoot => &DocId::ALL,
-        _ => &[DocId::Config],
-    };
-    for &doc in relevant {
-        let failed = app.panel.as_ref().unwrap().save_doc.get() == Some(doc);
-        let error = app
-            .docs
-            .error(doc)
-            .map(str::to_owned)
-            .or_else(|| {
-                app.panel
-                    .as_ref()
-                    .unwrap()
-                    .save_errors
-                    .borrow()
-                    .get(&doc)
-                    .cloned()
-            })
-            .or_else(|| match &app.docs.saved {
-                crate::docs::Saved::Failed(error) if failed => Some(error.clone()),
-                _ => None,
-            });
-        let Some(error) = error else {
-            continue;
-        };
-        group(b, c, "Couldn't save", |b, c| {
-            notice(
-                b,
-                c,
-                &format!(
-                    "{}: {}",
-                    doc.label(),
-                    error.lines().next().unwrap_or(&error)
-                ),
-            );
-            let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(30.0));
-            let w = (c.w - b.px(8.0)) / 2.0;
-            button(
-                b,
-                Rect::new(r.left, r.top, w, r.height()),
-                "Show file",
-                None,
-                false,
-                true,
-                Action::ShowFile(doc),
-            );
-            if !app.docs.newer(doc) {
-                button(
-                    b,
-                    Rect::new(r.left + w + b.px(8.0), r.top, w, r.height()),
-                    "Start over",
-                    None,
-                    false,
-                    true,
-                    Action::StartOver(doc),
-                );
+        Page::Look | Page::Windows | Page::Performance | Page::DesktopMenu | Page::Wallpapers | Page::Wallpaper | Page::AddWallpaper => &[DocId::Config],
+        _ => &[],
+    }
+}
+
+pub fn save_banner(app: &App, b: &mut B, c: &mut Col, page: super::Page) {
+    super::saving::banner(app, b, c, page);
+    use crate::docs::ReadIssue;
+    for &doc in relevant_docs(page) {
+        let state = app.panel.as_ref().unwrap();
+        let issue = app.docs.doc(doc).issue;
+        let write_failed = state.save_errors.borrow().contains_key(&doc);
+        if issue.is_none() && !write_failed { continue; }
+        let message = app.docs.error(doc).unwrap_or("Couldn't save");
+        let mut actions = vec![];
+        match issue {
+            Some(ReadIssue::Newer) => actions.push(("Show file", Action::ShowFile(doc))),
+            Some(ReadIssue::Malformed { .. }) => {
+                actions.push(("Show file", Action::ShowFile(doc)));
+                actions.push(("Start over", Action::StartOver(doc)));
             }
-            c.y = r.bottom + b.px(8.0);
-        });
+            Some(ReadIssue::Unavailable) | None => {
+                actions.push(("Retry", Action::Panel(super::Command::RetryDoc(doc))));
+                actions.push(("Show folder", Action::Panel(super::Command::ShowFolder(doc))));
+            }
+        }
+        let h = b.px(36.0);
+        let mut right = c.right();
+        for (label, action) in actions.into_iter().rev() {
+            let width = b.measure(label, &font(b, 10.0, 400)).0 + b.px(12.0);
+            right -= width;
+            button(b, Rect::new(right, c.y + b.px(4.0), width, b.px(28.0)), label, None, false, true, action);
+            right -= b.px(4.0);
+        }
+        b.icon(Rect::new(c.x, c.y + b.px(9.0), b.px(16.0), b.px(16.0)), mypaper_ui::icons::Icon::Warning, 14.0, b.p.ink2);
+        text(b, Rect::new(c.x + b.px(21.0), c.y, (right - c.x - b.px(21.0)).max(1.0), h), message, 10.0, 400, b.p.ink2, Align::Start);
+        c.y += h;
     }
 }
 

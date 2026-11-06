@@ -19,7 +19,31 @@ use mypaper_widgets::layout;
 use serde_json::{Map, Value};
 
 /// What a file saved by a newer mypaper shows instead of an error.
-pub const NEWER: &str = "This layout was saved by a newer mypaper. Restart Studio to update.";
+pub const NEWER: &str = "Saved by a newer mypaper. Update Studio to edit this.";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadIssue {
+    Newer,
+    Malformed { line: usize },
+    Unavailable,
+}
+
+/// Unknown fields are a compatibility boundary, even when the file has no version number.
+fn read_issue(id: DocId, source: &str, error: &anyhow::Error) -> ReadIssue {
+    let future_version = serde_json::from_str::<Value>(source).ok()
+        .and_then(|raw| raw.get("version").and_then(Value::as_u64))
+        .is_some_and(|version| match id {
+            DocId::Widgets => version > u64::from(layout::VERSION),
+            _ => version > 1,
+        });
+    if future_version || error.chain().any(|cause| cause.to_string().contains("unknown field")) {
+        ReadIssue::Newer
+    } else {
+        let line = error.chain().find_map(|cause| cause.downcast_ref::<serde_json::Error>())
+            .map_or(1, |error| error.line().max(1));
+        ReadIssue::Malformed { line }
+    }
+}
 
 /// What [`Docs::start_over`] did.
 #[derive(Debug, PartialEq)]
@@ -52,6 +76,13 @@ impl DocId {
             DocId::Widgets => "Your widget settings",
             DocId::Studio => "Studio's settings",
             DocId::Integrations => "Your integration settings",
+        }
+    }
+
+    pub fn filename(self) -> &'static str {
+        match self {
+            Self::Config => "config.json", Self::Bars => "bars.json", Self::Widgets => "widgets.json",
+            Self::Studio => "studio.json", Self::Integrations => "integrations.json",
         }
     }
 
@@ -108,16 +139,23 @@ pub struct Doc {
     /// The file was saved by a newer mypaper (a later layout version): only a restart helps,
     /// and Start over is refused.
     pub newer: bool,
+    pub issue: Option<ReadIssue>,
     /// The text last read or written, to notice other writers.
     seen: Option<String>,
 }
 
 impl Doc {
     fn load(id: DocId, path: Option<PathBuf>) -> Self {
-        let text = path
-            .as_deref()
-            .and_then(|p| std::fs::read_to_string(p).ok());
-        Self::from_text(id, path, text)
+        let text = path.as_deref().map(std::fs::read_to_string);
+        match text {
+            Some(Err(error)) if error.kind() != std::io::ErrorKind::NotFound => {
+                let mut doc = Self::from_text(id, path, None);
+                doc.issue = Some(ReadIssue::Unavailable);
+                doc.error = Some("Can't open this file. Check its permissions and try again.".into());
+                doc
+            }
+            text => Self::from_text(id, path, text.and_then(|result| result.ok())),
+        }
     }
 
     fn from_text(id: DocId, path: Option<PathBuf>, text: Option<String>) -> Self {
@@ -129,10 +167,12 @@ impl Doc {
                 effective,
                 error: None,
                 newer: false,
+                issue: None,
                 seen: text,
             },
             Err(e) => {
-                let newer = id == DocId::Widgets && layout::newer_version(source).is_some();
+                let issue = read_issue(id, source, &e);
+                let newer = issue == ReadIssue::Newer;
                 // A newer file isn't broken: no recovery copy, and its own message.
                 if id == DocId::Widgets
                     && !newer
@@ -142,12 +182,19 @@ impl Doc {
                     let _ = mypaper_widgets::files::backup(path, &bytes);
                 }
                 let (raw, effective) = id.parse(id.empty()).expect("defaults parse");
+                let message = if newer { NEWER.to_owned() } else {
+                        let ReadIssue::Malformed { line } = issue else { unreachable!() };
+                        let name = path.as_deref().and_then(Path::file_name)
+                            .map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| id.filename().into());
+                        format!("Can't read {name}, line {line}")
+                    };
                 Self {
                     path,
                     raw,
                     effective,
-                    error: Some(if newer { NEWER.to_owned() } else { format!("{e:#}") }),
+                    error: Some(message),
                     newer,
+                    issue: Some(issue),
                     seen: text,
                 }
             }
@@ -184,6 +231,7 @@ pub struct Docs {
     redo: Vec<Step>,
     /// A drag in progress: the raw documents before it.
     live: Option<Vec<(DocId, Value)>>,
+    pending: Option<(String, Vec<Op>)>,
     pub saved: Saved,
     /// Bumped on every change: previews cache on it.
     pub version: u64,
@@ -228,6 +276,7 @@ impl Docs {
             undo: Vec::new(),
             redo: Vec::new(),
             live: None,
+            pending: None,
             saved: Saved::Idle,
             version: 1,
         }
@@ -285,6 +334,25 @@ impl Docs {
 
     /// Applies `ops` as one undoable step named `label`, writing every changed file.
     pub fn edit(&mut self, label: &str, ops: &[Op]) -> Result<()> {
+        let result = self.edit_inner(label, ops);
+        if result.is_err() && matches!(self.saved, Saved::Failed(_)) {
+            self.pending = Some((label.into(), ops.to_vec()));
+        } else if result.is_ok() {
+            self.pending = None;
+        }
+        result
+    }
+
+    pub fn retry(&mut self) -> Result<()> {
+        if let Some((label, ops)) = self.pending.clone() {
+            self.edit(&label, &ops)
+        } else {
+            for id in DocId::ALL { self.reload(id); }
+            Ok(())
+        }
+    }
+
+    fn edit_inner(&mut self, label: &str, ops: &[Op]) -> Result<()> {
         if self.live.is_some() {
             self.commit_live(label)?;
         }
@@ -412,11 +480,12 @@ impl Docs {
         // Our own undo history no longer describes this file.
         self.undo.retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
         self.redo.retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
-        let fresh = Doc::from_text(id, Some(path), text);
+        let fresh = Doc::load(id, Some(path));
         let doc = &mut self.docs[id.index()];
         if fresh.error.is_some() {
             doc.error = fresh.error;
             doc.newer = fresh.newer;
+            doc.issue = fresh.issue;
             doc.seen = fresh.seen;
         } else {
             *doc = fresh;
@@ -438,9 +507,13 @@ impl Docs {
         let path = self.doc(id).path.clone();
         let on_disk = path.as_deref().and_then(|p| std::fs::read_to_string(p).ok());
         if self.doc(id).newer
-            || (id == DocId::Widgets && on_disk.as_deref().and_then(layout::newer_version).is_some())
+            || on_disk.as_deref().is_some_and(|text| id.parse(text).err()
+                .is_some_and(|error| read_issue(id, text, &error) == ReadIssue::Newer))
         {
             bail!("{NEWER}");
+        }
+        if self.doc(id).issue == Some(ReadIssue::Unavailable) {
+            bail!("Can't open this file. Check its permissions and try again.");
         }
         let backup = path.as_deref().filter(|p| p.exists()).map(timestamped);
         if !confirm(backup.as_deref()) {
@@ -465,6 +538,8 @@ impl Docs {
         doc.raw = raw;
         doc.effective = effective;
         doc.error = None;
+        doc.issue = None;
+        doc.newer = false;
         doc.seen = Some(defaults.to_owned());
         self.undo.retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
         self.redo.retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
@@ -535,6 +610,28 @@ impl Docs {
     fn write(&mut self, id: DocId, raw: &Value) -> Result<()> {
         let text = render(raw)?;
         if let Some(path) = &self.docs[id.index()].path {
+            match std::fs::read_to_string(path) {
+                Ok(current) if self.doc(id).seen.as_deref() != Some(&current) => {
+                    if let Err(error) = id.parse(&current) {
+                        let issue = read_issue(id, &current, &error);
+                        let doc = &mut self.docs[id.index()];
+                        doc.issue = Some(issue);
+                        doc.newer = issue == ReadIssue::Newer;
+                        doc.error = Some(if doc.newer { NEWER.into() } else { format!("Can't read {}", id.filename()) });
+                        bail!("{}", doc.error.as_deref().unwrap());
+                    }
+                }
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                    if id == DocId::Widgets && error.kind() == std::io::ErrorKind::InvalidData {
+                        if let Ok(bytes) = std::fs::read(path) {
+                            let _ = mypaper_widgets::files::backup(path, &bytes);
+                        }
+                    }
+                    self.saved = Saved::Failed("Couldn't save".into());
+                    return Err(error.into());
+                }
+                _ => {}
+            }
             let written = if id == DocId::Widgets {
                 mypaper_widgets::layout::Layout::save_value(raw, path)
             } else {
@@ -681,6 +778,48 @@ mod tests {
     }
 
     #[test]
+    fn unknown_fields_are_newer_and_cannot_be_started_over() {
+        let root = folder("unknown-fields");
+        for (id, source) in [(DocId::Config, "{\"future_setting\":true}"),
+            (DocId::Bars, "{\"version\":1,\"future_setting\":true}"),
+            (DocId::Widgets, "{\"future_setting\":true}")] {
+            let path = root.join(id.filename());
+            std::fs::write(&path, source).unwrap();
+            let mut docs = Docs::fixture(["{}", "{\"version\":1}", "{}", "{}"]);
+            docs.docs[id.index()] = Doc::load(id, Some(path.clone()));
+            assert!(docs.newer(id), "{id:?}");
+            assert_eq!(docs.error(id), Some(NEWER));
+            assert!(docs.start_over(id, id.empty(), |_| panic!("must not offer reset")).is_err());
+            assert_eq!(std::fs::read_to_string(path).unwrap(), source);
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn malformed_files_name_the_file_and_line_and_failed_writes_retry_the_edit() {
+        let root = folder("retry");
+        let path = root.join("config.json");
+        std::fs::write(&path, "{\n  broken\n}").unwrap();
+        let doc = Doc::load(DocId::Config, Some(path.clone()));
+        assert_eq!(doc.issue, Some(ReadIssue::Malformed { line: 2 }));
+        assert_eq!(doc.error.as_deref(), Some("Can't read config.json, line 2"));
+        std::fs::write(&path, "{}").unwrap();
+        let mut docs = Docs::fixture(["{}", "{\"version\":1}", "{}", "{}"]);
+        docs.docs[0] = Doc::load(DocId::Config, Some(path.clone()));
+        // A directory at the temporary filename deterministically denies the atomic write.
+        std::fs::create_dir(root.join("config.json.tmp")).unwrap();
+        assert!(docs.edit("Pause", &[op(DocId::Config, "/paused", Some(json!(true)))]).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{}");
+        std::fs::remove_dir(root.join("config.json.tmp")).unwrap();
+        docs.retry().unwrap();
+        assert_eq!(docs.get(DocId::Config, "/paused"), Some(&json!(true)));
+        assert_eq!(docs.undo_count(), 1);
+        docs.undo().unwrap();
+        assert_eq!(docs.get(DocId::Config, "/paused"), Some(&json!(false)));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn edits_keep_unknown_keys_validate_and_undo_as_one_step() {
         let mut docs = Docs::fixture([
             r#"{ "theme": "aurora" }"#,
@@ -785,7 +924,7 @@ mod tests {
         assert!(docs.reload(DocId::Widgets));
         assert!(docs.newer(DocId::Widgets));
         let (text, buttons) = crate::ui::banner_for(&docs, DocId::Widgets).unwrap();
-        assert_eq!(text, "This layout was saved by a newer mypaper. Restart Studio to update.");
+        assert_eq!(text, NEWER);
         assert_eq!(buttons, vec![("Restart", Action::RestartStudio)], "Restart only: no Start over");
         // Nothing can destroy it: Start over is refused without even asking, edits too.
         assert!(

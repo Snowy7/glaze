@@ -1142,7 +1142,7 @@ impl App {
             }
             Err(e) => {
                 crate::panel::save_failed(self, docs.first().copied(), &format!("{e:#}"));
-                self.alert(format!("{e:#}"));
+                if self.panel.is_none() { self.alert(format!("{e:#}")); }
             }
         }
         self.dirty = true;
