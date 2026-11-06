@@ -2,6 +2,8 @@
 //! only window placement, navigation and presentation belong to this module.
 
 mod colors;
+pub(crate) mod choosers;
+pub(crate) mod material;
 mod controls;
 mod editors;
 mod first_run;
@@ -133,12 +135,14 @@ impl Page {
 
 #[derive(Debug, Default)]
 pub struct State {
+    pub chooser: std::cell::RefCell<choosers::State>,
     reclaim_heap: std::cell::Cell<bool>,
     pub page: Page,
     pub add_widget: Option<String>,
     pub category: Option<String>,
     pub add_module: Option<String>,
     pub history: std::cell::RefCell<history::History>,
+    pub theme_data: std::cell::RefCell<saving::ThemeCache>,
     pub specimens:
         std::cell::RefCell<std::collections::HashMap<String, std::sync::Arc<mypaper_ui::Image>>>,
     specimen_page: std::cell::Cell<Option<Page>>,
@@ -439,6 +443,7 @@ pub fn run(app: &mut App, command: Command) {
 /// Panel shortcuts are resolved before the legacy app's page shortcuts.
 pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) -> bool {
     if colors::on_key(app, vk, ctrl, shift, alt) { return true; }
+    if vk == 0x1B && choosers::end(app) { app.dirty = true; return true; }
     if pick_client::on_key(app, vk) {
         return true;
     }
@@ -546,6 +551,7 @@ pub fn palette_for(app: &App) -> mypaper_ui::controls::Palette {
 
 pub fn build(app: &App, text: &mut Text) -> Built {
     pick_client::connect(app);
+    choosers::begin(app);
     history::observe(app);
     let mut page = app.panel.as_ref().map_or(Page::Root, |s| s.page);
     if matches!(page, Page::Top | Page::Dock) && app.nav.module.is_some() {
@@ -592,6 +598,7 @@ pub fn build(app: &App, text: &mut Text) -> Built {
         Rect::new(0.0, body.bottom, window.width(), app.px(footer)),
     );
     pages::toast(app, &mut b, window);
+    choosers::finish(app);
     Built {
         list: b.list,
         semantics: b.semantics,
@@ -681,6 +688,7 @@ pub fn fit_height(app: &mut App, surface: &mypaper_ui::Surface, built: &Built) -
 
 /// One additive bridge into the legacy action dispatcher, shared with desktop picking.
 pub fn before_action(app: &mut App, action: &Action) {
+    if app.panel.is_some() { choosers::end(app); }
     history::observe(app);
     if let Action::Set(edit, _) | Action::Unset(edit) = action
         && edit.path.starts_with("/theme:")
@@ -770,6 +778,7 @@ pub fn end_peek() {
 
 /// List drags are transient until release. This early bridge leaves legacy input intact.
 pub fn event(app: &mut App, event: &mypaper_ui::Event) -> bool {
+    if app.panel.is_some() { choosers::event(app, event); }
     if app.panel.is_some() && colors::event(app, event) { return true; }
     app.panel.is_some() && lists::event(app, event)
 }
