@@ -17,6 +17,12 @@ public static class StudioPanelCheck {
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
     [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr window, IntPtr dc, uint flags);
     [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out Point point);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint x, uint y, uint data, UIntPtr extra);
 }
 '@
 [void][StudioPanelCheck]::SetProcessDpiAwarenessContext([IntPtr](-4))
@@ -87,6 +93,49 @@ function CaptureOwn([string]$Name) {
     }
 }
 
+# Hold checks send only the down/up sequence for our own panel, under the desktop lock.
+# The low-level Peek hooks swallow the release while the panel is hidden.
+function CheckPeek([bool]$Mouse) {
+    WithDesktopLock {
+        $element = OwnElement 'Hold to peek'
+        if ($element.Current.ProcessId -ne $script:process.Id) { throw 'Peek target is not ours.' }
+        if ([StudioPanelCheck]::GetForegroundWindow() -ne $script:window) { throw 'Our panel is not foreground; no Peek input was sent.' }
+        $r = $element.Current.BoundingRectangle
+        $point = New-Object StudioPanelCheck+Point
+        $point.X = [int]($r.Left + $r.Width / 2)
+        $point.Y = [int]($r.Top + $r.Height / 2)
+        $owner = [uint32]0
+        [void][StudioPanelCheck]::GetWindowThreadProcessId([StudioPanelCheck]::WindowFromPoint($point), [ref]$owner)
+        if ($owner -ne $script:process.Id) { throw 'Peek is covered by another window; no input was sent.' }
+        $cursor = New-Object StudioPanelCheck+Point
+        [void][StudioPanelCheck]::GetCursorPos([ref]$cursor)
+        $hidden = $false
+        try {
+            if ($Mouse) {
+                [void][StudioPanelCheck]::SetCursorPos($point.X, $point.Y)
+                [StudioPanelCheck]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
+            } else {
+                [StudioPanelCheck]::keybd_event(0x11, 0, 0, [UIntPtr]::Zero)
+                [StudioPanelCheck]::keybd_event(0x44, 0, 0, [UIntPtr]::Zero)
+            }
+            Start-Sleep -Milliseconds 200
+            $hidden = ![StudioPanelCheck]::IsWindowVisible($script:window)
+        } finally {
+            if ($Mouse) { [StudioPanelCheck]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero) }
+            else {
+                [StudioPanelCheck]::keybd_event(0x44, 0, 2, [UIntPtr]::Zero)
+                Start-Sleep -Milliseconds 100
+                [StudioPanelCheck]::keybd_event(0x11, 0, 2, [UIntPtr]::Zero)
+            }
+            if ($Mouse) { [void][StudioPanelCheck]::SetCursorPos($cursor.X, $cursor.Y) }
+        }
+        Start-Sleep -Milliseconds 250
+        $restored = [StudioPanelCheck]::IsWindowVisible($script:window)
+        if (!$hidden -or !$restored) { throw "Peek hold failed: hidden=$hidden, restored=$restored." }
+        return @{ input = $(if ($Mouse) { 'eye' } else { 'Ctrl D' }); hiddenWhileHeld = $hidden; restoredOnRelease = $restored }
+    }
+}
+
 $before = SettingsHashes
 $existing = @(Get-Process -Name 'mypaper-studio' -ErrorAction SilentlyContinue | Select-Object Id,Path,MainWindowTitle)
 if ($existing | Where-Object { $_.MainWindowTitle -like '*Panel*' }) { throw 'Another panel is already running; it has not been touched.' }
@@ -94,8 +143,17 @@ $previousSwitch = $env:MYPAPER_STUDIO_PANEL
 $env:MYPAPER_STUDIO_PANEL = '1'
 $script:process = $null
 $measurements = @()
+$peekChecks = @()
 try {
-    $script:process = Start-Process -FilePath $Exe -PassThru
+    # Suppress the debug binary's console without suppressing its interactive App window.
+    # STARTF_USESHOWWINDOW/SW_HIDE would also hide the panel's first ShowWindow call.
+    WithDesktopLock {
+        $start = New-Object System.Diagnostics.ProcessStartInfo
+        $start.FileName = $Exe
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $script:process = [System.Diagnostics.Process]::Start($start)
+    }
     # A debug Rust executable has a console subsystem; WaitForInputIdle is not supported.
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
         $script:process.Refresh()
@@ -107,12 +165,13 @@ try {
     if ($script:window -eq [IntPtr]::Zero) { throw 'Our process has no panel window.' }
     Start-Sleep -Milliseconds 700
     $measurements += CaptureOwn 'live-root.png'
-    InvokeOwn 'Settings '
-    InvokeOwn 'Keyboard '
-    $measurements += CaptureOwn 'live-keyboard.png'
-    InvokeOwn 'Back to Settings'
-    InvokeOwn 'General '
-    $measurements += CaptureOwn 'live-general.png'
+    $peekChecks += CheckPeek $false
+    $peekChecks += CheckPeek $true
+    InvokeOwn 'Look '
+    $measurements += CaptureOwn 'live-look.png'
+    InvokeOwn 'Back to Studio'
+    InvokeOwn 'Wallpaper '
+    $measurements += CaptureOwn 'live-wallpapers.png'
     InvokeOwn 'Done'
     if (!$script:process.WaitForExit(5000)) { throw 'Done did not close our panel.' }
 } finally {
@@ -125,7 +184,7 @@ try {
 }
 $after = SettingsHashes
 $changed = @($before.Keys | Where-Object { $before[$_] -ne $after[$_] })
-$report = @{ process = $script:process.Id; closed = $script:process.HasExited; existing = $existing; captures = $measurements; changedSettings = $changed }
+$report = @{ process = $script:process.Id; closed = $script:process.HasExited; existing = $existing; captures = $measurements; peek = $peekChecks; changedSettings = $changed }
 $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $Shots 'live-panel-check.json') -Encoding utf8
 $report | ConvertTo-Json -Depth 5
 if ($changed.Count) { throw 'Settings changed during a navigation-only check.' }

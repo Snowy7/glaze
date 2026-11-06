@@ -11,6 +11,14 @@ use crate::docs::DocId;
 fn app(ui: &Ui, dark: bool) -> App {
     let mut app = crate::goldens::app(dark, ui);
     app.panel = Some(State::default());
+    let mut bars = app.docs.doc(DocId::Bars).raw.clone();
+    bars["dock"]["pinned"] = json!(super::icons::fixture_pins());
+    app.docs = crate::docs::Docs::fixture([
+        &app.docs.doc(DocId::Config).raw.to_string(),
+        &bars.to_string(),
+        &app.docs.doc(DocId::Widgets).raw.to_string(),
+        &app.docs.doc(DocId::Studio).raw.to_string(),
+    ]);
     crate::pages::plugins::fixture(&mut app.plugins);
     app.size = (480, 760);
     // Bare IDs resolve beside the executable. An isolated target isn't beside the repo's
@@ -48,7 +56,9 @@ fn render_panel_pages() {
             (Page::Widget, "clock"),
             (Page::Widget, "clock-world"),
             (Page::Widget, "clock-greeting"),
+            (Page::Widget, "clock-own-look"),
             (Page::Widget, "photos"),
+            (Page::Widget, "photos-polaroid"),
             (Page::AddWidget, "add-widget"),
             (Page::Look, "look"),
             (Page::Look, "look-more"),
@@ -61,6 +71,7 @@ fn render_panel_pages() {
             (Page::Wallpaper, "wallpaper-broken"),
             (Page::AddWallpaper, "add-wallpaper"),
             (Page::AddWallpaper, "add-wallpaper-app"),
+            (Page::AddWallpaper, "add-wallpaper-file"),
             (Page::Connections, "connections"),
             (Page::Connection, "connection"),
             (Page::Connection, "connection-reconnect"),
@@ -74,6 +85,7 @@ fn render_panel_pages() {
             (Page::Search, "search"),
             (Page::Search, "search-widgets"),
             (Page::Look, "save-failed"),
+            (Page::Wallpaper, "theme-save-failed"),
             (Page::FirstRun, "first-run"),
             (Page::FirstRun, "first-run-taskbar"),
             (Page::FirstRun, "first-run-recovery"),
@@ -90,9 +102,18 @@ fn render_panel_pages() {
             app.panel.as_mut().unwrap().page = page;
             match name {
                 "weather" => app.nav.widget = Some("weather-1".into()),
-                "clock" | "clock-world" | "clock-greeting" => {
+                "clock" | "clock-world" | "clock-greeting" | "clock-own-look" => {
                     app.nav.widget = Some("clock-1".into());
-                    if name != "clock" {
+                    if name == "clock-own-look" {
+                        app.run(Action::Set(
+                            crate::actions::Edit::new(
+                                DocId::Widgets,
+                                "/instances/0/appearance/surface",
+                                "Its own look",
+                            ),
+                            json!("glass"),
+                        ));
+                    } else if name != "clock" {
                         app.run(Action::Set(
                             crate::actions::Edit::new(
                                 DocId::Widgets,
@@ -107,12 +128,15 @@ fn render_panel_pages() {
                         ));
                     }
                 }
-                "photos" => {
+                "photos" | "photos-polaroid" => {
                     let mut layout = crate::pages::widgets::layout(&app);
                     let mut photo = layout.instances[0].clone();
                     photo.widget = "photo".into();
                     photo.instance = "photo-1".into();
                     photo.size = [6, 4];
+                    if name == "photos-polaroid" {
+                        photo.settings.insert("variant".into(), json!("polaroid"));
+                    }
                     for (n, item) in app
                         .library
                         .items
@@ -184,6 +208,20 @@ fn render_panel_pages() {
                     app.texts
                         .insert(crate::actions::FieldId::AddArgs, "--embed {hwnd}".into());
                 }
+                "add-wallpaper-file" => {
+                    let file = app
+                        .library
+                        .items
+                        .iter()
+                        .find_map(|w| w.preview.clone())
+                        .unwrap();
+                    app.overlay = Some(crate::app::Overlay::AddWallpaper {
+                        source: Some(crate::actions::Source::File),
+                        picked: Some(file.to_string_lossy().into()),
+                    });
+                    app.texts
+                        .insert(crate::actions::FieldId::AddName, "Rain picture".into());
+                }
                 "connection" => app.nav.integration = crate::pages::integrations::LIST.len(),
                 "connection-reconnect" => {
                     app.nav.integration = crate::pages::integrations::LIST.len() + 3
@@ -220,6 +258,16 @@ fn render_panel_pages() {
                         Some(DocId::Config),
                         "The settings folder is read-only.",
                     );
+                }
+                "theme-save-failed" => {
+                    let mut own = app.library.items[app.library.active().unwrap()].clone();
+                    own.name = "Rain picture".into();
+                    own.origin = crate::library::Origin::User;
+                    own.active = false;
+                    own.dir = PathBuf::from(r"C:\mypaper-fixture-only\rain-picture");
+                    super::theme_failed(&mut app, &own.dir, "The wallpaper folder is read-only.");
+                    app.nav.wallpaper = Some(app.library.items.len());
+                    app.library.items.push(own);
                 }
                 "first-run" | "first-run-taskbar" | "first-run-recovery" => {
                     app.overlay = Some(crate::app::Overlay::FirstRun {
@@ -258,7 +306,7 @@ fn render_panel_pages() {
                 }
                 "add-module" => {
                     app.nav.bar = Some(crate::actions::Bar::Top);
-                    app.panel.as_mut().unwrap().add_module = Some("media".into());
+                    app.panel.as_mut().unwrap().add_module = Some("search".into());
                 }
                 "start-menu" => app.nav.panel = Some(crate::actions::Panel::Start),
                 "calendar-panel" => app.nav.panel = Some(crate::actions::Panel::Calendar),
@@ -294,6 +342,14 @@ fn render_panel_pages() {
                     )),
                 )
                 .unwrap();
+            } else {
+                let obsolete = out.join(format!(
+                    "{name}-full-{}.png",
+                    if dark { "dark" } else { "light" }
+                ));
+                if obsolete.is_file() {
+                    std::fs::remove_file(obsolete).unwrap();
+                }
             }
         }
     }
@@ -668,6 +724,24 @@ fn a_list_drag_writes_once_on_drop_and_is_one_undo_step() {
 }
 
 #[test]
+fn sorting_modules_keeps_the_editor_on_the_same_module_and_removing_closes_it() {
+    let ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    app.nav.module = Some(crate::actions::Slot {
+        bar: crate::actions::Bar::Top,
+        list: "right",
+        index: 0,
+    });
+    let list = super::SortList::Modules(crate::actions::Bar::Top, "right");
+    let before = app.get(DocId::Bars, "/top/right/0").cloned().unwrap();
+    super::lists::reorder(&mut app, &list, 0, 1);
+    assert_eq!(app.nav.module.as_ref().unwrap().index, 1);
+    assert_eq!(app.get(DocId::Bars, "/top/right/1"), Some(&before));
+    super::lists::remove(&mut app, &list, 1);
+    assert!(app.nav.module.is_none());
+}
+
+#[test]
 fn save_failures_are_visible_on_the_affected_page_and_clear_after_a_valid_edit() {
     let mut ui = Ui::new().unwrap();
     let mut app = app(&ui, true);
@@ -824,5 +898,25 @@ fn history_summarizes_the_whole_coalesced_style_change_and_fields_ignore_typed_c
     assert_eq!(
         super::field_initial(&app, &field).as_deref(),
         Some("America/New_York")
+    );
+}
+
+#[test]
+fn custom_module_interval_text_is_saved_as_a_number() {
+    let ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    app.run(Action::Set(
+        crate::actions::Edit::new(DocId::Bars, "/modules/custom:example/command", "Program"),
+        json!("example.exe"),
+    ));
+    app.run(Action::Set(
+        crate::actions::Edit::new(DocId::Bars, "/modules/custom:example/interval", "Run every"),
+        json!("60"),
+    ));
+    assert_eq!(
+        app.get(DocId::Bars, "/modules/custom:example/interval"),
+        Some(&json!(60.0)),
+        "{:?}",
+        app.docs.saved
     );
 }
