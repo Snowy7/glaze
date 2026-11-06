@@ -70,7 +70,7 @@ fn run() -> Result<()> {
     let mut ui = Ui::new()?;
     // Window events arrive on a thread of their own; a batch that changed something posts
     // WM_NULL here (a posted message, so it runs the loop's work at once).
-    let win_events = mypaper_desktop::win_events::WinEvents::install();
+    let mut win_events = Some(mypaper_desktop::win_events::WinEvents::install());
     startup::ready("shell", "factories_ms");
     overlay_client::install();
     let bars = bars::Bars::new(&mut ui, bars_start)?;
@@ -105,7 +105,15 @@ fn run() -> Result<()> {
     'run: loop {
         game.set_enabled(shell.game_enabled);
         game.refresh();
+        if !game.active && win_events.is_none() {
+            win_events = Some(mypaper_desktop::win_events::WinEvents::install());
+        }
         shell.set_game_activity(&mut ui, game.active);
+        if game.active {
+            // First release providers, then the source. Core's independent signal still
+            // watches for exit; this source's hooks and batching sleep need do no work.
+            win_events = None;
+        }
         let start = Instant::now();
         // The parent's handle is first. Other handles are identified by name below.
         let mut handles: Vec<(HANDLE, &'static str)> = parent.iter().map(|&h| (h, "parent")).collect();
@@ -217,7 +225,7 @@ fn run() -> Result<()> {
                 "bars.tick ms/Mcycles: {}; bar stats (samples, changes, sample_us, all bar repaints) since start: {:?}; WinEvents (hooks, callbacks, subscribers): {:?}; widgets since start: {:?}",
                 bars.join(", "),
                 shell.bars.stats_counts(),
-                win_events.counts(),
+                win_events.as_ref().map(mypaper_desktop::win_events::WinEvents::counts),
                 shell.widgets.as_ref().map(widgets::Widgets::costs)
             )
         }) {

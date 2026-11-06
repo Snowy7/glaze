@@ -130,6 +130,12 @@ fn window_event(event: Event, known: &mut Known) -> Option<SystemEvent> {
         return Some(SystemEvent::Window { change, id, title, process });
     }
     let hwnd = HWND(event.window as *mut _);
+    let mut pid = 0;
+    // SAFETY: read-only owner query. Our shell surfaces are not application windows for
+    // this feed. In-process GetWindowText could synchronously call the UI thread while
+    // it is joining the event source during game quiescence.
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)); }
+    if pid == std::process::id() { return None; }
     // SAFETY: plain queries of a window handle; a stale one just fails. Another process's
     // caption is read without sending it a message, so a hung app can't block the shell.
     let title = unsafe {

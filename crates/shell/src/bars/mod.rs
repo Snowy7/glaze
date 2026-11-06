@@ -1847,6 +1847,9 @@ impl Bars {
     pub fn set_game_activity(&mut self, active: bool) {
         if self.game_active == active { return; }
         self.game_active = active;
+        // The shared source sleeps through games, including the exit's foreground event.
+        // Re-arm the subscription's snapshot bits so visibility reconciles on both edges.
+        self.services.start();
         self.subscribe();
     }
     fn subscribe(&mut self) {

@@ -589,6 +589,10 @@ impl Widgets {
 
     pub fn set_game_activity(&mut self, active: bool) {
         self.game_active = active;
+        if !active {
+            self.windows = WindowEvents::install();
+            self.reconcile_needed = true;
+        }
         self.plugins.set_game_activity(active);
     }
 
