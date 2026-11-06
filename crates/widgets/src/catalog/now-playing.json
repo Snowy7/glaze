@@ -65,6 +65,7 @@
     },
     {
       "key": "viz",
+      "faces": ["viz"],
       "type": "select",
       "label": "Spectrum",
       "group": "Visualizer",
@@ -86,6 +87,7 @@
     },
     {
       "key": "sensitivity",
+      "faces": ["viz"],
       "type": "slider",
       "label": "Sensitivity",
       "group": "Visualizer",

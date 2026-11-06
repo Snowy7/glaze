@@ -51,6 +51,7 @@
     },
     {
       "key": "format24",
+      "faces": ["desk", "flip", "words", "world"],
       "type": "boolean",
       "label": "24-hour clock",
       "group": "Time",
@@ -58,6 +59,7 @@
     },
     {
       "key": "showSeconds",
+      "faces": ["desk", "flip", "analog"],
       "type": "boolean",
       "label": "Seconds (Digital, Flip, Analog)",
       "group": "Time",
@@ -72,6 +74,7 @@
     },
     {
       "key": "zones",
+      "faces": ["world"],
       "type": "list",
       "label": "Cities (World face)",
       "group": "World",
@@ -109,6 +112,7 @@
     },
     {
       "key": "name",
+      "faces": ["words"],
       "type": "string",
       "label": "Name to greet (empty: your Windows name)",
       "group": "Greeting",

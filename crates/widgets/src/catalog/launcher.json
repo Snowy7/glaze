@@ -111,6 +111,7 @@
     },
     {
       "key": "engine",
+      "when": {"search": [true]},
       "type": "select",
       "label": "Search engine",
       "group": "Search",
@@ -148,6 +149,7 @@
     },
     {
       "key": "customUrl",
+      "when": {"search": [true], "engine": ["custom"]},
       "type": "string",
       "label": "Custom engine URL ({q} is the search text)",
       "group": "Search",
