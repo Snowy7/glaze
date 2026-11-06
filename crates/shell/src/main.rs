@@ -319,11 +319,13 @@ impl Shell {
             targets = self.bars.studio_targets();
             if let Some(widgets) = &self.widgets { targets.extend(widgets.studio_targets()); }
         }
-        self.studio.tick(ui, &targets, self.bars.config());
+        let revision = self.studio.active().then(|| self.widgets.as_ref().map(widgets::Widgets::studio_revision)).flatten();
+        self.studio.tick(ui, &targets, self.bars.config(), revision);
         self.bars.studio_preview(self.studio.preview());
         self.bars.studio_session(self.studio.active());
         if let Some(widgets) = &mut self.widgets {
-            widgets.studio_preview(ui, self.studio.preview());
+            let (preview, resize) = self.studio.previews();
+            widgets.studio_preview(ui, preview, resize);
             widgets.studio_session(ui, self.studio.active(), self.studio.lifted());
         }
     }

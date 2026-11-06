@@ -133,6 +133,8 @@ pub struct StudioPick {
     notice: Option<notice::Notice>,
     gesture: Option<Gesture>,
     preview: preview::Preview,
+    resize_preview: Option<resize::Preview>,
+    widget_revision: Option<u64>,
 }
 
 impl StudioPick {
@@ -152,6 +154,8 @@ impl StudioPick {
             notice: None,
             gesture: None,
             preview: preview::Preview::default(),
+            resize_preview: None,
+            widget_revision: None,
         })
     }
     pub fn timeout_ms(&self) -> u32 {
@@ -163,6 +167,10 @@ impl StudioPick {
 
     pub fn preview(&mut self) -> &mut preview::Preview { &mut self.preview }
 
+    pub fn previews(&mut self) -> (&mut preview::Preview, Option<&resize::Preview>) {
+        (&mut self.preview, self.resize_preview.as_ref())
+    }
+
     pub fn lifted(&self) -> BTreeSet<String> {
         // Keep the receiving HWND alive until its button release has run.
         if self.pressed && self.gesture.is_none() {
@@ -172,7 +180,8 @@ impl StudioPick {
         }
     }
 
-    pub fn tick(&mut self, ui: &mut Ui, targets: &[Target], bars: &BarsConfig) {
+    pub fn tick(&mut self, ui: &mut Ui, targets: &[Target], bars: &BarsConfig, widget_revision: Option<u64>) {
+        self.widget_revision = widget_revision;
         let mut previous_owner = self.session.owner;
         while let Some((source, request)) = self.endpoint.next() {
             match request {
@@ -239,12 +248,20 @@ impl StudioPick {
                     else { self.notice = Some(notice::Notice::new(display, text, step)); }
                 }
                 Message::UndoDismiss if self.owns(source) => self.notice = None,
+                Message::ResizeResult { selection, cell, size, revision } if self.owns(source) => {
+                    if let Some(preview) = &mut self.resize_preview && preview.selection == selection
+                        && preview.cell == cell && preview.size == size {
+                        if let Some(revision) = revision { preview.saved_revision = Some(revision); }
+                        else { self.resize_preview = None; }
+                    }
+                }
                 Message::ClearSelection
                     if self.session.owner.is_some_and(|(h, pid)| {
                         h == source.0 as isize && wire::process(source) == pid
                     }) =>
                 {
                     self.gesture = None;
+                    self.resize_preview = None;
                     self.session.selected = None;
                     self.session.highlight = None;
                     self.hovered = None;
@@ -258,7 +275,10 @@ impl StudioPick {
                     self.session.highlight = id;
                 }
                 Message::Selected { selection } if self.owns(source) => {
-                    self.gesture = None;
+                    if self.session.selected.as_ref() != Some(&selection) {
+                        self.gesture = None;
+                        self.resize_preview = None;
+                    }
                     self.session.selected = Some(selection);
                 }
                 _ => {}
@@ -269,6 +289,9 @@ impl StudioPick {
             .check(|h, p| wire::process(HWND(h as _)) == p && wire::process(panel) == p);
         if self.session.owner != previous_owner {
             self.reset_transients();
+        }
+        if self.resize_preview.as_ref().is_some_and(|p| !widget_revision.is_some_and(|r| p.current(r))) {
+            self.resize_preview = None;
         }
         if !self.session.active() {
             self.gesture = None;
@@ -381,7 +404,10 @@ impl StudioPick {
         }
         if self.gesture.as_ref().is_some_and(|gesture| {
             !targets.iter().any(|t| {
-                t.selection == gesture.selection && t.resize.as_ref() == Some(&gesture.spec)
+                t.selection == gesture.selection && t.resize.as_ref().is_some_and(|spec|
+                    spec.saved_cell == gesture.spec.saved_cell && spec.saved_size == gesture.spec.saved_size
+                    && spec.grid == gesture.spec.grid && spec.limits == gesture.spec.limits
+                    && spec.origin == gesture.spec.origin && spec.scale == gesture.spec.scale)
             })
         }) {
             self.finish_resize(false);
@@ -398,6 +424,9 @@ impl StudioPick {
                 }
                 GetAsyncKeyState(1) >= 0
             };
+            if let Some(preview) = &mut self.resize_preview {
+                (preview.cell, preview.size) = gesture.pending;
+            }
             if let Some(decoration) = self
                 .decorations
                 .iter_mut()
@@ -520,6 +549,11 @@ impl StudioPick {
                     window: handle.hwnd(),
                     _frames: handle.animation_frames(Duration::from_secs(3600)),
                 });
+                self.resize_preview = self.widget_revision.map(|base_revision| resize::Preview {
+                    selection: decoration.target.selection.clone(),
+                    before_cell: spec.saved_cell, before_size: spec.saved_size,
+                    cell: spec.cell, size: spec.size, base_revision, saved_revision: None,
+                });
             }
             return true;
         }
@@ -569,6 +603,7 @@ impl StudioPick {
 
     fn select(&mut self, selection: Selection) {
         self.gesture = None;
+        self.resize_preview = None;
         self.session.selected = Some(selection.clone());
         if let Some((owner, _)) = self.session.owner {
             let taken = wire::send(
@@ -588,6 +623,7 @@ impl StudioPick {
 
     fn reset_transients(&mut self) {
         self.preview = preview::Preview::default();
+        self.resize_preview = None;
         self.gesture = None;
         self.hovered = None;
         self.hover_until = None;
@@ -601,11 +637,12 @@ impl StudioPick {
             return;
         };
         self.pressed = false;
+        if !commit || gesture.pending == (gesture.spec.cell, gesture.spec.size) { self.resize_preview = None; }
         if commit
             && gesture.pending != (gesture.spec.cell, gesture.spec.size)
             && let Some((owner, _)) = self.session.owner
         {
-            wire::send(
+            let sent = wire::send(
                 HWND(owner as _),
                 self.endpoint.hwnd(),
                 &Message::ResizeWidget {
@@ -616,6 +653,7 @@ impl StudioPick {
                     size: gesture.pending.1,
                 },
             );
+            if !sent { self.resize_preview = None; }
         }
         drop(gesture);
         self.decorations.clear();

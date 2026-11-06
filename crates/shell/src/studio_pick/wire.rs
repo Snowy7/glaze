@@ -218,6 +218,12 @@ pub enum Message {
         cell: [u32; 2],
         size: [u32; 2],
     },
+    ResizeResult {
+        selection: Selection,
+        cell: [u32; 2],
+        size: [u32; 2],
+        revision: Option<u64>,
+    },
     Selected {
         selection: Selection,
     },
@@ -452,5 +458,48 @@ mod tests {
             assert!(queue.enqueue(source, Message::End));
         }
         assert!(!queue.enqueue(source, Message::End));
+    }
+
+    #[test]
+    fn a_new_drag_never_coalesces_across_the_previous_commit() {
+        let queue = Queue::default();
+        let source = HWND(1 as _);
+        let value = |sequence| Message::Preview {
+            session: 7,
+            sequence,
+            documents: vec![PreviewDocument {
+                document: Document::Config,
+                base_revision: 10,
+                ops: vec![PreviewOp {
+                    path: "/look/material/blur".into(),
+                    value: serde_json::json!(sequence),
+                }],
+            }],
+        };
+        queue.enqueue(source, value(1));
+        queue.enqueue(
+            source,
+            Message::PreviewCommit {
+                session: 7,
+                sequence: 2,
+                revisions: vec![],
+            },
+        );
+        queue.enqueue(source, value(3));
+        queue.enqueue(source, value(4));
+        let messages = queue.messages.borrow();
+        assert_eq!(messages.len(), 3);
+        assert!(matches!(
+            messages[0].1,
+            Message::Preview { sequence: 1, .. }
+        ));
+        assert!(matches!(
+            messages[1].1,
+            Message::PreviewCommit { sequence: 2, .. }
+        ));
+        assert!(matches!(
+            messages[2].1,
+            Message::Preview { sequence: 4, .. }
+        ));
     }
 }

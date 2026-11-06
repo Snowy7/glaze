@@ -22,6 +22,7 @@ struct Client {
     session: u64,
     sequence: u64,
     preview: Option<PreviewDrag>,
+    color_open: bool,
     undo_serial: u64,
     undo_step: Option<UndoGuard>,
     page_selection: Option<Selection>,
@@ -52,6 +53,9 @@ impl UndoGuard {
 
 impl Client {
     fn stream_preview(&mut self, app: &App) {
+        if self.color_open {
+            return;
+        }
         let Some(shell) = self.shell else { return };
         if let Some(crate::app::Drag::Slider { edit, .. }) = &app.drag {
             let documents = preview_documents(&self.observed, app);
@@ -218,6 +222,240 @@ fn preview_documents(before: &[(DocId, Value); 3], app: &App) -> Vec<wire::Previ
         .collect()
 }
 
+struct ColorDrag {
+    documents: Vec<wire::PreviewDocument>,
+    colors: Vec<(wire::Document, String)>,
+    checkpoint: usize,
+    label: String,
+    last: String,
+}
+
+const COLOR_SAMPLE: &str = "#010203";
+thread_local! { static COLOR_DRAG: RefCell<Option<ColorDrag>> = const { RefCell::new(None) }; }
+
+fn color_ops(app: &App, edit: &crate::actions::Edit, color: &str) -> Vec<Op> {
+    let mut ops = vec![Op {
+        doc: edit.doc,
+        path: edit.path.to_string(),
+        value: Some(serde_json::json!(color)),
+    }];
+    if edit.doc == DocId::Config {
+        // Match the panel's first tint choice when the current glass is completely clear.
+        if edit.path.as_ref() == "/look/material/tint"
+            && app
+                .get(DocId::Config, "/look/material/clarity")
+                .and_then(Value::as_f64)
+                == Some(1.0)
+            && app.get(DocId::Config, "/look/material/tint").is_none()
+        {
+            ops.push(Op {
+                doc: DocId::Config,
+                path: "/look/material/clarity".into(),
+                value: Some(serde_json::json!(0.88)),
+            });
+        }
+        ops.extend(crate::look::projection_after(&app.docs, &ops));
+    }
+    ops
+}
+
+impl ColorDrag {
+    fn new(app: &App, edit: &crate::actions::Edit, initial: u32) -> Option<Self> {
+        let ops = color_ops(app, edit, COLOR_SAMPLE);
+        let alternative = color_ops(app, edit, "#040506");
+        let documents: Vec<_> = snapshot(app)
+            .into_iter()
+            .filter_map(|(id, raw)| {
+                let document = document(id);
+                let ops: Vec<_> = ops
+                    .iter()
+                    .filter(|op| op.doc == id)
+                    .map(|op| wire::PreviewOp {
+                        path: op.path.clone(),
+                        value: op.value.clone().unwrap_or(Value::Null),
+                    })
+                    .filter(|op| op.valid(document))
+                    .collect();
+                (!ops.is_empty()).then(|| wire::PreviewDocument {
+                    document,
+                    base_revision: wire::revision(&raw),
+                    ops,
+                })
+            })
+            .collect();
+        // Two colors reveal which projected fields follow this picker. A family's own tint
+        // remains constant even when it happens to equal the sample color.
+        let mut colors = Vec::new();
+        for (id, _) in snapshot(app) {
+            if let Some(d) = documents.iter().find(|d| d.document == document(id)) {
+                for op in &d.ops {
+                    let other = alternative
+                        .iter()
+                        .find(|o| o.doc == id && o.path == op.path)
+                        .and_then(|o| o.value.as_ref())
+                        .unwrap_or(&Value::Null);
+                    if other != &op.value {
+                        colors.push((d.document, op.path.clone()));
+                    }
+                }
+            }
+        }
+        (!documents.is_empty()).then(|| Self {
+            documents,
+            colors,
+            checkpoint: app.docs.undo_count(),
+            label: edit.label.to_string(),
+            last: color_hex(initial),
+        })
+    }
+
+    fn values(&self, color: &str) -> Vec<wire::PreviewDocument> {
+        let mut documents = self.documents.clone();
+        for d in &mut documents {
+            for op in &mut d.ops {
+                if self
+                    .colors
+                    .iter()
+                    .any(|(doc, path)| *doc == d.document && *path == op.path)
+                {
+                    op.value = serde_json::json!(color);
+                }
+            }
+        }
+        documents
+    }
+}
+
+fn color_hex(color: u32) -> String {
+    mypaper_config::Color([color as u8, (color >> 8) as u8, (color >> 16) as u8]).hex()
+}
+
+fn publish_color(color: u32) {
+    COLOR_DRAG.with(|drag| {
+        let Ok(mut drag) = drag.try_borrow_mut() else {
+            return;
+        };
+        let Some(drag) = drag.as_mut() else { return };
+        let color = color_hex(color);
+        if drag.last == color {
+            return;
+        }
+        drag.last = color.clone();
+        let documents = drag.values(&color);
+        CLIENT.with(|client| {
+            let mut client = client.borrow_mut();
+            let Some(client) = client.as_mut() else {
+                return;
+            };
+            let Some(shell) = client.shell else { return };
+            client.sequence += 1;
+            wire::send(
+                shell,
+                client.endpoint.hwnd(),
+                &Message::Preview {
+                    session: client.session,
+                    sequence: client.sequence,
+                    documents: documents.clone(),
+                },
+            );
+            client.preview = Some(PreviewDrag {
+                documents,
+                checkpoint: drag.checkpoint,
+                label: drag.label.clone(),
+            });
+        });
+    });
+}
+
+struct ColorSession {
+    accepted: bool,
+}
+impl Drop for ColorSession {
+    fn drop(&mut self) {
+        COLOR_DRAG.with(|drag| {
+            drag.borrow_mut().take();
+        });
+        CLIENT.with(|client| {
+            if let Some(client) = client.borrow_mut().as_mut() {
+                client.color_open = false;
+                if !self.accepted {
+                    client.preview = None;
+                    client.sequence += 1;
+                    if let Some(shell) = client.shell {
+                        wire::send(
+                            shell,
+                            client.endpoint.hwnd(),
+                            &Message::PreviewCancel {
+                                session: client.session,
+                                sequence: client.sequence,
+                            },
+                        );
+                    }
+                }
+            }
+        });
+    }
+}
+
+/// Native RGB drags stream only IPC. The caller's existing `set` saves once after OK.
+pub fn choose_color(
+    app: &App,
+    edit: &crate::actions::Edit,
+    picker: &mut windows::Win32::UI::Controls::Dialogs::CHOOSECOLORW,
+) -> bool {
+    use windows::Win32::UI::Controls::Dialogs::{CC_ENABLEHOOK, ChooseColorW};
+    let drag = ColorDrag::new(app, edit, picker.rgbResult.0);
+    let connected = CLIENT.with(|c| c.borrow().as_ref().is_some_and(|c| c.shell.is_some()));
+    if !connected || drag.is_none() {
+        // SAFETY: the caller owns the complete dialog structure and custom-color buffer.
+        return unsafe { ChooseColorW(picker) }.as_bool();
+    }
+    COLOR_DRAG.with(|slot| *slot.borrow_mut() = drag);
+    CLIENT.with(|c| {
+        if let Some(c) = c.borrow_mut().as_mut() {
+            c.stream_preview(app);
+            c.color_open = true;
+        }
+    });
+    let mut session = ColorSession { accepted: false };
+    picker.Flags |= CC_ENABLEHOOK;
+    picker.lpfnHook = Some(color_hook);
+    // SAFETY: synchronous native dialog; the hook stores only owned values, never an App pointer.
+    let accepted = unsafe { ChooseColorW(picker) }.as_bool();
+    if accepted {
+        publish_color(picker.rgbResult.0);
+    }
+    session.accepted = accepted;
+    accepted
+}
+
+unsafe extern "system" fn color_hook(
+    window: HWND,
+    message: u32,
+    _: windows::Win32::Foundation::WPARAM,
+    _: windows::Win32::Foundation::LPARAM,
+) -> usize {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetDlgItemInt, WM_COMMAND, WM_HSCROLL, WM_MOUSEMOVE, WM_PAINT, WM_VSCROLL,
+    };
+    if matches!(
+        message,
+        WM_COMMAND | WM_HSCROLL | WM_MOUSEMOVE | WM_PAINT | WM_VSCROLL
+    ) {
+        // RGB edit IDs are COLOR_RED/GREEN/BLUE in the Windows SDK's ColorDlg.h.
+        let values = [706, 707, 708].map(|id| {
+            let mut translated = windows::core::BOOL::default();
+            // SAFETY: read-only queries of controls in the native dialog invoking this hook.
+            let value = unsafe { GetDlgItemInt(window, id, Some(&mut translated), false) };
+            (translated.as_bool() && value <= 255).then_some(value)
+        });
+        if let [Some(r), Some(g), Some(b)] = values {
+            publish_color(r | (g << 8) | (b << 16));
+        }
+    }
+    0
+}
+
 #[derive(Default)]
 struct UndoChain {
     values: Vec<String>,
@@ -288,6 +526,7 @@ pub fn connect(app: &App) {
                     .as_nanos() as u64,
                 sequence: 0,
                 preview: None,
+                color_open: false,
                 undo_serial: 0,
                 undo_step: None,
                 page_selection: None,
@@ -301,6 +540,7 @@ pub fn connect(app: &App) {
             client.begun = false;
             client.highlighted = None;
             client.preview = None;
+            client.color_open = false;
             client.page_selection = None;
             client.desktop_selected = false;
             client.undo_step = None;
@@ -344,7 +584,9 @@ pub fn connect(app: &App) {
             client.observed_version = app.docs.version;
         }
     });
-    highlight(hovered_widget(app, app.input.pointer));
+    // A caption's WM_NCMOUSELEAVE can follow the client's move and clear Input::pointer.
+    // Sample our HWND directly so that transition cannot lose the row's desktop highlight.
+    highlight(hovered_widget(app, panel_pointer(app)));
 }
 
 fn page_selection(app: &App) -> Option<Selection> {
@@ -384,6 +626,26 @@ fn hovered_widget(app: &App, point: Option<mypaper_ui::Point>) -> Option<String>
             Action::Panel(Command::Open(Page::Widget)) => app.nav.widget.clone(),
             _ => None,
         })
+}
+
+fn panel_pointer(app: &App) -> Option<mypaper_ui::Point> {
+    use windows::Win32::{
+        Foundation::POINT,
+        Graphics::Gdi::ScreenToClient,
+        UI::WindowsAndMessaging::{GetCursorPos, WindowFromPoint},
+    };
+    let window = app.window?;
+    let mut point = POINT::default();
+    // SAFETY: read-only pointer queries. Never treat a covered panel or another HWND as hover.
+    unsafe {
+        if GetCursorPos(&mut point).is_err()
+            || WindowFromPoint(point) != window
+            || !ScreenToClient(window, &mut point).as_bool()
+        {
+            return None;
+        }
+    }
+    Some(mypaper_ui::Point::new(point.x as f32, point.y as f32))
 }
 
 /// Called only after a successful pick has entered Studio's undo history.
@@ -452,11 +714,14 @@ pub fn highlight(id: Option<String>) {
                 return;
             }
             if let Some(shell) = client.shell {
-                wire::send(
+                let sent = wire::send(
                     shell,
                     client.endpoint.hwnd(),
                     &Message::Highlight { id: id.clone() },
                 );
+                if !sent {
+                    return;
+                }
             }
             client.highlighted = id;
         }
@@ -516,15 +781,29 @@ pub fn on_key(app: &mut App, key: u16) -> bool {
                 selected(app, selection);
             }
             Message::UndoRequest { step } => {
-                let guard =
-                    CLIENT.with(|c| c.borrow_mut().as_mut().and_then(|c| c.undo_step.take()));
-                if guard.is_some_and(|g| g.matches(app, step)) {
+                let guard = CLIENT.with(|c| {
+                    c.borrow_mut().as_mut().and_then(|c| {
+                        c.undo_step.filter(|g| g.step == step)?;
+                        c.undo_step.take()
+                    })
+                });
+                let Some(guard) = guard else { continue };
+                if guard.matches(app, step) {
                     app.run(Action::Undo);
                 }
                 CLIENT.with(|c| {
-                    if let Some(c) = c.borrow().as_ref()
+                    if let Some(c) = c.borrow_mut().as_mut()
                         && let Some(shell) = c.shell
                     {
+                        c.sequence += 1;
+                        wire::send(
+                            shell,
+                            c.endpoint.hwnd(),
+                            &Message::PreviewCancel {
+                                session: c.session,
+                                sequence: c.sequence,
+                            },
+                        );
                         wire::send(shell, c.endpoint.hwnd(), &Message::UndoDismiss);
                     }
                 });
@@ -536,7 +815,24 @@ pub fn on_key(app: &mut App, key: u16) -> bool {
                 cell,
                 size,
             } => {
-                resize_widget(app, selection, before_cell, before_size, cell, size);
+                let revision =
+                    resize_widget(app, selection.clone(), before_cell, before_size, cell, size);
+                CLIENT.with(|c| {
+                    if let Some(c) = c.borrow().as_ref()
+                        && let Some(shell) = c.shell
+                    {
+                        wire::send(
+                            shell,
+                            c.endpoint.hwnd(),
+                            &Message::ResizeResult {
+                                selection,
+                                cell,
+                                size,
+                                revision,
+                            },
+                        );
+                    }
+                });
             }
             _ => {}
         }
@@ -552,9 +848,9 @@ fn resize_widget(
     before_size: [u32; 2],
     cell: [u32; 2],
     size: [u32; 2],
-) {
+) -> Option<u64> {
     if selection.kind != Kind::Widget || (cell, size) == (before_cell, before_size) {
-        return;
+        return None;
     }
     let layout = crate::pages::widgets::layout(app);
     let Some((index, instance)) = layout
@@ -563,19 +859,19 @@ fn resize_widget(
         .enumerate()
         .find(|(_, i)| i.instance == selection.id)
     else {
-        return;
+        return None;
     };
     if instance.cell != before_cell || instance.size != before_size {
         app.alert("This widget changed while resizing. Try again.");
-        return;
+        return None;
     }
     let Some(widget) = app.registry.get(&instance.widget) else {
-        return;
+        return None;
     };
     if !widget.manifest.resizable
         || widget.manifest.fit_size(size.map(f64::from), [u32::MAX; 2]) != Some(size)
     {
-        return;
+        return None;
     }
     let label = format!("Resize {}", widget.manifest.name);
     let mut ops = Vec::new();
@@ -608,7 +904,9 @@ fn resize_widget(
             value: Some(serde_json::json!(size)),
         },
     ]);
+    let checkpoint = app.docs.undo_count();
     app.apply(&label, ops);
+    (app.docs.undo_count() > checkpoint).then(|| wire::revision(&app.docs.doc(DocId::Widgets).raw))
 }
 
 /// The one navigation seam. Selection changes only navigation, never document values.
@@ -866,6 +1164,7 @@ mod tests {
             session: 123,
             sequence: 0,
             preview: None,
+            color_open: false,
             undo_serial: 0,
             undo_step: None,
             page_selection: None,
@@ -1009,6 +1308,86 @@ mod tests {
     }
 
     #[test]
+    fn color_dialog_builds_only_transient_material_values_without_editing_documents() {
+        let ui = Ui::new().unwrap();
+        let app = crate::goldens::app(true, &ui);
+        let before = snapshot(&app);
+        for edit in [
+            crate::actions::Edit::new(DocId::Config, "/look/material/tint", "Tint"),
+            crate::actions::Edit::new(DocId::Widgets, "/instances/0/appearance/tint", "Tint"),
+            crate::actions::Edit::new(DocId::Bars, "/dock/appearance/tint", "Tint"),
+        ] {
+            let drag = ColorDrag::new(&app, &edit, 0).unwrap();
+            let red = drag.values("#ff0000");
+            let blue = drag.values("#0000ff");
+            assert!(
+                red.iter()
+                    .flat_map(|d| &d.ops)
+                    .any(|o| o.value.as_str() == Some("#ff0000"))
+            );
+            assert!(
+                blue.iter()
+                    .flat_map(|d| &d.ops)
+                    .any(|o| o.value.as_str() == Some("#0000ff"))
+            );
+            assert!(
+                blue.iter()
+                    .all(|d| d.ops.iter().all(|op| op.valid(d.document)))
+            );
+        }
+        assert_eq!(snapshot(&app), before);
+        assert_eq!(app.docs.undo_count(), 0);
+        assert!(
+            ColorDrag::new(
+                &app,
+                &crate::actions::Edit::new(DocId::Config, "/look/windows/border", "Border"),
+                0
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn color_dialog_preserves_a_family_tint_that_matches_the_projection_sample() {
+        let ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.docs
+            .edit(
+                "Own bar tint",
+                &[Op {
+                    doc: DocId::Config,
+                    path: "/look/bars/material/tint".into(),
+                    value: Some(serde_json::json!(COLOR_SAMPLE)),
+                }],
+            )
+            .unwrap();
+        let before = snapshot(&app);
+        let drag = ColorDrag::new(
+            &app,
+            &crate::actions::Edit::new(DocId::Config, "/look/material/tint", "Tint"),
+            0,
+        )
+        .unwrap();
+        let documents = drag.values("#ff0000");
+        let tint = |document| {
+            documents
+                .iter()
+                .find(|d| d.document == document)
+                .unwrap()
+                .ops
+                .iter()
+                .find(|o| o.path == "/appearance/tint")
+                .unwrap()
+                .value
+                .as_str()
+                .unwrap()
+        };
+        assert_eq!(tint(wire::Document::Bars), COLOR_SAMPLE);
+        assert_eq!(tint(wire::Document::Widgets), "#ff0000");
+        assert_eq!(snapshot(&app), before);
+    }
+
+    #[test]
     fn chip_undo_uses_the_announced_step_and_rejects_stale_history() {
         let ui = Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
@@ -1046,6 +1425,78 @@ mod tests {
             !guard.matches(&app, 12),
             "a new branch with the same count is still a different step"
         );
+    }
+
+    #[test]
+    fn chip_requests_route_without_keyboard_input_and_old_requests_leave_the_new_step_alone() {
+        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+        let ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        let before = snapshot(&app);
+        app.docs
+            .edit(
+                "Blur",
+                &[Op {
+                    doc: DocId::Config,
+                    path: "/look/material/blur".into(),
+                    value: Some(serde_json::json!(24)),
+                }],
+            )
+            .unwrap();
+        let shell = wire::Endpoint::new(true).unwrap();
+        let endpoint = wire::Endpoint::new(false).unwrap();
+        let to = endpoint.hwnd();
+        let guard = UndoGuard {
+            step: 12,
+            count: app.docs.undo_count(),
+            version: app.docs.version,
+        };
+        CLIENT.with(|c| {
+            *c.borrow_mut() = Some(Client {
+                endpoint,
+                shell: Some(shell.hwnd()),
+                begun: true,
+                panel: HWND::default(),
+                highlighted: None,
+                observed: snapshot(&app),
+                observed_version: app.docs.version,
+                undo_chain: UndoChain::default(),
+                session: 123,
+                sequence: 0,
+                preview: None,
+                color_open: false,
+                undo_serial: 12,
+                undo_step: Some(guard),
+                page_selection: None,
+                desktop_selected: false,
+            })
+        });
+        // SAFETY: read-only foreground query; neither hidden endpoint is activated.
+        let foreground = unsafe { GetForegroundWindow() };
+        wire::send(to, shell.hwnd(), &Message::UndoRequest { step: 11 });
+        on_key(&mut app, wire::PICK_EVENT);
+        assert_eq!(app.docs.undo_count(), 1);
+        assert!(CLIENT.with(|c| c.borrow().as_ref().unwrap().undo_step.is_some()));
+        wire::send(to, shell.hwnd(), &Message::UndoRequest { step: 12 });
+        on_key(&mut app, wire::PICK_EVENT);
+        assert_eq!(snapshot(&app), before);
+        assert!(matches!(
+            shell.next(),
+            Some((
+                _,
+                Message::PreviewCancel {
+                    session: 123,
+                    sequence: 1
+                }
+            ))
+        ));
+        assert!(matches!(shell.next(), Some((_, Message::UndoDismiss))));
+        wire::send(to, shell.hwnd(), &Message::UndoRequest { step: 12 });
+        on_key(&mut app, wire::PICK_EVENT);
+        assert_eq!(app.docs.undo_count(), 0);
+        // SAFETY: the assertion verifies that routing never changed activation.
+        assert_eq!(unsafe { GetForegroundWindow() }, foreground);
+        CLIENT.with(|c| *c.borrow_mut() = None);
     }
 
     #[test]

@@ -1,6 +1,36 @@
-//! Grid-snapped corner resizing. A gesture changes only its outline until release.
+//! Grid-snapped corner resizing. Geometry stays transient until Studio commits the release.
 use mypaper_ui::{Point, Rect};
 use mypaper_widgets::{layout::Grid, manifest::SizeSpec};
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Preview {
+    pub selection: super::wire::Selection,
+    pub before_cell: [u32; 2],
+    pub before_size: [u32; 2],
+    pub cell: [u32; 2],
+    pub size: [u32; 2],
+    pub base_revision: u64,
+    pub saved_revision: Option<u64>,
+}
+
+impl Preview {
+    pub fn current(&self, revision: u64) -> bool {
+        self.base_revision == revision && self.saved_revision != Some(revision)
+    }
+
+    pub fn apply(&self, layout: &mut mypaper_widgets::layout::Layout) -> bool {
+        let Some(instance) = layout.instances.iter_mut().find(|i| {
+            i.instance == self.selection.id
+                && i.cell == self.before_cell
+                && i.size == self.before_size
+        }) else {
+            return false;
+        };
+        instance.cell = self.cell;
+        instance.size = self.size;
+        true
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Spec {
@@ -92,6 +122,38 @@ impl Spec {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn geometry_preview_holds_until_saved_and_never_changes_the_durable_layout() {
+        let mut durable = mypaper_widgets::layout::Layout::default();
+        let id = durable.add("clock", "display", [2, 3], [8, 4]);
+        let mut preview = Preview {
+            selection: super::super::wire::Selection {
+                kind: super::super::wire::Kind::Widget,
+                id: id.clone(),
+                display: "display".into(),
+            },
+            before_cell: [2, 3],
+            before_size: [8, 4],
+            cell: [1, 2],
+            size: [9, 5],
+            base_revision: 10,
+            saved_revision: None,
+        };
+        let mut effective = durable.clone();
+        assert!(preview.current(10));
+        assert!(preview.apply(&mut effective));
+        assert_eq!(effective.get(&id).unwrap().size, [9, 5]);
+        assert_eq!(durable.get(&id).unwrap().size, [8, 4]);
+        preview.saved_revision = Some(20);
+        assert!(preview.current(10));
+        assert!(!preview.current(20));
+        assert!(!preview.current(11), "an external save wins a conflict");
+        assert!(
+            !preview.apply(&mut effective),
+            "changed geometry invalidates the original base"
+        );
+    }
     fn spec() -> Spec {
         Spec {
             grid: Grid {
