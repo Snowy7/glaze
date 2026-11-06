@@ -1103,6 +1103,10 @@ impl App {
 
     /// Sets a value during a drag (written once, at the end).
     fn set_live(&mut self, edit: &Edit, value: Value) {
+        if self.panel.is_some() && let Some((edit, value)) = crate::panel::slider_edit(edit, &value) {
+            self.set_live(&edit, value);
+            return;
+        }
         if edit.doc == DocId::Studio {
             // A wallpaper's own file: written when the drag ends.
             self.pending_value = Some((edit.clone(), value));

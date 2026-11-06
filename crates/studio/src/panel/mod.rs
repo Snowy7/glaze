@@ -15,6 +15,8 @@ mod peek;
 mod pickers;
 mod saving;
 mod specimens;
+mod widget_look;
+pub(crate) use widget_look::slider_edit;
 pub use colors::swatches;
 pub use lists::List as SortList;
 pub use saving::{theme_failed, theme_saved};
@@ -850,6 +852,10 @@ pub fn intercept_set(
     edit: &crate::actions::Edit,
     value: &serde_json::Value,
 ) -> bool {
+    if app.panel.is_some() && let Some((edit, value)) = slider_edit(edit, value) {
+        app.set(&edit, value);
+        return true;
+    }
     if app.panel.is_some() && editors::intercept_page_set(app, edit, value) { return true; }
     if app.panel.is_some()
         && edit.doc == crate::docs::DocId::Studio
