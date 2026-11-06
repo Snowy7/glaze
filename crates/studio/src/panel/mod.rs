@@ -168,6 +168,7 @@ pub struct State {
 
 /// Release temporary page allocations after the previous display list has been replaced.
 pub fn after_present(app: &App) {
+    choosers::presented(app);
     measure::reclaim(app);
 }
 
