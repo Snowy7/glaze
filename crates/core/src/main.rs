@@ -109,11 +109,16 @@ fn run() -> Result<()> {
     // The wallpaper is essential: when it stops for good, so does mypaper. It reads the config
     // itself and exits with EXIT_CONFIG on a bad one, which stops core too. Only an explicit
     // theme override is forwarded, as an absolute path.
+    // `--parent` makes it exit with core however core ends (a crash or a kill too), so no
+    // orphaned engine keeps drawing on the desktop; the shell watches its parent on its own.
     let theme_override = std::env::args().nth(1);
-    let wallpaper_args = match &theme_override {
-        Some(name) => vec![mypaper_theme::locate(Some(name)).context("theme to start with")?],
-        None => Vec::new(),
-    };
+    let mut wallpaper_args = vec![
+        PathBuf::from("--parent"),
+        PathBuf::from(std::process::id().to_string()),
+    ];
+    if let Some(name) = &theme_override {
+        wallpaper_args.push(mypaper_theme::locate(Some(name)).context("theme to start with")?);
+    }
     let mut wallpaper = Supervised::new("wallpaper", wallpaper_exe, wallpaper_args);
     wallpaper.start()?;
     startup::ready("core", "spawn_ms");
