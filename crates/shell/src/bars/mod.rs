@@ -900,10 +900,8 @@ impl Bars {
         let Some(index) = self.bars.iter().position(|b| b.owns(id)) else {
             return;
         };
-        let offset = self.bars[index].input_offset(id);
         let map = |mut p: mypaper_ui::Pointer| {
-            p.at.x += offset.x;
-            p.at.y += offset.y;
+            p.at = self.bars[index].input_point(id, p.at);
             p
         };
         let event = match *event {

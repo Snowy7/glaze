@@ -16,6 +16,7 @@ use mypaper_bars::{
     events::Reservation,
 };
 use mypaper_desktop::{Monitor, Rect as DesktopRect};
+use mypaper_ui::reveal::{Reveal, Snapshot, Transform};
 use mypaper_ui::{Glass, Kind, Point, Rect, Role, Surface, SurfaceId, Ui};
 use std::{
     cell::Cell,
@@ -76,6 +77,9 @@ pub struct Bar {
     pub band: DesktopRect,
     pub edge_surface: Option<Surface>,
     slide: Value,
+    presentation: Reveal,
+    reveal_snapshots: Vec<Option<Snapshot>>,
+    presentation_transforms: Vec<Transform>,
     /// The dock's magnification, as macOS's: how far in it is (one spring, 0 to 1, on enter and
     /// leave) and the pointer's place along the dock; each slot's (scale, shift) follows the
     /// pointer directly, so icons never trail it.
@@ -166,6 +170,7 @@ impl Bar {
             motion::resolve(motion, dock, motion::Leaf::Hover, animate, performance);
         let press_settings =
             motion::resolve(motion, dock, motion::Leaf::Press, animate, performance);
+        let presentation = motion::reveal(motion::presentation(motion, dock, motion::Leaf::Show));
         let mut slide = Value::new(if autohide { 1.0 } else { 0.0 });
         slide.settings = slide_settings;
         let mut bar = Self {
@@ -199,6 +204,9 @@ impl Bar {
             band,
             edge_surface,
             slide,
+            presentation,
+            reveal_snapshots: Vec::new(),
+            presentation_transforms: Vec::new(),
             presence: {
                 let mut v = Value::new(0.0);
                 v.settings = magnify_settings;
@@ -266,6 +274,41 @@ impl Bar {
         };
         self.offsets.get(index).copied().unwrap_or_default()
     }
+    pub fn input_point(&self, id: SurfaceId, point: Point) -> Point {
+        let index = if self.surface.id() == id {
+            0
+        } else {
+            self.islands
+                .iter()
+                .position(|s| s.id() == id)
+                .map_or(0, |i| i + 1)
+        };
+        let point = self
+            .presentation_transforms
+            .get(index)
+            .map_or(point, |t| t.inverse(point));
+        let offset = self.input_offset(id);
+        Point::new(point.x + offset.x, point.y + offset.y)
+    }
+
+    fn presentation_transform(&self, full: Rect) -> Transform {
+        let edge = edge(self.kind, &self.config);
+        let middle = Point::new(
+            (full.left + full.right) / 2.0,
+            (full.top + full.bottom) / 2.0,
+        );
+        let anchor = match edge {
+            Edge::Top => Rect::new(middle.x, full.top, 1.0, 1.0),
+            Edge::Bottom => Rect::new(middle.x, full.bottom, 1.0, 1.0),
+            Edge::Left => Rect::new(full.left, middle.y, 1.0, 1.0),
+            Edge::Right => Rect::new(full.right, middle.y, 1.0, 1.0),
+        };
+        Transform {
+            from: full,
+            to: self.presentation.body(full, anchor, 1.0 - self.slide.value),
+        }
+    }
+
     pub fn windows(&mut self, windows: &[Rect]) {
         if self.windows != windows {
             self.windows = windows.to_vec();
@@ -338,6 +381,8 @@ impl Bar {
         self.press_settings =
             motion::resolve(motion, dock, motion::Leaf::Press, animate, performance);
         self.interactions.clear();
+        self.presentation = motion::reveal(motion::presentation(motion, dock, motion::Leaf::Show));
+        self.reveal_snapshots.clear();
         self.animations.clear();
         self.magnify_animate = self.magnify_settings.enabled;
         self.presence.configure(self.magnify_settings);
@@ -543,6 +588,14 @@ impl Bar {
         keep_open: bool,
     ) -> Result<bool> {
         if self.hidden {
+            if self.reveal_snapshots.iter().any(Option::is_some) {
+                self.surface.release();
+                for island in &mut self.islands {
+                    island.release();
+                }
+                self.reveal_snapshots.clear();
+                self.presentation_dirty = true;
+            }
             self.surface.hide();
             for island in &self.islands {
                 island.hide();
@@ -609,6 +662,7 @@ impl Bar {
         let rebuilt = self.dirty || zoom_changed || interaction_changed || had_animation;
         let timing = Instant::now();
         if rebuilt {
+            self.reveal_snapshots.clear();
             let scale = self.scale();
             let hot = mypaper_ui::Interaction {
                 hover: self.hover,
@@ -711,6 +765,8 @@ impl Bar {
         }
         self.islands.truncate(count - 1);
         self.offsets.clear();
+        self.presentation_transforms.clear();
+        self.reveal_snapshots.resize_with(count, || None);
         let origin = self.origin();
         let visible = self.shows_content();
         for i in 0..count {
@@ -723,18 +779,35 @@ impl Bar {
             } else {
                 Rect::new(0.0, 0.0, self.frame.size.0 as f32, self.frame.size.1 as f32)
             };
-            let (list, offset, size) = if self.kind == BarKind::Top {
+            let (mut list, offset, size) = if self.kind == BarKind::Top {
                 self.frame.crop(crop)
             } else {
                 (self.dock_list(ui), Point::default(), self.frame.size)
             };
+            let full = if self.kind == BarKind::Top {
+                body.offset(-offset.x, -offset.y)
+            } else {
+                Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32)
+            };
+            let transform = self.presentation_transform(full);
+            self.presentation_transforms.push(transform);
+            if self.presentation.scales() && self.slide.value > 0.0 && self.slide.value < 1.0 {
+                if self.reveal_snapshots[i].is_none() {
+                    self.reveal_snapshots[i] = Snapshot::new(ui, list.clone(), size).ok();
+                }
+                if let Some(snapshot) = &self.reveal_snapshots[i] {
+                    list = snapshot.frame(transform.from, transform.to);
+                }
+            } else {
+                self.reveal_snapshots[i] = None;
+            }
             self.offsets.push(offset);
             let glass = self
                 .material()
                 .filter(|_| self.covered(body))
                 .map(|material| Glass {
-                    body: body.offset(-offset.x, -offset.y),
-                    radius,
+                    body: transform.rect(body.offset(-offset.x, -offset.y)),
+                    radius: radius * transform.scale(),
                     material,
                 });
             let surface = if i == 0 {
@@ -753,9 +826,14 @@ impl Bar {
                             .get(h.id as usize - 1)
                             .is_some_and(view::claims_foreground)
                     })
-                    .map(|h| h.rect.offset(-offset.x, -offset.y))
+                    .map(|h| transform.rect(h.rect.offset(-offset.x, -offset.y)))
                     .collect(),
             );
+            let alpha = if self.presentation == Reveal::Fade {
+                ((1.0 - self.slide.value).clamp(0.0, 1.0) * 255.0).round() as u8
+            } else {
+                255
+            };
             if surface.present_sparse(
                 ui,
                 (origin.0 + offset.x as i32, origin.1 + offset.y as i32),
@@ -771,6 +849,7 @@ impl Bar {
                     self.redraws
                 );
             }
+            surface.set_alpha(alpha)?;
             // After the move: the surface opens or places its glass at the origin it has now.
             // Before it, glass opened at the previous frame's origin, ~a magnified dock's headroom
             // too high, and the engine's asynchronous open could miss the correcting place.
@@ -805,7 +884,11 @@ impl Bar {
             self.sprites = None;
             return self.frame.list.clone();
         };
-        if self.sprites_failed || self.config.dock.style != DockStyle::Floating || !glass_plate {
+        if self.sprites_failed
+            || self.config.dock.style != DockStyle::Floating
+            || !glass_plate
+            || (self.presentation.scales() && self.slide.value > 0.0)
+        {
             self.sprites = None;
             return self.frame.list.clone();
         }
@@ -876,7 +959,11 @@ impl Bar {
                 Edge::Right => x += outset,
             }
         }
-        let slide = self.slide.value;
+        let slide = if self.presentation == Reveal::Slide {
+            self.slide.value
+        } else {
+            0.0
+        };
         match e {
             Edge::Top => y -= ((h + margin) as f32 * slide).round() as i32,
             Edge::Bottom => y += ((h + margin) as f32 * slide).round() as i32,
@@ -899,18 +986,33 @@ impl Bar {
             .iter()
             .enumerate()
             .filter(|(_, (rect, _))| !self.covered(*rect) || !mypaper_ui::glass::available())
-            .map(|(i, (rect, radius))| Plate {
-                id: if i == 0 {
-                    self.surface.hwnd().0 as u64
-                } else {
-                    self.islands[i - 1].hwnd().0 as u64
-                },
-                rect: rect.offset(
-                    (x - self.monitor.rect.x) as f32,
-                    (y - self.monitor.rect.y) as f32,
-                ),
-                radius: *radius,
-                material,
+            .map(|(i, (rect, radius))| {
+                let window = if self.kind == BarKind::Top { i } else { 0 };
+                let offset = self.offsets.get(window).copied().unwrap_or_default();
+                let transform =
+                    self.presentation_transforms
+                        .get(window)
+                        .copied()
+                        .unwrap_or(Transform {
+                            from: *rect,
+                            to: *rect,
+                        });
+                let rect = transform
+                    .rect(rect.offset(-offset.x, -offset.y))
+                    .offset(offset.x, offset.y);
+                Plate {
+                    id: if self.kind == BarKind::Top && i > 0 {
+                        self.islands[i - 1].hwnd().0 as u64
+                    } else {
+                        (self.surface.hwnd().0 as u64).wrapping_add((i as u64) << 32)
+                    },
+                    rect: rect.offset(
+                        (x - self.monitor.rect.x) as f32,
+                        (y - self.monitor.rect.y) as f32,
+                    ),
+                    radius: *radius * transform.scale(),
+                    material,
+                }
             })
             .collect()
     }
@@ -979,5 +1081,11 @@ mod tests {
         assert_eq!(plates[1].rect.left, 1000.0);
         bar.windows(&[]);
         assert_eq!(bar.plates().len(), 3);
+        bar.kind = BarKind::Dock;
+        bar.islands.clear();
+        let plates = bar.plates();
+        assert_eq!(plates.len(), 3);
+        assert_ne!(plates[0].id, plates[1].id);
+        assert_ne!(plates[1].id, plates[2].id);
     }
 }
