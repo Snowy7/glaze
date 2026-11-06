@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
 use mypaper_bars::files;
@@ -219,6 +220,7 @@ pub struct Launcher {
     file_sizes: HashMap<String, String>,
     // Separate from COM app discovery; a cold AppsFolder build must not delay instant files.
     index_lane: Option<mypaper_bars::flyouts::Lane<()>>,
+    index_generation: Arc<AtomicU64>,
     clipboard_open: bool,
     clipboard: Option<mypaper_bars::flyouts::clipboard::History>,
     menu_entries: Vec<Entry<PanelCommand>>,
@@ -306,6 +308,7 @@ impl Launcher {
             indexed_files: None,
             file_sizes: HashMap::new(),
             index_lane: None,
+            index_generation: Arc::new(AtomicU64::new(0)),
             clipboard_open: false,
             clipboard: None,
             menu_entries: vec![],
@@ -343,6 +346,7 @@ impl Launcher {
             indexed_files: None,
             file_sizes: HashMap::new(),
             index_lane: None,
+            index_generation: Arc::new(AtomicU64::new(0)),
             clipboard_open: false,
             clipboard: None,
             menu_entries: vec![],
@@ -471,12 +475,14 @@ impl Launcher {
     }
 
     fn search_files(&mut self, cx: &mut Cx) {
+        let generation = self.index_generation.fetch_add(1, Ordering::Relaxed) + 1;
         self.indexed_files = None;
         self.file_sizes.clear();
         if !self.files || self.query.trim().is_empty() {
             return;
         }
         let query = self.query.clone();
+        let latest = self.index_generation.clone();
         super::Lanes::run(
             &mut self.index_lane,
             "launcher-files",
@@ -484,6 +490,11 @@ impl Launcher {
             &cx.lanes.replies,
             &cx.lanes.waker,
             move |_| {
+                // Fast typing must skip superseded jobs instead of scanning the whole index
+                // for every intermediate prefix before the current query can start.
+                if latest.load(Ordering::Relaxed) != generation {
+                    return Reply::Done;
+                }
                 let request = mypaper_index::Request::Search {
                     query: query.clone(),
                     limit: 50,
