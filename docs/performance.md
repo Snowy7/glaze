@@ -81,6 +81,7 @@ Studio's 10 MiB section. Studio itself spun at ~100% of a core.
 | `7270919` | Shader inputs as immediate data (`var<immediate>`, root constants); an unchanged blit uploads nothing | 0.293-0.302 ms CPU per frame (lab, RTX) | **0.261-0.262 ms**, frames bit-identical |
 | `2efc0ee` | The engine's WinEvent hooks run on their own thread, in 50 ms batches (`crates/desktop/src/cover.rs`) | main thread 1,196 wakes/s, +0.8-1.6 points while the mouse moves | **96 wakes/s**, no measurable cost |
 | `6d11015` | Preview glass forks the desktop's compiled renderer | 7.0, 9.1 ms per preview (median) | **5.3, 2.7 ms** |
+| `0bd9a57` | No D3D12 debug names (`DISCARD_HAL_LABELS`; wgpu named a command list per pass, every frame) | glass-only 0.229-0.298 ms CPU per frame (lab) | **0.221-0.230 ms** |
 
 After them, rain on one visible screen is 1.9-2.9% of a core (the `measure.ps1` and A/B runs
 above) and the main thread's frame is wgpu and the driver: present 32%, command encoding 31%
