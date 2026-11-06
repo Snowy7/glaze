@@ -1201,6 +1201,8 @@ impl App {
                 self.apply(label, ops);
                 if let crate::docs::Saved::Failed(error) = &self.docs.saved {
                     crate::panel::theme_failed(self, dir, &error.clone());
+                } else {
+                    crate::panel::theme_saved(self, dir);
                 }
             }
             Err(error) => {

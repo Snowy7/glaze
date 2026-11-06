@@ -12,6 +12,20 @@ use crate::docs::{DocId, Op, apply_op};
 
 const SETTINGS_IN_BARS: [&str; 2] = ["/performance", "/animation/reduceMotion"];
 
+fn wallpaper<'a>(app: &'a App, id: Option<&str>) -> Option<&'a crate::library::Wallpaper> {
+    let id = id?;
+    if let Some(item) = app.library.items.iter().find(|item| {
+        item.id == id || item.apply_as == id || item.dir.as_path() == std::path::Path::new(id)
+    }) {
+        return Some(item);
+    }
+    let folder = mypaper_theme::locate(Some(id)).ok()?.canonicalize().ok()?;
+    app.library
+        .items
+        .iter()
+        .find(|item| item.dir.canonicalize().ok().as_ref() == Some(&folder))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Desktop {
@@ -150,12 +164,8 @@ impl Desktop {
                 value: Some(raw.clone()),
             });
         }
-        if let Some(wallpaper) = self.wallpaper().and_then(|id| {
-            app.library
-                .items
-                .iter()
-                .find(|w| w.id == id || w.apply_as == id)
-        }) && wallpaper.editable()
+        if let Some(wallpaper) = wallpaper(app, self.wallpaper())
+            && wallpaper.editable()
             && !self.theme.is_null()
             && !self.themes.iter().any(|(dir, _)| dir == &wallpaper.dir)
         {
@@ -406,13 +416,8 @@ fn summary(app: &App, before: &Desktop, after: &Desktop) -> String {
             .unwrap_or(Value::Null)
     };
     if before.wallpaper() != after.wallpaper() {
-        let name = |id: Option<&str>| {
-            app.library
-                .items
-                .iter()
-                .find(|w| Some(w.apply_as.as_str()) == id || Some(w.id.as_str()) == id)
-                .map_or("Your desktop", |w| w.name.as_str())
-        };
+        let name =
+            |id: Option<&str>| wallpaper(app, id).map_or("Your desktop", |w| w.name.as_str());
         return format!(
             "Wallpaper: {} → {}",
             name(before.wallpaper()),
@@ -730,16 +735,7 @@ pub fn preview_selected(app: &App) {
             },
         );
     }
-    let dir = entry
-        .desktop
-        .wallpaper()
-        .and_then(|id| {
-            app.library
-                .items
-                .iter()
-                .find(|w| w.id == id || w.apply_as == id)
-        })
-        .map(|w| w.dir.as_path());
+    let dir = wallpaper(app, entry.desktop.wallpaper()).map(|w| w.dir.as_path());
     super::pick_client::preview_snapshot(
         app,
         &config,
@@ -925,12 +921,7 @@ fn picture_region(
         )
     });
     let rect = Rect::new(0.0, 0.0, view_size.0 as f32, view_size.1 as f32);
-    let wallpaper = desktop.wallpaper().and_then(|id| {
-        app.library
-            .items
-            .iter()
-            .find(|w| w.id == id || w.apply_as == id)
-    });
+    let wallpaper = wallpaper(app, desktop.wallpaper());
     let backdrop = wallpaper
         .and_then(|w| w.preview.as_ref().or(w.video.as_ref()))
         .and_then(|path| app.images.borrow_mut().get(path, view_size));
@@ -1212,6 +1203,32 @@ pub fn starter_picture(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn snapshots_resolve_wallpaper_folder_paths_as_well_as_library_ids() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        let desktop = Desktop::read(&app);
+        let item = wallpaper(&app, desktop.wallpaper()).unwrap();
+        let folder = item.dir.display().to_string();
+        assert_eq!(wallpaper(&app, Some(&folder)).unwrap().dir, item.dir);
+        let mut by_path = desktop.clone();
+        by_path
+            .config
+            .iter_mut()
+            .find(|(path, _)| path == "/theme")
+            .unwrap()
+            .1 = Some(serde_json::json!(folder));
+        assert_eq!(
+            picture(&app, &desktop, (216, 122), 1793958138)
+                .unwrap()
+                .pixels,
+            picture(&app, &by_path, (216, 122), 1793958138)
+                .unwrap()
+                .pixels
+        );
+    }
 
     #[test]
     fn selecting_and_cancelling_history_is_read_only_and_leaving_clears_selection() {
