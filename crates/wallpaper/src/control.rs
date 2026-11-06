@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use mypaper_config::Config;
+use mypaper_desktop::dir_watch::DirWatch;
 use mypaper_desktop::{ConfigWatcher, watch_config};
-use notify::Watcher;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
@@ -55,7 +55,7 @@ pub struct Live {
     /// effect until the config's theme changes from what it was at startup.
     config: Config,
     apply_at: Option<Instant>,
-    theme_watch: Option<notify::RecommendedWatcher>,
+    theme_watch: Option<DirWatch>,
     _config_watch: ConfigWatcher,
 }
 
@@ -120,22 +120,13 @@ impl Live {
     }
 }
 
-/// Wakes the main thread with `WM_RELOAD` whenever a theme file changes.
-fn watch_theme(dir: &Path) -> Option<notify::RecommendedWatcher> {
+/// Wakes the main thread with `WM_RELOAD` whenever a theme file changes. No wakes otherwise
+/// (`DirWatch`, unlike notify's 100 ms poll).
+fn watch_theme(dir: &Path) -> Option<DirWatch> {
     // SAFETY: no preconditions.
     let thread = unsafe { GetCurrentThreadId() };
-    let watch = || -> notify::Result<_> {
-        let mut watcher =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                if event.is_ok_and(|e| !e.kind.is_access()) {
-                    post(thread, WM_RELOAD);
-                }
-            })?;
-        watcher.watch(dir, notify::RecursiveMode::Recursive)?;
-        Ok(watcher)
-    };
-    watch()
-        .inspect_err(|e| log::warn!("not watching {} for changes: {e}", dir.display()))
+    DirWatch::new(dir, true, move |_| post(thread, WM_RELOAD))
+        .inspect_err(|e| log::warn!("not watching {} for changes: {e:#}", dir.display()))
         .ok()
 }
 

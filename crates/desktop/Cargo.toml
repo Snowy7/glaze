@@ -13,7 +13,6 @@ env_logger.workspace = true
 log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-notify.workspace = true
 
 [features]
 # Temporary feature name for N2's base dependency; it contains no browser environment.
@@ -28,8 +27,11 @@ features = [
   "Win32_Graphics_Dxgi_Common",
   "Win32_Graphics_Gdi",
   "Win32_Storage_EnhancedStorage",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
   "Win32_System_Com",
   "Win32_System_Console",
+  "Win32_System_IO",
   "Win32_System_LibraryLoader",
   "Win32_System_Ole",
   "Win32_System_Power",
