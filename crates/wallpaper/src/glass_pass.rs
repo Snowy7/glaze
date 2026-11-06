@@ -185,6 +185,16 @@ impl GlassPass {
         }
     }
 
+    /// Screen `index`'s plates (and their styles) as last published.
+    pub fn plates(&self, index: usize) -> &[(Plate, Style)] {
+        self.screens.get(index).map_or(&[], |s| &s.plates)
+    }
+
+    /// The process id of the shell that published them (0 before any snapshot).
+    pub fn writer_pid(&self) -> u32 {
+        self.reader.writer_pid()
+    }
+
     /// Whether screen `index` must redraw its glass: its plates changed, or a spring runs.
     pub fn take_dirty(&mut self, index: usize) -> bool {
         self.screens.get_mut(index).is_some_and(|s| std::mem::take(&mut s.dirty) || s.animating)

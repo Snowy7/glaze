@@ -55,7 +55,8 @@ pub struct Material {
     pub refraction: f32,
     /// The specular rim's strength.
     pub highlight: f32,
-    /// The tint colour, sRGB bytes (the fourth byte is unused).
+    /// The tint colour, sRGB bytes. The fourth is a stained tint's strength, which the shell
+    /// leaves at 0 (only the engine's own plates over web and app wallpapers set it).
     pub tint: [u8; 4],
 }
 

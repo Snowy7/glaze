@@ -31,6 +31,15 @@
 //! every frame on WGC's thread. (A warm-up on pointer-down was measured and dropped: starting the capture while
 //! the button is down stalled the click's delivery to the shell by ~30 ms.)
 //!
+//! **Plates over web and app wallpapers (P14).** Those wallpapers draw with windows of their
+//! own, so the engine has no frame to draw the shell's plates into. Their plates become overlays
+//! the engine opens itself ([`Overlays::sync_plates`], keyed by plate id, apart from the shell's
+//! own requests for the same window): a widget's under it in the desktop band (`Layer::Desktop`),
+//! a bar's topmost (`Layer::Popup`). The capture follows the wallpaper's own frames like any
+//! backdrop, capped by the theme's fps ([`Overlays::set_fps`]). On a covered or held screen they
+//! are *frozen*: the last glass stays on screen and nothing is captured for them; a monitor with
+//! only frozen overlays has no session.
+//!
 //! Driving it: create [`Overlays`] on the engine's thread, pump that thread's messages (requests
 //! and frame wakes arrive as window messages), call [`Overlays::tick`] after each pump, and wake
 //! by [`Overlays::deadline`] (when the warm capture goes cold).
@@ -61,11 +70,11 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, EVENT_OBJECT_DESTROY, GWLP_USERDATA,
-    GetWindowLongPtrW, GetWindowThreadProcessId, HWND_MESSAGE, IsWindow, MSG, OBJID_WINDOW,
-    PM_NOREMOVE, PM_QS_SENDMESSAGE, PeekMessageW, PostMessageW, RegisterClassExW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, EVENT_OBJECT_DESTROY, GWL_EXSTYLE,
+    GWLP_USERDATA, GetWindowLongPtrW, GetWindowThreadProcessId, HWND_MESSAGE, IsWindow, MSG,
+    OBJID_WINDOW, PM_NOREMOVE, PM_QS_SENDMESSAGE, PeekMessageW, PostMessageW, RegisterClassExW,
     RegisterWindowMessageW, SetWindowDisplayAffinity, SetWindowLongPtrW, WDA_EXCLUDEFROMCAPTURE,
-    WINEVENT_OUTOFCONTEXT, WM_APP, WM_COPYDATA, WNDCLASSEXW,
+    WINEVENT_OUTOFCONTEXT, WM_APP, WM_COPYDATA, WNDCLASSEXW, WS_EX_TOPMOST,
 };
 use windows::core::{PCWSTR, w};
 
@@ -85,6 +94,87 @@ const WM_PRUNE: u32 = WM_APP + 0x4F1;
 pub const EXCLUDE_YOURSELF: windows::core::PCWSTR = w!("mypaper.glass.exclude-yourself");
 /// How long the capture stays running after the last overlay closes.
 pub const WARM: Duration = Duration::from_secs(3);
+
+/// A shell plate the engine draws as an overlay, because the wallpaper under it is a web page or
+/// an app ([`Overlays::sync_plates`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlateOverlay {
+    /// The plate's id: one overlay per plate.
+    pub id: u64,
+    /// The surface window the plate belongs to, which the overlay sits directly under.
+    pub client: HWND,
+    pub layer: Layer,
+    /// Virtual-screen physical px.
+    pub rect: Rect,
+    pub radius: f32,
+    pub material: Material,
+    pub style: Style,
+    /// Whether what is behind it can change: false on a covered or held screen, where the glass
+    /// keeps its last frame and nothing is captured for it.
+    pub live: bool,
+}
+
+impl PlateOverlay {
+    /// A published plate as an overlay. The low 32 bits of a plate's id are its surface's window
+    /// (`mypaper_glass_ipc::Plate::id`); `None` unless that is a live window of the plate's
+    /// publisher (`writer`, its process id), so a stale id never puts glass under another
+    /// app's window. A topmost surface (a bar) gets a topmost overlay, a desktop one (a widget)
+    /// one in the desktop band.
+    pub fn of(
+        plate: &mypaper_glass_ipc::Plate,
+        style: &mypaper_glass_ipc::Style,
+        writer: u32,
+        live: bool,
+    ) -> Option<Self> {
+        let client = HWND(plate.id as u32 as usize as *mut _);
+        let mut pid = 0;
+        // SAFETY: read-only queries of a handle that may be stale.
+        let topmost = unsafe {
+            if !IsWindow(Some(client)).as_bool() {
+                return None;
+            }
+            GetWindowThreadProcessId(client, Some(&mut pid));
+            GetWindowLongPtrW(client, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST.0 != 0
+        };
+        if pid != writer {
+            return None;
+        }
+        let [x, y, w, h] = plate.rect;
+        let (left, top) = (x.round() as i32, y.round() as i32);
+        let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+        let m = plate.material;
+        Some(Self {
+            id: plate.id,
+            client,
+            layer: if topmost { Layer::Popup } else { Layer::Desktop },
+            rect: Rect {
+                x: left,
+                y: top,
+                width: ((x + w).round() as i32 - left).max(1),
+                height: ((y + h).round() as i32 - top).max(1),
+            },
+            radius: plate.radius.max(0.0),
+            material: Material {
+                clarity: m.clarity.clamp(0.0, 1.0),
+                blur: m.blur.clamp(0.0, mypaper_glass_ipc::MAX_BLUR),
+                refraction: m.refraction.clamp(0.0, 1.0),
+                highlight: m.highlight.clamp(0.0, 1.0),
+                tint: m.tint.map(byte),
+            },
+            style: Style {
+                brightness: style.brightness,
+                saturation: style.saturation,
+                smoothing: style.smoothing,
+                sheen: style.sheen.unwrap_or(-1.0),
+                depth: style.depth.unwrap_or(-1.0),
+                inner_shadow: style.inner_shadow,
+                // A plate fades in like the shell's glass does by default.
+                ..Style::DEFAULT
+            },
+            live,
+        })
+    }
+}
 
 /// The engine's GPU, which draws every overlay (plan, Rule 1).
 #[derive(Clone)]
@@ -269,6 +359,8 @@ pub struct Overlays {
     /// The glass and compare pipelines, built at the first open and kept (small, and their
     /// shader compile is the slowest part of a cold open).
     pipes: Option<Rc<Pipelines>>,
+    /// The shortest time between two captured frames ([`set_fps`](Self::set_fps)).
+    interval: Duration,
 }
 
 /// What exists only while an overlay is open, or the capture is warm.
@@ -282,6 +374,10 @@ struct Live {
 
 struct Overlay {
     client: HWND,
+    /// The plate it draws ([`Overlays::sync_plates`]); `None` for the shell's own requests.
+    plate: Option<u64>,
+    /// Shows its last glass and takes no frames (a plate on a covered or held screen).
+    frozen: bool,
     /// The client surface, virtual px.
     rect: Rect,
     radius: f32,
@@ -329,7 +425,21 @@ impl Overlays {
             timing: std::env::var_os("MYPAPER_OVERLAY_TIMINGS").is_some(),
             warm_until: None,
             pipes: None,
+            interval: capture::MIN_INTERVAL,
         })
+    }
+
+    /// Caps captured frames at the theme's frame rate (`engine.fps`) when that is below the
+    /// capture's own 30 a second. Plates over a web or app wallpaper redraw at most this often.
+    pub fn set_fps(&mut self, fps: Option<u32>) {
+        let interval = capture::interval(fps);
+        if interval == self.interval {
+            return;
+        }
+        self.interval = interval;
+        for session in &self.sessions {
+            session.set_interval(interval);
+        }
     }
 
     /// Next coalesced placement or capture going cold: call [`tick`](Self::tick) by then.
@@ -391,20 +501,24 @@ impl Overlays {
             }
         }
         if self.inbox.prune.take() {
-            let gone: Vec<HWND> = self
+            let mut gone: Vec<HWND> = self
                 .open
                 .iter()
                 // SAFETY: a read-only query.
                 .filter(|o| !unsafe { IsWindow(Some(o.client)) }.as_bool())
                 .map(|o| o.client)
                 .collect();
+            gone.dedup();
             for client in gone {
                 log::info!("glass overlay: client {client:?} is gone");
                 self.inbox
                     .motion
                     .borrow_mut()
                     .retain(|m| m.client != client);
-                self.close(client);
+                // Its own overlay and any of its plates'.
+                while let Some(o) = self.open.iter().position(|o| o.client == client) {
+                    self.close_at(o);
+                }
             }
         }
         if handled > 0 {
@@ -483,26 +597,103 @@ impl Overlays {
                 let Some(o) = self.find(client) else {
                     return Ok(());
                 };
-                let changed = std::mem::replace(&mut self.open[o].style, style) != style;
-                if changed {
-                    let overlay = &self.open[o];
-                    overlay.window.set_clip(
-                        geometry::local(overlay.rect, overlay.frame),
-                        overlay.radius,
-                        style.smoothing,
-                    )?;
-                }
-                // Shown glass takes new knobs at once; the fade only applies to glass not shown yet.
-                if changed && self.open[o].shown.is_some() && !self.open[o].fresh {
-                    self.draw(&[o])?;
-                }
-                Ok(())
+                self.restyle(o, style)
             }
         }
     }
 
+    /// Makes the engine's own overlays match `plates`, the plates over web and app wallpapers
+    /// (see the module docs): opens the new live ones, moves, restyles, freezes or thaws the
+    /// rest, and closes those gone. Unchanged plates cost a comparison each.
+    pub fn sync_plates(&mut self, plates: &[PlateOverlay]) {
+        while let Some(o) = self.open.iter().position(|o| {
+            o.plate
+                .is_some_and(|id| !plates.iter().any(|p| p.id == id && p.client == o.client))
+        }) {
+            self.close_at(o);
+        }
+        for plate in plates {
+            if let Err(e) = self.sync_plate(plate) {
+                log::warn!("glass overlay for plate {:#x}: {e:#}", plate.id);
+            }
+        }
+    }
+
+    fn sync_plate(&mut self, plate: &PlateOverlay) -> Result<()> {
+        let Some(o) = self.open.iter().position(|o| o.plate == Some(plate.id)) else {
+            // A plate first seen on a covered or held screen waits until it can be seen.
+            if plate.live {
+                self.create(
+                    plate.client,
+                    Some(plate.id),
+                    plate.layer,
+                    plate.rect,
+                    plate.radius,
+                    plate.material,
+                )?;
+                self.restyle(self.open.len() - 1, plate.style)?;
+            }
+            return Ok(());
+        };
+        let overlay = &self.open[o];
+        if (overlay.rect, overlay.radius, overlay.material)
+            != (plate.rect, plate.radius, plate.material)
+        {
+            let material_changed = overlay.material != plate.material;
+            self.place(o, plate.rect, plate.radius, plate.material)?;
+            if material_changed && self.open[o].shown.is_some() && !self.open[o].fresh {
+                self.draw(&[o])?;
+            }
+        }
+        self.restyle(o, plate.style)?;
+        self.set_frozen(o, !plate.live)
+    }
+
+    /// Takes overlay `o`'s finer knobs: shown glass redraws with them at once; the fade only
+    /// applies to glass not shown yet.
+    fn restyle(&mut self, o: usize, style: Style) -> Result<()> {
+        if std::mem::replace(&mut self.open[o].style, style) == style {
+            return Ok(());
+        }
+        let overlay = &self.open[o];
+        overlay.window.set_clip(
+            geometry::local(overlay.rect, overlay.frame),
+            overlay.radius,
+            style.smoothing,
+        )?;
+        if overlay.shown.is_some() && !overlay.fresh {
+            self.draw(&[o])?;
+        }
+        Ok(())
+    }
+
+    /// Freezes overlay `o` (its glass stays as drawn, nothing is captured for it, and a monitor
+    /// left with only frozen overlays loses its session) or thaws it (it takes the next frame).
+    fn set_frozen(&mut self, o: usize, frozen: bool) -> Result<()> {
+        if std::mem::replace(&mut self.open[o].frozen, frozen) == frozen {
+            return Ok(());
+        }
+        let (monitor, bounds) = (self.open[o].monitor, self.open[o].bounds);
+        if frozen {
+            self.sync_capture(None)?;
+            self.drop_idle_sessions();
+            return Ok(());
+        }
+        self.open[o].fresh = true;
+        if !self.sessions.iter().any(|s| s.monitor == monitor) {
+            let live = self.live.take().context("no overlays")?;
+            let started = self.start_session(&live.capture, monitor, bounds);
+            self.live = Some(live);
+            started?;
+        }
+        self.sync_capture(Some(monitor))
+    }
+
+    /// The shell's own overlay for `client` (not one of the engine's plates).
     fn find(&self, client: HWND) -> Option<usize> {
-        self.open.iter().position(|o| o.client == client)
+        self.open
+            .iter()
+            .position(|o| o.client == client && o.plate.is_none())
     }
 
     fn open(
@@ -521,6 +712,19 @@ impl Overlays {
             }
             return Ok(());
         }
+        self.create(client, None, layer, rect, radius, material)
+    }
+
+    /// A new overlay under `client`: the shell's (`plate` `None`) or one of the engine's plates.
+    fn create(
+        &mut self,
+        client: HWND,
+        plate: Option<u64>,
+        layer: Layer,
+        rect: Rect,
+        radius: f32,
+        material: Material,
+    ) -> Result<()> {
         let opened = Instant::now();
         let (monitor, bounds) = monitor_of(rect);
         if self.live.is_none() {
@@ -563,6 +767,8 @@ impl Overlays {
         }
         self.open.push(Overlay {
             client,
+            plate,
+            frozen: false,
             rect,
             radius,
             material,
@@ -592,7 +798,14 @@ impl Overlays {
         monitor: HMONITOR,
         bounds: Rect,
     ) -> Result<()> {
-        let session = Session::start(capture, monitor, bounds, self.window.0, WM_FRAME)?;
+        let session = Session::start(
+            capture,
+            monitor,
+            bounds,
+            self.interval,
+            self.window.0,
+            WM_FRAME,
+        )?;
         if !session.excludes() && !self.inbox.affinity.get() {
             log::error!(
                 "glass overlays: this Windows has no per-session capture exclusion list \
@@ -646,8 +859,9 @@ impl Overlays {
         overlay.fresh = true;
         overlay.bounds = bounds;
         let previous = std::mem::replace(&mut overlay.monitor, monitor);
+        let frozen = overlay.frozen;
         if previous != monitor {
-            if !self.sessions.iter().any(|s| s.monitor == monitor) {
+            if !frozen && !self.sessions.iter().any(|s| s.monitor == monitor) {
                 let live = self.live.take().context("no overlays")?;
                 let started = self.start_session(&live.capture, monitor, bounds);
                 self.live = Some(live);
@@ -659,9 +873,12 @@ impl Overlays {
     }
 
     fn close(&mut self, client: HWND) {
-        let Some(o) = self.find(client) else {
-            return;
-        };
+        if let Some(o) = self.find(client) {
+            self.close_at(o);
+        }
+    }
+
+    fn close_at(&mut self, o: usize) {
         drop(self.open.remove(o));
         // Totals since the engine started (a harness diffs consecutive lines).
         let s = self.stats();
@@ -694,7 +911,7 @@ impl Overlays {
         let open = &self.open;
         let closed = &mut self.closed_counts;
         self.sessions.retain(|s| {
-            let used = warm || open.iter().any(|o| o.monitor == s.monitor);
+            let used = warm || open.iter().any(|o| o.monitor == s.monitor && !o.frozen);
             if !used {
                 *closed = closed.plus(s.counts());
             }
@@ -714,7 +931,7 @@ impl Overlays {
             let frames = self
                 .open
                 .iter()
-                .filter(|o| o.monitor == session.monitor)
+                .filter(|o| o.monitor == session.monitor && !o.frozen)
                 .map(|o| o.frame);
             session.set_regions(frames, fresh == Some(session.monitor));
             if self.exclusion_changed {
@@ -727,9 +944,11 @@ impl Overlays {
 
     /// Tells the request window where every overlay is now.
     fn sync_placements(&self) {
+        // The shell's overlays only: a `Place` names its client's own.
         *self.inbox.placements.borrow_mut() = self
             .open
             .iter()
+            .filter(|o| o.plate.is_none())
             .map(|o| Placement {
                 client: o.client,
                 overlay: o.window.hwnd(),
@@ -762,6 +981,7 @@ impl Overlays {
                 let overlay = &self.open[o];
                 let frame = geometry::local(overlay.frame, bounds);
                 overlay.monitor == monitor
+                    && !overlay.frozen
                     && (overlay.fresh || dirty.iter().any(|d| geometry::touches(*d, frame)))
             })
             .collect();
@@ -1206,6 +1426,87 @@ unsafe extern "system" fn inbox_proc(
         }
         // SAFETY: the system's own message, forwarded unchanged.
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
+}
+
+#[cfg(test)]
+mod plate_tests {
+    use super::*;
+
+    #[test]
+    fn a_plate_becomes_an_overlay_only_under_a_live_window_of_its_publisher() {
+        // SAFETY: a plain child-less STATIC window of this test process, destroyed below.
+        let window = unsafe {
+            CreateWindowExW(
+                Default::default(),
+                w!("STATIC"),
+                w!("plate"),
+                Default::default(),
+                0,
+                0,
+                10,
+                10,
+                None,
+                None,
+                None,
+                None,
+            )
+        }
+        .unwrap();
+        let plate = mypaper_glass_ipc::Plate {
+            // A bar's second shape on the same window: the window is in the low 32 bits.
+            id: (window.0 as usize as u64 & 0xFFFF_FFFF) | (1 << 32),
+            rect: [-2559.6, 10.4, 300.2, 99.5],
+            radius: 12.0,
+            material: mypaper_glass_ipc::Material {
+                tint: [0.1, 0.1, 0.12, 0.4],
+                ..Default::default()
+            },
+        };
+        let style = mypaper_glass_ipc::Style {
+            smoothing: 0.6,
+            sheen: Some(0.5),
+            ..Default::default()
+        };
+        let me = std::process::id();
+        let p = PlateOverlay::of(&plate, &style, me, true).expect("our own window");
+        assert_eq!(p.client, window);
+        assert_eq!(p.layer, Layer::Desktop, "not topmost: the desktop band");
+        assert_eq!(
+            p.rect,
+            Rect {
+                x: -2560,
+                y: 10,
+                width: 301,
+                height: 100
+            }
+        );
+        assert_eq!(p.material.tint, [26, 26, 31, 102], "the stained tint survives");
+        assert_eq!((p.style.smoothing, p.style.sheen, p.style.depth), (0.6, 0.5, -1.0));
+        assert_eq!(p.style.fade_ms, Style::DEFAULT.fade_ms);
+        assert!(PlateOverlay::of(&plate, &style, me + 1, true).is_none(), "another publisher");
+        // SAFETY: our own window.
+        unsafe { DestroyWindow(window).unwrap() };
+        assert!(PlateOverlay::of(&plate, &style, me, true).is_none(), "a stale id");
+        let auto = mypaper_glass_ipc::Plate { id: 3, ..plate };
+        assert!(PlateOverlay::of(&auto, &style, me, true).is_none(), "an id without a window");
+    }
+
+    #[test]
+    fn the_capture_rate_follows_a_lower_fps_cap_only() {
+        assert_eq!(capture::interval(None), capture::MIN_INTERVAL);
+        assert_eq!(capture::interval(Some(60)), capture::MIN_INTERVAL);
+        assert_eq!(capture::interval(Some(10)), Duration::from_millis(100));
+    }
+
+    #[test]
+    fn overlays_keep_a_plates_stained_tint() {
+        let m = Material {
+            tint: [255, 255, 255, 102],
+            ..Material::CLEAR
+        };
+        let [r, _, _, a] = glass::controls(&m).tint;
+        assert!(r == 1.0 && (a - 0.4).abs() < 1e-6);
     }
 }
 

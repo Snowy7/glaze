@@ -183,6 +183,42 @@ impl Engine {
         }
     }
 
+    /// The shell's plates over screens whose wallpaper draws with windows of its own (web, app),
+    /// which this engine has no frame to draw them into: the overlays draw them instead (P14,
+    /// `overlay::Overlays::sync_plates`). Live on a visible screen; frozen (last glass kept,
+    /// nothing captured) while it is covered or held; none once released. A plate across two
+    /// screens belongs to the one holding its centre. Empty, at no cost, for every other source.
+    pub fn native_plates(&self) -> Vec<crate::overlay::PlateOverlay> {
+        let Some(monitors) = &self.monitors else {
+            return Vec::new();
+        };
+        if self.released {
+            return Vec::new();
+        }
+        let writer = self.glass.writer_pid();
+        let mut plates = Vec::new();
+        for (index, (screen, monitor)) in self.screens.iter().zip(monitors).enumerate() {
+            if !self.source.native(index) {
+                continue;
+            }
+            let live = !self.held && !screen.paused;
+            for (plate, style) in self.glass.plates(index) {
+                let [x, y, w, h] = plate.rect;
+                let (cx, cy) = ((x + w / 2.0) as i32, (y + h / 2.0) as i32);
+                if !monitor.contains_point(cx, cy) {
+                    continue;
+                }
+                plates.extend(crate::overlay::PlateOverlay::of(plate, style, writer, live));
+            }
+        }
+        plates
+    }
+
+    /// The frame-rate cap (`engine.fps`) for this theme, if any.
+    pub fn fps(&self) -> Option<u32> {
+        self.render_settings.fps
+    }
+
     /// Named plate event plus the current writer's exit handle, both owned by GlassPass.
     pub fn glass_handles(&self) -> Vec<windows::Win32::Foundation::HANDLE> {
         let mut handles = self.glass.wait_handles();

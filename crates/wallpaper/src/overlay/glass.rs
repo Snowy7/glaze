@@ -25,15 +25,17 @@ pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 const SRGB: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
 
 /// The overlay material as the plates' controls (`glass_pass::liquid`). The tint's colour sets
-/// the colour scheme; clarity alone tints the glass, through the transparency slider.
+/// the colour scheme; clarity tints the glass through the transparency slider. The fourth byte
+/// is a stained tint's strength: the shell sends 0, a plate drawn as an overlay (a web or app
+/// wallpaper's, [`super::PlateOverlay`]) keeps its own.
 pub fn controls(material: &Material) -> mypaper_glass_ipc::Material {
-    let [r, g, b, _] = material.tint.map(|c| f32::from(c) / 255.0);
+    let tint = material.tint.map(|c| f32::from(c) / 255.0);
     mypaper_glass_ipc::Material {
         clarity: material.clarity,
         blur: material.blur,
         refraction: material.refraction,
         highlight: material.highlight,
-        tint: [r, g, b, 0.0],
+        tint,
     }
 }
 

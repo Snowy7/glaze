@@ -186,10 +186,9 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
             break code;
         }
         // Requests and capture frames arrived as messages in that pump.
-        let warm_at = overlays.as_mut().and_then(|o| {
-            o.tick();
-            o.deadline()
-        });
+        if let Some(overlays) = &mut overlays {
+            overlays.tick();
+        }
         if let Some(events) = &desktop_events {
             desktop_lost |= events.take_lost();
             if events.take_ready() {
@@ -220,13 +219,22 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
         live.apply_due(&mut engine);
         let trim_at = trimmer.poll(engine.theme_dir());
         match tick(&mut engine, events.as_ref()) {
-            Flow::Wait(deadline) => waiter.wait(
-                earliest(
-                    earliest(desktop_at, warm_at),
-                    earliest(earliest(deadline, trim_at), live.deadline()),
-                ),
-                &engine.glass_handles(),
-            ),
+            Flow::Wait(deadline) => {
+                // Plates over a web or app wallpaper are drawn as overlays (P14): after the tick,
+                // which read the latest plates and what is covered or held.
+                let warm_at = overlays.as_mut().and_then(|o| {
+                    o.set_fps(engine.fps());
+                    o.sync_plates(&engine.native_plates());
+                    o.deadline()
+                });
+                waiter.wait(
+                    earliest(
+                        earliest(desktop_at, warm_at),
+                        earliest(earliest(deadline, trim_at), live.deadline()),
+                    ),
+                    &engine.glass_handles(),
+                );
+            }
             Flow::Exit(code) => break code,
         }
     };

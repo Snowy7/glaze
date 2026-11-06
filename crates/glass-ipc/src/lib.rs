@@ -141,6 +141,9 @@ impl Style {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Plate {
+    /// Stable per plate. Its low 32 bits are the window of the surface the plate belongs to
+    /// (window handles fit in 32 bits), which the engine needs to draw the plate as an overlay
+    /// under that window when the wallpaper is a web page or an app.
     pub id: u64,
     /// [x, y, width, height], physical virtual-desktop pixels, with subpixel precision.
     pub rect: [f32; 4],
@@ -461,6 +464,12 @@ impl Reader {
     /// Include this in the engine wait set so a crashed shell clears its plates while idle.
     pub fn writer_process(&self) -> Option<HANDLE> {
         self.process.as_ref().map(|h| h.0)
+    }
+
+    /// The process id of the writer of the last snapshot read (0 before one), which owns the
+    /// windows named in its plates' ids.
+    pub fn writer_pid(&self) -> u32 {
+        self.pid
     }
 
     /// Latest coherent snapshot, once per sequence; never waits for a writer in flight.
