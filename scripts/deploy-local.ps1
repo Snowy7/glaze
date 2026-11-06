@@ -107,6 +107,15 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
     }
     Start-Process -FilePath "$destination\mypaper-plugins.exe" -ArgumentList "--compile", "`"$bundle`"" -Wait -WindowStyle Hidden
   }
+  # The experimental app styler (docs/windows-styling.md, "App styler"): the helper core runs only
+  # while experimental.app_styler is on, and the TAP DLL it loads into Explorer and Settings. Apps
+  # load a hash-named copy of the DLL, so replacing this one is safe while they hold an old build.
+  foreach ($file in "mypaper-styler.exe", "mypaper_app_styler.dll") {
+    if ((Test-Path -LiteralPath "$From\$file") -and
+        [IO.Path]::GetFullPath("$From\$file") -ne [IO.Path]::GetFullPath("$destination\$file")) {
+      Copy-Item -LiteralPath "$From\$file" -Destination "$destination\$file" -Force
+    }
+  }
   & "$PSScriptRoot\package\register.ps1" -PackagePath $identity -ExternalLocation $destination -Development
   Start-Process -FilePath "$destination\mypaper-core.exe" -WorkingDirectory $destination -WindowStyle Hidden
   Start-Sleep 6
