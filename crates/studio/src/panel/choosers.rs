@@ -28,24 +28,64 @@ pub struct State {
     previewed: Option<Action>,
     suppressed: Option<Key>,
     rasters_left: Option<u8>,
+    pub(super) drawings: std::collections::HashMap<String, super::specimens::Drawing>,
+    drawing_live: std::collections::HashSet<String>,
+    drawing_page: Option<super::Page>,
 }
 
 pub fn begin(app: &App) {
-    let mut state = app.panel.as_ref().unwrap().chooser.borrow_mut();
+    let panel = app.panel.as_ref().unwrap();
+    let mut state = panel.chooser.borrow_mut();
     state.requested = None;
     state.groups.clear();
+    state.drawing_live.clear();
+    if state.drawing_page.replace(panel.page) != Some(panel.page) {
+        state.drawings.clear();
+    }
 }
 
 pub fn presented(app: &App) {
-    app.panel
-        .as_ref()
-        .unwrap()
-        .chooser
-        .borrow_mut()
-        .rasters_left = None;
+    let panel = app.panel.as_ref().unwrap();
+    let mut state = panel.chooser.borrow_mut();
+    state.rasters_left = None;
+    let before = state.drawings.len();
+    let State {
+        drawings,
+        drawing_live,
+        ..
+    } = &mut *state;
+    drawings.retain(|key, _| drawing_live.contains(key));
+    if drawings.len() != before {
+        panel.reclaim_heap.set(true);
+    }
 }
 
-/// Limit new gallery canvases per presented frame; the next pair follows on an idle frame.
+pub(super) fn drawing(app: &App, key: &str) -> Option<super::specimens::Drawing> {
+    let mut state = app.panel.as_ref().unwrap().chooser.borrow_mut();
+    state.drawing_live.insert(key.to_owned());
+    state.drawings.get(key).cloned()
+}
+
+pub(super) fn remember_drawing(
+    app: &App,
+    key: String,
+    drawing: super::specimens::Drawing,
+    identity: Option<&str>,
+) {
+    let panel = app.panel.as_ref().unwrap();
+    let mut state = panel.chooser.borrow_mut();
+    if let Some(identity) = identity {
+        state.drawings.retain(|key, _| !key.starts_with(identity));
+    }
+    if state.drawings.len() >= 24 {
+        state.drawings.clear();
+    }
+    state.drawing_live.insert(key.clone());
+    state.drawings.insert(key, drawing);
+    panel.reclaim_heap.set(true);
+}
+
+/// Limit new picture jobs per presented frame; the next pair follows on an idle frame.
 pub fn claim_raster(app: &App) -> bool {
     if app.fixture
         || !matches!(
@@ -561,6 +601,62 @@ mod tests {
     };
     use mypaper_config::look::Style;
     use mypaper_ui::{Point, Ui};
+
+    #[test]
+    fn gallery_drawings_are_released_when_rows_or_the_page_leave() {
+        let ui = Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(PanelState {
+            page: Page::AddWidget,
+            ..Default::default()
+        });
+        begin(&app);
+        remember_drawing(
+            &app,
+            "face:clock".into(),
+            super::super::specimens::Drawing {
+                size: (200.0, 100.0),
+                ops: std::sync::Arc::from([]),
+            },
+            None,
+        );
+        presented(&app);
+        assert_eq!(
+            app.panel.as_ref().unwrap().chooser.borrow().drawings.len(),
+            1
+        );
+        begin(&app);
+        presented(&app);
+        assert!(
+            app.panel
+                .as_ref()
+                .unwrap()
+                .chooser
+                .borrow()
+                .drawings
+                .is_empty()
+        );
+        remember_drawing(
+            &app,
+            "face:clock".into(),
+            super::super::specimens::Drawing {
+                size: (200.0, 100.0),
+                ops: std::sync::Arc::from([]),
+            },
+            None,
+        );
+        app.panel.as_mut().unwrap().page = Page::Root;
+        begin(&app);
+        assert!(
+            app.panel
+                .as_ref()
+                .unwrap()
+                .chooser
+                .borrow()
+                .drawings
+                .is_empty()
+        );
+    }
 
     #[test]
     fn auto_height_rebuild_does_not_restart_the_raster_budget_before_presenting() {

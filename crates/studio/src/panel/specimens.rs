@@ -6,6 +6,22 @@ use mypaper_ui::controls::Align;
 use mypaper_ui::{Image, Rect, Rgba};
 use std::sync::Arc;
 
+/// Small immutable kit drawings share source artwork, never native widget models or canvases.
+#[derive(Debug, Clone)]
+pub(super) struct Drawing {
+    pub ops: Arc<[mypaper_ui::Op]>,
+    pub size: (f32, f32),
+}
+
+pub(super) fn draw_picture(b: &mut B, drawing: &Drawing, target: Rect) {
+    b.list.ops.push(mypaper_ui::Op::Clipped {
+        rect: target,
+        ops: crate::stage::offset(&drawing.ops, target.left, target.top)
+            .collect::<Vec<_>>()
+            .into(),
+    });
+}
+
 /// Keep only a page's small previews; large libraries must not grow the panel's footprint.
 pub fn remember(app: &App, key: String, image: &Arc<Image>) {
     if image.pixels.len() > 2 << 20 {
@@ -1061,15 +1077,8 @@ fn bars_at(
         desktop_dark(app)
     );
     let cache_key = format!("{identity}{icon_stamp:?}");
-    let cached = app
-        .panel
-        .as_ref()
-        .unwrap()
-        .specimens
-        .borrow()
-        .get(&cache_key)
-        .cloned();
-    let image = cached.or_else(|| {
+    let cached = super::choosers::drawing(app, &cache_key);
+    let drawing = cached.or_else(|| {
         if !super::choosers::claim_raster(app) {
             return None;
         }
@@ -1235,43 +1244,29 @@ fn bars_at(
         } else {
             (0.0, output_height)
         };
-        let list = DisplayList {
-            ops: crate::stage::offset(&list.ops, 0.0, vertical_offset - crop_top).collect(),
-            ..Default::default()
+        let drawing = Drawing {
+            ops: crate::stage::offset(&list.ops, 0.0, vertical_offset - crop_top)
+                .collect::<Vec<_>>()
+                .into(),
+            size: (raster.0 as f32, crop_height as f32),
         };
-        let image = Arc::new(mypaper_ui::render(&mut ui, &list, raster.0, crop_height).ok()?);
         drop(ui);
         super::measure::finish_raster(app);
-        // An icon's arrival replaces this card; it must not retain every earlier version.
-        let state = app.panel.as_ref().unwrap();
-        let mut pictures = state.specimens.borrow_mut();
-        let before = pictures.len();
-        pictures.retain(|key, _| !key.starts_with(&identity));
-        if pictures.len() != before {
-            state.reclaim_heap.set(true);
-        }
-        drop(pictures);
-        remember(app, cache_key, &image);
-        Some(image)
+        super::choosers::remember_drawing(app, cache_key, drawing.clone(), Some(&identity));
+        Some(drawing)
     });
-    if let Some(image) = image {
+    if let Some(drawing) = drawing {
         let target = if strip {
             Rect::new(
                 rect.left,
-                rect.top + (rect.height() - image.height as f32) / 2.0,
+                rect.top + (rect.height() - drawing.size.1) / 2.0,
                 rect.width(),
-                image.height as f32,
+                drawing.size.1,
             )
         } else {
             rect
         };
-        b.list.ops.push(Op::RoundedImage {
-            rect: target,
-            image,
-            opacity: 1.0,
-            source: None,
-            radius: if strip { 0.0 } else { b.px(6.0) },
-        });
+        draw_picture(b, &drawing, target);
     }
 }
 
@@ -1331,7 +1326,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn individual_bar_rasters_do_not_keep_the_empty_card_canvas() {
+    fn individual_bar_previews_keep_compact_native_drawings_without_raster_copies() {
         let mut ui = Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
@@ -1350,21 +1345,30 @@ mod tests {
                 &serde_json::json!({"version":1,"preset":"macos","dock":{"pinned":[]}}),
                 Some(bar),
             );
-            let image = b
+            let picture = b
                 .list
                 .ops
                 .iter()
                 .rev()
                 .find_map(|op| match op {
-                    mypaper_ui::Op::RoundedImage { image, .. } => Some(image),
+                    mypaper_ui::Op::Clipped { rect, ops } if !ops.is_empty() => Some(rect),
                     _ => None,
                 })
                 .unwrap();
-            assert_eq!(image.width, 200);
+            assert_eq!(picture.width(), 200.0);
             assert!(
-                image.height < 70,
-                "{bar:?} kept a {}-pixel canvas",
-                image.height
+                picture.height() < 70.0,
+                "{bar:?} kept a {}-pixel band",
+                picture.height()
+            );
+            assert!(
+                !app.panel
+                    .as_ref()
+                    .unwrap()
+                    .specimens
+                    .borrow()
+                    .keys()
+                    .any(|key| key.starts_with("bars:"))
             );
         }
     }
@@ -1390,7 +1394,8 @@ mod tests {
             }),
         );
         draw(&mut ui.text);
-        let cache = app.panel.as_ref().unwrap().specimens.borrow();
+        let chooser = app.panel.as_ref().unwrap().chooser.borrow();
+        let cache = &chooser.drawings;
         assert_eq!(
             cache.keys().filter(|key| key.starts_with("bars:")).count(),
             1

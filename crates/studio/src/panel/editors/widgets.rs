@@ -895,8 +895,11 @@ pub(crate) fn face(
             _ => (360, 220),
         }
     };
+    let backdrop = (!standalone && instance.widget != "photo"
+        && resolved_appearance.surface != Some(mypaper_theme::Surface::None))
+        .then(|| crate::panel::specimens::wallpaper(app)).flatten();
     let cache_key = format!(
-        "face:{}:{setting}:{value}:{width}:{height}:{:.0}x{:.0}:{}:{}:{}:{:p}",
+        "face:{}:{setting}:{value}:{width}:{height}:{:.0}x{:.0}:{}:{}:{}:{:p}:{:p}",
         instance.widget,
         pic.width(),
         pic.height(),
@@ -907,12 +910,12 @@ pub(crate) fn face(
             .map_or("", |i| app.library.items[i].id.as_str()),
         photo
             .as_ref()
-            .map_or(std::ptr::null(), std::sync::Arc::as_ptr)
+            .map_or(std::ptr::null(), std::sync::Arc::as_ptr),
+        backdrop.as_ref().map_or(std::ptr::null(), std::sync::Arc::as_ptr)
     );
-    let state = app.panel.as_ref().unwrap();
-    let cached = state.specimens.borrow().get(&cache_key).cloned();
-    // Construct the isolated runtime only on a bitmap miss; cached gallery rows own pixels.
-    let image = cached.or_else(|| {
+    let cached = crate::panel::choosers::drawing(app, &cache_key);
+    // Construct the sample model only on a drawing miss; retain immutable kit operations.
+    let drawing = cached.or_else(|| {
     let placed = mypaper_widgets::layout::Placed {
         instance: "panel-face-preview".into(),
         widget: instance.widget.clone(),
@@ -949,8 +952,7 @@ pub(crate) fn face(
     model.photo.current = photo;
         // Unavailable plugin artwork does not allocate a canvas or consume the frame's budget.
         if !crate::panel::choosers::claim_raster(app) { return None; }
-        let mut ui = crate::panel::measure::raster_ui(app)?;
-        ui.text.clear_cache();
+        b.text.clear_cache();
         let mut list = view(
             &model,
             &tokens(&appearance),
@@ -961,13 +963,13 @@ pub(crate) fn face(
                 instant: std::time::Instant::now(),
                 editing: false,
             },
-            &mut ui.text,
+            b.text,
         );
         // The display list owns its drawing data; do not overlap a widget runtime
         // and its native-size text layouts with the tile's software bitmap.
         drop(model);
         drop(storage);
-        ui.text.clear_cache();
+        b.text.clear_cache();
         if !standalone
             && instance.widget != "photo"
             && resolved_appearance.surface != Some(mypaper_theme::Surface::None)
@@ -1013,29 +1015,34 @@ pub(crate) fn face(
             (width - 2 * pad as u32, height - 2 * pad as u32)
         } else { (width, height) };
         let scale = (pic.width() / width as f32).min(pic.height() / height as f32);
-        let thumb_width = (width as f32 * scale).ceil().max(1.0) as u32;
-        let thumb_height = (height as f32 * scale).ceil().max(1.0) as u32;
+        for op in &mut list.ops {
+            if let mypaper_ui::Op::Image { rect, image, opacity, source } = op
+                && rect.left.abs() < 0.5 && rect.top.abs() < 0.5
+                && (rect.width() - width as f32).abs() < 0.5
+                && (rect.height() - height as f32).abs() < 0.5
+            {
+                *op = mypaper_ui::Op::RoundedImage {
+                    rect: *rect, image: image.clone(), opacity: *opacity, source: *source,
+                    radius: b.px(7.0) / scale,
+                };
+            }
+        }
         crate::panel::measure::scale_picture(&mut list.ops, scale);
-        let image = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, thumb_width, thumb_height).ok()?);
-        drop(ui);
-        drop(list);
-        crate::panel::measure::finish_raster(app);
-        crate::panel::specimens::remember(app, cache_key, &image);
-        Some(image)
+        let drawing = crate::panel::specimens::Drawing {
+            size: (width as f32 * scale, height as f32 * scale),
+            ops: list.ops.into(),
+        };
+        crate::panel::choosers::remember_drawing(app, cache_key, drawing.clone(), None);
+        Some(drawing)
     });
-    if let Some(image) = image {
-        // Fit the entire face. Cropping made short tiles turn every media face into a strip
-        // and cut Countdown's number and date off at opposite edges.
-        let scale = (pic.width() / image.width as f32).min(pic.height() / image.height as f32);
-        let width = image.width as f32 * scale;
-        let height = image.height as f32 * scale;
+    if let Some(drawing) = drawing {
         let target = Rect::new(
-            pic.left + (pic.width() - width) / 2.0,
-            pic.top + (pic.height() - height) / 2.0,
-            width,
-            height,
+            pic.left + (pic.width() - drawing.size.0) / 2.0,
+            pic.top + (pic.height() - drawing.size.1) / 2.0,
+            drawing.size.0,
+            drawing.size.1,
         );
-        crate::stage::image_round(b, target, &image, 1.0, b.px(7.0));
+        crate::panel::specimens::draw_picture(b, &drawing, target);
     } else {
         unavailable_face(app, b, manifest, pic);
     }

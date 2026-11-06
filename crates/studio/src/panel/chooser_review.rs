@@ -34,6 +34,7 @@ fn fixture(ui: &Ui, dark: bool, page: Page) -> App {
 }
 
 fn shot(app: &mut App, ui: &mut Ui, name: &str, hovered: Option<Action>, dark: bool) {
+    app.toast = None;
     let out = std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r10");
     let built = crate::panel::build(app, &mut ui.text);
     let scroll = built.scrolls.last().unwrap();
