@@ -56,6 +56,8 @@ fn render_panel_pages() {
             (Page::Dock, "dock"),
             (Page::Dock, "dock-designs"),
             (Page::Widget, "weather"),
+            (Page::Widget, "now-playing"),
+            (Page::Widget, "system-monitor"),
             (Page::Widget, "clock"),
             (Page::Widget, "clock-world"),
             (Page::Widget, "clock-greeting"),
@@ -107,6 +109,10 @@ fn render_panel_pages() {
             (Page::BarPanel, "tray-panel"),
             (Page::BarPanel, "notifications-panel"),
         ] {
+            if std::env::var("MYPAPER_STUDIO_PANEL_SHOT_FILTER").ok()
+                .is_some_and(|filter| !filter.split(',').any(|wanted| wanted == name)) {
+                continue;
+            }
             let mut app = app(&ui, dark);
             app.panel.as_mut().unwrap().page = page;
             match name {
@@ -130,6 +136,8 @@ fn render_panel_pages() {
                     )));
                 }
                 "weather" => app.nav.widget = Some("weather-1".into()),
+                "now-playing" => app.nav.widget = Some("now-playing-1".into()),
+                "system-monitor" => app.nav.widget = Some("system-monitor-1".into()),
                 "clock" | "clock-world" | "clock-greeting" | "clock-own-look" => {
                     app.nav.widget = Some("clock-1".into());
                     if name == "clock-own-look" {
