@@ -23,6 +23,8 @@ impl Drop for Apartment {
 }
 
 pub fn item(path: &str) -> Result<IShellItem> {
+    // Win32 filesystem calls accept '/', but shell parsing names require Windows separators.
+    let path = path.replace('/', "\\");
     // SAFETY: terminated parsing name; caller has initialized COM.
     Ok(unsafe { SHCreateItemFromParsingName(&HSTRING::from(path), None) }?)
 }
@@ -223,24 +225,24 @@ pub enum Operation {
 pub fn operate(operation: Operation, owner: HWND) -> Result<()> {
     unsafe {
         let file: IFileOperation = CoCreateInstance(&FileOperation, None, CLSCTX_ALL)?;
-        file.SetOwnerWindow(owner)?;
+        file.SetOwnerWindow(owner).context("setting operation owner")?;
         let permanent = matches!(&operation, Operation::Delete { permanent: true, .. });
         let flags = if permanent { FILEOPERATION_FLAGS(0) } else { FOF_ALLOWUNDO | FOFX_ADDUNDORECORD | FOFX_RECYCLEONDELETE };
-        file.SetOperationFlags(flags)?;
+        file.SetOperationFlags(flags).context("setting operation flags")?;
         match operation {
             Operation::Copy { paths, destination, moving } => {
                 let to = item(&destination)?;
                 for path in paths {
                     let from = item(&path)?;
                     if moving { file.MoveItem(&from, &to, PCWSTR::null(), None)?; }
-                    else { file.CopyItem(&from, &to, PCWSTR::null(), None)?; }
+                    else { file.CopyItem(&from, &to, PCWSTR::null(), None).context("queuing copy")?; }
                 }
             }
             Operation::Delete { paths, .. } => for path in paths { file.DeleteItem(&item(&path)?, None)?; },
             Operation::Rename { path, name } => { validate_name(&name)?; file.RenameItem(&item(&path)?, &HSTRING::from(name), None)?; }
             Operation::NewFolder { destination, name } => { validate_name(&name)?; file.NewItem(&item(&destination)?, FILE_ATTRIBUTE_DIRECTORY.0, &HSTRING::from(name), PCWSTR::null(), None)?; }
         }
-        file.PerformOperations()?;
+        file.PerformOperations().context("performing file operation")?;
         ensure!(!file.GetAnyOperationsAborted()?.as_bool(), "Operation cancelled");
     }
     Ok(())
@@ -250,5 +252,47 @@ pub fn validate_name(name: &str) -> Result<()> {
     ensure!(!name.is_empty() && name != "." && name != ".." && !name.ends_with(['.', ' ']) &&
         !name.chars().any(|c| c < ' ' || "<>:\"/\\|?*".contains(c)), "Choose a valid file name");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enumeration_names_and_shell_operations_round_trip_in_a_private_scratch_folder() {
+        let _apartment = Apartment::new().unwrap();
+        let root = Path::new(r"C:\mypaper-targets\files\scratch").join(format!("operations-{}", std::process::id()));
+        assert!(root.starts_with(r"C:\mypaper-targets\files\scratch"));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = |name: &str| root.join(name).to_string_lossy().into_owned();
+        std::fs::write(path("source.txt"), b"file operation fixture").unwrap();
+        std::fs::create_dir_all(path("destination")).unwrap();
+        let location = resolve(&root.to_string_lossy(), None).unwrap();
+        let entries = enumerate(&location, || false, |_| {}).unwrap();
+        assert_eq!(entries.len(), 2);
+        let image = decorate(&path("source.txt"), 20, false).unwrap();
+        assert!(!image.name.is_empty() && image.image.is_some());
+        operate(Operation::Copy { paths: vec![path("source.txt")], destination: path("destination"), moving: false }, HWND::default()).unwrap();
+        assert_eq!(std::fs::read(root.join("destination/source.txt")).unwrap(), b"file operation fixture");
+        operate(Operation::Rename { path: path("destination/source.txt"), name: "renamed.txt".into() }, HWND::default()).unwrap();
+        assert!(root.join("destination/renamed.txt").exists());
+        operate(Operation::NewFolder { destination: path("destination"), name: "Nested".into() }, HWND::default()).unwrap();
+        operate(Operation::Copy { paths: vec![path("destination/renamed.txt")], destination: path("destination/Nested"), moving: true }, HWND::default()).unwrap();
+        assert!(!root.join("destination/renamed.txt").exists());
+        assert!(root.join("destination/Nested/renamed.txt").exists());
+        operate(Operation::Delete { paths: vec![path("destination/Nested/renamed.txt")], permanent: false }, HWND::default()).unwrap();
+        assert!(!root.join("destination/Nested/renamed.txt").exists());
+        // No recursive cleanup of a computed user path: this test owns this exact fixture tree.
+        std::fs::remove_dir(root.join("destination/Nested")).unwrap();
+        std::fs::remove_dir(root.join("destination")).unwrap();
+        std::fs::remove_file(root.join("source.txt")).unwrap();
+        std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn invalid_names_cannot_turn_a_rename_into_a_path_operation() {
+        for name in ["", ".", "..", "../escape", "a\\b", "a:b", "a\0b", "trailing."] { assert!(validate_name(name).is_err(), "{name:?}"); }
+        assert!(validate_name("資料 — notes.txt").is_ok());
+    }
 }
 
