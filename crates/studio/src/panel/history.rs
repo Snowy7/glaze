@@ -515,6 +515,7 @@ pub fn record_edit(app: &mut App, label: &str, ops: &[Op], checkpoint: usize) {
                 || path.ends_with("/shape")
                 || path.ends_with("/display")
                 || path.ends_with("/frame")
+                || path.ends_with("/appearance")
                 || path.ends_with("/appearance/surface")
                 || path.ends_with("/appearance/tint") =>
         {
