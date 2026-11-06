@@ -39,6 +39,9 @@ const WM_RESOLVE: u32 = WM_APP + 1;
 const CRASH_WINDOW: Duration = Duration::from_secs(60);
 /// That many such deaths and the app isn't styled again this session.
 const CRASH_LIMIT: usize = 2;
+/// Deaths of one app this close together are one incident (one Explorer restart ends every
+/// Explorer process at once), so they count once.
+const INCIDENT: Duration = Duration::from_secs(5);
 
 thread_local! {
     /// Windows shown since the last pass (filled by the WinEvent callback).
@@ -116,8 +119,8 @@ struct Helper {
     /// Pids that are, but aren't attached yet (Explorer before its first folder window). Only a
     /// filter: attaching asks the allowlist again.
     seen: HashMap<u32, &'static str>,
-    /// Deaths soon after attaching, per app.
-    strikes: HashMap<&'static str, usize>,
+    /// Incidents of deaths soon after attaching, per app, and when the last one was.
+    strikes: HashMap<&'static str, (usize, Instant)>,
     disabled: HashSet<&'static str>,
 }
 
@@ -175,7 +178,7 @@ impl Helper {
                 accent: mypaper_config::Color(accent),
                 dominant: mypaper_config::Color(dominant),
             }),
-            mypaper_tweaks::system_prefers_dark(),
+            mypaper_tweaks::unmanaged_system_prefers_dark(),
         );
         let colors = Colors {
             accent: shared.accent.map(|c| c.0),
@@ -345,24 +348,38 @@ impl Helper {
         let mut code = 0;
         // SAFETY: a live handle and a valid out pointer.
         let _ = unsafe { GetExitCodeProcess(entry.process, &mut code) };
-        // NTSTATUS errors and warnings (access violation, fail-fast, heap corruption, ...); a
-        // normal close or a Task Manager restart isn't one.
+        // NTSTATUS errors and warnings (access violation, fail-fast, heap corruption, ...) and
+        // being ended with TerminateProcess(-1); a normal close or Task Manager's Explorer
+        // restart isn't one.
         let crashed = code >= 0x8000_0000;
         let soon = entry.at.elapsed() < CRASH_WINDOW;
         log::info!("{} ({pid}) exited with {code:#x}", entry.app);
-        if crashed && soon {
-            let strikes = self.strikes.entry(entry.app).or_default();
-            *strikes += 1;
+        if !(crashed && soon) {
+            return;
+        }
+        let (strikes, last) = self
+            .strikes
+            .entry(entry.app)
+            .or_insert((0, Instant::now() - INCIDENT * 2));
+        if last.elapsed() < INCIDENT {
             log::warn!(
-                "{} crashed {:?} after we attached ({} of {CRASH_LIMIT})",
+                "{} also died {:?} after we attached: same incident",
                 entry.app,
-                entry.at.elapsed(),
-                strikes
+                entry.at.elapsed()
             );
-            if *strikes >= CRASH_LIMIT {
-                log::error!("not styling {} again this session", entry.app);
-                self.disabled.insert(entry.app);
-            }
+            return;
+        }
+        *strikes += 1;
+        *last = Instant::now();
+        log::warn!(
+            "{} crashed {:?} after we attached ({} of {CRASH_LIMIT})",
+            entry.app,
+            entry.at.elapsed(),
+            strikes
+        );
+        if *strikes >= CRASH_LIMIT {
+            log::error!("not styling {} again this session", entry.app);
+            self.disabled.insert(entry.app);
         }
     }
 }
