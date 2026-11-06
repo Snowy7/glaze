@@ -209,6 +209,10 @@ impl TextField {
         }
         Ok(value.to_string())
     }
+    /// Select all text when opening an address field or renaming an item.
+    pub fn select_all(&self) {
+        self.send(windows::Win32::UI::Controls::EM_SETSEL, WPARAM(0), LPARAM(-1));
+    }
     pub fn focus(&self) {
         // SAFETY: the field's surface lives throughout the field's use.
         unsafe {
