@@ -451,7 +451,8 @@ impl Surface {
 
     /// Sets cached optics before showing a surface; changing them updates an open backdrop.
     pub fn set_glass_style(&self, style: crate::glass::GlassStyle) {
-        if self.glass_style.replace(style) != style && self.glass_open.get()
+        if self.glass_style.replace(style) != style
+            && self.glass_open.get()
             && let Some(backdrop) = crate::glass::backdrop()
         {
             backdrop.style(self.hwnd, &style);
@@ -466,7 +467,13 @@ impl Surface {
     fn open_glass(&self) {
         if let (Some(glass), Some(backdrop)) = (self.glass.get(), crate::glass::backdrop()) {
             let shape = glass.shape(self.origin);
-            let opened = backdrop.open_styled(self.hwnd, shape, glass.radius, &glass.material, &self.glass_style.get());
+            let opened = backdrop.open_styled(
+                self.hwnd,
+                shape,
+                glass.radius,
+                &glass.material,
+                &self.glass_style.get(),
+            );
             self.glass_open.set(opened);
         }
     }

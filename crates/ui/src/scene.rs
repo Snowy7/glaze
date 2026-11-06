@@ -18,7 +18,13 @@ pub type HitId = u32;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     /// A continuous corner surface; `width == 0` fills, otherwise strokes its contour.
-    Continuous { rect: Rect, radius: f32, smoothing: f32, width: f32, color: Rgba },
+    Continuous {
+        rect: Rect,
+        radius: f32,
+        smoothing: f32,
+        width: f32,
+        color: Rgba,
+    },
     /// A clipped group, used by windowless scroll views. Bounds never escape the viewport.
     Clipped { rect: Rect, ops: Arc<[Op]> },
     /// Markdown emphasis without changing the shared text style contract.

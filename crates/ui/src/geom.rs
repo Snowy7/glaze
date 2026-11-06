@@ -142,10 +142,7 @@ impl Rect {
     pub fn take_left(self, width: f32, gap: f32) -> (Self, Self) {
         let cut = (self.left + width).min(self.right);
         (
-            Self {
-                right: cut,
-                ..self
-            },
+            Self { right: cut, ..self },
             Self {
                 left: (cut + gap).min(self.right),
                 ..self
@@ -283,4 +280,3 @@ mod tests {
 }
 #[path = "continuous.rs"]
 pub mod continuous;
-

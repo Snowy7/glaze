@@ -96,9 +96,18 @@ pub trait Backdrop {
     /// Creates the glass under `client`; `false` when it was refused.
     fn open(&self, client: HWND, shape: Shape, radius: f32, material: &GlassMaterial) -> bool;
     /// Opens with optional optics; old backdrops can continue implementing only `open`.
-    fn open_styled(&self, client: HWND, shape: Shape, radius: f32, material: &GlassMaterial, style: &GlassStyle) -> bool {
+    fn open_styled(
+        &self,
+        client: HWND,
+        shape: Shape,
+        radius: f32,
+        material: &GlassMaterial,
+        style: &GlassStyle,
+    ) -> bool {
         let opened = self.open(client, shape, radius, material);
-        if opened { self.style(client, style); }
+        if opened {
+            self.style(client, style);
+        }
         opened
     }
     fn style(&self, _client: HWND, _style: &GlassStyle) {}
