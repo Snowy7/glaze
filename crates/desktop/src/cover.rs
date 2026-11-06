@@ -3,20 +3,20 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 
 use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
-use windows::Win32::System::Threading::{GetCurrentThreadId, INFINITE};
 use windows::Win32::Graphics::Dwm::{
     DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute,
 };
+use windows::Win32::System::Threading::{GetCurrentThreadId, INFINITE};
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
     CHILDID_SELF, DispatchMessageW, EVENT_OBJECT_CLOAKED, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
     EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_UNCLOAKED, EVENT_SYSTEM_FOREGROUND,
-    EVENT_SYSTEM_MINIMIZEEND, EnumWindows, GA_PARENT, GWL_EXSTYLE, GetAncestor, GetClassNameW,
-    GetDesktopWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsIconic,
-    IsWindowVisible, IsZoomed, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx,
-    OBJID_WINDOW, PM_NOREMOVE, PM_REMOVE, PeekMessageW, PostThreadMessageW, QS_ALLINPUT,
-    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_NULL, WM_QUIT, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+    EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZESTART, EnumWindows, GA_PARENT, GWL_EXSTYLE,
+    GetAncestor, GetClassNameW, GetDesktopWindow, GetWindowLongPtrW, GetWindowRect,
+    GetWindowThreadProcessId, IsIconic, IsWindowVisible, IsZoomed, MSG, MWMO_INPUTAVAILABLE,
+    MsgWaitForMultipleObjectsEx, OBJID_WINDOW, PM_NOREMOVE, PM_REMOVE, PeekMessageW,
+    PostThreadMessageW, QS_ALLINPUT, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_NULL,
+    WM_QUIT, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 use windows::core::BOOL;
 
@@ -96,8 +96,13 @@ impl Drop for WindowEvents {
 /// Hooks the window events, sends its thread id once its queue exists, then takes events in
 /// batches until `WM_QUIT`, and unhooks.
 fn hook_thread(started: std::sync::mpsc::Sender<u32>) {
+    // Only what can change coverage. The system events between FOREGROUND and MINIMIZESTART
+    // (mouse capture, menus, move/size loops, dialogs, scrolling, alt-tab) fire on top-level
+    // windows with every click; each one made the engine and the widgets rescan (2026-11-06:
+    // 10 clicks a second added ~80 wakes a second to the engine's main thread).
     let ranges = [
-        (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND),
+        (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
+        (EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND),
         (EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE),
         (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE),
         (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
