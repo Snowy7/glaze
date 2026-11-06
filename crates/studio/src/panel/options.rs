@@ -1,31 +1,14 @@
-//! Panel option metadata stays beside its editor; runtime widget manifests are owned by
-//! another crate. `when` declares the faces/settings to which an option applies.
+//! Manifest-owned visibility and presentation for widget controls.
 use mypaper_widgets::manifest::Setting;
-use serde::Deserialize;
 use serde_json::{Map, Value};
-use std::{collections::BTreeMap, sync::OnceLock};
 
-#[derive(Deserialize)]
-struct Rule {
-    widget: String,
-    key: String,
-    when: BTreeMap<String, Vec<Value>>,
-}
-
-pub fn visible(widget: &str, setting: &Setting, values: &Map<String, Value>) -> bool {
-    static RULES: OnceLock<Vec<Rule>> = OnceLock::new();
-    RULES
-        .get_or_init(|| {
-            serde_json::from_str(include_str!("option-faces.json"))
-                .expect("panel option declarations")
-        })
-        .iter()
-        .filter(|rule| rule.widget == widget && rule.key == setting.key())
-        .all(|rule| {
-            rule.when
-                .iter()
-                .all(|(key, allowed)| values.get(key).is_some_and(|value| allowed.contains(value)))
-        })
+pub fn visible(_widget: &str, setting: &Setting, values: &Map<String, Value>) -> bool {
+    let face = [
+        "variant", "face", "style", "layout", "look", "shape", "display", "frame",
+    ]
+    .into_iter()
+    .find_map(|key| values.get(key).and_then(Value::as_str));
+    setting.visible_on(face, values)
 }
 
 /// Remove empty/default instructions from labels; string controls show them as placeholders.
@@ -79,5 +62,42 @@ mod tests {
         ));
         values.insert("variant".into(), Value::String("polaroid".into()));
         assert!(visible("photo", photo.setting("caption").unwrap(), &values));
+    }
+
+    #[test]
+    fn media_and_conditional_options_use_the_manifest_rules() {
+        let widgets = mypaper_widgets::registry::builtins();
+        let media = &widgets.get("now-playing").unwrap().manifest;
+        let mut values = media.resolve_settings(&Map::new());
+        assert!(!visible(
+            "now-playing",
+            media.setting("viz").unwrap(),
+            &values
+        ));
+        values.insert("variant".into(), Value::String("viz".into()));
+        assert!(visible(
+            "now-playing",
+            media.setting("viz").unwrap(),
+            &values
+        ));
+        let launcher = &widgets.get("launcher").unwrap().manifest;
+        let mut values = launcher.resolve_settings(&Map::new());
+        assert!(!visible(
+            "launcher",
+            launcher.setting("customUrl").unwrap(),
+            &values
+        ));
+        values.insert("engine".into(), Value::String("custom".into()));
+        assert!(visible(
+            "launcher",
+            launcher.setting("customUrl").unwrap(),
+            &values
+        ));
+        values.insert("search".into(), Value::Bool(false));
+        assert!(!visible(
+            "launcher",
+            launcher.setting("customUrl").unwrap(),
+            &values
+        ));
     }
 }
