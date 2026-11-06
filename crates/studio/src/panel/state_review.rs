@@ -122,6 +122,7 @@ fn render_panel_states() {
             ("large-widget", Page::Widget),
             ("large-wallpapers", Page::Wallpapers),
             ("high-contrast", Page::Root),
+            ("look-widgets-no-background", Page::Look),
         ] {
             let mut app = fixture(&ui, dark, page);
             match name {
@@ -160,6 +161,16 @@ fn render_panel_states() {
                     app.panel.as_mut().unwrap().add_widget = Some("clock".into());
                 }
                 "large-widget" => app.nav.widget = Some("clock-1".into()),
+                "look-widgets-no-background" => {
+                    app.run(Action::Set(
+                        Edit::new(DocId::Widgets, "/appearance/surface", "Widget background"),
+                        json!("none"),
+                    ));
+                    app.nav.more.insert(mypaper_ui::controls::key((
+                        "panel-more",
+                        mypaper_ui::controls::key(("studio-panel", Page::Look)),
+                    )));
+                }
                 "high-contrast" => {
                     app.theme.contrast = true;
                     let (window, ink) = if dark {

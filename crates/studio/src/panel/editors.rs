@@ -254,6 +254,11 @@ pub fn action_button(b: &mut B, c: &mut Col, label: &str, action: Action) {
 
 pub fn footer_height(app: &App) -> f32 {
     match app.panel.as_ref().map(|s| s.page) {
+        Some(Page::FirstRun)
+            if app.size.0 as f32 / app.scale < 400.0 || app.theme.ty.text_scale > 1.0 =>
+        {
+            104.0
+        }
         Some(Page::AddWidget | Page::AddWallpaper | Page::AddModule | Page::FirstRun) => 64.0,
         Some(Page::History) if super::history::can_restore(app) => 64.0,
         _ => 0.0,
@@ -331,7 +336,12 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
             .iter()
             .any(|id| app.docs.doc(*id).issue.is_some());
     let gap = b.px(8.0);
-    let width = (r.width() - b.px(32.0) - gap) / 2.0;
+    let stacked = state.page == Page::FirstRun && r.height() > b.px(64.0);
+    let width = if stacked {
+        r.width() - b.px(32.0)
+    } else {
+        (r.width() - b.px(32.0) - gap) / 2.0
+    };
     button(
         b,
         Rect::new(b.px(16.0), r.top + b.px(16.0), width, b.px(32.0)),
@@ -344,8 +354,8 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
     button(
         b,
         Rect::new(
-            b.px(16.0) + width + gap,
-            r.top + b.px(16.0),
+            b.px(16.0) + if stacked { 0.0 } else { width + gap },
+            r.top + b.px(if stacked { 56.0 } else { 16.0 }),
             width,
             b.px(32.0),
         ),
