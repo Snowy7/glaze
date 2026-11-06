@@ -207,7 +207,7 @@ unsafe extern "system" fn reclaim_idle(
     optimize_heap();
 }
 
-fn optimize_heap() {
+pub(crate) fn optimize_heap() {
     #[repr(C)]
     struct HeapOptimizeResourcesInformation {
         version: u32,

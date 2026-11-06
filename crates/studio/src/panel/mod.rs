@@ -13,7 +13,7 @@ pub(crate) use history::time_label as history_time;
 mod icons;
 mod lists;
 mod measure;
-pub(crate) use measure::prepare_frame;
+pub(crate) use measure::{optimize_heap, prepare_frame};
 mod options;
 mod pages;
 mod peek;

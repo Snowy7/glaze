@@ -55,11 +55,15 @@ impl Images {
     pub fn connect(&mut self, inbox: Sender<crate::app::Msg>, thread: u32) {
         let (tx, rx) = channel::<Job>();
         let generation = self.generation.clone();
+        let release_decoders = self.budget.is_some();
         std::thread::spawn(move || {
             let Ok(ui) = mypaper_ui::Ui::new() else { return };
             for (page, key, path, max) in rx {
                 if page != generation.load(std::sync::atomic::Ordering::Relaxed) { continue; }
                 let image = decode(&ui, &path, max).map(Arc::new);
+                // The ready pixels outlive the decoder. Return its freed native buffers
+                // before the UI allocates a snapshot canvas or another specimen.
+                if release_decoders { crate::panel::optimize_heap(); }
                 if page != generation.load(std::sync::atomic::Ordering::Relaxed) { continue; }
                 if inbox.send(crate::app::Msg::Image(Loaded { key, image })).is_err() {
                     break;
