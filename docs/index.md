@@ -1,8 +1,9 @@
 # Native file index (experimental)
 
-**Repair handoff:** the source includes follow-up `6ebad2c`, but the running 10:54 build
-precedes it. The initial rebuild passed the RAM gate; a later broad game replay did not.
-See the independent-review section for the measured failure and the verified, undeployed fix.
+**Status:** the source includes follow-up `6ebad2c`, shipped in the later shared workspace
+deployment recorded in the [night log](../plans/night/2026-11-06.md). The 10:54 build passed the
+initial rebuild RAM gate but failed a broad game replay. Its correction passed an isolated replay;
+post-repair production game certification remains open. See the independent-review evidence below.
 
 `mypaper-index` is an optional native process, enabled with
 `"experimental": { "file_index": true }` in `%APPDATA%\mypaper\config.json`.
@@ -221,7 +222,8 @@ SID DACL and remote clients rejected. First-instance creation rejects an existin
 Each transaction is one UTF-8 JSON request message and one UTF-8 JSON response message,
 without a newline or length prefix. Requests are limited to 8 KiB and replies to 1 MiB.
 Four listeners serve concurrent clients. I/O has cancellation deadlines. Each transaction
-is guarded by `catch_unwind`, then the listener disconnects and accepts another client.
+is wrapped in `catch_unwind`; an unwinding build disconnects after a panic and accepts another
+client. The shipped abort build exits on a panic and is restarted by core, as described below.
 Sizes walks folded path components, so Unicode lowercase changes in UTF-8 byte length
 (for example the Kelvin sign) never slice the original string at a folded byte offset.
 
@@ -287,13 +289,13 @@ and shadowed cached roots), `3428d22` (listener containment/unwinding release), 
 `f6d0899` (infrequent lifecycle/recovery log). Only `crates/index` and this document
 were changed. `service.rs` already had a formatting-only edit, which was retained.
 
-**Deployment status:** `6ebad2c` adds bounded large-subtree replay, a bounded offline
+**Deployment record at the end of this review:** `6ebad2c` adds bounded large-subtree replay, a bounded offline
 visibility cache and two diagnostic CLI benchmarks after live stress exposed additional
-failures. It is committed and verified in the private target, **not deployed**: this turn
-used its one permitted deployment at 10:54. The running helper therefore still has the
-broad-subtree memory failure described below. Complete live certification requires the
-orchestrator's next deployment (normal workspace build, then `deploy-local.ps1`) and a new
-resume/rebuild observation. No second deployment was attempted.
+failures. It was verified in the private target after that turn's single 10:54 deployment,
+so the measurements below still describe the older helper's broad-subtree memory failure.
+The later shared deployment included the correction, using the normal workspace build and
+`deploy-local.ps1`; it needs no unwinding override. A new production resume/rebuild observation
+is still needed to certify the corrected live path.
 
 | Finding | Repair and focused regression |
 |---|---|
@@ -303,9 +305,9 @@ resume/rebuild observation. No second deployment was attempted.
 | Per-entry marker filesystem probes | Scans pass inherited marker decisions through the directory queue, taking `.csproj` presence from enumeration. Notification batches cache directory decisions. A regression removes marker files after resolving the directory and verifies 2,000 children reuse the decision; a fresh batch observes removal. Existing include/unknown-size scan coverage remains. |
 | Game buffer can overflow | Native reads continue during pause; only bounded parent-directory sets are retained. A real paused watch delivers a dirty directory before resume and cancels cleanly while paused; 200,000 same-directory paths remain one directory, and 8,193 directories request bounded overflow recovery. The offline 20,000-file regression also verifies unchanged paused Sizes and exact resumed search/bytes/counts after one subtree replay. |
 
-Validation: **32 debug tests**, **33 LLVM release tests**, and index Clippy on all targets
-with warnings denied. The normal workspace release build passed, followed by the
-index-only unwinding release build into the shared main target. The injected-panic test
+Validation at that review: **32 debug tests**, **33 LLVM release tests**, and index Clippy on all
+targets with warnings denied. The review also tried an index-only unwinding release; this is an
+experimental test configuration, not a deployment step. The injected-panic test
 is release-only because this workspace's Windows Cranelift debug backend cannot unwind.
 
 The same E: volume was measured before and after with the alternating
@@ -385,9 +387,9 @@ This is an offline pause/resume proof, not a live foreground-game result. Eviden
 `review-paused-offline.json` and `.log`. The fixture lives under the excluded private
 Cargo target and cleans up its own tree. The final native burst regression and foreground
 safeguards were added after deployment. The later bounded-replay/visibility correction
-below is production code and remains undeployed.
+below was added afterward; its isolated proof does not replace production certification.
 
-### Late stress failures and bounded-replay correction (not deployed)
+### Late stress failures and bounded-replay correction (verified offline)
 
 A larger **30,000-file** background fixture overlapped an independently triggered real
 game pause after the user resumed using the machine. We did not launch a fullscreen
@@ -417,7 +419,7 @@ Its OS working-set peak was **140,189,696 bytes / 133.70 MiB**, private high-wat
 and `size_unknown: true` for excluded aggregates. The live helper, user files and
 production snapshot were not modified by this isolated replay. Scratch was removed.
 This verifies the corrected broad-subtree path under 256 MiB **offline**, and does not
-certify that correction in the still-running older binary. Evidence:
+certify a post-repair production game replay. Evidence:
 `review-bounded-replay.json`.
 
 The live broad-query sample taken while an offline root was retained had **p95
@@ -502,15 +504,15 @@ directory metadata notifications can identify very broad ancestors. That prototy
 the budget and was replaced, not shipped as the final behavior. Its failure evidence is
 `round2-backed-resume-highwater.json` and `round2-parent-sweep-game-catchup.json`.
 
-**Remaining wake cost:** 18.66 context switches/s came entirely from two
+**Wake cost in the 08:20 build:** 18.66 context switches/s came entirely from two
 `notify-rs windows loop` threads (572 and 564 switches). Every index main/search/native
 reader/delivery thread recorded zero switches in that game sample. The installed
 `notify` 8.2.1 Windows backend unconditionally waits with
 `WaitForSingleObjectEx(wakeup_sem, 100, TRUE)`; its Windows constructor ignores the
 poll-interval config. This misses the handful-of-wakes target even though index work is
-parked. The separate `crates/fswatch` workstream owns replacing those shared config/game
-watchers with an infinite overlapped wait. Its source migration landed after this build;
-**these results do not claim that later migration was deployed or measured**.
+parked. Those shared config/game watches now use `mypaper_fswatch::Watch`, blocking indefinitely
+on overlapped I/O while idle; `31b51d2` consolidated the desktop wrapper onto the same watcher.
+These historical samples do not measure that later migration.
 
 Other final checks:
 

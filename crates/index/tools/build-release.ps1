@@ -1,6 +1,6 @@
-# Build into the shared deployment target after the normal workspace release build.
-# The workspace's panic=abort bypasses catch_unwind; this service needs transaction isolation.
-param([string]$TargetDir = 'C:\mypaper-targets\main')
+# Experimental unwinding build for transaction-panic tests, never a deployment prerequisite.
+# Production ships in the normal panic=abort workspace build; core restarts a crashed helper.
+param([string]$TargetDir = 'C:\mypaper-targets\index-unwind')
 $ErrorActionPreference = 'Stop'
 $oldTarget = $env:CARGO_TARGET_DIR
 $oldPanic = $env:CARGO_PROFILE_RELEASE_PANIC
