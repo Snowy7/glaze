@@ -29,7 +29,22 @@ pub fn swatches(
         .and_then(Value::as_str)
         .unwrap_or("");
     let is_windows = edit.path.starts_with("/look/windows/");
-    let wallpaper = specimens::wallpaper_color(app);
+    let target_wallpaper = edit
+        .path
+        .strip_prefix("/theme:")
+        .and_then(|rest| rest.split_once('/'))
+        .and_then(|(folder, _)| {
+            let folder = std::path::PathBuf::from(folder.replace("~1", "/").replace("~0", "~"));
+            app.library
+                .items
+                .iter()
+                .find(|wallpaper| wallpaper.dir == folder)
+        });
+    let wallpaper = if let Some(wallpaper) = target_wallpaper {
+        specimens::wallpaper_color_of(app, wallpaper)
+    } else {
+        specimens::wallpaper_color(app)
+    };
     let wallpaper_hex = wallpaper.map(|color| {
         mypaper_config::Color([
             (color.r * 255.0).round() as u8,

@@ -35,6 +35,15 @@ pub fn wallpaper_image(app: &App, item: &crate::library::Wallpaper) -> Option<Ar
 
 pub fn wallpaper_color(app: &App) -> Option<Rgba> {
     let image = wallpaper(app)?;
+    average_color(&image)
+}
+
+pub fn wallpaper_color_of(app: &App, wallpaper: &crate::library::Wallpaper) -> Option<Rgba> {
+    let image = wallpaper_image(app, wallpaper)?;
+    average_color(&image)
+}
+
+fn average_color(image: &Image) -> Option<Rgba> {
     let mut sums = [0u64; 3];
     let mut count = 0;
     for pixel in image.pixels.chunks_exact(4).step_by(7) {
@@ -75,6 +84,28 @@ fn area_crop(image: &Image, crop: Rect, size: (u32, u32)) -> Image {
         for x in 0..width {
             let left = crop.left + x as f32 * crop.width() / width as f32;
             let right = crop.left + (x + 1) as f32 * crop.width() / width as f32;
+            if crop.width() < width as f32 && crop.height() < height as f32 {
+                let sx = ((left + right) * 0.5 - 0.5).clamp(0.0, image.width as f32 - 1.0);
+                let sy = ((top + bottom) * 0.5 - 0.5).clamp(0.0, image.height as f32 - 1.0);
+                let (ix, iy) = (sx.floor() as usize, sy.floor() as usize);
+                let (fx, fy) = (sx.fract(), sy.fract());
+                let at = |x, y| (y * image.width as usize + x) * 4;
+                for channel in 0..4 {
+                    let a = image.pixels[at(ix, iy) + channel] as f32;
+                    let b = image.pixels[at((ix + 1).min(image.width as usize - 1), iy) + channel]
+                        as f32;
+                    let c = image.pixels[at(ix, (iy + 1).min(image.height as usize - 1)) + channel]
+                        as f32;
+                    let d = image.pixels[at(
+                        (ix + 1).min(image.width as usize - 1),
+                        (iy + 1).min(image.height as usize - 1),
+                    ) + channel] as f32;
+                    pixels[(y * width + x) * 4 + channel] = ((a * (1.0 - fx) + b * fx) * (1.0 - fy)
+                        + (c * (1.0 - fx) + d * fx) * fy)
+                        .round() as u8;
+                }
+                continue;
+            }
             let mut sum = [0.0; 4];
             let mut area = 0.0;
             for sy in
@@ -611,7 +642,12 @@ pub fn window_choice(app: &App, b: &mut B, r: Rect, look: Option<usize>) {
             _ => 0.45,
         }),
     );
-    let caption = Rect::new(win.left, win.top, win.width(), 25.0 * scale);
+    let caption = Rect::new(
+        win.left,
+        win.top,
+        win.width(),
+        b.px(28.0).min(win.height() * 0.3),
+    );
     b.fill(
         caption,
         radius,
@@ -668,20 +704,21 @@ pub fn window_choice(app: &App, b: &mut B, r: Rect, look: Option<usize>) {
             Align::Center,
         );
     }
-    let sidebar = Rect::new(
-        win.left + 6.0 * scale,
-        caption.bottom + 5.0 * scale,
-        win.width() * 0.25,
-        win.bottom - caption.bottom - 11.0 * scale,
+    let body = Rect::new(
+        win.left + b.px(10.0),
+        caption.bottom + b.px(8.0),
+        win.width() - b.px(20.0),
+        (win.bottom - caption.bottom - b.px(16.0)).max(1.0),
     );
+    let sidebar = Rect::new(body.left, body.top, body.width() * 0.25, body.height());
     b.fill(sidebar, 3.0 * scale, ink.with_alpha(0.08));
     for n in 0..3 {
         b.fill(
             Rect::new(
                 win.left + win.width() * 0.36,
-                caption.bottom + (12.0 + n as f32 * 16.0) * scale,
+                body.top + body.height() * (0.12 + n as f32 * 0.28),
                 win.width() * (0.5 - n as f32 * 0.08),
-                5.0 * scale,
+                (body.height() * 0.08).max(1.0),
             ),
             1.5 * scale,
             ink.with_alpha(if look == 2 { 0.75 } else { 0.35 }),
@@ -882,6 +919,7 @@ fn bars_at(
             append(frame, x, y, &tokens);
         }
         let image = Arc::new(mypaper_ui::render(&mut ui, &list, raster.0, raster.1).ok()?);
+        ui.text.clear_cache();
         remember(app, cache_key, &image);
         Some(image)
     });
@@ -919,7 +957,6 @@ fn real_pinned_icons(app: &App, frame: &mut mypaper_shell::preview::bars::Frame)
         let initial = item
             .name
             .chars()
-        ui.text.clear_cache();
             .next()
             .unwrap_or('?')
             .to_uppercase()

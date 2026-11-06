@@ -123,7 +123,11 @@ pub fn wallpaper(
     let sample = super::wallpaper_look::sample(app, theme);
     let uses = super::wallpaper_look::selected(theme)
         .map(crate::look::uses)
-        .unwrap_or([true; 4]);
+        .unwrap_or(match sample.style {
+            mypaper_config::look::Style::Liquid => [true; 4],
+            mypaper_config::look::Style::Solid => [false; 4],
+            _ => [true, true, false, false],
+        });
     let sliders: Vec<_> = [
         ("clarity", "Clarity", sample.clarity),
         ("blur", "Blur", sample.blur),

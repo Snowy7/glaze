@@ -54,23 +54,28 @@ pub fn sample(app: &App, theme: &Value) -> MaterialSample {
         },
     );
     let mut sample = MaterialSample::defaults(app, style);
-    let glass: mypaper_theme::Liquid = theme
+    let stored_glass: mypaper_theme::Liquid = theme
         .pointer("/widgets/glass")
         .and_then(|value| serde_json::from_value(value.clone()).ok())
         .unwrap_or_default();
-    sample.clarity = glass
-        .tint
-        .map(|value| 1.0 - value)
-        .or_else(|| appearance.opacity.map(|value| 1.0 - value))
-        .unwrap_or(sample.clarity);
-    sample.blur = glass.blur.or(appearance.blur).unwrap_or(sample.blur);
-    sample.refraction = glass.refraction.unwrap_or(sample.refraction);
-    sample.highlight = glass.highlight.unwrap_or(sample.highlight);
-    sample.tint = appearance
+    let effective = appearance.over(&mypaper_widgets::look::defaults());
+    let glass = stored_glass.over(&mypaper_widgets::look::liquid_defaults());
+    if style == Style::Liquid {
+        sample.clarity = 1.0 - glass.tint.unwrap();
+        sample.blur = glass.blur.unwrap();
+        sample.refraction = glass.refraction.unwrap();
+        sample.highlight = glass.highlight.unwrap();
+    } else {
+        sample.clarity = 1.0 - effective.opacity.unwrap();
+        sample.blur = effective.blur.unwrap();
+        sample.refraction = 0.0;
+        sample.highlight = 0.0;
+    }
+    sample.tint = effective
         .tint
         .map_or(sample.tint, |color| mypaper_ui::Rgba::rgb8(color.0, 1.0));
-    sample.radius = appearance.radius.unwrap_or(sample.radius);
-    sample.edge = appearance.border.unwrap_or(sample.edge);
+    sample.radius = effective.radius.unwrap();
+    sample.edge = effective.border.unwrap();
     if appearance.surface == Some(mypaper_theme::Surface::Solid) {
         sample.clarity = 0.0;
     }
@@ -255,6 +260,74 @@ pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opening_an_inactive_wallpapers_look_keeps_it_as_the_edit_target() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        app.size = (480, 1600);
+        let active = app.library.active();
+        let index = app
+            .library
+            .items
+            .iter()
+            .position(|wallpaper| !wallpaper.active)
+            .unwrap();
+        app.library.items[index].origin = crate::library::Origin::User;
+        let folder = app.library.items[index].dir.clone();
+        let before = app.docs.doc(DocId::Config).raw.clone();
+        app.run(Action::Panel(super::super::Command::WallpaperLook(index)));
+        assert_eq!(target(&app).unwrap().dir, folder);
+        assert_eq!(app.library.active(), active);
+        assert_eq!(app.docs.doc(DocId::Config).raw, before);
+        let frame = super::super::build(&app, &mut ui.text);
+        assert_eq!(
+            frame
+                .targets
+                .iter()
+                .filter(|target| target.group.is_some()
+                    && matches!(&target.action,
+            Action::Set(edit, _) if edit.path.starts_with("/panel/wallpaper-style/")))
+                .count(),
+            5
+        );
+        assert!(frame.targets.iter().any(|target| matches!(&target.action,
+            Action::Slider(edit) if edit.path.starts_with("/panel/wallpaper-material/"))));
+        assert!(frame.targets.iter().any(|target| matches!(&target.action,
+            Action::Choose(choices) if choices.edit.path.contains("/@both/appearance/text"))));
+        app.run(
+            frame
+                .targets
+                .iter()
+                .find(|target| matches!(target.action, Action::More(_)))
+                .unwrap()
+                .action
+                .clone(),
+        );
+        let frame = super::super::build(&app, &mut ui.text);
+        assert!(frame.targets.iter().any(|target| matches!(&target.action,
+            Action::Slider(edit) if edit.path.contains("/@both/appearance/radius"))));
+        assert_eq!(
+            app.docs.undo_count(),
+            0,
+            "opening or expanding the editor is read-only"
+        );
+    }
+
+    #[test]
+    fn clarity_and_blur_update_the_native_and_liquid_fields_together() {
+        let theme = json!({"widgets":{"css":"widgets.css"},"bars":{"css":"bars.css"}});
+        let clarity = with_material(&theme, "clarity", 0.75).unwrap();
+        let blur = with_material(&clarity, "blur", 18.0).unwrap();
+        for family in ["widgets", "bars"] {
+            assert_eq!(blur[family]["glass"]["tint"], json!(0.25));
+            assert_eq!(blur[family]["appearance"]["opacity"], json!(0.25));
+            assert_eq!(blur[family]["glass"]["blur"], json!(18.0));
+            assert_eq!(blur[family]["appearance"]["blur"], json!(18.0));
+            assert_eq!(blur[family]["css"], theme[family]["css"]);
+        }
+    }
 
     #[test]
     fn every_style_fits_the_theme_format_and_preserves_sources_and_family_css() {

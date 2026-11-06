@@ -194,10 +194,8 @@ pub fn draw(
 }
 
 /// Arrows browse a chooser; Enter/Space and clicks apply through the existing target action.
-pub fn on_key(app: &mut App, vk: u16, ctrl: bool, shift: bool, alt: bool) -> bool {
-    if ctrl
-        || shift
-        || alt
+pub fn on_key(app: &mut App, vk: u16, _ctrl: bool, _shift: bool, alt: bool) -> bool {
+    if alt
         || !matches!(vk, 0x25..=0x28)
         || app.field.is_some()
         || app
@@ -442,6 +440,14 @@ mod tests {
             |(_, semantic)| matches!(semantic, mypaper_ui::Semantics::Status(message)
             if message.as_ref() == "Previewing One UI · Click to apply")
         ));
+        app.key_with(0x28, (false, true, false));
+        app.key_with(0x28, (true, false, false));
+        assert_eq!(app.docs.doc(DocId::Config).raw, before);
+        assert_eq!(
+            app.docs.undo_count(),
+            0,
+            "modifiers never turn row focus into a pick"
+        );
     }
 
     #[test]

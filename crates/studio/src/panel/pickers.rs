@@ -129,6 +129,8 @@ pub fn font(app: &App, b: &mut B, c: &mut Col, edit: Edit, current: &str) {
         Value::Null,
         if edit.doc == DocId::Config {
             "From wallpaper"
+        } else if edit.path.starts_with("/theme:") {
+            "The style's"
         } else {
             "From Look"
         }

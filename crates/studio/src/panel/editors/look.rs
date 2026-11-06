@@ -65,20 +65,27 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         },
     );
     title(b, c, "Look", &subtitle);
-    let r = Rect::new(c.x, c.y + b.px(6.0), c.w, b.px(30.0));
-    let wallpaper_label = format!("{}'s", wallpaper.map_or("Wallpaper", |w| w.name.as_str()));
-    b.segmented(
-        key("panel-look-scope"),
-        r,
-        &["Yours", &wallpaper_label],
-        Some(usize::from(app.nav.look_theme)),
-        "Look scope",
-        wallpaper.is_some(),
-        |i| Action::Panel(Command::Scope(i == 1)),
-    );
-    b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
-    c.y = r.bottom + b.px(4.0);
+    if let Some(wallpaper) = wallpaper {
+        let r = Rect::new(c.x, c.y + b.px(6.0), c.w, b.px(30.0));
+        let wallpaper_label = format!("{}'s", wallpaper.name);
+        b.segmented(
+            key("panel-look-scope"),
+            r,
+            &["Yours", &wallpaper_label],
+            Some(usize::from(app.nav.look_theme)),
+            "Look scope",
+            true,
+            |i| Action::Panel(Command::Scope(i == 1)),
+        );
+        b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
+        c.y = r.bottom + b.px(4.0);
+    }
     if app.nav.look_theme {
+        if wallpaper.is_none() {
+            notice(b, c, "Choose a wallpaper to edit the look it brings.");
+            action_button(b, c, "Choose a wallpaper", open(Page::Wallpapers));
+            return;
+        }
         // Reuses the wallpaper editor's validated theme paths and built-in copy protection.
         wallpaper_scope(app, b, c);
         return;
@@ -435,32 +442,23 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
     let selected = looks
         .iter()
         .position(|(_, preset)| windows_matches(&layer, preset));
-    group(
-        b,
-        c,
-        if selected.is_none() {
-            "Look · Custom"
-        } else {
-            "Look"
-        },
-        |b, c| {
-            let choices: Vec<_> = looks
-                .iter()
-                .enumerate()
-                .map(|(i, (name, _))| (*name, selected == Some(i), Action::WindowsLook(i)))
-                .collect();
-            let picture_height = b.px(174.0);
-            crate::panel::choosers::draw(
-                app,
-                b,
-                c,
-                key("panel-windows-looks"),
-                picture_height,
-                &choices,
-                |b, index, rect| super::super::specimens::window_choice(app, b, rect, index),
-            );
-        },
-    );
+    group(b, c, "Look", |b, c| {
+        let choices: Vec<_> = looks
+            .iter()
+            .enumerate()
+            .map(|(i, (name, _))| (*name, selected == Some(i), Action::WindowsLook(i)))
+            .collect();
+        let picture_height = b.px(174.0);
+        crate::panel::choosers::draw(
+            app,
+            b,
+            c,
+            key("panel-windows-looks"),
+            picture_height,
+            &choices,
+            |b, index, rect| super::super::specimens::window_choice(app, b, rect, index),
+        );
+    });
     group(b, c, "", |b, c| {
         for id in ["windows_apps", "windows_corners", "windows_material"] {
             let s = crate::settings::Setting::get(id).unwrap();
@@ -562,6 +560,8 @@ pub(super) fn windows_matches(layer: &Value, preset: &Value) -> bool {
         "backdrop",
         "apps",
         "cursors",
+        "accent_on_taskbar",
+        "accent_on_title_bars",
     ]
     .into_iter()
     .all(|key| {
@@ -616,6 +616,9 @@ mod tests {
         assert!(windows_matches(&sharp, &sharp));
         let mut custom = sharp.clone();
         custom["caption"] = json!("#123456");
+        assert!(!windows_matches(&custom, &sharp));
+        let mut custom = sharp.clone();
+        custom["accent_on_title_bars"] = json!(true);
         assert!(!windows_matches(&custom, &sharp));
     }
 }
