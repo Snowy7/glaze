@@ -2,12 +2,14 @@
 //! [`Fit`] mode and an opacity (for cross-fades). Images, slideshows,
 //! videos and down-scaled renders all present through this.
 
+use std::cell::Cell;
+
 use bytemuck::{Pod, Zeroable};
 use mypaper_theme::Fit;
 
 /// Mirrors `struct Blit` in blit.wgsl.
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 struct Params {
     scale: [f32; 2],
     offset: [f32; 2],
@@ -27,6 +29,9 @@ pub struct Blitter {
 /// because every screen's frame is its own queue submission.
 pub struct BlitQuad {
     params: wgpu::Buffer,
+    /// What `params` was last given: a draw like the last one uploads nothing. Every
+    /// `write_buffer` costs a staging buffer and an extra command list at the next submit.
+    written: Cell<Option<Params>>,
     bind_group: wgpu::BindGroup,
 }
 
@@ -135,7 +140,11 @@ impl Blitter {
                 },
             ],
         });
-        BlitQuad { params, bind_group }
+        BlitQuad {
+            params,
+            written: Cell::new(None),
+            bind_group,
+        }
     }
 }
 
@@ -156,7 +165,9 @@ impl BlitQuad {
             opacity,
             _pad: [0.0; 3],
         };
-        queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&params));
+        if self.written.replace(Some(params)) != Some(params) {
+            queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&params));
+        }
     }
 
     pub fn draw(&self, blitter: &Blitter, pass: &mut wgpu::RenderPass<'_>) {

@@ -10,7 +10,7 @@ mod app;
 pub mod blit;
 mod image;
 mod scene;
-mod shader;
+pub mod shader;
 mod slideshow;
 mod video;
 mod web;

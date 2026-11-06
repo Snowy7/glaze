@@ -449,17 +449,20 @@ const DESCRIPTORS: u32 = 16_384;
 fn open_device(adapter: &wgpu::Adapter, timing: bool) -> Result<(wgpu::Device, wgpu::Queue)> {
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("mypaper"),
-        // 16-bit normalized formats: the planes of 10-bit (P010) video.
-        required_features: adapter.features().intersection(
-            wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
-                | if timing {
-                    crate::timing::FEATURES
-                } else {
-                    wgpu::Features::empty()
-                },
-        ),
+        // Immediate data (every DX12 adapter has it): a shader wallpaper's inputs ride in its
+        // draw. 16-bit normalized formats: the planes of 10-bit (P010) video.
+        required_features: wgpu::Features::IMMEDIATES
+            | adapter.features().intersection(
+                wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
+                    | if timing {
+                        crate::timing::FEATURES
+                    } else {
+                        wgpu::Features::empty()
+                    },
+            ),
         required_limits: wgpu::Limits {
             max_non_sampler_bindings: DESCRIPTORS,
+            max_immediate_size: crate::sources::shader::PAPER_SIZE,
             ..wgpu::Limits::default().using_resolution(adapter.limits())
         },
         memory_hints: MEMORY_HINTS,
