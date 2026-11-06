@@ -27,6 +27,17 @@ pub fn height(b: &B, base: f32) -> f32 {
     b.px(base * b.t.text_scale)
 }
 
+/// Shared readout grammar: percent closes up; physical and time units take one space.
+pub fn unit(value: f64, unit: &str) -> String {
+    let unit = unit.trim();
+    format!("{value:.0}{}{unit}", if unit.is_empty() || unit == "%" { "" } else { " " })
+}
+
+/// All inline sliders reserve the same label column; narrow and large-text rows stack.
+pub fn label_width(b: &B, c: &Col) -> f32 {
+    b.px(140.0).min(c.w * 0.46)
+}
+
 pub fn displays(app: &App, b: &mut B, c: &mut Col) {
     if app.monitors.len() < 2 {
         return;
@@ -483,7 +494,7 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
         Kind::Switch { .. } => c.w - b.px(48.0),
         Kind::Text { .. } => c.w,
         _ if c.w < b.px(360.0) || b.t.text_scale > 1.0 => c.w,
-        _ => b.px(140.0).min(c.w * 0.46),
+        _ => label_width(b, c),
     };
     text(
         b,
@@ -713,7 +724,7 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
                 control,
                 value,
                 (min, max, step),
-                &format!("{:.0}{unit}", value * factor),
+                &self::unit(value * factor, unit),
                 b.px(48.0),
                 label,
                 Action::Slider(edit),
