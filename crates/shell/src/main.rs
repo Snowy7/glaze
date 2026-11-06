@@ -287,7 +287,7 @@ impl Shell {
             targets = self.bars.studio_targets();
             if let Some(widgets) = &self.widgets { targets.extend(widgets.studio_targets()); }
         }
-        self.studio.tick(ui, &targets);
+        self.studio.tick(ui, &targets, self.bars.config());
         self.bars.studio_session(self.studio.active());
         if let Some(widgets) = &mut self.widgets {
             widgets.studio_session(ui, self.studio.active(), self.studio.lifted());

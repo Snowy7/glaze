@@ -1,8 +1,10 @@
 //! Transient desktop picking while Studio's panel is open. Selection never writes config.
 //! Catchers sit below widgets in the desktop band; widget input still reaches its real HWND.
+mod chrome;
 pub mod wire;
 
 use anyhow::Result;
+use mypaper_bars::config::BarsConfig;
 use mypaper_desktop::{DesktopHost, Monitor, monitor_infos};
 use mypaper_ui::{
     Button, DisplayList, Event, Kind as SurfaceKind, Op, Point, Rect, Rgba, Role, Surface,
@@ -124,7 +126,7 @@ impl StudioPick {
         }
     }
 
-    pub fn tick(&mut self, ui: &mut Ui, targets: &[Target]) {
+    pub fn tick(&mut self, ui: &mut Ui, targets: &[Target], bars: &BarsConfig) {
         let previous_owner = self.session.owner;
         while let Some((source, request)) = self.endpoint.next() {
             match request {
@@ -188,12 +190,12 @@ impl StudioPick {
         }
         let geometry: Vec<_> = monitors
             .iter()
-            .map(|m| (&m.device, m.rect, m.dpi))
+            .map(|m| (&m.device, m.rect, m.work, m.dpi))
             .collect();
         let previous: Vec<_> = self
             .monitors
             .iter()
-            .map(|m| (&m.device, m.rect, m.dpi))
+            .map(|m| (&m.device, m.rect, m.work, m.dpi))
             .collect();
         if self.catchers.is_empty() || anchor != self.anchor || geometry != previous {
             self.catchers.clear();
@@ -286,7 +288,7 @@ impl StudioPick {
         {
             self.decorations.clear();
             for (target, selected) in wanted {
-                if let Err(e) = self.decorate(ui, target, selected) {
+                if let Err(e) = self.decorate(ui, target, selected, bars) {
                     log::warn!("Studio pick chrome: {e:#}");
                 }
             }
@@ -365,7 +367,13 @@ impl StudioPick {
         }
     }
 
-    fn decorate(&mut self, ui: &mut Ui, target: Target, selected: bool) -> Result<()> {
+    fn decorate(
+        &mut self,
+        ui: &mut Ui,
+        target: Target,
+        selected: bool,
+        bars: &BarsConfig,
+    ) -> Result<()> {
         let Some(parent) = self.anchor else {
             return Ok(());
         };
@@ -386,15 +394,7 @@ impl StudioPick {
         let scale = monitor.map_or(1.0, |m| m.dpi as f32 / 96.0);
         let r = target.rect.inflate(3.0 * scale);
         let local = Rect::new(2.0 * scale, 2.0 * scale, r.width(), r.height());
-        let mut ops = vec![Op::Stroke {
-            rect: local,
-            radius: 10.0 * scale,
-            width: scale,
-            color: Rgba::rgb8([235, 235, 235], if selected { 0.35 } else { 0.65 }),
-        }];
-        if selected {
-            brackets(&mut ops, local, scale);
-        }
+        let ops = chrome::frame(local, scale, selected);
         frame.present(
             ui,
             (
@@ -410,7 +410,9 @@ impl StudioPick {
                 ..Default::default()
             },
         )?;
-        let suffix = if target.selection.kind == Kind::Module {
+        let suffix = if selected {
+            ""
+        } else if target.selection.kind == Kind::Module {
             " · click to edit"
         } else if target.selection.kind == Kind::Widget {
             " · click to edit; its buttons still work"
@@ -420,18 +422,12 @@ impl StudioPick {
         let label = format!("{}{suffix}", target.label);
         let style = TextStyle::new("Segoe UI", 11.0 * scale);
         let measured = ui.text.measure(&label, &style);
-        let width = (measured.0 + 16.0 * scale).ceil();
+        let work = monitor.map(|m| chrome::work_area(m, bars));
+        let width = (measured.0 + 16.0 * scale)
+            .ceil()
+            .min(work.map_or(f32::MAX, |r| r.width()));
         let height = (24.0 * scale).ceil();
-        let bounds = monitor.map(|m| m.rect);
-        let x = bounds.map_or(r.left, |b| {
-            r.left
-                .clamp(b.x as f32, ((b.x + b.width) as f32 - width).max(b.x as f32))
-        });
-        let y = if bounds.is_some_and(|b| r.top - height - 3.0 * scale < b.y as f32) {
-            r.bottom + 3.0 * scale
-        } else {
-            r.top - height - 3.0 * scale
-        };
+        let at = chrome::name_position(r, (width, height), work, scale);
         let list = DisplayList {
             ops: vec![
                 Op::Fill {
@@ -449,7 +445,7 @@ impl StudioPick {
                     rect: Rect::new(
                         8.0 * scale,
                         (height - measured.1) / 2.0,
-                        measured.0,
+                        (width - 16.0 * scale).max(0.0),
                         measured.1,
                     ),
                     text: label.into(),
@@ -461,7 +457,7 @@ impl StudioPick {
         };
         chip.present(
             ui,
-            (x.round() as i32, y.round() as i32),
+            (at.x.round() as i32, at.y.round() as i32),
             (width as u32, height as u32),
             list,
         )?;
@@ -478,24 +474,6 @@ impl StudioPick {
             selected,
         });
         Ok(())
-    }
-}
-
-fn brackets(ops: &mut Vec<Op>, r: Rect, s: f32) {
-    for (x, dx) in [(r.left, 1.0), (r.right, -1.0)] {
-        for (y, dy) in [(r.top, 1.0), (r.bottom, -1.0)] {
-            for to in [
-                Point::new(x + dx * 13.0 * s, y),
-                Point::new(x, y + dy * 13.0 * s),
-            ] {
-                ops.push(Op::Line {
-                    from: Point::new(x, y),
-                    to,
-                    width: 2.0 * s,
-                    color: Rgba::rgb8([245, 245, 245], 0.95),
-                });
-            }
-        }
     }
 }
 

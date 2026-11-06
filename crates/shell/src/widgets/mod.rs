@@ -3730,7 +3730,7 @@ fn usable_for(monitor: &Monitor, bars: &BarsConfig) -> RectF {
         monitor.primary,
     )
 }
-fn usable_screen(monitor: &Monitor, bars: &BarsConfig) -> Rect {
+pub(crate) fn usable_screen(monitor: &Monitor, bars: &BarsConfig) -> Rect {
     let r = usable_for(monitor, bars);
     let s = monitor.dpi as f32 / 96.0;
     Rect::new(
