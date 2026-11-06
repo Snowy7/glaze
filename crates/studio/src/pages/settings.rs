@@ -266,7 +266,7 @@ fn menu_items(app: &App, b: &mut B, c: &mut Col) {
     c.y += b.px(42.0);
 }
 
-const ALL_BUILTINS: [Builtin; 11] = [
+const ALL_BUILTINS: [Builtin; 13] = [
     Builtin::View,
     Builtin::Sort,
     Builtin::Refresh,
@@ -274,6 +274,8 @@ const ALL_BUILTINS: [Builtin; 11] = [
     Builtin::Paste,
     Builtin::Wallpaper,
     Builtin::Widgets,
+    Builtin::AddWidget,
+    Builtin::Studio,
     Builtin::Display,
     Builtin::Personalize,
     Builtin::Terminal,
@@ -290,6 +292,8 @@ fn builtin_label(b: Builtin) -> &'static str {
         Builtin::Paste => "Paste",
         Builtin::Wallpaper => "Change wallpaper",
         Builtin::Widgets => "Edit widgets",
+        Builtin::AddWidget => "Add widget",
+        Builtin::Studio => "mypaper Studio",
         Builtin::Display => "Display settings",
         Builtin::Personalize => "Personalize",
         Builtin::Terminal => "Open terminal here",
