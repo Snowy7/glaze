@@ -1,5 +1,5 @@
 # Owns only the fullscreen fixture and the shared empty lock directory.
-param([ValidateSet('start', 'stop')][string]$Action)
+param([ValidateSet('start', 'stop', 'lifecycle')][string]$Action)
 $ErrorActionPreference = 'Stop'
 $fixtureExe = 'C:\mypaper-targets\game-quiet-fixture\release\examples\game_quiet.exe'
 $probeDir = 'C:\mypaper-targets\game-quiet-live'
@@ -8,7 +8,30 @@ $record = Join-Path $probeDir 'fixture.json'
 if ([IO.Path]::GetFullPath($desktopLock) -ne 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock') { throw 'Unexpected lock path' }
 New-Item -ItemType Directory -Path $desktopLock -ErrorAction Stop | Out-Null
 try {
-  if ($Action -eq 'start') {
+  if ($Action -eq 'lifecycle') {
+    $signalPath = Join-Path $env:LOCALAPPDATA 'mypaper/game-activity.json'
+    $logPath = Join-Path $env:LOCALAPPDATA 'mypaper/mypaper.log'
+    $publisher = (Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json).publisher_pid
+    $shellId = (Get-Process mypaper-shell).Id
+    $helperId = (Get-Process mypaper-plugins).Id
+    $offset = (Get-Item -LiteralPath $logPath).Length
+    $output = Join-Path $PSScriptRoot 'game-lifecycle.json'
+    $fixture = Start-Process -FilePath $fixtureExe -ArgumentList @('30', ('"' + $output + '"')) -WindowStyle Normal -PassThru -RedirectStandardOutput (Join-Path $probeDir 'lifecycle.log') -RedirectStandardError (Join-Path $probeDir 'lifecycle-error.log')
+    if (-not $fixture.WaitForExit(60000)) { Stop-Process -InputObject $fixture; throw 'Lifecycle fixture timed out' }
+    Get-Content -LiteralPath (Join-Path $probeDir 'lifecycle.log')
+    if ($fixture.ExitCode -ne 0) { Get-Content -LiteralPath (Join-Path $probeDir 'lifecycle-error.log'); throw 'Lifecycle fixture failed' }
+    $signal = Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json
+    if ($signal.publisher_pid -ne $publisher -or $signal.activity.pause_background) { throw 'Publisher changed or pause did not clear' }
+    if ((Get-Process mypaper-shell).Id -ne $shellId -or (Get-Process mypaper-plugins).Id -ne $helperId) { throw 'Shell/helper restarted during resume' }
+    $reader = [IO.StreamReader]::new($logPath)
+    try { $reader.BaseStream.Seek($offset, [IO.SeekOrigin]::Begin) | Out-Null; $events = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    $shellResumes = [regex]::Matches($events, 'mypaper_shell\] game background pause: false').Count
+    $helperResumes = [regex]::Matches($events, 'mypaper_plugins::host\] game background pause: false').Count
+    if ($shellResumes -lt 3 -or $helperResumes -lt 3) { throw "Missing consumer resumes: shell=$shellResumes helper=$helperResumes" }
+    @{ publisher = $publisher; shell = $shellId; helper = $helperId; shell_resumes = $shellResumes; helper_resumes = $helperResumes; activity = $signal.activity } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'game-lifecycle-consumers.json') -Encoding utf8
+    $events | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'game-lifecycle.log') -Encoding utf8
+    powershell -NoProfile -File 'C:\Users\you\AppData\Local\Temp\mypaper-tools\shotall.ps1' -Out (Join-Path $probeDir 'restored.png')
+  } elseif ($Action -eq 'start') {
     $fixture = Start-Process -FilePath $fixtureExe -ArgumentList '180' -WindowStyle Normal -PassThru -RedirectStandardOutput (Join-Path $probeDir 'fullscreen.log') -RedirectStandardError (Join-Path $probeDir 'fullscreen-error.log')
     @{ id = $fixture.Id; started = $fixture.StartTime.ToUniversalTime().Ticks } | ConvertTo-Json | Set-Content -LiteralPath $record
     Start-Sleep -Seconds 12
