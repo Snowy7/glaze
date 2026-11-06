@@ -248,20 +248,14 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                     .enumerate()
                     .map(|(i, (name, _))| (*name, starter == i, Action::FirstRunPick(i)))
                     .collect();
-                let shown = super::choosers::draw(
-                    app,
-                    b,
-                    c,
-                    key("panel-starters"),
-                    b.px(196.0),
-                    &choices,
-                    |b, i, r| super::editors::starter_preview(app, b, i.unwrap_or(starter), r),
-                );
+                super::choosers::tiles(app, b, c, key("panel-starters"), &choices, |b, i, r| {
+                    super::editors::starter_preview(app, b, i, r)
+                });
                 notice(
                     b,
                     c,
                     starters
-                        .get(shown.unwrap_or(starter))
+                        .get(starter)
                         .map_or("Choose a starter", |(_, line)| *line),
                 );
             });
