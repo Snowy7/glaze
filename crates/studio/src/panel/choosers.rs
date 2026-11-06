@@ -36,6 +36,7 @@ pub struct State {
 }
 
 pub fn begin(app: &App) {
+    app.images.borrow_mut().begin_frame();
     let panel = app.panel.as_ref().unwrap();
     let mut state = panel.chooser.borrow_mut();
     state.requested = None;
@@ -50,6 +51,9 @@ pub fn begin(app: &App) {
 
 pub fn presented(app: &App) {
     let panel = app.panel.as_ref().unwrap();
+    if app.images.borrow_mut().finish_frame() {
+        panel.reclaim_heap.set(true);
+    }
     let mut state = panel.chooser.borrow_mut();
     state.rasters_left = None;
     let before = state.drawings.len();

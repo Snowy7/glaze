@@ -36,6 +36,7 @@ enum Job {
 pub struct Images {
     slots: HashMap<String, Slot>,
     clock: u64,
+    frame_start: Option<u64>,
     budget: Option<usize>,
     worker: Option<Sender<Job>>,
     generation: Arc<std::sync::atomic::AtomicU64>,
@@ -44,6 +45,18 @@ pub struct Images {
 }
 
 impl Images {
+    /// Panel pages keep only stills requested by the frame that was actually presented.
+    pub fn begin_frame(&mut self) {
+        self.frame_start = Some(self.clock);
+    }
+
+    pub fn finish_frame(&mut self) -> bool {
+        let Some(start) = self.frame_start.take() else { return false };
+        let before = self.slots.len();
+        self.slots.retain(|_, slot| !matches!(slot, Slot::Ready(_, used, _) if *used <= start));
+        before != self.slots.len()
+    }
+
     /// A smaller window can bound its decoded-picture cache independently.
     pub fn set_budget(&mut self, bytes: usize) {
         self.budget = Some(bytes.max(64 << 10));
@@ -421,6 +434,21 @@ fn shell_thumbnail(path: &Path, max: (u32, u32)) -> anyhow::Result<Image> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn presented_frames_release_hidden_stills_and_keep_visible_source_metadata() {
+        let mut images = Images::default();
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/icon-32.png");
+        let hidden = images.get(&path, (32, 32)).unwrap();
+        images.begin_frame();
+        let visible = images.get(&path, (128, 128)).unwrap();
+        assert!(images.finish_frame());
+        assert_eq!(images.source_size(&hidden), None);
+        assert_eq!(images.source_size(&visible), Some((32, 32)));
+        images.begin_frame();
+        assert!(images.finish_frame());
+        assert_eq!(images.source_size(&visible), None);
+    }
 
     #[test]
     fn the_wic_only_decoder_preserves_the_ui_decoders_pixels() {
