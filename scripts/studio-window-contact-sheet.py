@@ -1,4 +1,4 @@
-"""Make an uncropped contact sheet of the standalone Studio golden renders."""
+"""Make an uncropped contact sheet of Studio renders and isolated live captures."""
 
 import argparse
 from pathlib import Path
@@ -12,6 +12,7 @@ def main():
     args = parser.parse_args()
     baseline = Path(__file__).resolve().parents[1] / "crates/studio/tests/golden/window"
     files = [args.shots / path.name for path in sorted(baseline.glob("*.png"))]
+    files.extend(path for name in ("live-home.png", "live-look.png") if (path := args.shots / name).is_file())
     columns, cell_width, cell_height = 4, 480, 328
     sheet = Image.new("RGB", (columns * cell_width, ((len(files) + columns - 1) // columns) * cell_height), "#202020")
     draw = ImageDraw.Draw(sheet)
