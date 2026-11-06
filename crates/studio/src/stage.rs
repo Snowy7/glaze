@@ -10,12 +10,12 @@ use std::time::Instant;
 
 use mypaper_bars::BarsConfig;
 use mypaper_shell::preview as shell;
-use mypaper_ui::controls::{Align, Font, key};
+use mypaper_ui::controls::key;
 use mypaper_ui::{DisplayList, Image, Op, Point, Rect, Rgba, Role, Ui};
 use mypaper_widgets::layout::{self, Grid, Layout, RectF};
 use serde_json::{Value, json};
 
-use crate::actions::{Action, Bar, Page, Slot};
+use crate::actions::{Action, Bar, Slot};
 use crate::app::{App, theme_name};
 use crate::docs::DocId;
 use crate::glass::{Request, Shape};
@@ -65,43 +65,10 @@ pub struct Content {
     pub grid: Option<(Grid, f32)>,
 }
 
-/// One design's thumbnail for the Bars inspector: its bar, drawn by the shell's view on a
-/// 400-pixel-wide screen scaled to the tile (room for its modules, large enough to read its
-/// shape), in tile-local pixels.
-pub struct Thumb {
-    pub design: &'static str,
-    pub ops: Vec<Op>,
-    pub shapes: Vec<Shape>,
-}
-
-/// The design thumbnails. A tile asks for its size while the frame is built (`want`); the next
-/// frame builds them ([`prepare_designs`]), so they are always the tile's exact size.
-#[derive(Default)]
-pub struct Designs {
-    pub want: Option<(Bar, (u32, u32))>,
-    /// What `thumbs` were built for: the bar, the size, the documents' version.
-    built: Option<(Bar, (u32, u32), u64)>,
-    pub thumbs: Vec<Thumb>,
-}
-
-impl Designs {
-    /// A tile asked for thumbnails that aren't built yet.
-    pub fn pending(&self, version: u64) -> bool {
-        self.want.is_some_and(|(bar, size)| self.built != Some((bar, size, version)))
-    }
-
-    /// `design`'s thumbnail, if built for this bar and size.
-    pub fn get(&self, bar: Bar, size: (u32, u32), design: &str) -> Option<&Thumb> {
-        let built = self.built.is_some_and(|(b, s, _)| b == bar && s == size);
-        built.then(|| self.thumbs.iter().find(|t| t.design == design)).flatten()
-    }
-}
-
 #[derive(Default)]
 pub struct Cache {
     key: u64,
     pub content: Content,
-    pub designs: Designs,
     images: Option<shell::bars::Images>,
     /// The shell's app-icon service (names and icons of pinned apps), started on first use.
     icons: Option<(mypaper_bars::icons::Icons, std::sync::mpsc::Receiver<mypaper_bars::wake::Msg>)>,
@@ -113,7 +80,6 @@ impl Cache {
     pub(crate) fn clear_pictures(&mut self) {
         self.key = 0;
         self.content = Content::default();
-        self.designs = Designs::default();
         self.images = None;
     }
 
@@ -288,70 +254,6 @@ fn bar_base(
     (config.appearance.over(&theme), system)
 }
 
-/// Builds the design thumbnails a tile asked for, if they aren't already (see [`Designs`]).
-pub fn prepare_designs(app: &App, ui: &mut Ui) {
-    let mut cache = app.stage.borrow_mut();
-    let Some((bar, size)) = cache.designs.want.take() else { return };
-    let version = app.docs.version;
-    if cache.designs.built == Some((bar, size, version)) {
-        return;
-    }
-    let Some(monitor) = app.display().cloned() else { return };
-    let Ok(base) = bars_config(app, &monitor) else { return };
-    let theme_dir = theme_name(&app.docs).and_then(|t| mypaper_theme::locate(Some(&t)).ok());
-    let loaded = theme_dir.as_deref().and_then(|d| mypaper_theme::LoadedTheme::load(d).ok());
-    let Cache { images, icons, designs, .. } = &mut *cache;
-    let images = images.get_or_insert_with(shell::bars::Images::default);
-    let mut icons = icons.as_mut().map(|(i, _)| i);
-    let scale = size.0 as f32 / 400.0;
-    let model = shell::bars::sample_model(clock(app), "File Explorer");
-    let list: &[(&'static str, &str)] = match bar {
-        Bar::Top => &crate::pages::bars::TOP_DESIGNS,
-        Bar::Dock => &crate::pages::bars::DOCK_DESIGNS,
-    };
-    designs.thumbs.clear();
-    for &(design, _) in list {
-        // The file as it is, with this design: the bars resolve it exactly as on the desktop.
-        let mut raw = app.docs.doc(DocId::Bars).raw.clone();
-        let op = crate::docs::Op { doc: DocId::Bars, path: format!("/{}/design", bar.key()), value: Some(json!(design)) };
-        crate::docs::apply_op(&mut raw, &op);
-        let Ok(mut config) = BarsConfig::parse(&raw.to_string()).and_then(|c| c.for_monitor(&monitor.device, monitor.primary)) else {
-            continue;
-        };
-        config.dock.pinned = base.dock.pinned.clone();
-        config.resolve(shell::bars::default_pins);
-        let (appearance, system) = bar_base(app, &config, loaded.as_ref());
-        let (frame, at, tokens) = match bar {
-            Bar::Top => {
-                let tokens = shell::bars::Tokens::resolve(&config.top.look, &appearance, &system);
-                let frame = shell::bars::top(size.0, &config, &model, &tokens, scale, ui, images, None);
-                let y = if config.top.position == mypaper_bars::config::TopPosition::Bottom { size.1 as f32 - frame.size.1 as f32 } else { 0.0 };
-                (frame, (0.0, y), tokens)
-            }
-            Bar::Dock => {
-                let tokens = shell::bars::Tokens::resolve(&config.dock.look, &appearance, &system);
-                let apps = dock_apps(&config, icons.as_deref_mut());
-                let frame = shell::bars::dock(&config, &model, &apps, &tokens, scale, size, &[], &[], ui, images, None);
-                let (w, h) = (frame.size.0 as f32, frame.size.1 as f32);
-                let margin = config.dock.margin.unwrap_or(6.0) as f32 * scale;
-                let at = match config.dock.position {
-                    mypaper_bars::config::DockPosition::Bottom => ((size.0 as f32 - w) / 2.0, size.1 as f32 - h - margin),
-                    mypaper_bars::config::DockPosition::Top => ((size.0 as f32 - w) / 2.0, margin),
-                    mypaper_bars::config::DockPosition::Left => (margin, (size.1 as f32 - h) / 2.0),
-                    mypaper_bars::config::DockPosition::Right => (size.0 as f32 - w - margin, (size.1 as f32 - h) / 2.0),
-                };
-                (frame, at, tokens)
-            }
-        };
-        designs.thumbs.push(Thumb {
-            design,
-            ops: offset(&frame.list.ops, at.0, at.1).collect(),
-            shapes: frame.shapes.iter().map(|(r, radius)| shape(r.offset(at.0, at.1), *radius, &tokens)).collect(),
-        });
-    }
-    designs.built = Some((bar, size, version));
-}
-
 /// The bars' config as this display sees it (overrides applied, pins resolved).
 fn bars_config(app: &App, monitor: &mypaper_desktop::Monitor) -> anyhow::Result<BarsConfig> {
     let text = serde_json::to_string(&app.docs.doc(DocId::Bars).raw)?;
@@ -430,7 +332,7 @@ fn place_bar(
                     what: What::Module(slot),
                     rect: hit.rect.offset(x, y),
                     radius: 5.0,
-                    label: crate::pages::bars::module_name(module),
+                    label: crate::editing::bars::module_name(module),
                 });
             }
         }
@@ -836,16 +738,6 @@ pub fn outline(b: &mut B, rect: Rect, radius: f32, tag: bool) {
     let _ = tag;
 }
 
-/// A name tag (micro on solid) at the top-left of `rect`.
-pub fn name_tag(b: &mut B, rect: Rect, label: &str) {
-    let style = b.font(Font::Micro);
-    let (w, _) = b.measure(label, &style);
-    let tag = Rect::new(rect.left, rect.top - b.px(22.0), w + b.px(12.0), b.px(18.0));
-    let tag = if tag.top < 0.0 { tag.offset(0.0, rect.height() + b.px(26.0)) } else { tag };
-    b.fill(tag, b.px(4.0), b.p.solid);
-    b.text_in(tag, label, &style, b.p.on_solid, Align::Center);
-}
-
 fn dim(op: Op, by: f32) -> Op {
     let fade = |c: Rgba| c.with_alpha(c.a * by);
     match op {
@@ -889,15 +781,5 @@ pub fn image_round(b: &mut B, rect: Rect, image: &Arc<Image>, opacity: f32, radi
         source: Some(cover_source(rect, image)),
         radius,
     });
-}
-
-/// Which page a click on the Home stage opens.
-pub fn home_pick(item: Option<&Item>) -> Action {
-    match item.map(|i| &i.what) {
-        None => Action::Nav(Page::Wallpapers),
-        Some(What::Widget(id)) => Action::SelectWidget(Some(id.clone())),
-        Some(What::Bar(bar)) => Action::SelectBar(Some(*bar)),
-        Some(What::Module(slot)) => Action::SelectModule(Some(slot.clone())),
-    }
 }
 

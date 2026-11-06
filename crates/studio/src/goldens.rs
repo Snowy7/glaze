@@ -1,14 +1,12 @@
-//! Golden images of every main screen, light and dark, rendered headless through the same
-//! software target the window gets, from fixed files, wallpapers and monitors. They are compared
-//! with `tests/golden/*.png`; `MYPAPER_BLESS=1` writes them anew (and the README's copies in
-//! `docs/media/studio/`).
+//! Deterministic standalone window renders, compared with `tests/golden/window`.
+//! Set `MYPAPER_BLESS=1` to update baselines; review copies go to the window shots folder.
 
 use std::path::PathBuf;
 
 use mypaper_ui::{Ui, golden, render};
 
-use crate::actions::{Bar, Page, Section};
-use crate::app::{App, Overlay};
+use crate::actions::Action;
+use crate::app::App;
 use crate::docs::Docs;
 use crate::library::Library;
 use crate::theme::Theme;
@@ -38,137 +36,197 @@ fn repo() -> PathBuf {
 }
 
 pub fn app(dark: bool, ui: &Ui) -> App {
-    let docs = Docs::fixture([CONFIG, BARS, WIDGETS, "{}"]);
-    let library = Library::scan_in(&[repo().join("themes")], None, Some("rain-city"));
+    // Isolated Cargo targets are not beside the bundled themes. Resolve the fixture's
+    // active wallpaper explicitly, including after edits call Library::set_active.
+    let active = repo().join("themes/rain-city").display().to_string();
+    let mut config: serde_json::Value = serde_json::from_str(CONFIG).unwrap();
+    config["theme"] = serde_json::json!(active);
+    let docs = Docs::fixture([&config.to_string(), BARS, WIDGETS, "{}"]);
+    let library = Library::scan_in(&[repo().join("themes")], None, Some(&active));
     App::fixture(docs, Theme::fixed(dark, &ui.text), library, (1280, 800))
 }
 
-/// `app` as the window would show it once settled (design thumbnails take a second frame).
+/// Shared fixture pages inside the real standalone frame.
+pub fn window_app(dark: bool, ui: &Ui, size: (u32, u32)) -> App {
+    let mut app = app(dark, ui);
+    app.panel = Some(crate::panel::State::default());
+    app.panel.as_mut().unwrap().windowed = true;
+    app.size = size;
+    if app.library.active().is_none() {
+        if let Some(item) = app
+            .library
+            .items
+            .iter_mut()
+            .find(|item| item.id == "rain-city")
+        {
+            item.active = true;
+        }
+    }
+    crate::editing::plugins::fixture(&mut app.plugins);
+    app
+}
+
 pub fn shot(app: &mut App, ui: &mut Ui) -> mypaper_ui::Image {
-    loop {
-        if let Some((frame, show)) = crate::pages::stage(app) {
-            crate::stage::prepare(app, ui, (frame.width() as u32, frame.height() as u32), show);
-        }
-        crate::stage::prepare_designs(app, ui);
-        let built = crate::view::build(app, &mut ui.text);
-        if !app.stage.borrow().designs.pending(app.docs.version) {
-            return render(ui, &built.list, app.size.0, app.size.1).unwrap();
-        }
-    }
+    let built = crate::view::build(app, ui);
+    let image = render(ui, &built.list, app.size.0, app.size.1).unwrap();
+    app.frame.targets = built.targets;
+    app.frame.scrolls = built.scrolls;
+    app.frame.regions = built.regions;
+    app.frame.overlay_from = built.overlay_from;
+    image
 }
 
-/// Keyboard only: every place by its shortcut, regions by F6, controls by Tab, the palette by
-/// Ctrl+K and back out by Esc, with a fresh frame after each key (as the window does).
 #[test]
-fn keyboard_reaches_every_place_region_and_the_palette() {
+fn keyboard_reaches_window_pages_search_and_history() {
+    use crate::panel::Page;
     let mut ui = Ui::new().unwrap();
-    let mut app = app(true, &ui);
-    let ctrl = (true, false, false);
-    let none = (false, false, false);
-    let press = |app: &mut App, ui: &mut Ui, vk: u16, mods| {
-        app.key_with(vk, mods);
-        let built = crate::view::build(app, &mut ui.text);
-        app.frame.targets = built.targets;
-        app.frame.regions = built.regions;
-        app.frame.overlay_from = built.overlay_from;
-    };
-    press(&mut app, &mut ui, 0x31, ctrl);
-    for (vk, page) in [(0x32, Page::Wallpapers), (0x33, Page::Look), (0x34, Page::Widgets), (0x35, Page::Bars), (0x36, Page::Integrations), (0xBC, Page::Settings), (0x31, Page::Home)] {
-        press(&mut app, &mut ui, vk, ctrl);
-        assert_eq!(app.nav.page(), page);
+    let mut app = window_app(true, &ui, (1280, 800));
+    for (vk, page) in [
+        (0x30, Page::Root),
+        (0x31, Page::Wallpapers),
+        (0x32, Page::Look),
+        (0x33, Page::Bars),
+        (0x34, Page::Widgets),
+        (0x35, Page::DesktopMenu),
+        (0x36, Page::Windows),
+        (0x37, Page::Connections),
+        (0xBC, Page::Settings),
+        (0x48, Page::History),
+    ] {
+        app.key_with(vk, (true, false, false));
+        shot(&mut app, &mut ui);
+        assert_eq!(app.panel.as_ref().unwrap().page, page);
     }
-    // F6 visits each region in turn.
-    let mut regions = Vec::new();
+    app.key_with(0x4B, (true, false, false));
+    assert_eq!(app.panel.as_ref().unwrap().page, Page::Search);
+    app.key_with(0x1B, (false, false, false));
+    assert!(!app.quit);
+    // F6 reaches sidebar, title tools and editor; Tab returns with Shift+Tab.
+    shot(&mut app, &mut ui);
+    let mut visited = std::collections::HashSet::new();
     for _ in 0..app.frame.regions.len() {
-        press(&mut app, &mut ui, 0x75, none);
-        let focus = app.input.focus.expect("F6 focuses a control");
-        let rect = app.frame.targets.iter().find(|t| t.key == focus).unwrap().rect;
-        let c = mypaper_ui::Point::new((rect.left + rect.right) / 2.0, (rect.top + rect.bottom) / 2.0);
-        regions.push(app.frame.regions.iter().position(|r| r.contains(c)));
+        app.key_with(0x75, (false, false, false));
+        let rect = app
+            .frame
+            .targets
+            .iter()
+            .find(|t| Some(t.key) == app.input.focus)
+            .unwrap()
+            .rect;
+        let center = mypaper_ui::Point::new(
+            (rect.left + rect.right) / 2.0,
+            (rect.top + rect.bottom) / 2.0,
+        );
+        visited.insert(
+            app.frame
+                .regions
+                .iter()
+                .position(|r| r.contains(center))
+                .unwrap(),
+        );
     }
-    regions.dedup();
-    assert_eq!(regions.len(), app.frame.regions.len(), "F6 reaches every region: {regions:?}");
-    // Tab moves on, and Shift+Tab comes back.
-    let start = app.input.focus;
-    press(&mut app, &mut ui, 0x09, none);
-    assert_ne!(app.input.focus, start);
-    press(&mut app, &mut ui, 0x09, (false, true, false));
-    assert_eq!(app.input.focus, start);
-    // The palette opens on Ctrl+K and Esc closes it.
-    press(&mut app, &mut ui, 0x4B, ctrl);
-    assert!(matches!(app.overlay, Some(Overlay::Palette { .. })));
-    press(&mut app, &mut ui, 0x1B, none);
-    assert_eq!(app.overlay, None);
+    assert_eq!(visited.len(), app.frame.regions.len());
+    let before = app.input.focus;
+    app.key_with(0x09, (false, false, false));
+    app.key_with(0x09, (false, true, false));
+    assert_eq!(app.input.focus, before);
 }
 
-fn check(name: &str, dark: bool, setup: impl Fn(&mut App)) {
+#[test]
+fn render_window_pages() {
+    use crate::panel::{Command, Page};
+    let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-window\shots"));
+    let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
     let mut ui = Ui::new().unwrap();
-    ui.text.set_capacity(480);
-    let mut app = app(dark, &ui);
-    setup(&mut app);
-    let image = shot(&mut app, &mut ui);
-    let file = format!("{name}-{}.png", if dark { "dark" } else { "light" });
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden").join(&file);
-    golden::check(&image, &path).unwrap();
-    if std::env::var_os("MYPAPER_BLESS").is_some() {
-        let media = repo().join("docs/media/studio").join(&file);
-        golden::check(&image, &media).unwrap();
+    for size in [(1280, 800), (1920, 1080)] {
+        for dark in [true, false] {
+            for (page, name) in [
+                (Page::Root, "home"),
+                (Page::Wallpapers, "wallpapers"),
+                (Page::Look, "look"),
+                (Page::Bars, "bars"),
+                (Page::Widget, "widget"),
+                (Page::Settings, "settings"),
+                (Page::History, "history"),
+                (Page::FirstRun, "first-run"),
+                (Page::Look, "off"),
+            ] {
+                let mut app = window_app(dark, &ui, size);
+                app.run(Action::Panel(Command::Open(page)));
+                if page == Page::Widget {
+                    app.nav.widget = Some("clock-1".into());
+                }
+                if page == Page::History {
+                    app.run(Action::SetStyle(Some(mypaper_config::look::Style::Fluent)));
+                    app.run(Action::Preset("islands"));
+                    for (i, entry) in app
+                        .panel
+                        .as_ref()
+                        .unwrap()
+                        .history
+                        .borrow_mut()
+                        .entries
+                        .iter_mut()
+                        .enumerate()
+                    {
+                        entry.at = 1793958138 + i as u64 * 60;
+                    }
+                    app.toast = None;
+                }
+                if name == "off" {
+                    app.system
+                        .parts
+                        .iter_mut()
+                        .for_each(|part| part.running = false);
+                }
+                let image = shot(&mut app, &mut ui);
+                let file = format!(
+                    "{name}-{}x{}-{}.png",
+                    size.0,
+                    size.1,
+                    if dark { "dark" } else { "light" }
+                );
+                golden::write(&image, &out.join(&file)).unwrap();
+                golden::check(&image, &baseline.join(&file)).unwrap();
+            }
+        }
     }
 }
 
-macro_rules! screens {
-    ($($name:ident: $setup:expr;)*) => {$(
-        #[test]
-        fn $name() {
-            check(stringify!($name), true, $setup);
-            check(stringify!($name), false, $setup);
-        }
-    )*};
+#[test]
+fn window_layout_keeps_the_footer_pinned_and_preview_out_of_narrow_windows() {
+    use crate::panel::{Command, Page};
+    let mut ui = Ui::new().unwrap();
+    for (size, rail, preview) in [
+        ((960, 640), true, false),
+        ((1280, 800), false, false),
+        ((1920, 1080), false, true),
+    ] {
+        let mut app = window_app(true, &ui, size);
+        app.run(Action::Panel(Command::Open(Page::AddWidget)));
+        let built = crate::view::build(&app, &mut ui);
+        let interactive: Vec<_> = built.list.hits.iter().filter(|hit| hit.id < u32::MAX / 2).map(|hit| hit.id).collect();
+        assert_eq!(interactive, (1..=built.targets.len() as u32).collect::<Vec<_>>());
+        let r = crate::view::regions(&app);
+        let (column, live) = crate::view::content_regions(&app);
+        assert_eq!(r.rail, rail);
+        assert_eq!(live.is_some(), preview);
+        assert!(column.width() <= 752.0);
+        let cancel = built
+            .targets
+            .iter()
+            .rev()
+            .find(|t| t.action == Action::Panel(Command::Open(Page::Widgets)))
+            .unwrap();
+        assert!(cancel.rect.left >= column.left);
+        assert_eq!(cancel.rect.bottom, r.body.bottom - 16.0);
+        assert!(
+            !built
+                .targets
+                .iter()
+                .any(|t| t.action == Action::Panel(Command::Done))
+        );
+    }
 }
-
-screens! {
-    plugins: |app: &mut App| {
-        app.nav.page = Some(Page::Integrations);
-        app.nav.plugins = true;
-        crate::pages::plugins::fixture(&mut app.plugins);
-    };
-    plugins_consent: |app: &mut App| crate::pages::plugins::consent_fixture(app);
-    home: |app: &mut App| app.nav.page = Some(Page::Home);
-    wallpapers: |app: &mut App| {
-        app.nav.page = Some(Page::Wallpapers);
-        app.nav.wallpaper = app.library.items.iter().position(|w| w.id == "rain-city-amber");
-    };
-    look: |app: &mut App| app.nav.page = Some(Page::Look);
-    look_windows: |app: &mut App| {
-        app.nav.page = Some(Page::Look);
-        app.nav.look_windows = true;
-    };
-    widgets: |app: &mut App| {
-        app.nav.page = Some(Page::Widgets);
-        app.nav.widget = Some("weather-1".into());
-    };
-    bars: |app: &mut App| {
-        app.nav.page = Some(Page::Bars);
-        app.nav.bar = Some(Bar::Top);
-    };
-    bars_overview: |app: &mut App| app.nav.page = Some(Page::Bars);
-    integrations: |app: &mut App| app.nav.page = Some(Page::Integrations);
-    settings: |app: &mut App| {
-        app.nav.page = Some(Page::Settings);
-        app.nav.section = Some(Section::Performance);
-    };
-    troubleshoot: |app: &mut App| {
-        app.nav.page = Some(Page::Settings);
-        app.nav.section = Some(Section::Troubleshoot);
-    };
-    palette: |app: &mut App| {
-        app.texts.insert(crate::actions::FieldId::Palette, "dark".into());
-        app.overlay = Some(Overlay::Palette { selected: 0 });
-    };
-    add_wallpaper: |app: &mut App| {
-        app.nav.page = Some(Page::Wallpapers);
-        app.overlay = Some(Overlay::AddWallpaper { source: None, picked: None });
-    };
-    first_run: |app: &mut App| app.overlay = Some(Overlay::FirstRun { step: 0, starter: 0, taskbar: 0 });
-}
-

@@ -302,7 +302,7 @@ pub fn zones(app: &App, b: &mut B, c: &mut Col, target: ZoneTarget, caption: &st
             .filter_map(|v| v["zone"].as_str().map(str::to_owned))
             .collect(),
         ZoneTarget::AddRecord(path) => {
-            let layout = crate::pages::widgets::layout(app);
+            let layout = crate::editing::widgets::layout(app);
             path.split('/')
                 .nth(2)
                 .and_then(|s| s.parse::<usize>().ok())
@@ -395,7 +395,7 @@ pub fn choose_zone(app: &mut App, target: &ZoneTarget, city: usize) {
             json!({"label": city, "tz": zone}),
         ),
         ZoneTarget::AddRecord(path) => {
-            let layout = crate::pages::widgets::layout(app);
+            let layout = crate::editing::widgets::layout(app);
             let Some(instance) = path
                 .split('/')
                 .nth(2)

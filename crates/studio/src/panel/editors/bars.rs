@@ -142,9 +142,9 @@ pub fn design_name(app: &App, bar: Option<Bar>) -> String {
         .and_then(|v| v.as_str().map(str::to_owned))
         .unwrap_or_else(|| "monochrome".into());
     let designs: &[(&str, &str)] = match bar {
-        Some(Bar::Top) => &crate::pages::bars::TOP_DESIGNS,
-        Some(Bar::Dock) => &crate::pages::bars::DOCK_DESIGNS,
-        None => &crate::pages::bars::PRESETS,
+        Some(Bar::Top) => &crate::editing::bars::TOP_DESIGNS,
+        Some(Bar::Dock) => &crate::editing::bars::DOCK_DESIGNS,
+        None => &crate::editing::bars::PRESETS,
     };
     designs
         .iter()
@@ -720,9 +720,9 @@ pub fn designs(app: &App, b: &mut B, c: &mut Col) {
         ),
     );
     let designs: &[(&str, &str)] = match bar {
-        Some(Bar::Top) => &crate::pages::bars::TOP_DESIGNS,
-        Some(Bar::Dock) => &crate::pages::bars::DOCK_DESIGNS,
-        None => &crate::pages::bars::PRESETS,
+        Some(Bar::Top) => &crate::editing::bars::TOP_DESIGNS,
+        Some(Bar::Dock) => &crate::editing::bars::DOCK_DESIGNS,
+        None => &crate::editing::bars::PRESETS,
     };
     let path = bar.map_or_else(|| "/preset".into(), |bar| format!("/{}/design", bar.key()));
     let current = bar_value(app, &path).unwrap_or(json!("monochrome"));

@@ -535,7 +535,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             None,
             open(Page::Wallpapers),
         );
-        let recent = crate::pages::home::recent(app);
+        let recent = crate::editing::home::recent(app);
         if !recent.is_empty() {
             // The thumbnails belong to the Wallpaper row, above its separator.
             if matches!(b.list.ops.last(), Some(mypaper_ui::Op::Line { .. })) {
@@ -577,7 +577,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             c.y += b.px(58.0);
             b.hline(c.x, c.right(), c.y - 1.0, b.p.line);
         }
-        let look = crate::pages::look::summary(app)
+        let look = crate::editing::look::summary(app)
             .split(" · ")
             .take(2)
             .collect::<Vec<_>>()
@@ -610,7 +610,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             "Widgets",
             &format!(
                 "{} · {}",
-                crate::pages::widgets::count_here(app),
+                crate::editing::widgets::count_here(app),
                 ui::display_name(app, app.nav.display)
             ),
             "",
@@ -669,8 +669,8 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
 }
 
 fn widgets(app: &App, b: &mut B, c: &mut Col) {
-    let layout = crate::pages::widgets::layout(app);
-    let items = crate::pages::widgets::here(app, &layout);
+    let layout = crate::editing::widgets::layout(app);
+    let items = crate::editing::widgets::here(app, &layout);
     let add_width = b.measure("Add", &ui::font(b, 13.0, 500)).0 + b.px(44.0);
     let add = Rect::new(
         c.right() - add_width,
@@ -708,7 +708,7 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
             row(
                 b,
                 c,
-                Some(crate::pages::widgets::glyph_of(&instance.widget)),
+                Some(crate::editing::widgets::glyph_of(&instance.widget)),
                 name,
                 "",
                 &caption,
@@ -868,7 +868,7 @@ pub fn toast(app: &App, b: &mut B, window: Rect) {
         return;
     };
     let r = Rect::new(
-        b.px(16.0),
+        window.left + b.px(16.0),
         window.bottom - b.px(60.0 + super::editors::footer_height(app)),
         window.width() - b.px(32.0),
         b.px(44.0),

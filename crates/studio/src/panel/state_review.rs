@@ -36,7 +36,7 @@ fn first_run_choices_are_independent_of_the_previous_choice() {
     let expected =
         [DocId::Config, DocId::Bars, DocId::Widgets].map(|id| app.docs.doc(id).raw.clone());
     app.run(Action::FirstRunTaskbar(2));
-    assert!(crate::pages::widgets::layout(&app).instances.is_empty());
+    assert!(crate::editing::widgets::layout(&app).instances.is_empty());
     app.run(Action::FirstRunTaskbar(0));
     assert_eq!(
         [DocId::Config, DocId::Bars, DocId::Widgets].map(|id| app.docs.doc(id).raw.clone()),
@@ -48,7 +48,7 @@ fn first_run_choices_are_independent_of_the_previous_choice() {
     app.run(Action::FirstRunTaskbar(0));
     assert_eq!(app.get(DocId::Bars, "/preset"), Some(&json!("islands")));
     assert_eq!(app.get(DocId::Bars, "/dock/enabled"), Some(&json!(true)));
-    assert!(!crate::pages::widgets::layout(&app).instances.is_empty());
+    assert!(!crate::editing::widgets::layout(&app).instances.is_empty());
     for step in 0..3 {
         app.overlay = Some(crate::app::Overlay::FirstRun {
             step,
@@ -191,7 +191,7 @@ fn render_panel_states() {
                     .unwrap(),
                 "no-room" => {
                     let grid = crate::stage::grid_for(
-                        &crate::pages::widgets::layout(&app),
+                        &crate::editing::widgets::layout(&app),
                         app.display().unwrap(),
                     );
                     app.docs.edit("Fixture", &[Op{doc:DocId::Widgets,path:"/instances".into(),value:Some(json!([{"instance":"cover","widget":"clock","monitor":"","cell":[0,0],"size":[grid.cols,grid.rows]}]))}]).unwrap();

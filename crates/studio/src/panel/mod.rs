@@ -1,12 +1,11 @@
-//! Opt-in v16 Studio panel. It shares the legacy app's documents, actions, input and workers;
-//! only window placement, navigation and presentation belong to this module.
+//! Studio's shared pages, editing state and optional docked presentation.
 
 mod colors;
 pub(crate) mod choosers;
 pub(crate) mod material;
-mod controls;
+pub(crate) mod controls;
 pub use controls::display_name;
-mod editors;
+pub(crate) mod editors;
 mod first_run;
 pub(crate) use first_run::run as run_first_run;
 mod history;
@@ -16,7 +15,7 @@ mod lists;
 mod measure;
 pub(crate) use measure::{optimize_heap, prepare_frame};
 mod options;
-mod pages;
+pub(crate) mod pages;
 mod peek;
 mod pickers;
 mod saving;
@@ -42,7 +41,7 @@ use crate::actions::{Action, FieldId};
 use crate::app::App;
 use crate::view::Built;
 
-pub const TITLE: &str = "mypaper Studio · Panel";
+pub const TITLE: &str = "mypaper Studio (new) · Panel";
 
 pub fn enabled() -> bool {
     std::env::var("MYPAPER_STUDIO_PANEL").is_ok_and(|v| v == "1")
@@ -117,7 +116,7 @@ impl Page {
         }
     }
 
-    fn parent(self) -> Option<Self> {
+    pub(crate) fn parent(self) -> Option<Self> {
         match self {
             Self::Root => None,
             Self::Performance
@@ -140,6 +139,8 @@ impl Page {
 
 #[derive(Debug, Default)]
 pub struct State {
+    /// The standalone frame hosts these same pages without any desktop picking session.
+    pub windowed: bool,
     pub chooser: std::cell::RefCell<choosers::State>,
     reclaim_heap: std::cell::Cell<bool>,
     raster: measure::Raster,
@@ -527,9 +528,9 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
                 _ => return false,
             };
             if shift {
-                crate::pages::widgets::nudge(app, 0, 0, dx, dy);
+                crate::editing::widgets::nudge(app, 0, 0, dx, dy);
             } else {
-                crate::pages::widgets::nudge(app, dx, dy, 0, 0);
+                crate::editing::widgets::nudge(app, dx, dy, 0, 0);
             }
             return true;
         }
@@ -541,7 +542,8 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
         0x5A | 0x59 => app.run(Action::Redo),
         0x57 => run(app, Command::Done),
         0x4B => {
-            run(app, Command::Open(Page::Root));
+            let page = if app.panel.as_ref().unwrap().windowed { Page::Search } else { Page::Root };
+            run(app, Command::Open(page));
             app.focus_field(FieldId::Palette);
         }
         0x46 => {
@@ -579,13 +581,60 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
 
 pub fn palette_for(app: &App) -> mypaper_ui::controls::Palette {
     if app.panel.is_some() && !app.theme.contrast {
-        tokens::palette(app.theme.palette.dark)
+        let mut palette = tokens::palette(app.theme.palette.dark);
+        if app.panel.as_ref().is_some_and(|state| state.windowed) {
+            palette.bg = tokens::hex(if palette.dark { 0x1a1a1a } else { 0xf4f4f4 });
+        }
+        palette
     } else {
         app.theme.palette
     }
 }
 
+pub(crate) fn save_status(app: &App, page: Page) -> &'static str {
+    if let Some(issue) = controls::relevant_docs(page).iter().find_map(|id| app.docs.doc(*id).issue) {
+        return match issue {
+            crate::docs::ReadIssue::Newer => "Newer file",
+            crate::docs::ReadIssue::Unavailable => "Can't read",
+            crate::docs::ReadIssue::Malformed { .. } => "Read only",
+        };
+    }
+    let state = app.panel.as_ref().unwrap();
+    if !state.save_errors.borrow().is_empty() || !state.theme_errors.borrow().is_empty()
+        || matches!(app.docs.saved, crate::docs::Saved::Failed(_)) {
+        "Not saved"
+    } else if app.drag.is_some() {
+        "Saving…"
+    } else {
+        "Saved"
+    }
+}
+
 pub fn build(app: &App, text: &mut Text) -> Built {
+    let page = prepare_page(app, text);
+    let p = palette_for(app);
+    let ty = app.theme.ty.clone();
+    let mut b = Builder::new(text, &p, &ty, app.scale, &app.input);
+    let window = Rect::new(0.0, 0.0, app.size.0 as f32, app.size.1 as f32);
+    b.fill(window, 0.0, p.chrome);
+    let header = Rect::new(0.0, 0.0, window.width(), b.px(48.0));
+    pages::header(app, &mut b, header, page);
+    let body = content(app, &mut b, Rect::new(0.0, header.bottom, window.width(), window.height() - header.height()), page);
+    pages::toast(app, &mut b, window);
+    controls::flash_hovered_display(app, &b);
+    choosers::finish(app);
+    Built {
+        list: b.list,
+        semantics: b.semantics,
+        targets: b.targets,
+        scrolls: b.scrolls,
+        chrome: vec![(header, Chrome::Caption)],
+        regions: vec![header, body],
+        overlay_from: if app.overlay.is_some() { 0 } else { usize::MAX },
+    }
+}
+
+pub(crate) fn prepare_page(app: &App, text: &mut Text) -> Page {
     pick_client::connect(app);
     choosers::begin(app);
     history::observe(app);
@@ -599,29 +648,27 @@ pub fn build(app: &App, text: &mut Text) -> Built {
         state.specimens.borrow_mut().clear();
         measure::leave_page(app, text);
     }
-    let p = palette_for(app);
-    let ty = app.theme.ty.clone();
-    let mut b = Builder::new(text, &p, &ty, app.scale, &app.input);
-    let window = Rect::new(0.0, 0.0, app.size.0 as f32, app.size.1 as f32);
-    b.fill(window, 0.0, p.chrome);
-    let header = Rect::new(0.0, 0.0, window.width(), b.px(48.0));
-    pages::header(app, &mut b, header, page);
+    page
+}
+
+/// The same scrollable page and pinned creation/restore footer in either host.
+pub(crate) fn content(app: &App, b: &mut crate::ui::B, area: Rect, page: Page) -> Rect {
     let footer = editors::footer_height(app);
     let mut failures = crate::ui::Col {
-        x: b.px(16.0), y: header.bottom,
-        w: window.width() - b.px(32.0), view: key("panel-save-feedback"),
+        x: area.left + b.px(16.0), y: area.top,
+        w: area.width() - b.px(32.0), view: key("panel-save-feedback"),
     };
-    saving::write_banners(app, &mut b, &mut failures);
+    saving::write_banners(app, b, &mut failures);
     let body = Rect::new(
-        0.0,
+        area.left,
         failures.y,
-        window.width(),
-        (window.height() - failures.y - app.px(footer)).max(0.0),
+        area.width(),
+        (area.bottom - failures.y - app.px(footer)).max(0.0),
     );
     let view = key(("studio-panel", page));
     b.scroll(view, body, app.nav.scroll(view), Action::None, |b, top| {
         let mut c = crate::ui::Col {
-            x: b.px(16.0),
+            x: area.left + b.px(16.0),
             y: top + b.px(4.0),
             w: body.width() - b.px(32.0),
             view,
@@ -635,24 +682,13 @@ pub fn build(app: &App, text: &mut Text) -> Built {
         colors::finish(app, b);
         c.y + b.px(16.0)
     });
-    lists::drop_overlay(app, &mut b);
+    lists::drop_overlay(app, b);
     editors::footer(
         app,
-        &mut b,
-        Rect::new(0.0, body.bottom, window.width(), app.px(footer)),
+        b,
+        Rect::new(area.left, body.bottom, area.width(), app.px(footer)),
     );
-    pages::toast(app, &mut b, window);
-    controls::flash_hovered_display(app, &b);
-    choosers::finish(app);
-    Built {
-        list: b.list,
-        semantics: b.semantics,
-        targets: b.targets,
-        scrolls: b.scrolls,
-        chrome: vec![(header, Chrome::Caption)],
-        regions: vec![header, body],
-        overlay_from: if app.overlay.is_some() { 0 } else { usize::MAX },
-    }
+    body
 }
 
 /// Reserve a top-bar band and 96 DIPs for a floating dock, within the primary work area.
@@ -838,6 +874,7 @@ pub fn event(app: &mut App, event: &mypaper_ui::Event) -> bool {
 }
 
 fn move_to_display(app: &App) {
+    if app.panel.as_ref().is_some_and(|state| state.windowed) { return; }
     if pick_client::place_panel(app) { return; }
     use windows::Win32::{
         Foundation::{POINT, RECT},
@@ -1138,7 +1175,7 @@ pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
             return None;
         }
         let index = parts.get(2)?.parse::<usize>().ok()?;
-        let layout = crate::pages::widgets::layout(app);
+        let layout = crate::editing::widgets::layout(app);
         let instance = layout.instances.get(index)?;
         let manifest = &app.registry.get(&instance.widget)?.manifest;
         let resolved = serde_json::Value::Object(manifest.resolve_settings(&instance.settings));

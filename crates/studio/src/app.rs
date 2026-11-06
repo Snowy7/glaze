@@ -136,9 +136,9 @@ pub enum Msg {
 pub const WM_STUDIO: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 41;
 
 pub struct App {
-    /// Present only for the opt-in desktop panel; legacy Studio keeps its own navigation.
+    /// Shared page state; `windowed` selects the standalone host instead of docking.
     pub panel: Option<crate::panel::State>,
-    pub plugins: crate::pages::plugins::State,
+    pub plugins: crate::editing::plugins::State,
     pub docs: Docs,
     pub theme: Theme,
     pub scale: f32,
@@ -185,11 +185,8 @@ pub struct App {
 impl App {
     /// Studio as it opens: the files, the wallpapers, the machine.
     pub fn new(text: &mypaper_ui::Text, scale: f32, size: (u32, u32)) -> Self {
-        let mut docs = Docs::load();
-        let panel = crate::panel::enabled();
-        if !panel {
-            migrate(&mut docs);
-        }
+        let docs = Docs::load();
+        let docked = crate::panel::enabled();
         let appearance = Appearance::parse(
             docs.get(DocId::Studio, "/appearance")
                 .and_then(Value::as_str)
@@ -200,24 +197,15 @@ impl App {
         let mut app = Self::with(docs, theme, library, scale, size, false);
         app.monitors = mypaper_desktop::monitor_infos();
         app.system = System::probe();
-        if panel {
-            app.panel = Some(crate::panel::State::default());
-            app.nav.display = app.monitors.iter().position(|m| m.primary).unwrap_or(0);
-            app.system.gpus();
-        } else {
-            app.restore_place();
-        }
-        if !panel && first_run_due(&app.docs) {
-            app.overlay = Some(Overlay::FirstRun {
-                step: 0,
-                starter: 0,
-                taskbar: 0,
-            });
-        }
-        if panel && first_run_due(&app.docs) {
+        app.panel = Some(crate::panel::State::default());
+        app.panel.as_mut().unwrap().windowed = !docked;
+        app.nav.display = app.monitors.iter().position(|m| m.primary).unwrap_or(0);
+        app.system.gpus();
+        if first_run_due(&app.docs) {
             app.panel.as_mut().unwrap().page = crate::panel::Page::FirstRun;
             app.overlay = Some(Overlay::FirstRun { step: 0, starter: 0, taskbar: 0 });
         }
+
         app
     }
 
@@ -595,7 +583,7 @@ impl App {
                 }
             }
             Drag::Widget { .. } | Drag::Module { .. } => {
-                crate::pages::drag_to(self, drag, p);
+                crate::editing::drag_to(self, drag, p);
             }
         }
     }
@@ -653,7 +641,7 @@ impl App {
                 self.after_edit(&[edit.doc]);
             }
             Some(drag @ (Drag::Widget { .. } | Drag::Module { .. })) => {
-                crate::pages::drop_drag(self, drag);
+                crate::editing::drop_drag(self, drag);
             }
             _ => {}
         }
@@ -711,13 +699,13 @@ impl App {
             0x25..=0x28 => {
                 if alt {
                     self.reorder(if matches!(vk, 0x26 | 0x25) { -1 } else { 1 });
-                } else if !crate::pages::key(self, vk, shift) {
+                } else if !crate::editing::key(self, vk, shift) {
                     self.arrows(vk, shift);
                 }
             }
             0x24 | 0x23 => self.slider_key(if vk == 0x24 { f64::MIN } else { f64::MAX }),
             _ => {
-                crate::pages::key(self, vk, shift);
+                crate::editing::key(self, vk, shift);
             }
         }
     }
@@ -1093,7 +1081,7 @@ impl App {
     pub fn set(&mut self, edit: &Edit, value: Value) {
         if crate::panel::intercept_set(self, edit, &value) { return; }
         let value = (!value.is_null()).then_some(value);
-        if edit.doc == DocId::Studio && crate::pages::intercept(self, &edit.path, value.clone()) {
+        if edit.doc == DocId::Studio && crate::editing::intercept(self, &edit.path, value.clone()) {
             self.dirty = true;
             return;
         }
@@ -1453,7 +1441,7 @@ impl App {
             }
             Action::Panel(command) => crate::panel::run(self, command),
             Action::Back if self.panel.is_some() => crate::panel::run(self, crate::panel::Command::Back),
-            Action::Back => crate::pages::back(self),
+            Action::Back => crate::editing::back(self),
             Action::Palette => {
                 self.texts.remove(&FieldId::Palette);
                 self.overlay = Some(Overlay::Palette { selected: 0 });
@@ -1534,10 +1522,10 @@ impl App {
                     self.run(action);
                 }
             }
-            Action::Open(target) if target == "mypaper-custom:new" => crate::pages::widgets::new_custom(self),
+            Action::Open(target) if target == "mypaper-custom:new" => crate::editing::widgets::new_custom(self),
             Action::Open(target) => crate::system::open(&target),
             Action::Reveal(path) => crate::system::reveal(&path),
-            other => crate::pages::run(self, other),
+            other => crate::editing::run(self, other),
         }
         crate::panel::after_action(self);
     }
@@ -1620,26 +1608,6 @@ pub fn theme_name(docs: &Docs) -> Option<String> {
     docs.get(DocId::Config, "/theme")
         .and_then(Value::as_str)
         .map(str::to_owned)
-}
-
-/// D2's migration: adopt an active user theme's Windows styling into the user's look, once.
-fn migrate(docs: &mut Docs) {
-    if docs.error(DocId::Config).is_some() || docs.is_set(DocId::Config, "/look/windows") {
-        return;
-    }
-    let Ok(mut config) = serde_json::from_value::<mypaper_config::Config>(docs.doc(DocId::Config).effective.clone()) else {
-        return;
-    };
-    if mypaper_theme::migrate_windows(&mut config)
-        && let Ok(layer) = serde_json::to_value(&config.look.windows)
-    {
-        let _ = docs.edit("Your Windows styling", &[Op {
-            doc: DocId::Config,
-            path: "/look/windows".into(),
-            value: Some(layer),
-        }]);
-        log::info!("Windows styling moved into your look (D2)");
-    }
 }
 
 /// First run: no settings of any kind yet, and Studio hasn't finished it.

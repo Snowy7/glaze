@@ -17,7 +17,7 @@ mod glass;
 mod images;
 mod library;
 mod look;
-mod pages;
+mod editing;
 mod panel;
 mod peek;
 mod search;
@@ -52,7 +52,8 @@ use windows::core::w;
 use crate::app::{App, Msg, WM_STUDIO};
 use mypaper_bars::wake as mypaper_bars_wake;
 
-const TITLE: &str = "mypaper Studio";
+// This branch runs alongside the installed Studio until the owner chooses to replace it.
+const TITLE: &str = "mypaper Studio (new)";
 
 /// Wakes the UI thread's loop (workers post after sending a [`Msg`]).
 pub fn wake(thread: u32) {
@@ -99,16 +100,13 @@ impl Studio {
         }
         app.size = size;
         panel::prepare_frame(app, surface);
-        if app.panel.is_none() && let Some((frame, show)) = pages::stage(app) {
-            stage::prepare(app, ui, (frame.width() as u32, frame.height() as u32), show);
-        }
-        let mut built = if app.panel.is_some() {
+        let docked = !app.panel.as_ref().unwrap().windowed;
+        let mut built = if docked {
             panel::build(app, &mut ui.text)
         } else {
-            stage::prepare_designs(app, ui);
-            view::build(app, &mut ui.text)
+            view::build(app, ui)
         };
-        if app.panel.is_some() && panel::fit_height(app, surface, &built) {
+        if docked && panel::fit_height(app, surface, &built) {
             built = panel::build(app, &mut ui.text);
         }
         let size = surface.client_size();
@@ -128,11 +126,6 @@ impl Studio {
         }
         app.dirty = false;
         if app.panel.is_some() { panel::after_present(app); }
-        // A design tile asked for thumbnails this frame: build them in the next one.
-        if app.panel.is_none() && app.stage.borrow().designs.pending(app.docs.version) {
-            app.dirty = true;
-            crate::wake(app.thread);
-        }
         app.settle_reveal();
         // Text cursor over fields, an arrow elsewhere.
         let over_field = app
@@ -251,7 +244,7 @@ fn run() -> Result<()> {
     let title = if panel_mode { panel::TITLE } else { TITLE };
     // SAFETY: a named mutex held (never closed) for the life of the process.
     unsafe {
-        let name = if panel_mode { w!("Local\\mypaper-studio-panel") } else { w!("Local\\mypaper-studio") };
+        let name = if panel_mode { w!("Local\\mypaper-studio-panel-new") } else { w!("Local\\mypaper-studio-window-new") };
         let _mutex = CreateMutexW(None, true, name).context("mutex")?;
         if GetLastError() == ERROR_ALREADY_EXISTS {
             if let Ok(hwnd) = FindWindowW(w!("mypaper.ui.app"), &windows::core::HSTRING::from(title)) {
@@ -264,8 +257,7 @@ fn run() -> Result<()> {
     }
     let mut ui = Ui::new()?;
     // Studio shows a few hundred labels at once: keep them all laid out.
-    ui.text.set_capacity(480);
-    if panel_mode { ui.text.set_capacity(24); }
+    ui.text.set_capacity(64);
     // UI Automation loads on its first request rather than before the first paint.
     let min = if panel_mode { (360, 160) } else { (960, 640) };
     let surface = Surface::new_deferred_accessibility(Kind::App { min }, title, Role::Window)?;
@@ -274,7 +266,7 @@ fn run() -> Result<()> {
     let thread = unsafe { GetCurrentThreadId() };
     let (tx, rx) = channel::<Msg>();
     let mut app = App::new(&ui.text, scale, (1280, 800));
-    if panel_mode { app.images.borrow_mut().set_budget(2 << 20); }
+    app.images.borrow_mut().set_budget(2 << 20);
     app.window = Some(surface.hwnd());
     app.inbox = Some(tx.clone());
     app.thread = thread;
@@ -282,6 +274,7 @@ fn run() -> Result<()> {
     surface.set_icon_png(include_bytes!("../assets/icon-32.png"));
     let (bounds, maximized) = if panel_mode { (panel::placement(&app), false) } else { placement(&app, scale) };
     surface.place(bounds);
+    panel::round_window(surface.hwnd());
     if panel_mode {
         panel::fit_client(&surface, bounds);
         panel::round_window(surface.hwnd());

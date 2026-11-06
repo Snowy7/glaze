@@ -149,6 +149,7 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
     });
     group(b, c, "Studio", |b, c| {
         setting(app, b, c, "studio_appearance", "Appearance", "");
+        if !app.panel.as_ref().unwrap().windowed {
         let left = crate::panel::pick_client::panel_side(app) == Some("left");
         text(
             b,
@@ -172,6 +173,7 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
         );
         b.stroke(rect, b.px(7.0), b.px(1.0), b.p.edge);
         c.y = rect.bottom + b.px(8.0);
+        }
     });
     group(b, c, "History", |b, c| {
         select(
@@ -238,7 +240,7 @@ pub fn keyboard(b: &mut B, c: &mut Col) {
                 ("Undo", "Ctrl Z"),
                 ("Redo", "Ctrl Y / Ctrl Shift Z"),
                 ("Duplicate widget", "Ctrl Shift D"),
-                ("Done", "Ctrl W"),
+                ("Close Studio", "Ctrl W"),
                 ("Next / previous control", "Tab / Shift Tab"),
                 ("Next / previous region", "F6 / Shift F6"),
                 ("Open or apply", "Enter / Space"),

@@ -13,7 +13,7 @@ fn app(ui: &Ui, dark: bool) -> App {
     app.panel = Some(State::default());
     let mut bars = app.docs.doc(DocId::Bars).raw.clone();
     bars["dock"]["pinned"] = json!(super::icons::fixture_pins());
-    let mut layout = crate::pages::widgets::layout(&app);
+    let mut layout = crate::editing::widgets::layout(&app);
     layout.upgrade();
     app.docs = crate::docs::Docs::fixture([
         &app.docs.doc(DocId::Config).raw.to_string(),
@@ -21,7 +21,7 @@ fn app(ui: &Ui, dark: bool) -> App {
         &serde_json::to_string(&layout).unwrap(),
         &app.docs.doc(DocId::Studio).raw.to_string(),
     ]);
-    crate::pages::plugins::fixture(&mut app.plugins);
+    crate::editing::plugins::fixture(&mut app.plugins);
     app.size = (480, 760);
     // Bare IDs resolve beside the executable. An isolated target isn't beside the repo's
     // themes; keep the fixture's bundled wallpaper active without touching any files.
@@ -172,7 +172,7 @@ fn render_panel_pages() {
                             ),
                             json!("glass"),
                         ));
-                        let layout = crate::pages::widgets::layout(&app);
+                        let layout = crate::editing::widgets::layout(&app);
                         let own = super::widget_look::appearance(&app, &layout.instances[0], super::widget_look::inherited_style(&app));
                         app.run(Action::Set(crate::actions::Edit::new(DocId::Widgets, "/instances/0/appearance", "Its own look"), own));
                     } else if name != "clock" {
@@ -191,7 +191,7 @@ fn render_panel_pages() {
                     }
                 }
                 "photos" | "photos-polaroid" => {
-                    let mut layout = crate::pages::widgets::layout(&app);
+                    let mut layout = crate::editing::widgets::layout(&app);
                     let mut photo = layout.instances[0].clone();
                     photo.widget = "photo".into();
                     photo.instance = "photo-1".into();
@@ -284,9 +284,9 @@ fn render_panel_pages() {
                     app.texts
                         .insert(crate::actions::FieldId::AddName, "Rain picture".into());
                 }
-                "connection" => app.nav.integration = crate::pages::integrations::LIST.len(),
+                "connection" => app.nav.integration = crate::editing::integrations::LIST.len(),
                 "connection-reconnect" => {
-                    app.nav.integration = crate::pages::integrations::LIST.len() + 3
+                    app.nav.integration = crate::editing::integrations::LIST.len() + 3
                 }
                 "history" => {
                     super::history::observe(&app);
@@ -695,7 +695,7 @@ fn widget_creation_is_staged_and_search_opens_panel_pages() {
     super::run(&mut app, Command::Open(Page::AddWidget));
     super::run(&mut app, Command::AddWidget);
     assert_eq!(app.panel.as_ref().unwrap().page, Page::Widget);
-    assert_eq!(crate::pages::widgets::layout(&app).instances.len(), 7);
+    assert_eq!(crate::editing::widgets::layout(&app).instances.len(), 7);
     app.texts
         .insert(crate::actions::FieldId::Palette, "on battery".into());
     let results = crate::search::results(&app);

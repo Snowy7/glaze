@@ -56,7 +56,7 @@ pub fn run(app: &mut App, action: Action) {
     };
     begin(app);
     let apply = match action {
-        Action::FirstRunPick(index) if crate::pages::first_run::panel_starter(index).is_some() => {
+        Action::FirstRunPick(index) if crate::editing::first_run::panel_starter(index).is_some() => {
             app.overlay = Some(Overlay::FirstRun {
                 step,
                 starter: index,
@@ -120,7 +120,7 @@ pub fn run(app: &mut App, action: Action) {
     let Some((starter, taskbar)) = apply else {
         return;
     };
-    let (wallpaper, preset, widgets) = crate::pages::first_run::panel_starter(starter).unwrap();
+    let (wallpaper, preset, widgets) = crate::editing::first_run::panel_starter(starter).unwrap();
     let mut docs = app
         .panel
         .as_ref()
@@ -230,7 +230,7 @@ pub fn run(app: &mut App, action: Action) {
 }
 
 fn contents(index: usize, taskbar: usize) -> String {
-    let (_, _, widgets) = crate::pages::first_run::panel_starter(index).unwrap();
+    let (_, _, widgets) = crate::editing::first_run::panel_starter(index).unwrap();
     let style = ["Liquid", "Fluent", "One UI", "Mono"][index];
     if taskbar == 2 {
         return format!("Wallpaper · {style}");
@@ -250,7 +250,7 @@ fn contents(index: usize, taskbar: usize) -> String {
 /// Tile-sized shell drawings: a visible bar band and the starter's own complete widgets.
 fn starter_preview(app: &App, b: &mut B, index: usize, rect: Rect, taskbar: usize) {
     use serde_json::json;
-    let Some((wallpaper, preset, widgets)) = crate::pages::first_run::panel_starter(index) else {
+    let Some((wallpaper, preset, widgets)) = crate::editing::first_run::panel_starter(index) else {
         return;
     };
     let style = [
@@ -351,7 +351,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                 "2 of 3 · A starting point you can change",
             );
             group(b, c, "Starter", |b, c| {
-                let starters = crate::pages::first_run::panel_starters();
+                let starters = crate::editing::first_run::panel_starters();
                 let choices: Vec<_> = starters
                     .iter()
                     .enumerate()

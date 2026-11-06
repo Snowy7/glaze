@@ -132,7 +132,7 @@ pub fn plugin_image(app: &App, id: &str) -> Option<std::sync::Arc<Image>> {
 pub fn plugin_glyph(app: &App, id: &str) -> Glyph {
     use mypaper_ui::icons::Icon;
     let Some((plugin, face)) = id.split_once("--") else {
-        return crate::pages::widgets::glyph_of(id);
+        return crate::editing::widgets::glyph_of(id);
     };
     let manifest = app
         .plugins
@@ -160,7 +160,7 @@ pub fn plugin_glyph(app: &App, id: &str) -> Glyph {
         Some("clock") => Icon::Clock,
         Some("calendar") => Icon::Calendar,
         Some("package") => Icon::Package,
-        _ => return crate::pages::widgets::glyph_of(plugin),
+        _ => return crate::editing::widgets::glyph_of(plugin),
     }
     .into()
 }

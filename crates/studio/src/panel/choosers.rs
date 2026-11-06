@@ -168,7 +168,7 @@ fn cards(
     if choices.is_empty() {
         return None;
     }
-    let columns = if b.t.text_scale > 1.0 { 1 } else { 2 };
+    let columns = if b.t.text_scale > 1.0 { 1 } else if c.w >= b.px(640.0) { 3 } else { 2 };
     app.panel
         .as_ref()
         .unwrap()

@@ -5,7 +5,7 @@ use mypaper_widgets::manifest::{Setting, WidgetManifest};
 use serde_json::{Map, Value, json};
 
 use super::*;
-use crate::pages::widgets as legacy;
+use crate::editing::widgets as legacy;
 
 fn control_group(setting: &Setting) -> &str {
     if matches!(setting, Setting::Select { .. })
@@ -106,8 +106,12 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
     }
     group(b, c, "Size", |b, c| {
         size_controls(b, c, instance);
-        notice(b, c, "Drag to move · arrows move one cell");
-        notice(b, c, "Drag the corner brackets on the desktop to resize.");
+        if app.panel.as_ref().unwrap().windowed {
+            notice(b, c, "Arrow keys move one cell; Shift + arrows resize.");
+        } else {
+            notice(b, c, "Drag to move \u{b7} arrows move one cell");
+            notice(b, c, "Drag the corner brackets on the desktop to resize.");
+        }
     });
     group(b, c, "Its look", |b, c| {
         let own = instance.appearance != Default::default();

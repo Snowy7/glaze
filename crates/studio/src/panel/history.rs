@@ -463,7 +463,7 @@ fn summary(app: &App, before: &Desktop, after: &Desktop) -> String {
             return format!("{}: bars changed", super::controls::display_name(app, app.nav.display));
         }
         let name = |bars: &Value| {
-            crate::pages::bars::PRESETS
+            crate::editing::bars::PRESETS
                 .iter()
                 .find(|(id, _)| bars.get("preset").and_then(Value::as_str) == Some(id))
                 .map_or("Custom", |(_, name)| *name)

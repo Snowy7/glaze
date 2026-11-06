@@ -102,7 +102,7 @@ mod tests {
     fn every_style_round_trips_through_the_current_widget_format() {
         let ui = mypaper_ui::Ui::new().unwrap();
         let app = crate::goldens::app(true, &ui);
-        let layout = crate::pages::widgets::layout(&app);
+        let layout = crate::editing::widgets::layout(&app);
         for style in Style::ALL {
             let raw = appearance(&app, &layout.instances[0], style);
             let parsed: Appearance = serde_json::from_value(raw).unwrap();
@@ -123,7 +123,7 @@ mod tests {
         crate::panel::history::observe(&app);
         let original = app.docs.doc(DocId::Widgets).raw.clone();
         for style in Style::ALL {
-            let layout = crate::pages::widgets::layout(&app);
+            let layout = crate::editing::widgets::layout(&app);
             let own = appearance(&app, &layout.instances[0], style);
             app.run(Action::Set(
                 Edit::new(DocId::Widgets, "/instances/0/appearance", "Widget style"),
@@ -164,7 +164,7 @@ mod tests {
                     app.theme.ty.text_scale = scale;
                     if page == Page::Widget {
                         app.nav.widget = Some("clock-1".into());
-                        let layout = crate::pages::widgets::layout(&app);
+                        let layout = crate::editing::widgets::layout(&app);
                         let own = appearance(&app, &layout.instances[0], Style::Liquid);
                         app.run(Action::Set(
                             Edit::new(DocId::Widgets, "/instances/0/appearance", "Its own look"),

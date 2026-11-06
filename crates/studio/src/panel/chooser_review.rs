@@ -106,7 +106,7 @@ fn render_chooser_review() {
         viewport_shot(&gallery, &mut ui, "gallery-plugins", dark);
         let mut photo = fixture(&ui, dark, Page::Widget);
         photo.run(Action::AddWidget("photo".into()));
-        photo.nav.widget = crate::pages::widgets::layout(&photo)
+        photo.nav.widget = crate::editing::widgets::layout(&photo)
             .instances
             .iter()
             .find(|instance| instance.widget == "photo")
@@ -147,7 +147,7 @@ fn render_chooser_review() {
         for (widget, face) in [("clock-1", "world"), ("now-playing-1", "strip")] {
             let mut app = fixture(&ui, dark, Page::Widget);
             app.nav.widget = Some(widget.into());
-            let layout = crate::pages::widgets::layout(&app);
+            let layout = crate::editing::widgets::layout(&app);
             let index = layout
                 .instances
                 .iter()
@@ -190,7 +190,7 @@ fn render_chooser_review() {
         }
         let mut app = fixture(&ui, dark, Page::Widget);
         app.nav.widget = Some("clock-1".into());
-        let layout = crate::pages::widgets::layout(&app);
+        let layout = crate::editing::widgets::layout(&app);
         let own = crate::panel::widget_look::appearance(&app, &layout.instances[0], Style::Liquid);
         app.run(Action::Set(
             Edit::new(DocId::Widgets, "/instances/0/appearance", "Its own look"),
@@ -199,7 +199,7 @@ fn render_chooser_review() {
         shot(&mut app, &mut ui, "clock-own-material", None, dark);
         let mut app = fixture(&ui, dark, Page::Widget);
         app.nav.widget = Some("calendar-1".into());
-        let layout = crate::pages::widgets::layout(&app);
+        let layout = crate::editing::widgets::layout(&app);
         let index = layout
             .instances
             .iter()
@@ -266,7 +266,7 @@ fn render_chooser_review() {
         }
         let mut launcher = fixture(&ui, dark, Page::Widget);
         launcher.run(Action::AddWidget("launcher".into()));
-        let layout = crate::pages::widgets::layout(&launcher);
+        let layout = crate::editing::widgets::layout(&launcher);
         let index = layout
             .instances
             .iter()
@@ -279,7 +279,7 @@ fn render_chooser_review() {
             .more
             .insert(key(("panel-list-item", path.as_str(), 0usize)));
         shot(&mut launcher, &mut ui, "launcher-picker", None, dark);
-        for index in 0..crate::pages::first_run::panel_starters().len() {
+        for index in 0..crate::editing::first_run::panel_starters().len() {
             let mut starter = fixture(&ui, dark, Page::FirstRun);
             starter.overlay = Some(crate::app::Overlay::FirstRun {
                 step: 1,
@@ -325,7 +325,7 @@ fn render_gallery_countdown_fits_and_taskbar_choices() {
         viewport_shot(&gallery, &mut ui, "gallery-selected", dark);
         let mut countdown = fixture(&ui, dark, Page::Widget);
         countdown.run(Action::AddWidget("countdown".into()));
-        countdown.nav.widget = crate::pages::widgets::layout(&countdown)
+        countdown.nav.widget = crate::editing::widgets::layout(&countdown)
             .instances
             .iter()
             .find(|instance| instance.widget == "countdown")

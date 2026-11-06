@@ -4,8 +4,6 @@
 //! Wallpapers, Widgets, Integrations, Go to; with nothing typed, recent ones come first.
 
 use mypaper_ui::controls::Glyph;
-use mypaper_ui::controls::{Align, Font, key};
-use mypaper_ui::{Rect, Role};
 use serde_json::{Value, json};
 
 use crate::actions::{Action, Edit, FieldId, Page, Section};
@@ -13,7 +11,6 @@ use crate::app::{App, Overlay};
 use crate::docs::{DocId, Op};
 use crate::settings::{Kind, SETTINGS, Setting};
 use crate::theme::glyph;
-use crate::ui::{B, text_field};
 
 /// One result.
 #[derive(Debug, Clone)]
@@ -126,7 +123,7 @@ fn all(app: &App) -> Vec<Entry> {
         out.push(Entry {
             title: format!("{} widget", installed.manifest.name),
             section: "Add to the desktop".into(),
-            glyph: crate::pages::widgets::glyph_of(id),
+            glyph: crate::editing::widgets::glyph_of(id),
             group: "Widgets",
             action: Action::AddWidget(id.clone()),
             reveal: None,
@@ -134,7 +131,7 @@ fn all(app: &App) -> Vec<Entry> {
             id: format!("widget:{id}"),
         });
     }
-    for (i, integration) in crate::pages::integrations::LIST.iter().enumerate() {
+    for (i, integration) in crate::editing::integrations::LIST.iter().enumerate() {
         out.push(Entry {
             title: integration.name.into(),
             section: integration.adds.into(),
@@ -147,7 +144,7 @@ fn all(app: &App) -> Vec<Entry> {
         });
     }
     if let Some(panel) = &app.panel {
-        let layout = crate::pages::widgets::layout(app);
+        let layout = crate::editing::widgets::layout(app);
         for instance in &layout.instances {
             let Some(widget) = app.registry.get(&instance.widget) else {
                 continue;
@@ -206,7 +203,7 @@ fn all(app: &App) -> Vec<Entry> {
         }
         for (i, plugin) in app.plugins.installed.iter().enumerate() {
             let action = Action::Panel(crate::panel::Command::Connection(
-                crate::pages::integrations::LIST.len() + i,
+                crate::editing::integrations::LIST.len() + i,
             ));
             out.push(Entry {
                 title: plugin.name.clone(),
@@ -235,9 +232,9 @@ fn all(app: &App) -> Vec<Entry> {
                 });
             }
         }
-        for (i, item) in crate::pages::integrations::LIST.iter().enumerate() {
+        for (i, item) in crate::editing::integrations::LIST.iter().enumerate() {
             for field in item.fields {
-                let crate::pages::integrations::Field::Switch { path, label, .. } = field;
+                let crate::editing::integrations::Field::Switch { path, label, .. } = field;
                 out.push(Entry {
                     title: format!("{} \u{b7} {label}", item.name),
                     section: "Connection options".into(),
@@ -446,221 +443,6 @@ fn remember(app: &mut App, id: &str) {
     );
 }
 
-pub fn view(app: &App, b: &mut B, selected: usize) {
-    let p = *b.p;
-    let full = Rect::new(0.0, 0.0, app.size.0 as f32, app.size.1 as f32);
-    b.scrim(key("palette-scrim"), full, Action::Dismiss);
-    let list = results(app);
-    let row = b.px(36.0);
-    let groups = {
-        let mut g: Vec<&str> = list.iter().map(|e| e.group).collect();
-        g.dedup();
-        g.len()
-    };
-    let body_h = if list.is_empty() {
-        b.px(64.0)
-    } else {
-        list.len() as f32 * row + groups as f32 * b.px(26.0) + b.px(8.0)
-    };
-    let w = b.px(640.0).min(app.size.0 as f32 - b.px(48.0));
-    let h = b.px(52.0) + body_h + b.px(36.0);
-    let regions = crate::view::regions(app);
-    let rect = Rect::new(
-        regions.main.left + (regions.main.width() - w) / 2.0 - b.px(40.0),
-        b.px(132.0),
-        w,
-        h,
-    );
-    let rect = Rect::new(rect.left.max(b.px(24.0)), rect.top, w, h);
-    b.elevated(rect, b.px(12.0));
-    b.hit(
-        key("palette-body"),
-        rect,
-        Role::Dialog,
-        "Search everything",
-        Action::None,
-        mypaper_ui::controls::Behavior::Click,
-    );
-    // The input.
-    let input = Rect::new(
-        rect.left + b.px(8.0),
-        rect.top + b.px(10.0),
-        rect.width() - b.px(16.0),
-        b.px(32.0),
-    );
-    b.icon(
-        Rect::new(rect.left + b.px(16.0), rect.top, b.px(18.0), b.px(52.0)),
-        glyph::SEARCH,
-        15.0,
-        p.ink3,
-    );
-    // The field draws without its own frame: the palette is the frame.
-    let field = Rect::new(
-        rect.left + b.px(40.0),
-        rect.top + b.px(16.0),
-        rect.width() - b.px(56.0),
-        b.px(20.0),
-    );
-    let _ = input;
-    text_field_bare(app, b, field);
-    b.hline(rect.left, rect.right, rect.top + b.px(52.0), p.line);
-    // Results.
-    let mut y = rect.top + b.px(52.0) + b.px(4.0);
-    if list.is_empty() {
-        let caption = b.font(Font::Caption);
-        b.text_in(
-            Rect::new(
-                rect.left + b.px(16.0),
-                y,
-                rect.width() - b.px(32.0),
-                b.px(56.0),
-            ),
-            "No matches. Try a setting's name, a wallpaper or a widget.",
-            &caption,
-            p.ink3,
-            Align::Start,
-        );
-        y += b.px(60.0);
-    }
-    let mut last_group = "";
-    b.group(key("palette-results"), |b| {
-        for (i, e) in list.iter().enumerate() {
-            if e.group != last_group {
-                last_group = e.group;
-                b.section_header(
-                    Rect::new(
-                        rect.left + b.px(16.0),
-                        y + b.px(8.0),
-                        rect.width() - b.px(32.0),
-                        b.px(18.0),
-                    ),
-                    e.group,
-                );
-                y += b.px(26.0);
-            }
-            let r = Rect::new(rect.left + b.px(6.0), y, rect.width() - b.px(12.0), row);
-            let k = key(("palette", i));
-            if i == selected {
-                b.fill(r, b.px(8.0), p.selected);
-            } else {
-                b.wash(k, r, b.px(8.0));
-            }
-            b.icon(
-                Rect::new(r.left + b.px(10.0), r.top, b.px(16.0), row),
-                e.glyph,
-                14.0,
-                p.ink2,
-            );
-            let body = b.font(Font::Body);
-            let caption = b.font(Font::Caption);
-            let section_w = b.measure(&e.section, &caption).0.min(r.width() * 0.45);
-            b.text_in(
-                Rect::new(
-                    r.left + b.px(38.0),
-                    r.top,
-                    r.width() - b.px(56.0) - section_w,
-                    row,
-                ),
-                &e.title,
-                &body,
-                p.ink1,
-                Align::Start,
-            );
-            let mut right = r.right - b.px(10.0);
-            if let Some(s) = e.toggle {
-                let on = app.value(s).as_bool().unwrap_or(false);
-                let state = if on { "On" } else { "Off" };
-                let (sw, _) = b.measure(state, &caption);
-                b.text_in(
-                    Rect::new(right - sw, r.top, sw + b.px(2.0), row),
-                    state,
-                    &caption,
-                    p.ink2,
-                    Align::End,
-                );
-                right -= sw + b.px(12.0);
-            }
-            b.text_in(
-                Rect::new(right - section_w, r.top, section_w, row),
-                &e.section,
-                &caption,
-                p.ink3,
-                Align::End,
-            );
-            b.hit(
-                k,
-                r,
-                Role::ListItem,
-                &format!("{} {}", e.title, e.section),
-                Action::PaletteRun(i),
-                mypaper_ui::controls::Behavior::Click,
-            );
-            y += row;
-        }
-    });
-    // Footer keycaps.
-    let foot = Rect::new(
-        rect.left,
-        rect.bottom - b.px(36.0),
-        rect.width(),
-        b.px(36.0),
-    );
-    let caption = b.font(Font::Caption);
-    let mut x = foot.left + b.px(16.0);
-    for (keys, label) in [
-        (&["↑", "↓"][..], "Move"),
-        (&["Enter"][..], "Open"),
-        (&["Space"][..], "Toggle"),
-        (&["Esc"][..], "Close"),
-    ] {
-        x += b.keys(x, foot.top + b.px(8.0), keys) + b.px(6.0);
-        let (lw, _) = b.measure(label, &caption);
-        b.text_in(
-            Rect::new(x, foot.top, lw + b.px(2.0), foot.height()),
-            label,
-            &caption,
-            p.ink3,
-            Align::Start,
-        );
-        x += lw + b.px(16.0);
-    }
-}
-
-/// The palette's field: no frame of its own, `title-2`-ish text.
-fn text_field_bare(app: &App, b: &mut B, rect: Rect) {
-    let id = FieldId::Palette;
-    let live = app.field.as_ref().filter(|f| f.id == id);
-    match live {
-        Some(f) => {
-            f.field.set_rect(rect);
-            b.list.ops.push(mypaper_ui::Op::TextField {
-                rect,
-                field: f.field.clone(),
-                revision: f.field.revision(),
-            });
-        }
-        None => {
-            let shown = app.text(&id);
-            let style = b.font(Font::Title2).scaled(1.0);
-            let (text, color) = if shown.is_empty() {
-                ("Search settings, wallpapers, widgets…", b.p.ink4)
-            } else {
-                (shown, b.p.ink1)
-            };
-            b.text_in(rect, text, &style, color, Align::Start);
-        }
-    }
-    b.hit(
-        crate::app::field_key(&id),
-        rect,
-        Role::SearchInput,
-        "Search",
-        Action::Field(id),
-        mypaper_ui::controls::Behavior::Field,
-    );
-    let _ = text_field;
-}
-
 /// Up and Down in the palette.
 pub fn step(app: &mut App, delta: i32) {
     let n = results(app).len().max(1) as i32;
@@ -678,7 +460,7 @@ mod tests {
         let mut app = crate::goldens::app(true, ui);
         app.panel = Some(State::default());
         app.size = (480, 760);
-        crate::pages::plugins::fixture(&mut app.plugins);
+        crate::editing::plugins::fixture(&mut app.plugins);
         app
     }
     #[test]

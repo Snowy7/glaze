@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 
 use super::*;
-use crate::pages::integrations::{self as legacy, Field};
+use crate::editing::integrations::{self as legacy, Field};
 
 fn plugin_status<'a>(app: &'a App, id: &str) -> &'a str {
     if app.plugins.preferences.disabled.contains(id) {
@@ -182,8 +182,8 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
             group(b, c, "Shows in", |b, c| {
                 for face in &plugin.faces {
                     let id = format!("{}--{}", plugin.id, face.id);
-                    let layout = crate::pages::widgets::layout(app);
-                    let shown = crate::pages::widgets::here(app, &layout)
+                    let layout = crate::editing::widgets::layout(app);
+                    let shown = crate::editing::widgets::here(app, &layout)
                         .iter()
                         .any(|i| i.widget == id);
                     toggle(
@@ -311,7 +311,7 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
         }
         group(b, c, "Access and privacy", |b, c| {
             c.y += b.px(8.0);
-            for line in crate::pages::plugins::permissions(plugin) {
+            for line in crate::editing::plugins::permissions(plugin) {
                 notice(b, c, &line);
             }
             c.y += b.px(8.0);
@@ -456,8 +456,8 @@ pub fn connection_module(app: &mut App, id: &str, bar: crate::actions::Bar, on: 
 }
 
 pub fn hide_connection_widget(app: &mut App, widget: &str) {
-    let mut layout = crate::pages::widgets::layout(app);
-    let here: Vec<_> = crate::pages::widgets::here(app, &layout)
+    let mut layout = crate::editing::widgets::layout(app);
+    let here: Vec<_> = crate::editing::widgets::here(app, &layout)
         .iter()
         .filter(|i| i.widget == widget)
         .map(|i| i.instance.clone())
@@ -567,7 +567,7 @@ mod tests {
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(crate::panel::State::default());
         app.panel.as_mut().unwrap().page = Page::Connections;
-        crate::pages::plugins::fixture(&mut app.plugins);
+        crate::editing::plugins::fixture(&mut app.plugins);
         let count = members(&app, "Connected").len();
         assert_eq!(summary(&app), format!("{count} connected"));
         let built = crate::panel::build(&app, &mut ui.text);

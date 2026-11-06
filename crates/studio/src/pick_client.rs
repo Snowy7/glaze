@@ -677,7 +677,7 @@ fn choice_documents(app: &App, action: &Action) -> Option<Vec<wire::PreviewDocum
     let op = |doc, path: String, value| Op { doc, path, value };
     let mut ops = match action {
         // The same ops a click saves, so the hover shows exactly what applying gives.
-        Action::SetStyle(style) => crate::pages::look::style_ops(*style),
+        Action::SetStyle(style) => crate::editing::look::style_ops(*style),
         Action::Preset(id) => {
             let mut ops = vec![op(DocId::Bars, "/preset".into(), Some(json!(id)))];
             for bar in ["top", "dock"] {
@@ -688,7 +688,7 @@ fn choice_documents(app: &App, action: &Action) -> Option<Vec<wire::PreviewDocum
             ops
         }
         Action::FirstRunPick(index) => {
-            let (_, preset, _) = crate::pages::first_run::panel_starter(*index)?;
+            let (_, preset, _) = crate::editing::first_run::panel_starter(*index)?;
             let mut ops = vec![op(DocId::Bars, "/preset".into(), Some(json!(preset)))];
             for bar in ["top", "dock"] {
                 for field in ["design", "enabled"] {
@@ -752,7 +752,7 @@ impl Drop for Client {
 
 /// Starts only for a real panel window (fixtures never contact the desktop).
 pub fn connect(app: &App) {
-    if app.fixture {
+    if app.fixture || app.panel.as_ref().is_none_or(|state| state.windowed) {
         return;
     }
     let Some(panel) = app.window else { return };
@@ -1222,7 +1222,7 @@ fn resize_widget(
     if selection.kind != Kind::Widget || (cell, size) == (before_cell, before_size) {
         return None;
     }
-    let layout = crate::pages::widgets::layout(app);
+    let layout = crate::editing::widgets::layout(app);
     let Some((index, instance)) = layout
         .instances
         .iter()
@@ -1482,8 +1482,8 @@ mod tests {
         let ui = mypaper_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         let before = snapshot(&app);
-        for index in 0..crate::pages::first_run::panel_starters().len() {
-            let (_, preset, _) = crate::pages::first_run::panel_starter(index).unwrap();
+        for index in 0..crate::editing::first_run::panel_starters().len() {
+            let (_, preset, _) = crate::editing::first_run::panel_starter(index).unwrap();
             let docs = choice_documents(&app, &Action::FirstRunPick(index)).unwrap();
             assert!(docs.iter().all(|doc| doc.document == wire::Document::Bars));
             let ops = docs.iter().find(|doc| doc.document == wire::Document::Bars).map_or(&[][..], |doc| doc.ops.as_slice());
@@ -1533,7 +1533,7 @@ mod tests {
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(crate::panel::State::default());
         let before = app.docs.doc(DocId::Widgets).raw.clone();
-        let layout = crate::pages::widgets::layout(&app);
+        let layout = crate::editing::widgets::layout(&app);
         let instance = layout.get("clock-1").unwrap();
         let selection = Selection {
             kind: Kind::Widget,
@@ -1544,7 +1544,7 @@ mod tests {
         let next = [size[0] + 1, size[1] + 1];
         resize_widget(&mut app, selection.clone(), cell, size, cell, next);
         assert_eq!(
-            crate::pages::widgets::layout(&app)
+            crate::editing::widgets::layout(&app)
                 .get("clock-1")
                 .unwrap()
                 .size,
@@ -1581,7 +1581,7 @@ mod tests {
         app.registry.widgets.get_mut("clock").unwrap().manifest.resizable = false;
         app.panel = Some(crate::panel::State::default());
         let before = app.docs.doc(DocId::Widgets).raw.clone();
-        let layout = crate::pages::widgets::layout(&app);
+        let layout = crate::editing::widgets::layout(&app);
         let instance = layout.get("clock-1").unwrap();
         let selection = Selection { kind: Kind::Widget, id: instance.instance.clone(), display: instance.monitor.clone() };
         let (cell, size) = (instance.cell, instance.size);
@@ -1590,7 +1590,7 @@ mod tests {
         assert!(resize_widget(&mut app, selection.clone(), cell, size, cell, [size[0] + 1, size[1]]).is_none());
         assert!(!app.docs.can_undo());
         assert!(resize_widget(&mut app, selection.clone(), cell, size, moved, size).is_some());
-        let layout = crate::pages::widgets::layout(&app);
+        let layout = crate::editing::widgets::layout(&app);
         assert_eq!((layout.get("clock-1").unwrap().cell, layout.get("clock-1").unwrap().size), (moved, size));
         assert_eq!(app.docs.undo_count(), 1);
         assert!(resize_widget(&mut app, selection, cell, size, [moved[0] + 1, moved[1]], size).is_none());

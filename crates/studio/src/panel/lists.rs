@@ -454,7 +454,7 @@ fn values(app: &App, list: &List) -> Vec<Value> {
                     .clone()
             }),
         List::Photos | List::Widget(_) => {
-            let layout = crate::pages::widgets::layout(app);
+            let layout = crate::editing::widgets::layout(app);
             let instance = match list {
                 List::Widget(path) => path
                     .split('/')
@@ -506,7 +506,7 @@ fn store(app: &mut App, list: &List, items: Vec<Value>, label: &str) {
         List::Menu => (DocId::Config, "/desktop_menu/items".into()),
         List::Widget(path) => (DocId::Widgets, path.clone()),
         List::Photos => {
-            let layout = crate::pages::widgets::layout(app);
+            let layout = crate::editing::widgets::layout(app);
             let Some(index) = layout
                 .instances
                 .iter()

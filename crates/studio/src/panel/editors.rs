@@ -40,8 +40,8 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
             if let Some(id) = app.panel.as_ref().unwrap().add_widget.as_deref()
                 && !widget_has_room(app, id)
             {
-                let layout = crate::pages::widgets::layout(app);
-                let make_room = crate::pages::widgets::here(app, &layout)
+                let layout = crate::editing::widgets::layout(app);
+                let make_room = crate::editing::widgets::here(app, &layout)
                     .into_iter()
                     .max_by_key(|instance| instance.size[0] * instance.size[1])
                     .map(|instance| ("Make room", Action::SelectWidget(Some(instance.instance))));
@@ -110,7 +110,7 @@ pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
 /// Creation and its room check must use the same display grid as the shell.
 pub fn prepare_widget_grid(app: &App) {
     if let Some(monitor) = app.display() {
-        let layout = crate::pages::widgets::layout(app);
+        let layout = crate::editing::widgets::layout(app);
         app.stage.borrow_mut().content.grid = Some((crate::stage::grid_for(&layout, monitor), 1.0));
     }
 }
@@ -122,13 +122,13 @@ pub fn widget_has_room(app: &App, id: &str) -> bool {
     let Some(monitor) = app.display() else {
         return false;
     };
-    let layout = crate::pages::widgets::layout(app);
+    let layout = crate::editing::widgets::layout(app);
     let grid = crate::stage::grid_for(&layout, monitor);
     let size = manifest.size.default;
     if size[0] > grid.cols || size[1] > grid.rows {
         return false;
     }
-    let instances = crate::pages::widgets::here(app, &layout);
+    let instances = crate::editing::widgets::here(app, &layout);
     (0..=grid.rows - size[1]).any(|row| {
         (0..=grid.cols - size[0]).any(|column| {
             instances.iter().all(|instance| {
@@ -482,7 +482,7 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
     };
     button(
         b,
-        Rect::new(b.px(16.0), r.top + b.px(16.0), width, b.px(32.0)),
+        Rect::new(r.left + b.px(16.0), r.top + b.px(16.0), width, b.px(32.0)),
         secondary,
         None,
         false,
@@ -492,7 +492,7 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
     button(
         b,
         Rect::new(
-            b.px(16.0) + if stacked { 0.0 } else { width + gap },
+            r.left + b.px(16.0) + if stacked { 0.0 } else { width + gap },
             r.top + b.px(if stacked { 56.0 } else { 16.0 }),
             width,
             b.px(32.0),
@@ -506,7 +506,9 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
 }
 
 fn history(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "History", "Preview on every display");
+    title(b, c, "History", if app.panel.as_ref().unwrap().windowed {
+        "Select a desktop to restore"
+    } else { "Preview on every display" });
     if super::history::partial_preview(app) {
         notice(b, c, "Partial preview · wallpaper unchanged");
     }
@@ -718,7 +720,7 @@ fn search(app: &App, b: &mut B, c: &mut Col) {
                             b,
                             c,
                             id,
-                            crate::pages::widgets::glyph_of(id),
+                            crate::editing::widgets::glyph_of(id),
                             &widget.manifest.name,
                             "Add to your desktop",
                             false,
@@ -806,7 +808,7 @@ pub fn run_search(app: &mut App, index: usize) {
             app.panel.as_mut().unwrap().page = Page::Connection;
         }
         Action::SelectWidget(Some(id)) => {
-            if let Some(instance) = crate::pages::widgets::layout(app).get(&id) {
+            if let Some(instance) = crate::editing::widgets::layout(app).get(&id) {
                 app.nav.display = app
                     .monitors
                     .iter()
@@ -994,20 +996,20 @@ mod tests {
         app.panel = Some(crate::panel::State::default());
         app.monitors.truncate(1);
         let grid =
-            crate::stage::grid_for(&crate::pages::widgets::layout(&app), app.display().unwrap());
+            crate::stage::grid_for(&crate::editing::widgets::layout(&app), app.display().unwrap());
         assert!(grid.cols > 30);
         let widgets = serde_json::json!({"version":2,"instances":[{"instance":"cover","widget":"clock","monitor":"","cell":[0,0],"size":[24,grid.rows]}]});
         app.docs = crate::docs::Docs::fixture(["{}", "{}", &widgets.to_string(), "{}"]);
         assert!(widget_has_room(&app, "clock"));
         app.run(Action::AddWidget("clock".into()));
-        let layout = crate::pages::widgets::layout(&app);
+        let layout = crate::editing::widgets::layout(&app);
         assert_eq!(layout.instances.len(), 2);
         assert!(layout.instances[1].cell[0] >= 24);
         let widgets = serde_json::json!({"version":2,"instances":[{"instance":"cover","widget":"clock","monitor":"","cell":[0,0],"size":[grid.cols,grid.rows]}]});
         app.docs = crate::docs::Docs::fixture(["{}", "{}", &widgets.to_string(), "{}"]);
         assert!(!widget_has_room(&app, "clock"));
         app.run(Action::AddWidget("clock".into()));
-        assert_eq!(crate::pages::widgets::layout(&app).instances.len(), 1);
+        assert_eq!(crate::editing::widgets::layout(&app).instances.len(), 1);
         assert!(
             app.toast
                 .as_ref()

@@ -144,6 +144,9 @@ pub fn flash_hovered_display(app: &App, b: &B) {
 
 /// Hints stay until dismissed; only that explicit action writes Studio's own settings.
 pub fn first_use_hint(app: &App, b: &mut B, c: &mut Col, page: super::Page) {
+    if app.panel.as_ref().is_some_and(|state| state.windowed) {
+        return;
+    }
     use super::Page;
     let (id, message) = match page {
         Page::Root => ("home", "Click anything on your desktop to edit it"),
