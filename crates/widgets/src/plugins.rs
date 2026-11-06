@@ -363,7 +363,7 @@ impl Plugins {
                     self.component_status.remove(&id);
                     self.studio.plugins.entry(id.clone()).or_default().status = "Unloaded".into();
                     let opens: Vec<_> = self.faces.iter().filter(|(_, s)| s.plugin == id && s.component.is_some()).map(|(instance, slot)| component_open(instance, slot)).collect();
-                    for message in opens { self.to_helper(message, now).map_err(|e| anyhow::anyhow!(e.message))?; }
+                    for message in opens { self.send_to_helper(message, now).map_err(|e| anyhow::anyhow!(e.message))?; }
                     self.mark(&id);
                 }
                 Request::Settings(id, settings) => {
@@ -378,7 +378,7 @@ impl Plugins {
                         if slot.component.is_some() { opens.push(component_open(instance, slot)); }
                     }
                     if !self.preferences.disabled.contains(&id) {
-                        for message in opens { self.to_helper(message, now).map_err(|e| anyhow::anyhow!(e.message))?; }
+                        for message in opens { self.send_to_helper(message, now).map_err(|e| anyhow::anyhow!(e.message))?; }
                     }
                 }
             }
@@ -503,7 +503,7 @@ impl Plugins {
     }
 
     /// Sends a frame to the helper, starting it if it isn't running (and isn't backing off).
-    fn to_helper(&mut self, message: wire::HostMsg, now: Instant) -> Result<(), WidgetError> {
+    fn send_to_helper(&mut self, message: wire::HostMsg, now: Instant) -> Result<(), WidgetError> {
         if let Some(helper) = &mut self.helper {
             helper.idle_since = None;
             let _ = helper.frames.send(message);
@@ -669,11 +669,10 @@ impl Plugins {
             && !self.held
             && let Some((at, delay)) = self.helper_retry
             && now >= at
+            && let Err(e) = self.start_helper()
         {
-            if let Err(e) = self.start_helper() {
-                log::warn!("restarting the plugin runtime: {e:#}");
-                self.helper_retry = Some((now + delay, (delay * 2).min(Duration::from_secs(60))));
-            }
+            log::warn!("restarting the plugin runtime: {e:#}");
+            self.helper_retry = Some((now + delay, (delay * 2).min(Duration::from_secs(60))));
         }
     }
 
@@ -733,12 +732,12 @@ impl Plugins {
                 // Only the options changed: `event::options`, the face stays open.
                 slot.settings = settings;
                 let message = wire::HostMsg::Options { instance: instance.into(), settings: slot.settings.to_string() };
-                self.to_helper(message, now)?;
+                self.send_to_helper(message, now)?;
             } else if slot.size != size || slot.settings != settings {
                 slot.size = size;
                 slot.settings = settings;
                 let message = component_open(instance, slot);
-                self.to_helper(message, now)?;
+                self.send_to_helper(message, now)?;
             }
             return Ok(());
         }
@@ -753,7 +752,7 @@ impl Plugins {
             let message = component_open(instance, &slot);
             self.faces.insert(instance.into(), slot);
             self.changed.push(instance.into());
-            return self.to_helper(message, now);
+            return self.send_to_helper(message, now);
         }
         if let Some(slot) = self.faces.get_mut(instance)
             && slot.plugin == plugin
@@ -1290,9 +1289,9 @@ impl Plugins {
         let (_, dir) = self.find(plugin).filter(|(m, _)| m.component.is_some()).ok_or_else(|| unavailable(format!("plugin {plugin} isn't an installed component")))?;
         let message = wire::HostMsg::Command { plugin: plugin.into(), dir: dir.to_string_lossy().into_owned(), id: id.into() };
         if self.helper.is_none() {
-            self.to_helper(wire::HostMsg::Held(self.held), now)?; // starts it
+            self.send_to_helper(wire::HostMsg::Held(self.held), now)?; // starts it
         }
-        self.to_helper(message, now)
+        self.send_to_helper(message, now)
     }
 
     /// Instances of permitted notification subscribers. The shell checks actual visibility
