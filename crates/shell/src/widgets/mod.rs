@@ -519,6 +519,14 @@ impl Widgets {
             let id = &e.model.placed.instance;
             let label = self.registry.get(&e.model.placed.widget)
                 .map_or(e.model.placed.widget.as_str(), |w| w.manifest.name.as_str());
+            let screen = &self.monitors[e.monitor];
+            let resize = self.registry.get(&e.model.placed.widget).filter(|w| w.manifest.resizable).map(|w| crate::studio_pick::resize::Spec {
+                grid: grid_for_bars(&self.layout, screen, &self.bars),
+                cell: e.model.placed.cell, size: e.model.placed.size,
+                saved_cell: self.layout.get(id).map_or(e.model.placed.cell, |i| i.cell),
+                saved_size: self.layout.get(id).map_or(e.model.placed.size, |i| i.size),
+                limits: w.manifest.size.clone(), origin: (screen.rect.x, screen.rect.y), scale: screen.dpi as f32 / 96.0,
+            });
             crate::studio_pick::Target {
                 selection: crate::studio_pick::wire::Selection {
                     kind: crate::studio_pick::wire::Kind::Widget,
@@ -526,6 +534,7 @@ impl Widgets {
                 },
                 label: label.into(), rect: e.rect, topmost: e.topmost,
                 surface: e.surface.id(), body_selects: true,
+                resize,
             }
         }).collect()
     }

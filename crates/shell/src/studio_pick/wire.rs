@@ -39,10 +39,28 @@ pub struct Selection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
-    Begin { panel: isize },
+    Begin {
+        panel: isize,
+    },
     End,
-    Highlight { id: Option<String> },
-    Selected { selection: Selection },
+    Highlight {
+        id: Option<String>,
+    },
+    ClearSelection,
+    UndoStep {
+        display: String,
+        text: String,
+    },
+    ResizeWidget {
+        selection: Selection,
+        before_cell: [u32; 2],
+        before_size: [u32; 2],
+        cell: [u32; 2],
+        size: [u32; 2],
+    },
+    Selected {
+        selection: Selection,
+    },
 }
 
 #[derive(Default)]

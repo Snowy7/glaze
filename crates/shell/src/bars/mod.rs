@@ -841,7 +841,7 @@ impl Bars {
             let origin = bar.origin();
             let make = |kind, id, label, rect, body_selects| PickTarget {
                 selection: Selection { kind, id, display: bar.monitor.device.clone() },
-                label, rect, topmost: true, surface: bar.surface.id(), body_selects,
+                label, rect, topmost: true, surface: bar.surface.id(), body_selects, resize: None,
             };
             for (rect, _) in &bar.frame.shapes {
                 result.push(make(Kind::Bar, key.into(), if key == "top" { "Top bar" } else { "Dock" }.into(),

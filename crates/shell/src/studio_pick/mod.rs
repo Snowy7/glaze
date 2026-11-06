@@ -1,6 +1,8 @@
 //! Transient desktop picking while Studio's panel is open. Selection never writes config.
 //! Catchers sit below widgets in the desktop band; widget input still reaches its real HWND.
 mod chrome;
+mod notice;
+pub mod resize;
 pub mod wire;
 
 use anyhow::Result;
@@ -25,6 +27,7 @@ pub struct Target {
     pub surface: SurfaceId,
     /// Modules are selected by their chip; the body's normal action still runs.
     pub body_selects: bool,
+    pub resize: Option<resize::Spec>,
 }
 
 #[derive(Default, Debug)]
@@ -75,10 +78,43 @@ struct Catcher {
     display: String,
 }
 struct Decoration {
-    _frame: Surface,
+    frame: Surface,
     chip: Surface,
+    handles: Vec<(Surface, resize::Corner)>,
     target: Target,
     selected: bool,
+}
+
+struct Gesture {
+    selection: Selection,
+    spec: resize::Spec,
+    corner: resize::Corner,
+    start: Point,
+    pending: ([u32; 2], [u32; 2]),
+    capture: SurfaceId,
+    window: HWND,
+    _frames: mypaper_ui::AnimationFrames,
+}
+
+impl Gesture {
+    fn update(&mut self, point: Point) {
+        self.pending = self.spec.target(
+            self.corner,
+            Point::new(point.x - self.start.x, point.y - self.start.y),
+        );
+    }
+}
+
+impl Drop for Gesture {
+    fn drop(&mut self) {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{GetCapture, ReleaseCapture};
+        // SAFETY: release only this gesture's capture on its owning UI thread.
+        unsafe {
+            if GetCapture() == self.window {
+                let _ = ReleaseCapture();
+            }
+        }
+    }
 }
 
 pub struct StudioPick {
@@ -93,6 +129,8 @@ pub struct StudioPick {
     anchor: Option<HWND>,
     pressed: bool,
     geometry_due: Instant,
+    notice: Option<notice::Notice>,
+    gesture: Option<Gesture>,
 }
 
 impl StudioPick {
@@ -109,6 +147,8 @@ impl StudioPick {
             anchor: None,
             pressed: false,
             geometry_due: Instant::now(),
+            notice: None,
+            gesture: None,
         })
     }
     pub fn timeout_ms(&self) -> u32 {
@@ -119,7 +159,7 @@ impl StudioPick {
     }
     pub fn lifted(&self) -> BTreeSet<String> {
         // Keep the receiving HWND alive until its button release has run.
-        if self.pressed {
+        if self.pressed && self.gesture.is_none() {
             self.session.highlight.iter().cloned().collect()
         } else {
             self.session.lifted()
@@ -139,6 +179,29 @@ impl StudioPick {
                     }
                 }
                 Message::End => self.session.end(source.0 as isize),
+                Message::UndoStep { display, text }
+                    if self.session.owner.is_some_and(|(h, pid)| {
+                        h == source.0 as isize && wire::process(source) == pid
+                    }) && text.chars().count() <= 200
+                        && !text.chars().any(char::is_control) =>
+                {
+                    if let Some(notice) = &mut self.notice {
+                        notice.update(display, text);
+                    } else {
+                        self.notice = Some(notice::Notice::new(display, text));
+                    }
+                }
+                Message::ClearSelection
+                    if self.session.owner.is_some_and(|(h, pid)| {
+                        h == source.0 as isize && wire::process(source) == pid
+                    }) =>
+                {
+                    self.gesture = None;
+                    self.session.selected = None;
+                    self.session.highlight = None;
+                    self.hovered = None;
+                    self.hover_until = None;
+                }
                 Message::Highlight { id }
                     if self.session.owner.is_some_and(|(h, pid)| {
                         h == source.0 as isize && wire::process(source) == pid
@@ -153,12 +216,15 @@ impl StudioPick {
         self.session
             .check(|h, p| wire::process(HWND(h as _)) == p && wire::process(panel) == p);
         if self.session.owner != previous_owner {
+            self.gesture = None;
             self.hovered = None;
             self.hover_until = None;
             self.decorations.clear();
             self.pressed = false;
+            self.notice = None;
         }
         if !self.session.active() {
+            self.gesture = None;
             self.catchers.clear();
             self.decorations.clear();
             self.hovered = None;
@@ -198,6 +264,7 @@ impl StudioPick {
             .map(|m| (&m.device, m.rect, m.work, m.dpi))
             .collect();
         if self.catchers.is_empty() || anchor != self.anchor || geometry != previous {
+            self.gesture = None;
             self.catchers.clear();
             self.decorations.clear();
             self.monitors = monitors;
@@ -255,6 +322,53 @@ impl StudioPick {
         for catcher in &self.catchers {
             let _ = catcher.surface.keep_above_desktop();
         }
+        if let Some(notice) = &mut self.notice {
+            match notice.tick(ui, &self.monitors, bars) {
+                Ok(true) => {}
+                Ok(false) => self.notice = None,
+                Err(e) => {
+                    log::warn!("Studio undo chip: {e:#}");
+                    self.notice = None;
+                }
+            }
+        }
+        if self.gesture.as_ref().is_some_and(|gesture| {
+            !targets.iter().any(|t| {
+                t.selection == gesture.selection && t.resize.as_ref() == Some(&gesture.spec)
+            })
+        }) {
+            self.finish_resize(false);
+        }
+        if let Some(gesture) = &mut self.gesture {
+            use windows::Win32::Foundation::POINT;
+            use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+            use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+            let mut point = POINT::default();
+            // SAFETY: read-only pointer state. Polling also covers no-activate background capture.
+            let released = unsafe {
+                if GetCursorPos(&mut point).is_ok() {
+                    gesture.update(Point::new(point.x as f32, point.y as f32));
+                }
+                GetAsyncKeyState(1) >= 0
+            };
+            if let Some(decoration) = self
+                .decorations
+                .iter_mut()
+                .find(|d| d.target.selection == gesture.selection)
+            {
+                let rect = gesture.spec.rect(gesture.pending.0, gesture.pending.1);
+                if let Err(e) =
+                    paint_frame(ui, &mut decoration.frame, rect, gesture.spec.scale, true)
+                {
+                    log::warn!("Studio resize outline: {e:#}");
+                }
+            }
+            if released {
+                self.finish_resize(true);
+            } else {
+                return;
+            }
+        }
         if self.hover_until.is_some_and(|at| at <= Instant::now()) {
             self.hovered = None;
             self.hover_until = None;
@@ -300,6 +414,21 @@ impl StudioPick {
         if !self.active() {
             return false;
         }
+        if let Some(gesture) = &mut self.gesture {
+            if gesture.capture == surface {
+                match event {
+                    Event::Move(p) | Event::Release(p, Button::Left) => {
+                        gesture.update(Point::new(p.screen.0 as f32, p.screen.1 as f32));
+                        if matches!(event, Event::Release(_, Button::Left)) {
+                            self.finish_resize(true);
+                        }
+                    }
+                    Event::CaptureLost | Event::Cancelled => self.finish_resize(false),
+                    _ => {}
+                }
+                return true;
+            }
+        }
         if matches!(event, Event::Press(_, Button::Left)) {
             self.pressed = true;
         }
@@ -308,6 +437,32 @@ impl StudioPick {
             Event::Release(_, Button::Left) | Event::CaptureLost | Event::Cancelled
         ) {
             self.pressed = false;
+        }
+        if let Some((decoration, handle, corner)) = self.decorations.iter().find_map(|d| {
+            d.handles
+                .iter()
+                .find(|(s, _)| s.id() == surface)
+                .map(|(s, c)| (d, s, *c))
+        }) {
+            if let Event::Press(p, Button::Left) = event
+                && let Some(spec) = &decoration.target.resize
+            {
+                // SAFETY: capture belongs to this shell-owned no-activate handle.
+                unsafe {
+                    windows::Win32::UI::Input::KeyboardAndMouse::SetCapture(handle.hwnd());
+                }
+                self.gesture = Some(Gesture {
+                    selection: decoration.target.selection.clone(),
+                    spec: spec.clone(),
+                    corner,
+                    start: Point::new(p.screen.0 as f32, p.screen.1 as f32),
+                    pending: (spec.cell, spec.size),
+                    capture: surface,
+                    window: handle.hwnd(),
+                    _frames: handle.animation_frames(Duration::from_secs(3600)),
+                });
+            }
+            return true;
         }
         if let Some(decoration) = self.decorations.iter().find(|d| d.chip.id() == surface) {
             let selection = decoration.target.selection.clone();
@@ -354,6 +509,7 @@ impl StudioPick {
     }
 
     fn select(&mut self, selection: Selection) {
+        self.gesture = None;
         self.session.selected = Some(selection.clone());
         if let Some((owner, _)) = self.session.owner {
             let taken = wire::send(
@@ -365,6 +521,31 @@ impl StudioPick {
             );
             log::info!("Studio pick {selection:?}, delivered={taken}");
         }
+    }
+
+    fn finish_resize(&mut self, commit: bool) {
+        let Some(gesture) = self.gesture.take() else {
+            return;
+        };
+        self.pressed = false;
+        if commit
+            && gesture.pending != (gesture.spec.cell, gesture.spec.size)
+            && let Some((owner, _)) = self.session.owner
+        {
+            wire::send(
+                HWND(owner as _),
+                self.endpoint.hwnd(),
+                &Message::ResizeWidget {
+                    selection: gesture.selection.clone(),
+                    before_cell: gesture.spec.saved_cell,
+                    before_size: gesture.spec.saved_size,
+                    cell: gesture.pending.0,
+                    size: gesture.pending.1,
+                },
+            );
+        }
+        drop(gesture);
+        self.decorations.clear();
     }
 
     fn decorate(
@@ -393,23 +574,7 @@ impl StudioPick {
             .find(|m| m.device == target.selection.display);
         let scale = monitor.map_or(1.0, |m| m.dpi as f32 / 96.0);
         let r = target.rect.inflate(3.0 * scale);
-        let local = Rect::new(2.0 * scale, 2.0 * scale, r.width(), r.height());
-        let ops = chrome::frame(local, scale, selected);
-        frame.present(
-            ui,
-            (
-                (r.left - 2.0 * scale).floor() as i32,
-                (r.top - 2.0 * scale).floor() as i32,
-            ),
-            (
-                (r.width() + 4.0 * scale).ceil() as u32,
-                (r.height() + 4.0 * scale).ceil() as u32,
-            ),
-            DisplayList {
-                ops,
-                ..Default::default()
-            },
-        )?;
+        paint_frame(ui, &mut frame, target.rect, scale, selected)?;
         let suffix = if selected {
             ""
         } else if target.selection.kind == Kind::Module {
@@ -467,14 +632,71 @@ impl StudioPick {
             let _ = frame.raise_in_desktop_band();
             let _ = chip.raise_in_desktop_band();
         }
+        let mut handles = Vec::new();
+        if selected && target.resize.is_some() {
+            for corner in resize::CORNERS {
+                let rect = resize::handle(r, corner, scale);
+                let mut surface = Surface::new(kind, "Studio resize corner", Role::Pane)?;
+                surface.set_no_activate(true);
+                surface.present(
+                    ui,
+                    (rect.left.round() as i32, rect.top.round() as i32),
+                    (rect.width().ceil() as u32, rect.height().ceil() as u32),
+                    DisplayList {
+                        ops: vec![Op::Fill {
+                            rect: Rect::new(0.0, 0.0, rect.width(), rect.height()),
+                            radius: 0.0,
+                            color: Rgba::HIT,
+                        }],
+                        ..Default::default()
+                    },
+                )?;
+                surface.show();
+                if !target.topmost {
+                    let _ = surface.raise_in_desktop_band();
+                }
+                handles.push((surface, corner));
+            }
+        }
         self.decorations.push(Decoration {
-            _frame: frame,
+            frame,
             chip,
+            handles,
             target,
             selected,
         });
         Ok(())
     }
+}
+
+fn paint_frame(
+    ui: &mut Ui,
+    surface: &mut Surface,
+    target: Rect,
+    scale: f32,
+    selected: bool,
+) -> Result<()> {
+    let rect = target.inflate(3.0 * scale);
+    surface.present(
+        ui,
+        (
+            (rect.left - 3.0 * scale).floor() as i32,
+            (rect.top - 3.0 * scale).floor() as i32,
+        ),
+        (
+            (rect.width() + 6.0 * scale).ceil() as u32,
+            (rect.height() + 6.0 * scale).ceil() as u32,
+        ),
+        DisplayList {
+            ops: chrome::frame(
+                Rect::new(3.0 * scale, 3.0 * scale, rect.width(), rect.height()),
+                scale,
+                selected,
+            ),
+            ..Default::default()
+        },
+    )?;
+    Ok(())
 }
 
 /// Alpha-zero holes preserve desktop icon input; alpha one receives only bare wallpaper.
