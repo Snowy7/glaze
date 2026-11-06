@@ -371,12 +371,27 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
             "Ctrl Alt Shift Backspace restores the Windows desktop from anywhere.",
         );
         action_button(b, c, "Restore Windows desktop", Action::RestoreDesktop);
-        for (name, doc) in [
-            ("Start over: Bars", DocId::Bars),
-            ("Start over: Widgets", DocId::Widgets),
-            ("Start over: Look", DocId::Config),
+        for (name, doc, path) in [
+            ("Start over: Bars", DocId::Bars, None),
+            ("Start over: Widgets", DocId::Widgets, None),
+            ("Start over: Look", DocId::Config, Some("/look")),
+            ("Start over: Windows", DocId::Config, Some("/look/windows")),
+            (
+                "Start over: Desktop menu",
+                DocId::Config,
+                Some("/desktop_menu"),
+            ),
+            (
+                "Start over: Built-in connections",
+                DocId::Integrations,
+                None,
+            ),
+            ("Start over: App connections", DocId::Plugins, None),
         ] {
-            if matches!(app.docs.doc(doc).issue, Some(crate::docs::ReadIssue::Newer | crate::docs::ReadIssue::Unavailable)) {
+            if matches!(
+                app.docs.doc(doc).issue,
+                Some(crate::docs::ReadIssue::Newer | crate::docs::ReadIssue::Unavailable)
+            ) {
                 continue;
             }
             row(
@@ -387,7 +402,11 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
                 "",
                 "A backup is kept",
                 None,
-                Action::StartOver(doc),
+                if app.docs.doc(doc).issue.is_some() {
+                    Action::StartOver(doc)
+                } else {
+                    Action::Panel(Command::ResetPart(doc, path))
+                },
             );
         }
     });

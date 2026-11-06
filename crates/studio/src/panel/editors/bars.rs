@@ -229,16 +229,27 @@ fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str, cap
             let label_width = if stacked { c.w } else { b.px(100.0) };
             text(
                 b,
-                Rect::new(c.x, c.y, label_width, height(b, if stacked { 25.0 } else { 40.0 })),
+                Rect::new(
+                    c.x,
+                    c.y,
+                    label_width,
+                    height(b, if stacked { 25.0 } else { 40.0 }),
+                ),
                 label,
                 13.0,
                 400,
                 b.p.ink1,
                 Align::Start,
             );
-            if stacked { c.y += height(b, 25.0); }
+            if stacked {
+                c.y += height(b, 25.0);
+            }
             let value = value.as_f64().unwrap_or(default);
-            let left = if stacked { c.x } else { c.x + label_width + b.px(8.0) };
+            let left = if stacked {
+                c.x
+            } else {
+                c.x + label_width + b.px(8.0)
+            };
             let r = Rect::new(left, c.y, c.right() - left, height(b, 36.0));
             b.slider(
                 key(("panel-bar-setting", id)),
@@ -691,206 +702,23 @@ pub fn designs(app: &App, b: &mut B, c: &mut Col) {
             )
         })
         .collect();
-    let gap = b.px(10.0);
-    let width = (c.w - gap) / 2.0;
-    let picture_height = b.px(match bar {
-        Some(Bar::Top) => 92.0,
-        Some(Bar::Dock) => 136.0,
-        None => 208.0,
-    });
-    let row_height = picture_height + b.px(32.0);
-    let top = c.y;
-    for (index, (label, on, action)) in choices.iter().enumerate() {
-        let pic = Rect::new(
-            c.x + (index % 2) as f32 * (width + gap),
-            top + (index / 2) as f32 * row_height,
-            width,
-            picture_height,
-        );
-        let k = key(("panel-bar-design-grid", bar, index));
-        let tile = Rect::new(
-            pic.left - b.px(4.0),
-            pic.top - b.px(4.0),
-            pic.width() + b.px(8.0),
-            pic.height() + b.px(32.0),
-        );
-        b.plate(k, tile, b.px(10.0), *on);
-        let mut raw = match bar {
-            Some(bar) => json!({bar.key(): {"design":designs[index].0,"enabled":true}}),
-            None => json!({"preset":designs[index].0}),
-        };
-        raw["dock"]["pinned"] = bar_value(app, "/dock/pinned").filter(|v| v.as_array().is_some_and(|pins| !pins.is_empty()))
-            .unwrap_or_else(|| json!([{"path":"C:\\Windows\\explorer.exe","name":"Files"},{"path":"C:\\Windows\\System32\\notepad.exe","name":"Notes"}]));
-        crate::panel::specimens::backdrop(app, b, pic);
-        if let Some(bar) = bar {
-            bar_crop(app, b, pic, &raw, bar);
-        } else {
-            let has_top = mypaper_bars::BarsConfig::parse(&raw.to_string())
-                .is_ok_and(|config| config.top.enabled);
-            if has_top {
-                let h = b.px(68.0);
-                bar_crop(
-                    app,
-                    b,
-                    Rect::new(pic.left, pic.top, pic.width(), h),
-                    &raw,
-                    Bar::Top,
-                );
-                bar_crop(
-                    app,
-                    b,
-                    Rect::new(
-                        pic.left,
-                        pic.top + h + b.px(4.0),
-                        pic.width(),
-                        pic.height() - h - b.px(4.0),
-                    ),
-                    &raw,
-                    Bar::Dock,
-                );
-            } else {
-                bar_crop(app, b, pic, &raw, Bar::Dock);
-            }
-        }
-        text(
-            b,
-            Rect::new(pic.left, pic.bottom + b.px(5.0), pic.width(), b.px(22.0)),
-            label,
-            12.0,
-            500,
-            if *on { b.p.ink1 } else { b.p.ink3 },
-            Align::Center,
-        );
-        b.hit_checked(
-            k,
-            tile,
-            Role::RadioButton,
-            label,
-            Some(*on),
-            action.clone(),
-            Behavior::Click,
-        );
-        b.focus_ring(k, tile, b.px(10.0));
-    }
-    c.y = top + choices.len().div_ceil(2) as f32 * row_height;
-}
-
-/// Rasterize the shell's real bar vectors at twice their desktop size, without enlarging a thumbnail.
-fn bar_crop(app: &App, b: &mut B, pic: Rect, raw: &Value, bar: Bar) {
-    use mypaper_shell::preview::bars as shell;
-    use mypaper_ui::{DisplayList, Op, Ui};
-    let width = pic.width().ceil() as u32;
-    let height = pic.height().ceil() as u32;
-    let dark = crate::panel::specimens::desktop_dark(app);
-    let cache_key = format!("bar-detail:{raw}:{bar:?}:{width}:{height}:{}:{dark}", b.s);
-    let state = app.panel.as_ref().unwrap();
-    let cached = state.specimens.borrow().get(&cache_key).cloned();
-    let image = cached.or_else(|| {
-        let mut config = mypaper_bars::BarsConfig::parse(&raw.to_string()).ok()?;
-        config.resolve(Vec::new);
-        let look = if bar == Bar::Top {
-            &config.top.look
-        } else {
-            &config.dock.look
-        };
-        let mut system = mypaper_bars::accent::read();
-        system.scheme = if dark {
-            mypaper_bars::accent::Scheme::Dark
-        } else {
-            mypaper_bars::accent::Scheme::Light
-        };
-        let tokens = shell::Tokens::resolve(look, &config.appearance, &system);
-        let model = shell::sample_model(
-            windows::Win32::Foundation::SYSTEMTIME {
-                wHour: 10,
-                wMinute: 42,
-                wYear: 2026,
-                wMonth: 11,
-                wDay: 6,
-                ..Default::default()
-            },
-            "Files",
-        );
-        let mut ui = Ui::new().ok()?;
-        let mut images = shell::Images::default();
-        let scale = 2.0 * b.s;
-        let extent = ((800.0 * scale) as u32, (360.0 * scale) as u32);
-        let frame = if bar == Bar::Top {
-            shell::top(
-                extent.0,
-                &config,
-                &model,
-                &tokens,
-                scale,
-                &mut ui,
-                &mut images,
-                None,
-            )
-        } else {
-            let apps: Vec<_> = config
-                .dock
-                .pinned
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .take(8)
-                .map(|pin| mypaper_bars::apps::Item {
-                    key: mypaper_bars::apps::pin_key(&pin.path),
-                    name: pin
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path)),
-                    path: pin.path,
-                    icon: None,
-                    pinned: true,
-                    windows: vec![],
-                    aumid: None,
-                    exe: None,
-                })
-                .collect();
-            shell::dock(
-                &config,
-                &model,
-                &apps,
-                &tokens,
-                scale,
-                extent,
-                &[],
-                &[],
-                &mut ui,
-                &mut images,
-                None,
-            )
-        };
-        // Empty centers (the macOS menu bar, for example) show their clock and status end.
-        let x = if bar == Bar::Top && config.top.center.is_empty() {
-            width as f32 - frame.size.0 as f32 + b.px(6.0)
-        } else {
-            (width as f32 - frame.size.0 as f32) / 2.0
-        };
-        let y = (height as f32 - frame.size.1 as f32) / 2.0;
-        let mut list = DisplayList::default();
-        for (shape, radius) in &frame.shapes {
-            let color = tokens.material.map_or(tokens.theme.color.surface, |m| {
-                m.tint.with_alpha((1.0 - m.clarity).max(0.35))
-            });
-            list.ops.push(Op::Fill {
-                rect: shape.offset(x, y),
-                radius: *radius,
-                color,
-            });
-        }
-        list.ops.extend(crate::stage::offset(&frame.list.ops, x, y));
-        let image = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, width, height).ok()?);
-        state
-            .specimens
-            .borrow_mut()
-            .insert(cache_key, image.clone());
-        Some(image)
-    });
-    if let Some(image) = image {
-        crate::stage::image_round(b, pic, &image, 1.0, b.px(6.0));
-    }
+    crate::panel::choosers::draw(
+        app,
+        b,
+        c,
+        key(("panel-bar-designs", bar)),
+        b.px(196.0),
+        &choices,
+        |b, index, pic| {
+            let mut raw = match bar {
+                Some(bar) => json!({bar.key(): {"design":designs[index].0,"enabled":true}}),
+                None => json!({"preset":designs[index].0}),
+            };
+            raw["dock"]["pinned"] = bar_value(app, "/dock/pinned").unwrap_or(json!([]));
+            crate::panel::specimens::backdrop(app, b, pic);
+            crate::panel::specimens::bars(app, b, pic, &raw, bar);
+        },
+    );
 }
 
 pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {

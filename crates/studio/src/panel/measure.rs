@@ -8,6 +8,15 @@ pub struct Memory {
 /// A page owns its decoded thumbnails, preview artwork, icon descriptions and shaped text.
 /// Keep the image worker connected while dropping its ready pixels, so the next page stays async.
 pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
+    // Snapshot rasters live only while their History rows are on screen.
+    app.panel
+        .as_ref()
+        .unwrap()
+        .history
+        .borrow()
+        .pictures
+        .borrow_mut()
+        .clear();
     if app.fixture {
         return;
     }
@@ -22,7 +31,11 @@ pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
 
 /// Ask the allocator to decommit freed pages, once per navigation rather than on hover.
 pub fn reclaim(app: &crate::app::App) {
-    if !app.panel.as_ref().is_some_and(|state| state.reclaim_heap.replace(false)) {
+    if !app
+        .panel
+        .as_ref()
+        .is_some_and(|state| state.reclaim_heap.replace(false))
+    {
         return;
     }
     #[repr(C)]
@@ -30,7 +43,10 @@ pub fn reclaim(app: &crate::app::App) {
         version: u32,
         flags: u32,
     }
-    let information = HeapOptimizeResourcesInformation { version: 1, flags: 0 };
+    let information = HeapOptimizeResourcesInformation {
+        version: 1,
+        flags: 0,
+    };
     // SAFETY: a versioned input buffer for the documented current-process heap operation.
     // Null selects this process's heaps; this releases unused committed pages, not live data.
     let _ = unsafe {

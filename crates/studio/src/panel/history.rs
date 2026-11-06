@@ -18,6 +18,9 @@ pub struct Desktop {
     config: Vec<(String, Option<Value>)>,
     bars: Value,
     widgets: Value,
+    /// Keep the wallpaper's appearance layer even if its theme is edited later.
+    #[serde(default)]
+    theme: Value,
 }
 
 impl Desktop {
@@ -59,6 +62,11 @@ impl Desktop {
                 .collect(),
             bars,
             widgets: app.docs.doc(DocId::Widgets).raw.clone(),
+            theme: app.library.active().map_or(Value::Null, |i| {
+                super::saving::theme_value(app, &app.library.items[i])
+                    .as_ref()
+                    .clone()
+            }),
         }
     }
 
@@ -132,6 +140,9 @@ pub struct History {
     last: Option<Desktop>,
     loaded: bool,
     last_pick: Option<(String, usize)>,
+    pub pictures: std::cell::RefCell<
+        std::collections::HashMap<(usize, u32, u32), std::sync::Arc<mypaper_ui::Image>>,
+    >,
 }
 
 impl History {
@@ -298,6 +309,7 @@ fn capture(app: &App, label: Option<&str>, merge: bool) {
         history.entries.remove(0);
     }
     history.last = Some(desktop);
+    history.pictures.get_mut().clear();
     // Opening a panel or rendering fixtures never writes a file.
     if label.is_some() {
         persist(app, &mut history);
@@ -491,7 +503,14 @@ pub fn time_label(at: u64) -> String {
 }
 
 pub fn observe(app: &App) {
-    capture(app, None, false);
+    // Builds (including hover frames) may initialize once, but never compare or record.
+    if app
+        .panel
+        .as_ref()
+        .is_some_and(|state| state.history.borrow().last.is_none())
+    {
+        capture(app, None, false);
+    }
 }
 
 pub fn record_drag(app: &App, label: &str) {
@@ -619,6 +638,347 @@ pub fn can_restore(app: &App) -> bool {
         .selected
         .and_then(|i| history.entries.get(i).map(|entry| (i, entry)))
         .is_some_and(|(i, entry)| {
-            i + 1 < history.entries.len() && entry.desktop != Desktop::read(app)
+            i + 1 < history.entries.len() && history.last.as_ref() != Some(&entry.desktop)
         })
+}
+
+/// A snapshot owns every appearance input; current Look and current wallpaper never enter it.
+/// Rasterize at the actual picture size so a long history retains only small visible pictures.
+pub fn picture(
+    app: &App,
+    desktop: &Desktop,
+    size: (u32, u32),
+    at: u64,
+) -> Option<std::sync::Arc<mypaper_ui::Image>> {
+    use mypaper_shell::preview::{bars as bars_view, widgets as widgets_view};
+    use mypaper_ui::{DisplayList, Op, Rect, Rgba, Ui};
+    let rect = Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32);
+    let wallpaper = desktop.wallpaper().and_then(|id| {
+        app.library
+            .items
+            .iter()
+            .find(|w| w.id == id || w.apply_as == id)
+    });
+    let backdrop = wallpaper
+        .and_then(|w| w.preview.as_ref().or(w.video.as_ref()))
+        .and_then(|path| app.images.borrow_mut().get(path, size));
+    if wallpaper.is_some_and(|w| w.preview.is_some() || w.video.is_some()) && backdrop.is_none() {
+        return None;
+    }
+    let mut ui = Ui::new().ok()?;
+    let mut list = DisplayList::default();
+    list.ops.push(Op::Fill {
+        rect,
+        radius: 0.0,
+        color: super::tokens::hex(0x243044),
+    });
+    if let Some(image) = backdrop.as_ref() {
+        let aspect = rect.width() / rect.height();
+        let width = (image.height as f32 * aspect).min(image.width as f32);
+        let height = width / aspect;
+        list.ops.push(Op::Image {
+            rect,
+            image: image.clone(),
+            opacity: 1.0,
+            source: Some(Rect::new(
+                (image.width as f32 - width) / 2.0,
+                (image.height as f32 - height) / 2.0,
+                width,
+                height,
+            )),
+        });
+    }
+    let look = desktop
+        .config
+        .iter()
+        .find(|(path, _)| path == "/look")
+        .and_then(|(_, v)| v.as_ref());
+    let light = look
+        .and_then(|look| look.get("appearance"))
+        .and_then(Value::as_str)
+        == Some("light");
+    let display = app.display()?;
+    let dip_width = display.rect.width as f32 / (display.dpi as f32 / 96.0);
+    let scale = size.0 as f32 / dip_width;
+    let theme = serde_json::from_value::<mypaper_theme::Theme>(desktop.theme.clone()).ok();
+    if let Ok(mut config) = mypaper_bars::BarsConfig::parse(&desktop.bars.to_string())
+        .and_then(|config| config.for_monitor(&display.device, display.primary))
+    {
+        config.resolve(Vec::new);
+        if let Some(base) = theme
+            .as_ref()
+            .and_then(|t| t.bars.as_ref())
+            .and_then(|s| s.appearance.as_ref())
+        {
+            config.appearance = config.appearance.over(base);
+        }
+        let system = mypaper_bars::accent::System {
+            accent: std::array::from_fn(|_| "#5b8def".to_owned()),
+            scheme: if light {
+                mypaper_bars::accent::Scheme::Light
+            } else {
+                mypaper_bars::accent::Scheme::Dark
+            },
+            animations: false,
+        };
+        let model = bars_view::sample_model(
+            windows::Win32::Foundation::SYSTEMTIME {
+                wHour: 10,
+                wMinute: 42,
+                wYear: 2026,
+                wMonth: 11,
+                wDay: 6,
+                ..Default::default()
+            },
+            "Files",
+        );
+        let mut images = bars_view::Images::default();
+        let mut append = |frame: bars_view::Frame, x: f32, y: f32, tokens: &bars_view::Tokens| {
+            for (shape, radius) in &frame.shapes {
+                list.ops.push(Op::Fill {
+                    rect: shape.offset(x, y),
+                    radius: *radius,
+                    color: tokens.material.map_or(tokens.theme.color.surface, |m| {
+                        m.tint.with_alpha((1.0 - m.clarity).max(0.25))
+                    }),
+                });
+            }
+            list.ops.extend(crate::stage::offset(&frame.list.ops, x, y));
+        };
+        if config.top.enabled {
+            let tokens = bars_view::Tokens::resolve(&config.top.look, &config.appearance, &system);
+            let frame = bars_view::top(
+                size.0,
+                &config,
+                &model,
+                &tokens,
+                scale,
+                &mut ui,
+                &mut images,
+                None,
+            );
+            append(frame, 0.0, 16.0 * scale, &tokens);
+        }
+        if config.dock.enabled {
+            let tokens = bars_view::Tokens::resolve(&config.dock.look, &config.appearance, &system);
+            let apps: Vec<_> = config
+                .dock
+                .pinned
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|pin| mypaper_bars::apps::Item {
+                    key: mypaper_bars::apps::pin_key(&pin.path),
+                    name: pin
+                        .name
+                        .unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path)),
+                    path: pin.path,
+                    icon: None,
+                    pinned: true,
+                    windows: vec![],
+                    aumid: None,
+                    exe: None,
+                })
+                .collect();
+            let frame = bars_view::dock(
+                &config,
+                &model,
+                &apps,
+                &tokens,
+                scale,
+                size,
+                &[],
+                &[],
+                &mut ui,
+                &mut images,
+                None,
+            );
+            let x = (size.0 as f32 - frame.size.0 as f32) / 2.0;
+            let y = size.1 as f32 - frame.size.1 as f32 - 16.0 * scale;
+            append(frame, x, y, &tokens);
+        }
+    }
+    if let Ok(layout) =
+        serde_json::from_value::<mypaper_widgets::layout::Layout>(desktop.widgets.clone())
+    {
+        let grid = crate::stage::grid_for(&layout, display);
+        let mut base = theme
+            .as_ref()
+            .and_then(|t| t.widgets.as_ref())
+            .and_then(|skin| skin.appearance.clone())
+            .unwrap_or_default()
+            .over(&mypaper_widgets::look::defaults());
+        if light && layout.appearance.text.is_none() {
+            base.text = Some(mypaper_theme::TextTone::Dark);
+        }
+        let now = widgets_view::Stamp::at((at.min(253402300799) * 1000) as i64);
+        let mut storage = mypaper_widgets::storage::Storage::new(
+            std::env::temp_dir().join("mypaper-panel-snapshot"),
+        );
+        for instance in crate::pages::widgets::here(app, &layout) {
+            let Some(widget) = app.registry.get(&instance.widget) else {
+                continue;
+            };
+            let appearance = mypaper_widgets::look::resolve(
+                &instance.appearance,
+                &layout.appearance,
+                &base,
+                mypaper_widgets::look::DEFAULT_TINT,
+            );
+            let placed =
+                mypaper_widgets::layout::place(&instance, &widget.manifest, &grid, &appearance);
+            let position = grid.rect(placed.cell, placed.size);
+            let frame = Rect::new(
+                position.x as f32 * scale,
+                position.y as f32 * scale,
+                position.width as f32 * scale,
+                position.height as f32 * scale,
+            );
+            let Ok(mut model) = widgets_view::Model::new(placed, &mut storage, now) else {
+                continue;
+            };
+            model.photo.current = backdrop.clone();
+            if appearance.surface != Some(mypaper_theme::Surface::None) {
+                list.ops.push(Op::Fill {
+                    rect: frame,
+                    radius: appearance.radius.unwrap_or(22.0) * scale,
+                    color: Rgba::rgb8(
+                        appearance
+                            .tint
+                            .unwrap_or(mypaper_widgets::look::DEFAULT_TINT)
+                            .0,
+                        appearance.opacity.unwrap_or(0.46),
+                    ),
+                });
+            }
+            let appearance = mypaper_widgets::look::json_of(&appearance);
+            let widget_list = widgets_view::view(
+                &model,
+                &widgets_view::tokens(&appearance),
+                widgets_view::Frame {
+                    size: (
+                        frame.width().ceil().max(1.0) as u32,
+                        frame.height().ceil().max(1.0) as u32,
+                    ),
+                    scale,
+                    now,
+                    instant: std::time::Instant::now(),
+                    editing: false,
+                },
+                &mut ui.text,
+            );
+            list.ops.extend(crate::stage::offset(
+                &widget_list.ops,
+                frame.left,
+                frame.top,
+            ));
+        }
+    }
+    mypaper_ui::render(&mut ui, &list, size.0, size.1)
+        .ok()
+        .map(std::sync::Arc::new)
+}
+
+pub fn starter_picture(
+    app: &App,
+    index: usize,
+    size: (u32, u32),
+    taskbar: usize,
+) -> Option<std::sync::Arc<mypaper_ui::Image>> {
+    let (wallpaper, preset, items) = crate::pages::first_run::panel_starter(index)?;
+    let wallpaper = app.library.items.iter().find(|w| w.id == wallpaper)?;
+    let style = ["liquid", "fluent", "oneui", "mono"].get(index)?;
+    let mut desktop = Desktop::read(app);
+    desktop.config = vec![
+        ("/theme".into(), Some(serde_json::json!(wallpaper.apply_as))),
+        (
+            "/look".into(),
+            Some(serde_json::json!({"style":style,"appearance":"dark"})),
+        ),
+    ];
+    desktop.theme = super::saving::theme_value(app, wallpaper).as_ref().clone();
+    desktop.bars = serde_json::json!({"version":1,"preset":preset,"look":{"style":style}});
+    if matches!(preset, "macos" | "islands") {
+        desktop.bars["dock"] = serde_json::json!({"enabled":true});
+    }
+    if taskbar != 0 {
+        desktop.bars["top"] = serde_json::json!({"enabled":false});
+        desktop.bars["dock"] = serde_json::json!({"enabled":false});
+    }
+    let mut row = 1;
+    let instances: Vec<_> = if taskbar == 2 {
+        vec![]
+    } else {
+        items.iter().enumerate().map(|(i,(id,size))| {
+        let instance=serde_json::json!({"instance":format!("starter-{i}"),"widget":id,"monitor":"","cell":[20,row],"size":size});
+        row+=size[1];
+        instance
+    }).collect()
+    };
+    desktop.widgets = serde_json::json!({"version":2,"instances":instances,"appearance":{
+        "style":if *style == "liquid" {"liquid"} else {"minimal"},
+        "surface":"glass","radius":if *style == "oneui" {32} else {16},
+        "opacity":if *style == "liquid" {0.15} else {0.7}}});
+    picture(app, &desktop, size, 1793958138)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn rebuilds_do_not_record_or_compare_changed_documents() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        observe(&app);
+        app.docs
+            .edit(
+                "External change",
+                &[Op {
+                    doc: DocId::Config,
+                    path: "/look/style".into(),
+                    value: Some(serde_json::json!("solid")),
+                }],
+            )
+            .unwrap();
+        observe(&app);
+        assert_eq!(
+            app.panel.as_ref().unwrap().history.borrow().entries.len(),
+            1
+        );
+        record_drag(&app, "Committed change");
+        assert_eq!(
+            app.panel.as_ref().unwrap().history.borrow().entries.len(),
+            2
+        );
+    }
+
+    #[test]
+    fn a_snapshot_picture_is_independent_of_todays_look_and_wallpaper() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        // No external image files are needed to check appearance ownership.
+        for wallpaper in &mut app.library.items {
+            wallpaper.preview = None;
+            wallpaper.video = None;
+        }
+        let desktop = Desktop::read(&app);
+        let before = picture(&app, &desktop, (216, 122), 1793958138).unwrap();
+        app.run(crate::actions::Action::SetStyle(Some(
+            mypaper_config::look::Style::Solid,
+        )));
+        for wallpaper in &mut app.library.items {
+            wallpaper.active = false;
+        }
+        let after = picture(&app, &desktop, (216, 122), 1793958138).unwrap();
+        assert_eq!(before.pixels, after.pixels);
+        let current = Desktop::read(&app);
+        assert_ne!(
+            before.pixels,
+            picture(&app, &current, (216, 122), 1793958138)
+                .unwrap()
+                .pixels
+        );
+    }
 }

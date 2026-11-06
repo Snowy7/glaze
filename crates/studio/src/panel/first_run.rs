@@ -34,12 +34,12 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                     .enumerate()
                     .map(|(i, (name, _))| (*name, starter == i, Action::FirstRunPick(i)))
                     .collect();
-                crate::ui::tiles(
+                super::choosers::draw(
+                    app,
                     b,
                     c,
                     key("panel-starters"),
-                    2,
-                    false,
+                    b.px(196.0),
                     &choices,
                     |b, i, r| super::editors::starter_preview(app, b, i, r),
                 );

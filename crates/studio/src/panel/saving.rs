@@ -18,23 +18,49 @@ pub struct ThemeCache(std::collections::HashMap<PathBuf, ThemeData>);
 struct ThemeData {
     stamp: Option<(std::time::SystemTime, u64)>,
     value: std::rc::Rc<Value>,
+    source: Option<std::rc::Rc<str>>,
 }
 
 /// Watch the cheap file stamp; parse a wallpaper manifest only when its file changes.
 pub fn theme_value(app: &App, wallpaper: &crate::library::Wallpaper) -> std::rc::Rc<Value> {
     let path = wallpaper.dir.join(mypaper_theme::MANIFEST);
-    let stamp = std::fs::metadata(&path).ok().and_then(|m| Some((m.modified().ok()?, m.len())));
+    let stamp = std::fs::metadata(&path)
+        .ok()
+        .and_then(|m| Some((m.modified().ok()?, m.len())));
     let mut cache = app.panel.as_ref().unwrap().theme_data.borrow_mut();
     if let Some(data) = cache.0.get(&path)
         && data.stamp == stamp
     {
         return data.value.clone();
     }
-    let value = std::rc::Rc::new(std::fs::read_to_string(&path).ok()
-        .and_then(|source| serde_json::from_str(&source).ok())
-        .unwrap_or_else(|| serde_json::json!({})));
-    cache.0.insert(path, ThemeData { stamp, value: value.clone() });
+    let source: Option<std::rc::Rc<str>> = std::fs::read_to_string(&path).ok().map(Into::into);
+    let value = std::rc::Rc::new(
+        source
+            .as_deref()
+            .and_then(|source| serde_json::from_str(source).ok())
+            .unwrap_or_else(|| serde_json::json!({})),
+    );
+    cache.0.insert(
+        path,
+        ThemeData {
+            stamp,
+            value: value.clone(),
+            source,
+        },
+    );
     value
+}
+
+fn theme_source(app: &App, wallpaper: &crate::library::Wallpaper) -> Option<std::rc::Rc<str>> {
+    theme_value(app, wallpaper);
+    app.panel
+        .as_ref()
+        .unwrap()
+        .theme_data
+        .borrow()
+        .0
+        .get(&wallpaper.dir.join(mypaper_theme::MANIFEST))
+        .and_then(|data| data.source.clone())
 }
 
 /// Alerts use the same readable treatment in the header and beside a failed file.
@@ -145,6 +171,96 @@ pub fn theme_saved(app: &mut App, dir: &Path) {
     }
 }
 
+/// Healthy parts have the same backup-first reset path as malformed files.
+pub fn reset_part(app: &mut App, doc: crate::docs::DocId, path: Option<&'static str>) {
+    use crate::docs::{DocId, Op, StartedOver};
+    app.docs.reload(doc);
+    let defaults = if let Some(path) = path {
+        let mut raw = app.docs.doc(doc).raw.clone();
+        crate::docs::apply_op(
+            &mut raw,
+            &Op {
+                doc,
+                path: path.into(),
+                value: None,
+            },
+        );
+        serde_json::to_string_pretty(&raw).unwrap_or_default()
+    } else {
+        match doc {
+            DocId::Bars => "{\"version\":1}".into(),
+            DocId::Widgets => format!(
+                "{{\"version\":{},\"instances\":[]}}",
+                mypaper_widgets::layout::VERSION
+            ),
+            _ => "{}".into(),
+        }
+    };
+    let owner = app.window;
+    let result = app.docs.start_over(doc, &defaults, |backup| {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            IDOK, MB_DEFBUTTON2, MB_ICONWARNING, MB_OKCANCEL, MessageBoxW,
+        };
+        let kept = backup
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy())
+            .unwrap_or_default();
+        let part = match path {
+            Some("/look") => "Your look",
+            Some("/look/windows") => "Windows look",
+            Some("/desktop_menu") => "Desktop menu",
+            _ => doc.label(),
+        };
+        let message = windows::core::HSTRING::from(format!(
+            "Start over?\n\n{part} returns to its defaults.\nThe current file is kept as {kept}."
+        ));
+        // SAFETY: a confirmation owned by our panel; Cancel is the default.
+        (unsafe {
+            MessageBoxW(
+                owner,
+                &message,
+                windows::core::w!("Start over"),
+                MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2,
+            )
+        }) == IDOK
+    });
+    match result {
+        Ok(StartedOver::Done(backup)) => {
+            if doc == DocId::Config && path.is_some_and(|path| path.starts_with("/look")) {
+                app.apply(
+                    "Start over",
+                    vec![Op {
+                        doc,
+                        path: path.unwrap().into(),
+                        value: None,
+                    }],
+                );
+            }
+            app.panel
+                .as_ref()
+                .unwrap()
+                .save_errors
+                .borrow_mut()
+                .remove(&doc);
+            app.retheme();
+            super::sync_connections(app);
+            super::history::record_drag(app, "Start over");
+            app.toast(
+                format!(
+                    "Started over{}",
+                    backup.map_or(String::new(), |p| format!(
+                        "; backup: {}",
+                        p.file_name().unwrap().to_string_lossy()
+                    ))
+                ),
+                None,
+            );
+        }
+        Ok(StartedOver::Declined) => {}
+        Err(error) => app.alert(format!("{error:#}")),
+    }
+}
+
 pub fn theme_failed(app: &mut App, dir: &Path, error: &str) {
     if let Some(panel) = &app.panel {
         panel.save_doc.set(None);
@@ -166,7 +282,7 @@ pub fn banner(app: &App, b: &mut B, c: &mut Col, page: Page) {
     if let Some(wallpaper) = selected
         && let Some(error) = &wallpaper.error
     {
-        let parsed = std::fs::read_to_string(wallpaper.dir.join(mypaper_theme::MANIFEST)).ok();
+        let parsed = theme_source(app, wallpaper);
         let parse_error = parsed.as_deref().and_then(|source| {
             mypaper_theme::LoadedTheme::parse(wallpaper.dir.clone(), source).err()
         });

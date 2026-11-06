@@ -21,10 +21,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
     if page == Page::FirstRun {
         return;
     }
-    let committing = matches!(
-        page,
-        Page::AddWidget | Page::AddModule | Page::AddWallpaper
-    );
+    let committing = matches!(page, Page::AddWidget | Page::AddModule | Page::AddWallpaper);
     let done_label = "Done";
     let done_style = ui::font(b, 13.0, 500);
     let done_width = (b.measure(done_label, &done_style).0 + b.px(20.0)).max(b.px(52.0));
@@ -45,7 +42,11 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
             Action::Panel(Command::Done),
         );
     }
-    let mut x = if committing { r.right - b.px(8.0) } else { done.left - b.px(6.0) };
+    let mut x = if committing {
+        r.right - b.px(8.0)
+    } else {
+        done.left - b.px(6.0)
+    };
     let editing = app.system.running();
     let compact = r.width() <= b.px(360.0) || b.t.text_scale > 1.0;
     for (icon, label, enabled, action) in [
@@ -293,6 +294,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::Top | Page::Dock => super::editors::view(app, b, c, page),
         _ => super::editors::view(app, b, c, page),
     }
+    super::editors::reveal_search(app, b, page, first_target);
     super::saving::finish_page(app, b, page, first_op, first_target);
 }
 
@@ -342,17 +344,20 @@ fn playback_status(app: &App) -> String {
         .iter()
         .zip(app.system.parts)
         .filter(|(_, part)| !part.running)
-        .map(|((id, _), _)| *id)
+        .map(|((id, _), _)| match *id {
+            "core" => "Core",
+            "engine" => "Engine",
+            _ => "Shell",
+        })
         .collect();
     if !stopped.is_empty() {
-        return format!("{} stopped · {}", stopped.join(", "), metrics(app));
+        return format!("{} stopped", stopped.join(", "));
     }
     let Some(wallpaper) = app.library.active().map(|i| &app.library.items[i]) else {
         return "No wallpaper selected".into();
     };
-    let loaded: Option<mypaper_theme::Theme> = serde_json::from_value(
-        super::saving::theme_value(app, wallpaper).as_ref().clone(),
-    ).ok();
+    let loaded: Option<mypaper_theme::Theme> =
+        serde_json::from_value(super::saving::theme_value(app, wallpaper).as_ref().clone()).ok();
     let engine: mypaper_config::EngineConfig = app
         .get(DocId::Config, "/engine")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -363,14 +368,12 @@ fn playback_status(app: &App) -> String {
             loaded.as_ref().map_or_default(|theme| theme.engine),
         )
         .fps;
-    let source = loaded
-        .as_ref()
-        .and_then(|theme| match &theme.wallpaper {
-            mypaper_theme::Wallpaper::Shader(source) => Some(source.fps),
-            mypaper_theme::Wallpaper::Video(source) => Some(source.fps),
-            mypaper_theme::Wallpaper::Scene(source) => Some(source.fps),
-            _ => None,
-        });
+    let source = loaded.as_ref().and_then(|theme| match &theme.wallpaper {
+        mypaper_theme::Wallpaper::Shader(source) => Some(source.fps),
+        mypaper_theme::Wallpaper::Video(source) => Some(source.fps),
+        mypaper_theme::Wallpaper::Scene(source) => Some(source.fps),
+        _ => None,
+    });
     match (source, cap, wallpaper.kind) {
         (_, _, Some(crate::library::Kind::Image)) => "Still picture".into(),
         (Some(source), cap, _) => format!("{} fps", cap.map_or(source, |cap| cap.min(source))),
@@ -646,16 +649,21 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
                 .registry
                 .get(&instance.widget)
                 .map_or(instance.widget.as_str(), |w| w.manifest.name.as_str());
+            let position = super::editors::position(app, &layout, instance);
+            let area = position.split(", column").next().unwrap_or("On this display");
+            let collision = items.iter().any(|other| other.instance != instance.instance
+                && other.widget == instance.widget
+                && super::editors::position(app,&layout,other).starts_with(&format!("{area},")));
+            let caption = if collision {
+                format!("{area} \u{b7} {} \u{d7} {} \u{b7} cell {}, {}",instance.size[0],instance.size[1],instance.cell[0]+1,instance.cell[1]+1)
+            } else {area.into()};
             row(
                 b,
                 c,
                 Some(crate::pages::widgets::glyph_of(&instance.widget)),
                 name,
                 "",
-                super::editors::position(app, &layout, instance)
-                    .split(", column")
-                    .next()
-                    .unwrap_or("On this display"),
+                &caption,
                 None,
                 Action::SelectWidget(Some(instance.instance.clone())),
             );
@@ -911,7 +919,8 @@ mod tests {
                     .list
                     .hits
                     .iter()
-                    .any(|hit| hit.label.as_ref() == "Cancel" && hit.rect.top >= app.size.1 as f32 - 64.0),
+                    .any(|hit| hit.label.as_ref() == "Cancel"
+                        && hit.rect.top >= app.size.1 as f32 - 64.0),
                 "{page:?}"
             );
             if page == Page::FirstRun {

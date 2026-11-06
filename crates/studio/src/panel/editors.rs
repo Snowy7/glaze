@@ -33,7 +33,19 @@ pub fn open(page: Page) -> Action {
 pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
     match page {
         Page::Widget => widgets::widget(app, b, c),
-        Page::AddWidget => widgets::add(app, b, c),
+        Page::AddWidget => {
+            if let Some(id) = app.panel.as_ref().unwrap().add_widget.as_deref()
+                && !widget_has_room(app, id)
+            {
+                let layout = crate::pages::widgets::layout(app);
+                let make_room = crate::pages::widgets::here(app, &layout)
+                    .into_iter()
+                    .max_by_key(|instance| instance.size[0] * instance.size[1])
+                    .map(|instance| ("Make room", Action::SelectWidget(Some(instance.instance))));
+                super::controls::feedback(b, c, "No room", make_room.into_iter().collect());
+            }
+            widgets::add(app, b, c);
+        }
         Page::Look => look::view(app, b, c),
         Page::Windows => look::windows(app, b, c),
         Page::Wallpapers => wallpapers::list(app, b, c),
@@ -61,7 +73,10 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
 
 pub fn intercept_page_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
     if edit.doc == DocId::Studio && edit.path.as_ref() == "/add_use_now" {
-        app.texts.insert(FieldId::Text(DocId::Studio, edit.path.clone()), value.to_string());
+        app.texts.insert(
+            FieldId::Text(DocId::Studio, edit.path.clone()),
+            value.to_string(),
+        );
         return true;
     }
     bars::intercept_set(app, edit, value) || settings::intercept_set(app, edit, value)
@@ -69,6 +84,32 @@ pub fn intercept_page_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
 
 pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
     bars::field_initial(app, id)
+}
+
+pub fn widget_has_room(app: &App, id: &str) -> bool {
+    let Some(manifest) = app.registry.get(id).map(|w| &w.manifest) else {
+        return false;
+    };
+    let Some(monitor) = app.display() else {
+        return false;
+    };
+    let layout = crate::pages::widgets::layout(app);
+    let grid = crate::stage::grid_for(&layout, monitor);
+    let size = manifest.size.default;
+    if size[0] > grid.cols || size[1] > grid.rows {
+        return false;
+    }
+    let instances = crate::pages::widgets::here(app, &layout);
+    (0..=grid.rows - size[1]).any(|row| {
+        (0..=grid.cols - size[0]).any(|column| {
+            instances.iter().all(|instance| {
+                column + size[0] <= instance.cell[0]
+                    || instance.cell[0] + instance.size[0] <= column
+                    || row + size[1] <= instance.cell[1]
+                    || instance.cell[1] + instance.size[1] <= row
+            })
+        })
+    })
 }
 
 /// Position is relative to the display's actual grid, including the widget's size.
@@ -241,12 +282,16 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
             state
                 .add_widget
                 .as_deref()
-                .is_some_and(|id| can_add_widget(app, id)),
+                .is_some_and(|id| can_add_widget(app, id) && widget_has_room(app, id)),
         ),
         Page::AddWallpaper => (
             "Cancel",
             open(Page::Wallpapers),
-            if wallpapers::use_now(app) { "Add and use" } else { "Add" },
+            if wallpapers::use_now(app) {
+                "Add and use"
+            } else {
+                "Add"
+            },
             Action::AddCommit(wallpapers::use_now(app)),
             wallpapers::can_add(app),
         ),
@@ -322,6 +367,7 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
         }
         crate::panel::controls::feedback(b, c, error, actions);
     }
+    let mut visible_pictures = std::collections::HashSet::new();
     group(b, c, "Desktop changes", |b, c| {
         for (i, entry) in history.entries.iter().enumerate().rev() {
             let r = Rect::new(c.x - b.px(8.0), c.y, c.w + b.px(16.0), height(b, 84.0));
@@ -332,7 +378,7 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
                 b.wash(k, r, b.px(8.0));
             }
             let pic = Rect::new(c.x, c.y + b.px(10.0), b.px(108.0), b.px(61.0));
-            desktop_preview(app, b, pic, &entry.desktop);
+            desktop_preview(app, b, pic, i, entry, &mut visible_pictures);
             let x = pic.right + b.px(12.0);
             let summary = if entry.summary.is_empty() {
                 &entry.title
@@ -379,10 +425,13 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
             c.y = r.bottom;
         }
     });
-    if let Some(entry) = history.selected.and_then(|i| history.entries.get(i)) {
+    if let Some((i, entry)) = history
+        .selected
+        .and_then(|i| history.entries.get(i).map(|entry| (i, entry)))
+    {
         group(b, c, "Selected desktop", |b, c| {
             let r = Rect::new(c.x, c.y + b.px(6.0), c.w, c.w * 9.0 / 16.0);
-            desktop_preview(app, b, r, &entry.desktop);
+            desktop_preview(app, b, r, i, entry, &mut visible_pictures);
             let count = entry
                 .desktop
                 .widgets()
@@ -407,58 +456,39 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
             );
         });
     }
+    history
+        .pictures
+        .borrow_mut()
+        .retain(|key, _| visible_pictures.contains(key));
 }
 
-fn desktop_preview(app: &App, b: &mut B, r: Rect, desktop: &super::history::Desktop) {
-    b.fill(r, b.px(6.0), b.p.fill);
-    if let Some(wallpaper) = desktop.wallpaper().and_then(|id| {
-        app.library
-            .items
-            .iter()
-            .find(|w| w.apply_as == id || w.id == id)
-    }) && let Some(path) = wallpaper.preview.as_ref()
-        && let Some(image) = app
-            .images
-            .borrow_mut()
-            .get(path, (r.width() as u32, r.height() as u32))
-    {
-        crate::stage::image_round(b, r, &image, 1.0, b.px(6.0));
+fn desktop_preview(
+    app: &App,
+    b: &mut B,
+    r: Rect,
+    index: usize,
+    entry: &super::history::Entry,
+    visible: &mut std::collections::HashSet<(usize, u32, u32)>,
+) {
+    if b.clip_rect().is_some_and(|clip| !r.intersects(&clip)) {
+        return;
     }
-    let monitor_bars = app
-        .display()
-        .and_then(|monitor| {
-            mypaper_bars::BarsConfig::parse(&desktop.bars().to_string())
-                .ok()?
-                .for_monitor(&monitor.device, monitor.primary)
-                .ok()
-        })
-        .and_then(|config| serde_json::to_value(config).ok());
-    crate::panel::specimens::desktop_bars(
-        app,
-        b,
-        r,
-        monitor_bars.as_ref().unwrap_or_else(|| desktop.bars()),
+    let size = (
+        r.width().ceil().max(1.0) as u32,
+        r.height().ceil().max(1.0) as u32,
     );
-    if let Ok(layout) = serde_json::from_value::<Layout>(desktop.widgets().clone())
-        && let Some(monitor) = app.display()
-    {
-        let grid = crate::stage::grid_for(&layout, monitor);
-        let scale = r.width() / (monitor.rect.width as f32 / (monitor.dpi as f32 / 96.0));
-        for mut instance in crate::pages::widgets::here(app, &layout) {
-            let at = grid.rect(instance.cell, instance.size);
-            let frame = Rect::new(
-                r.left + at.x as f32 * scale,
-                r.top + at.y as f32 * scale,
-                at.width as f32 * scale,
-                at.height as f32 * scale,
-            );
-            instance.appearance = instance
-                .appearance
-                .over(&layout.appearance.over(&mypaper_widgets::look::defaults()));
-            if let Some(widget) = app.registry.get(&instance.widget) {
-                widgets::face(app, b, &instance, &widget.manifest, "", "", frame);
-            }
-        }
+    let key = (index, size.0, size.1);
+    visible.insert(key);
+    let history = app.panel.as_ref().unwrap().history.borrow();
+    let cached = history.pictures.borrow().get(&key).cloned();
+    let picture = cached.or_else(|| {
+        let picture = super::history::picture(app, &entry.desktop, size, entry.at)?;
+        history.pictures.borrow_mut().insert(key, picture.clone());
+        Some(picture)
+    });
+    b.fill(r, b.px(6.0), b.p.fill);
+    if let Some(picture) = picture {
+        crate::stage::image_round(b, r, &picture, 1.0, b.px(6.0));
     }
 }
 
@@ -515,10 +545,12 @@ fn search(app: &App, b: &mut B, c: &mut Col) {
     }
     for name in [
         "Settings",
+        "On your desktop",
         "Actions",
         "Wallpapers",
         "Widgets",
         "Integrations",
+        "History",
         "Go to",
         "Recent",
     ] {
@@ -604,7 +636,8 @@ pub fn run_search(app: &mut App, index: usize) {
             }
             crate::settings::Place::Bars(Some(crate::actions::Bar::Top)) => Page::Top,
             crate::settings::Place::Bars(Some(crate::actions::Bar::Dock)) => Page::Dock,
-            crate::settings::Place::Bars(_) | crate::settings::Place::BarsPanel(_) => Page::Bars,
+            crate::settings::Place::Bars(_) => Page::Bars,
+            crate::settings::Place::BarsPanel(_) => Page::BarPanel,
             crate::settings::Place::Settings(section) => section_page(section),
             crate::settings::Place::Page(page) => legacy_page(page),
         };
@@ -613,6 +646,7 @@ pub fn run_search(app: &mut App, index: usize) {
         app.nav.more.insert(key(("panel-more", view)));
         return;
     }
+    let reveal = entry.reveal.clone();
     match entry.action {
         Action::Nav(page) => app.panel.as_mut().unwrap().page = legacy_page(page),
         Action::Section(section) => app.panel.as_mut().unwrap().page = section_page(section),
@@ -624,7 +658,70 @@ pub fn run_search(app: &mut App, index: usize) {
             app.nav.integration = i;
             app.panel.as_mut().unwrap().page = Page::Connection;
         }
+        Action::SelectWidget(Some(id)) => {
+            if let Some(instance) = crate::pages::widgets::layout(app).get(&id) {
+                app.nav.display = app
+                    .monitors
+                    .iter()
+                    .position(|m| m.device == instance.monitor)
+                    .unwrap_or(0);
+            }
+            app.run(Action::SelectWidget(Some(id)));
+        }
+        Action::Panel(Command::History(index)) => {
+            app.panel.as_mut().unwrap().page = Page::History;
+            app.run(Action::Panel(Command::History(index)));
+        }
         action => app.run(action),
+    }
+    if let Some(label) = reveal {
+        let page = app.panel.as_ref().unwrap().page;
+        app.panel.as_mut().unwrap().search_match = Some((page, label));
+        app.nav
+            .more
+            .insert(key(("panel-more", key(("studio-panel", page)))));
+        app.pending_reveal = Some("panel-search-match");
+        app.flash = Some(("panel-search-match", std::time::Instant::now()));
+    }
+}
+
+/// Dynamic manifest controls use one reusable anchor, never leaked strings for search IDs.
+pub fn reveal_search(app: &App, b: &mut B, page: Page, first_target: usize) {
+    let Some((on_page, label)) = app
+        .panel
+        .as_ref()
+        .and_then(|state| state.search_match.as_ref())
+    else {
+        return;
+    };
+    if *on_page != page {
+        return;
+    }
+    let target = b
+        .targets
+        .iter()
+        .enumerate()
+        .skip(first_target)
+        .find_map(|(index, target)| {
+            let hit = b.list.hits.iter().find(|hit| hit.id == index as u32 + 1)?;
+            (hit.label.as_ref() == label
+                || hit.label.starts_with(&format!("{label}:"))
+                || hit.label.starts_with(&format!("{label},")))
+            .then_some(target.rect)
+        });
+    if let Some(rect) = target {
+        crate::ui::anchor(
+            app,
+            "panel-search-match",
+            key(("studio-panel", page)),
+            rect.top,
+        );
+        if app
+            .flash
+            .is_some_and(|(id, at)| id == "panel-search-match" && at.elapsed().as_secs_f32() < 2.0)
+        {
+            b.stroke(rect.inflate(b.px(2.0)), b.px(7.0), b.px(2.0), b.p.ink2);
+        }
     }
 }
 
@@ -699,44 +796,30 @@ pub fn number(
 }
 
 pub fn starter_preview(app: &App, b: &mut B, index: usize, rect: Rect) {
-    let Some((wallpaper, preset, items)) = crate::pages::first_run::panel_starter(index) else {
-        return;
+    let size = (
+        rect.width().ceil().max(1.0) as u32,
+        rect.height().ceil().max(1.0) as u32,
+    );
+    let taskbar = match app.overlay {
+        Some(crate::app::Overlay::FirstRun { taskbar, .. }) => taskbar,
+        _ => 0,
     };
+    let key = format!("starter:{index}:{taskbar}:{size:?}");
+    let cached = app
+        .panel
+        .as_ref()
+        .unwrap()
+        .specimens
+        .borrow()
+        .get(&key)
+        .cloned();
+    let picture = cached.or_else(|| {
+        let picture = super::history::starter_picture(app, index, size, taskbar)?;
+        super::specimens::remember(app, key, &picture);
+        Some(picture)
+    });
     b.fill(rect, b.px(6.0), b.p.fill);
-    if let Some(path) = app
-        .library
-        .items
-        .iter()
-        .find(|item| item.id == wallpaper)
-        .and_then(|item| item.preview.as_ref())
-        && let Some(image) = app.images.borrow_mut().get(path, (384, 256))
-    {
-        crate::stage::image_round(b, rect, &image, 1.0, b.px(6.0));
-    }
-    let mut bars = serde_json::json!({"version":1,"preset":preset});
-    if matches!(preset, "macos" | "islands") {
-        bars["dock"] = serde_json::json!({"enabled":true});
-    }
-    crate::panel::specimens::desktop_bars(app, b, rect, &bars);
-    for (i, (id, size)) in items.iter().enumerate() {
-        let Some(widget) = app.registry.get(id) else {
-            continue;
-        };
-        let instance = Instance {
-            instance: format!("starter-{id}"),
-            widget: (*id).into(),
-            monitor: String::new(),
-            cell: [20, i as u32 * 2],
-            size: *size,
-            settings: Default::default(),
-            appearance: Default::default(),
-        };
-        let frame = Rect::new(
-            rect.left + rect.width() * 0.61,
-            rect.top + rect.height() * (0.16 + i as f32 * 0.3),
-            rect.width() * 0.32,
-            rect.height() * 0.27,
-        );
-        widgets::face(app, b, &instance, &widget.manifest, "", "", frame);
+    if let Some(picture) = picture {
+        crate::stage::image_round(b, rect, &picture, 1.0, b.px(6.0));
     }
 }
