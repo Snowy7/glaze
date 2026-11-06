@@ -375,6 +375,23 @@ mod tests {
         };
         let from = Slot::parse("top/left/0").unwrap();
         assert_eq!(zone.destination(Point::new(100., 10.), &from).0.index, 1);
+        let hidden = Zone {
+            items: vec![
+                (2, Rect::new(0., 0., 30., 30.)),
+                (5, Rect::new(40., 0., 30., 30.)),
+            ],
+            len: 8,
+            ..zone.clone()
+        };
+        assert_eq!(
+            hidden
+                .destination(Point::new(38., 10.), &Slot::parse("top/left/2").unwrap())
+                .0
+                .index,
+            4,
+            "insertion preserves separators and modules with no visible output"
+        );
+        assert_eq!(hidden.destination(Point::new(100., 10.), &from).0.index, 7);
         let vertical = Zone {
             horizontal: false,
             items: vec![],
