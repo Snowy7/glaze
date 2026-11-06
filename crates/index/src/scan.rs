@@ -178,6 +178,47 @@ pub struct Scanned {
     pub denied: usize,
 }
 
+/// Live-created subtrees are usually a few entries. Enumerate on the already-background
+/// service thread instead of starting four OS threads for every build/cache directory.
+pub fn subtree(root: &Path, fetch: Fetch) -> Result<Scanned> {
+    let started = Instant::now();
+    let mut store = Store::new();
+    let id = store.insert(
+        0,
+        root.to_string_lossy().trim_end_matches('\\'),
+        DIRECTORY,
+        0,
+        0,
+    );
+    let mut pending = vec![(id, root.to_owned())];
+    let mut denied = 0;
+    while let Some((parent, path)) = pending.pop() {
+        match enumerate(&path, fetch) {
+            Ok(entries) => {
+                for entry in entries {
+                    let child = store.insert(
+                        parent,
+                        &entry.name,
+                        entry.attributes,
+                        entry.size,
+                        entry.modified,
+                    );
+                    if entry.attributes & DIRECTORY != 0 {
+                        pending.push((child, path.join(&entry.name)));
+                    }
+                }
+            }
+            Err(_) => denied += 1,
+        }
+    }
+    store.roll_up();
+    Ok(Scanned {
+        store,
+        seconds: started.elapsed().as_secs_f64(),
+        denied,
+    })
+}
+
 /// Four workers share a directory queue; enumeration happens outside the short store lock.
 /// TODO: optional elevated MFT bootstrap / USN replay, in a separate explicit admin path.
 pub fn scan(root: &Path, fetch: Fetch) -> Result<Scanned> {

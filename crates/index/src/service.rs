@@ -53,7 +53,7 @@ fn apply(state: &RwLock<State>, path: &Path) -> Result<()> {
                 existing
             };
             if entry.attributes & DIRECTORY != 0 && existing.is_none() {
-                reconcile(state, path)?;
+                reconcile(state, path, false)?;
             }
         }
         Ok(_) => {
@@ -80,10 +80,14 @@ fn apply(state: &RwLock<State>, path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn reconcile(state: &RwLock<State>, root: &Path) -> Result<()> {
+fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
     // Measured warm trees on this machine favor Basic over LARGE_FETCH; the CLI retains both
     // so the choice can be remeasured on another disk or Windows version.
-    let scanned = scan::scan(root, Fetch::Basic)?;
+    let scanned = if parallel {
+        scan::scan(root, Fetch::Basic)?
+    } else {
+        scan::subtree(root, Fetch::Basic)?
+    };
     eprintln!(
         "scan {}: {} entries, {:.3}s, {} inaccessible directories",
         root.display(),
@@ -172,7 +176,7 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
         .spawn(move || {
             let _background = Background::enter();
             for root in roots {
-                if let Err(error) = reconcile(&initial, &root) {
+                if let Err(error) = reconcile(&initial, &root, true) {
                     eprintln!("scan {}: {error:#}", root.display());
                 } else if let Err(error) = checkpoint(&initial, &initial_snapshot) {
                     eprintln!("checkpoint after {}: {error:#}", root.display());
@@ -231,7 +235,7 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                     dirty.get_or_insert_with(Instant::now);
                 }
                 for root in &overflows {
-                    reconcile(&state, root)?;
+                    reconcile(&state, root, true)?;
                 }
                 // Parent paths sort before their children. New directories import complete
                 // subtrees; later events are idempotent final-state updates.
