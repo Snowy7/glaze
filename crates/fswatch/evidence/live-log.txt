@@ -1,0 +1,157 @@
+﻿[2026-11-06T06:52:51Z INFO  mypaper_tweaks::dwm] restored 3 window(s)
+[2026-11-06T06:52:51Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 26.7215ms
+[2026-11-06T06:52:51Z INFO  mypaper_wallpaper::engine] Rainy Hong Kong (non-commercial) loaded in 83.3ms
+[2026-11-06T06:52:51Z INFO  mypaper_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-06T06:52:51Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 23.2653ms
+[2026-11-06T06:52:51Z INFO  mypaper_wallpaper::snapshot] snapshot: 2 of 2 screens drawn in 12.6ms on the main thread
+[2026-11-06T06:52:51Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.7 ms (not waited on), copy 0.06 ms on the frame, write 1.50 ms off it
+[2026-11-06T06:52:51Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.0432ms
+[2026-11-06T06:52:51Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 23.9751ms
+[2026-11-06T06:52:51Z INFO  mypaper_wallpaper::engine] Rainy Hong Kong (non-commercial) loaded in 24.6ms
+[2026-11-06T06:52:51Z INFO  mypaper_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-06T06:52:51Z INFO  mypaper_wallpaper::snapshot] snapshot: 1 of 2 screens drawn in 7.0ms on the main thread
+[2026-11-06T06:52:51Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 12.9 ms (not waited on), copy 0.01 ms on the frame, write 1.50 ms off it
+[2026-11-06T06:52:51Z INFO  mypaper_wallpaper::snapshot] snapshot (worker thread): GPU wait 1.0ms, encode 30.8ms, set 21.8ms
+[2026-11-06T06:52:51Z INFO  mypaper_wallpaper::snapshot] snapshot (worker thread): GPU wait 39.2µs, encode 12.8ms, set 0.0ns
+[2026-11-06T06:52:53Z INFO  mypaper_wallpaper::trim] trimmed the working set
+[2026-11-06T06:52:54Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 25.2271ms
+[2026-11-06T06:52:54Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 31.4748ms
+[2026-11-06T06:52:54Z INFO  mypaper_wallpaper::engine] Rainy Hong Kong (non-commercial) loaded in 26.8ms
+[2026-11-06T06:52:54Z INFO  mypaper_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-06T06:52:54Z INFO  mypaper_wallpaper::snapshot] snapshot: 2 of 2 screens drawn in 10.8ms on the main thread
+[2026-11-06T06:52:54Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 26.5 ms (not waited on), copy 0.15 ms on the frame, write 1.70 ms off it
+[2026-11-06T06:52:54Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 22.9393ms
+[2026-11-06T06:52:54Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 32.7522ms
+[2026-11-06T06:52:54Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.2858ms
+[2026-11-06T06:52:54Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 33.5915ms
+[2026-11-06T06:52:54Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 32.4535ms
+[2026-11-06T06:52:54Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.1467ms
+[2026-11-06T06:52:55Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 29.3551ms
+[2026-11-06T06:52:55Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 29.6852ms
+[2026-11-06T06:52:55Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.2636ms
+[2026-11-06T06:52:55Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.9154ms
+[2026-11-06T06:52:55Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 25.0123ms
+[2026-11-06T06:52:55Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.2983ms
+[2026-11-06T06:52:55Z INFO  mypaper_wallpaper::snapshot] snapshot (worker thread): GPU wait 123.8µs, encode 26.6ms, set 156.1ms
+[2026-11-06T06:52:56Z WARN  mypaper_bars::appbar] couldn't register an app bar (is Explorer running?)
+[2026-11-06T06:52:56Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.8355ms
+[2026-11-06T06:52:56Z WARN  mypaper_bars::appbar] couldn't register an app bar (is Explorer running?)
+[2026-11-06T06:52:56Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 22.5166ms
+[2026-11-06T06:52:56Z WARN  mypaper_bars::appbar] couldn't register an app bar (is Explorer running?)
+[2026-11-06T06:52:56Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 28.9291ms
+[2026-11-06T06:52:56Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 21.3587ms
+[2026-11-06T06:52:56Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 23.6391ms
+[2026-11-06T06:52:56Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 36.6503ms
+[2026-11-06T06:52:57Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 25.8829ms
+[2026-11-06T06:52:57Z WARN  mypaper_bars::appbar] couldn't register an app bar (is Explorer running?)
+[2026-11-06T06:52:57Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 26.1405ms
+[2026-11-06T06:52:57Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.5697ms
+[2026-11-06T06:52:57Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 20.3414ms
+[2026-11-06T06:52:57Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 26.1163ms
+[2026-11-06T06:52:57Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.0023ms
+[2026-11-06T06:52:57Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 23.6276ms
+[2026-11-06T06:52:57Z WARN  mypaper_shell::bars] bars.json: in C:\Users\you\AppData\Roaming\mypaper\bars.json: unknown field `fswatch_probe`, expected one of `version`, `preset`, `taskbar`, `top`, `dock`, `launcher`, `tray`, `calendar`, `audio`, `look`, `animation`, `modules`, `icons`, `performance`, `vars`, `appearance`, `overrides` at line 97 column 19; keeping the last valid config
+[2026-11-06T06:52:57Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 23.2805ms
+[2026-11-06T06:52:57Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 28.0591ms
+[2026-11-06T06:52:57Z INFO  mypaper_integrations::notifications] notifications: snapshot mode (package identity is absent); no polling
+[2026-11-06T06:52:58Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 26.2992ms
+invalid index rules: error parsing glob '[fswatch-probe': unclosed character class; missing ']'
+[2026-11-06T06:53:01Z INFO  mypaper_tweaks::dwm] styled 3 window(s)
+[2026-11-06T06:53:01Z INFO  mypaper_tweaks::dwm] restored 3 window(s)
+[2026-11-06T06:53:01Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.9589ms
+[2026-11-06T06:53:01Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 32.5203ms
+[2026-11-06T06:53:01Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 23.8759ms
+[2026-11-06T06:53:01Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 30.917ms
+[2026-11-06T06:53:01Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.0091ms
+[2026-11-06T06:53:01Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.5036ms
+[2026-11-06T06:53:02Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 22.1105ms
+[2026-11-06T06:53:02Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 25.1875ms
+[2026-11-06T06:53:02Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.9944ms
+[2026-11-06T06:53:02Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 25.3337ms
+[2026-11-06T06:53:02Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.2587ms
+[2026-11-06T06:53:02Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 23.9835ms
+[2026-11-06T06:53:02Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.0781ms
+[2026-11-06T06:53:02Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 28.1003ms
+[2026-11-06T06:53:02Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 23.4858ms
+[2026-11-06T06:53:02Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 26.9166ms
+[2026-11-06T06:53:04Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.0 ms (not waited on), copy 0.02 ms on the frame, write 1.61 ms off it
+[2026-11-06T06:53:06Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 25.8898ms
+[2026-11-06T06:53:06Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 29.0857ms
+[2026-11-06T06:53:06Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 22.5314ms
+[2026-11-06T06:53:07Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.0792ms
+[2026-11-06T06:53:07Z INFO  mypaper_shell] game background pause: true
+[2026-11-06T06:53:07Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 20.6873ms
+[2026-11-06T06:53:07Z INFO  mypaper_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
+[2026-11-06T06:53:07Z INFO  mypaper_widgets::plugins] [plugins] [2026-11-06T06:53:07Z INFO  mypaper_plugins::host] game background pause: true
+[2026-11-06T06:53:07Z INFO  mypaper_shell] desktop right-click menu off
+[2026-11-06T06:53:07Z WARN  mypaper_core::tray] could not add the tray icon (is Explorer running?)
+[2026-11-06T06:53:07Z INFO  mypaper_shell] game background pause: false
+[2026-11-06T06:53:07Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
+[2026-11-06T06:53:08Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
+[2026-11-06T06:53:08Z INFO  mypaper_widgets::plugins] [plugins] [2026-11-06T06:53:08Z INFO  mypaper_plugins::host] game background pause: false
+[2026-11-06T06:53:08Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+weather: Windows location unavailable: Your App does not have permission to access location data. Make sure you have defined ID_CAP_LOCATION in the application manifest and that on your phone, you have turned on location by checking Settings > Location. (0x80070005); trying IP (city level)
+[2026-11-06T06:53:08Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 36.0837ms
+[2026-11-06T06:53:08Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 1 took 33.413ms
+[2026-11-06T06:53:08Z INFO  mypaper_shell] desktop right-click menu on
+[2026-11-06T06:53:09Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 22.4981ms
+[2026-11-06T06:53:10Z INFO  mypaper_tweaks::dwm] styled 3 window(s)
+[2026-11-06T06:53:12Z INFO  mypaper_bars::flyouts::index] launcher: 249 apps indexed in 654.4545ms
+[2026-11-06T06:53:12Z INFO  mypaper_tweaks::dwm] styled 3 window(s)
+[2026-11-06T06:53:12Z INFO  mypaper_wallpaper::engine] Rainy Hong Kong (non-commercial) loaded in 31.2ms
+[2026-11-06T06:53:12Z INFO  mypaper_wallpaper::palette] palette: dominant #424c80, accent #2e44b8
+[2026-11-06T06:53:12Z INFO  mypaper_wallpaper::snapshot] snapshot: 2 of 2 screens drawn in 14.0ms on the main thread
+[2026-11-06T06:53:12Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 27.4 ms (not waited on), copy 0.01 ms on the frame, write 1.28 ms off it
+[2026-11-06T06:53:12Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.5764ms
+[2026-11-06T06:53:12Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.2499ms
+[2026-11-06T06:53:12Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 32.2806ms
+[2026-11-06T06:53:12Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 20.0973ms
+[2026-11-06T06:53:12Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 35.2754ms
+[2026-11-06T06:53:12Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 29.1928ms
+[2026-11-06T06:53:12Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 25.1332ms
+[2026-11-06T06:53:12Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 25.7187ms
+[2026-11-06T06:53:12Z WARN  mypaper_bars::appbar] couldn't register an app bar (is Explorer running?)
+[2026-11-06T06:53:12Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 23.3806ms
+[2026-11-06T06:53:12Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 22.3802ms
+[2026-11-06T06:53:12Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 29.0774ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 23.5394ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.3051ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 28.9301ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.3707ms
+[2026-11-06T06:53:13Z WARN  mypaper_bars::appbar] couldn't register an app bar (is Explorer running?)
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 26.6796ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 21.3954ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 21.9042ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 26.2463ms
+[2026-11-06T06:53:13Z WARN  mypaper_bars::appbar] couldn't register an app bar (is Explorer running?)
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 21.8908ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 21.8133ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 34.7523ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 22.334ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.0438ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.2862ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 22.4766ms
+[2026-11-06T06:53:13Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 20.896ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 22.6607ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.264ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 28.9648ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 27.0855ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 26.6439ms
+[2026-11-06T06:53:14Z INFO  mypaper_wallpaper::trim] trimmed the working set
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 25.7193ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 25.9114ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 26.7908ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 23.0402ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.6312ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 31.9822ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 20.6961ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 22.8623ms
+[2026-11-06T06:53:14Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 23.0559ms
+[2026-11-06T06:53:15Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 25.5365ms
+[2026-11-06T06:53:15Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 22.826ms
+[2026-11-06T06:53:15Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 20.3939ms
+[2026-11-06T06:53:15Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 22.7879ms
+[2026-11-06T06:53:15Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.9095ms
+[2026-11-06T06:53:15Z INFO  mypaper_bars::flyouts::index] launcher: 249 apps indexed in 630.7788ms
+[2026-11-06T06:53:16Z INFO  mypaper_wallpaper::snapshot] snapshot (worker thread): GPU wait 6.3ms, encode 25.8ms, set 3.7s
+

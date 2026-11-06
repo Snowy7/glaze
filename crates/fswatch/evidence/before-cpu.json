@@ -1,0 +1,72 @@
+﻿{
+    "label":  "fswatch-before",
+    "at":  "2026-11-06T09:32:24",
+    "rows":  [
+                 {
+                     "part":  "mypaper-shell",
+                     "pid":  94016,
+                     "cpu_core_pct":  0.52,
+                     "gpu3d_pct":  0.01,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  36,
+                     "ws_mb":  99
+                 },
+                 {
+                     "part":  "mypaper-plugins",
+                     "pid":  20296,
+                     "cpu_core_pct":  0,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  11,
+                     "ws_mb":  24
+                 },
+                 {
+                     "part":  "mypaper-wallpaper",
+                     "pid":  83820,
+                     "cpu_core_pct":  1.15,
+                     "gpu3d_pct":  9.08,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  140,
+                     "private_mb":  167,
+                     "ws_mb":  28
+                 },
+                 {
+                     "part":  "mypaper-core",
+                     "pid":  83056,
+                     "cpu_core_pct":  0,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  3,
+                     "ws_mb":  18
+                 },
+                 {
+                     "part":  "mypaper-index",
+                     "pid":  75068,
+                     "cpu_core_pct":  0.52,
+                     "gpu3d_pct":  0,
+                     "gpu_copy_pct":  0,
+                     "gpu_video_pct":  0,
+                     "gpu_mem_mb":  0,
+                     "private_mb":  19,
+                     "ws_mb":  7
+                 }
+             ],
+    "total":  {
+                  "part":  "TOTAL",
+                  "procs":  5,
+                  "cpu_core_pct":  2.19,
+                  "gpu3d_pct":  9.09,
+                  "gpu_video_pct":  0,
+                  "gpu_mem_mb":  140,
+                  "private_mb":  236,
+                  "ws_mb":  176
+              },
+    "theme":  "rain-city"
+}

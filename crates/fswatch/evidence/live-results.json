@@ -1,0 +1,24 @@
+﻿{
+    "at":  "2026-11-06T09:52:51.2436572+03:00",
+    "config_hot_reload_core":  true,
+    "config_theme_switch":  true,
+    "theme_edit_captured":  true,
+    "bars_hot_reload_rejected_unknown_field":  true,
+    "index_config_hot_reload_rejected_invalid_glob":  true,
+    "palette_hot_reload_core":  true,
+    "game_activity_pause_shell":  true,
+    "game_activity_resume_shell":  true,
+    "start_menu_hot_reload_launcher":  true,
+    "processes_survived_without_restart":  true,
+    "processes":  [
+                      "mypaper-core:13056",
+                      "mypaper-index:15672",
+                      "mypaper-shell:70488"
+                  ],
+    "restored_byte_for_byte":  {
+                                   "C:\\Users\\you\\AppData\\Local\\mypaper\\palette.json":  true,
+                                   "C:\\Users\\you\\AppData\\Roaming\\mypaper\\bars.json":  true,
+                                   "C:\\Users\\you\\AppData\\Roaming\\mypaper\\config.json":  true,
+                                   "C:\\Users\\you\\AppData\\Local\\mypaper\\game-activity.json":  true
+                               }
+}

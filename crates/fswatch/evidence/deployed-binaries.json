@@ -1,0 +1,32 @@
+﻿[
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "024CF58F85BF2266DC000B699F589B255B48A37A8665DFBB64A268C0F0F36605",
+        "Path":  "C:\\mypaper-targets\\main\\release\\mypaper-core.exe"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "024CF58F85BF2266DC000B699F589B255B48A37A8665DFBB64A268C0F0F36605",
+        "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-core.exe"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "27C66AA63488A7162B71283C509390611B8DE096CCF390DDAC51C8E26AB0BE0F",
+        "Path":  "C:\\mypaper-targets\\main\\release\\mypaper-shell.exe"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "27C66AA63488A7162B71283C509390611B8DE096CCF390DDAC51C8E26AB0BE0F",
+        "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-shell.exe"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "73A0CB8221E70D46B21D91FE4DAF6471137C6F3971596F1FD1F3D28CE0AC806A",
+        "Path":  "C:\\mypaper-targets\\main\\release\\mypaper-index.exe"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "73A0CB8221E70D46B21D91FE4DAF6471137C6F3971596F1FD1F3D28CE0AC806A",
+        "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-index.exe"
+    }
+]
