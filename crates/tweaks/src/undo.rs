@@ -57,9 +57,13 @@ struct Entry {
     name: String,
     /// `None`: the value did not exist.
     original: Option<Value>,
-    /// Last value we intended to write, for ownership-aware persistent experiments.
+    /// Last committed value (or the intended value in journals predating `pending`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     written: Option<Value>,
+    /// Values an interrupted apply may have installed. Keep every uncommitted attempt
+    /// alongside `written` until a successful apply commits this entry's ownership.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pending: Vec<Value>,
     /// The topmost key that did not exist and was created for this value.
     /// Restoring removes it again (and the keys below it, if empty).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -139,6 +143,7 @@ impl<S: Store> Undo<S> {
     /// are recorded once: applying again (e.g. a new palette) keeps the
     /// values from before the first change. The journal exists after this
     /// call even if `writes` is empty. Returns whether any value changed.
+    /// Ownership retains committed and pending values until the batch succeeds.
     pub fn apply(&mut self, writes: &[Write]) -> Result<bool> {
         let mut journal = self.load()?.unwrap_or_default();
         let mut grown = !self.path.exists();
@@ -148,7 +153,8 @@ impl<S: Store> Undo<S> {
                     key: w.key.into(),
                     name: w.name.into(),
                     original: self.store.read(w.key, w.name)?,
-                    written: Some(w.value.clone()),
+                    written: None,
+                    pending: Vec::new(),
                     created: self.store.first_missing(w.key)?,
                 });
                 grown = true;
@@ -158,8 +164,9 @@ impl<S: Store> Undo<S> {
                 .iter_mut()
                 .find(|e| e.key == w.key && e.name == w.name)
                 && entry.written.as_ref() != Some(&w.value)
+                && !entry.pending.contains(&w.value)
             {
-                entry.written = Some(w.value.clone());
+                entry.pending.push(w.value.clone());
                 grown = true;
             }
         }
@@ -173,6 +180,25 @@ impl<S: Store> Undo<S> {
                 self.store.write(w.key, w.name, &w.value)?;
                 changed = true;
             }
+        }
+
+        // Only retire previous ownership after the entire batch succeeded. A crash,
+        // failed write or failed commit save retains all possible owned values on disk.
+        let mut committed = false;
+        for entry in &mut journal.entries {
+            if let Some(w) = writes
+                .iter()
+                .rev()
+                .find(|w| entry.key == w.key && entry.name == w.name)
+                && (entry.written.as_ref() != Some(&w.value) || !entry.pending.is_empty())
+            {
+                entry.written = Some(w.value.clone());
+                entry.pending.clear();
+                committed = true;
+            }
+        }
+        if committed {
+            self.save(&journal)?;
         }
         Ok(changed)
     }
@@ -216,7 +242,12 @@ impl<S: Store> Undo<S> {
         let mut changed = false;
         for entry in journal.entries.iter().rev() {
             let current = self.store.read(&entry.key, &entry.name)?;
-            if entry.written.is_some() && (current == entry.written || current == entry.original) {
+            let ours = current.as_ref().is_some_and(|value| {
+                entry.written.as_ref() == Some(value) || entry.pending.contains(value)
+            });
+            let already_restored =
+                (entry.written.is_some() || !entry.pending.is_empty()) && current == entry.original;
+            if ours || already_restored {
                 changed |= self.put_back(entry)?;
             }
         }
@@ -301,7 +332,7 @@ impl<S: Store> Undo<S> {
 /// `pub(crate)`: the cursor and shell-toggle tests reuse the in-memory registry.
 #[cfg(test)]
 pub(crate) mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use std::collections::{BTreeSet, HashMap};
     use std::rc::Rc;
 
@@ -592,5 +623,376 @@ pub(crate) mod tests {
         assert!(second.pending());
         assert!(!second.restore(|| {}).unwrap());
         assert!(!second.pending());
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum Interruption {
+        FailedWrite,
+        Crash,
+    }
+
+    /// Interrupts a registry write after the real journal has been saved. The shared
+    /// memory and journal survive when the Undo instance is dropped and reopened.
+    struct Interrupting {
+        memory: Memory,
+        interrupt: Rc<Cell<Option<(usize, Interruption)>>>,
+    }
+
+    impl Store for Interrupting {
+        fn read(&self, key: &str, name: &str) -> Result<Option<Value>> {
+            self.memory.read(key, name)
+        }
+
+        fn write(&mut self, key: &str, name: &str, value: &Value) -> Result<()> {
+            if let Some((remaining, interruption)) = self.interrupt.get() {
+                if remaining == 0 {
+                    self.interrupt.set(None);
+                    match interruption {
+                        Interruption::FailedWrite => bail!("injected write failure"),
+                        Interruption::Crash => bail!("injected crash before registry write"),
+                    }
+                }
+                self.interrupt.set(Some((remaining - 1, interruption)));
+            }
+            self.memory.write(key, name, value)
+        }
+
+        fn delete(&mut self, key: &str, name: &str) -> Result<()> {
+            self.memory.delete(key, name)
+        }
+
+        fn first_missing(&self, key: &str) -> Result<Option<String>> {
+            self.memory.first_missing(key)
+        }
+
+        fn delete_if_empty(&mut self, key: &str) -> Result<()> {
+            self.memory.delete_if_empty(key)
+        }
+    }
+
+    fn interrupted_apply(undo: &mut Undo<Interrupting>, writes: &[Write], how: Interruption) {
+        match how {
+            Interruption::FailedWrite => {
+                let error = undo.apply(writes).unwrap_err();
+                assert_eq!(error.to_string(), "injected write failure");
+            }
+            Interruption::Crash => assert_eq!(
+                undo.apply(writes).unwrap_err().to_string(),
+                "injected crash before registry write"
+            ),
+        }
+        assert!(undo.pending(), "interrupted writes must retain the journal");
+    }
+
+    /// Exercise the real setting plans at each write boundary, including a partial
+    /// batch with both old and new values installed, then reopen the disk journal.
+    fn interrupted_setting(
+        kind: &str,
+        first: &[Write],
+        next: &[Write],
+        owned_restore: bool,
+        how: Interruption,
+    ) {
+        let changing = next.iter().filter(|next| !first.contains(next)).count();
+        assert!(changing > 0);
+        for (original_index, original) in [
+            None,
+            Some(Value::ExpandString("%ORIGINAL%\\handler.exe".into())),
+            Some(Value::Raw {
+                kind: 7,
+                bytes: vec![65, 0, 0, 0, 0, 0, 0, 0],
+            }),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for cut in 0..changing {
+                let scratch = Scratch::new(&format!("undo-{kind}-{how:?}-{original_index}-{cut}"));
+                let mut memory = Memory::default();
+                for w in next {
+                    if let Some(original) = &original {
+                        memory.write(w.key, w.name, original).unwrap();
+                    }
+                }
+                let interrupt = Rc::new(Cell::new(None));
+                let mut undo = Undo::new(
+                    Interrupting {
+                        memory: memory.clone(),
+                        interrupt: interrupt.clone(),
+                    },
+                    scratch.journal(),
+                    Duration::ZERO,
+                );
+                undo.apply(first).unwrap();
+                interrupt.set(Some((cut, how)));
+                interrupted_apply(&mut undo, next, how);
+                // Stopping before the Store write has the same durable state as a
+                // crash here: Undo has no drop/rollback. Reopen without unwinding.
+                let mut recovered = match how {
+                    Interruption::Crash => {
+                        drop(undo);
+                        Undo::new(
+                            Interrupting {
+                                memory: memory.clone(),
+                                interrupt,
+                            },
+                            scratch.journal(),
+                            Duration::ZERO,
+                        )
+                    }
+                    Interruption::FailedWrite => undo,
+                };
+                if owned_restore {
+                    assert!(recovered.restore_if_unchanged().unwrap());
+                } else {
+                    recovered.restore(|| {}).unwrap();
+                }
+                for w in next {
+                    assert_eq!(
+                        memory.read(w.key, w.name).unwrap(),
+                        original,
+                        "{kind}, {how:?}, write {cut}: {}\\{}",
+                        w.key,
+                        w.name
+                    );
+                }
+                assert!(!recovered.pending());
+            }
+        }
+    }
+
+    fn interrupted_folder_routing(how: Interruption) {
+        use crate::folder_routing::writes;
+        use std::path::Path;
+
+        interrupted_setting(
+            "folders",
+            &writes(Path::new(r"C:\A\mypaper-files.exe")).unwrap(),
+            &writes(Path::new(r"C:\B\mypaper-files.exe")).unwrap(),
+            true,
+            how,
+        );
+    }
+
+    #[test]
+    fn folder_routing_crash_between_journal_and_write_restores_the_true_originals() {
+        interrupted_folder_routing(Interruption::Crash);
+    }
+
+    #[test]
+    fn folder_routing_failed_update_restores_the_true_originals() {
+        interrupted_folder_routing(Interruption::FailedWrite);
+    }
+
+    fn interrupted_system_preferences(how: Interruption) {
+        use mypaper_config::{PowerMode, SystemConfig};
+
+        let config = |on| SystemConfig {
+            game_mode: Some(on),
+            show_extensions: Some(on),
+            show_hidden: Some(on),
+            separate_process: Some(on),
+            power_mode: Some(if on {
+                PowerMode::Performance
+            } else {
+                PowerMode::Efficiency
+            }),
+            ..Default::default()
+        };
+        interrupted_setting(
+            "system",
+            &crate::system::writes(&config(true)),
+            &crate::system::writes(&config(false)),
+            false,
+            how,
+        );
+    }
+
+    #[test]
+    fn system_preferences_crash_between_journal_and_write_restores_the_true_originals() {
+        interrupted_system_preferences(Interruption::Crash);
+    }
+
+    #[test]
+    fn system_preferences_failed_update_restores_the_true_originals() {
+        interrupted_system_preferences(Interruption::FailedWrite);
+    }
+
+    fn interrupted_windows_styling(how: Interruption) {
+        use mypaper_theme::{Color, Paint, WindowsStyle};
+
+        let style = |on| WindowsStyle {
+            accent: Some(Paint::Color(if on {
+                Color([1, 2, 3])
+            } else {
+                Color([4, 5, 6])
+            })),
+            dark_mode: Some(on),
+            accent_on_taskbar: Some(on),
+            accent_on_title_bars: Some(on),
+            ..Default::default()
+        };
+        interrupted_setting(
+            "styling",
+            &crate::plan::system_writes(&style(true), None),
+            &crate::plan::system_writes(&style(false), None),
+            false,
+            how,
+        );
+    }
+
+    #[test]
+    fn windows_styling_crash_between_journal_and_write_restores_the_true_originals() {
+        interrupted_windows_styling(Interruption::Crash);
+    }
+
+    #[test]
+    fn windows_styling_failed_update_restores_the_true_originals() {
+        interrupted_windows_styling(Interruption::FailedWrite);
+    }
+
+    #[test]
+    fn classic_menu_crash_between_journal_and_write_keeps_the_true_originals() {
+        interrupted_setting(
+            "classic",
+            &[],
+            &crate::classic_menu::writes(),
+            false,
+            Interruption::Crash,
+        );
+    }
+
+    #[test]
+    fn classic_menu_failed_write_keeps_the_true_originals() {
+        interrupted_setting(
+            "classic",
+            &[],
+            &crate::classic_menu::writes(),
+            false,
+            Interruption::FailedWrite,
+        );
+    }
+
+    #[test]
+    fn interrupted_retries_keep_ownership_of_each_possible_installed_value() {
+        let scratch = Scratch::new("undo-interrupted-retries");
+        let memory = Memory::default();
+        let interrupt = Rc::new(Cell::new(None));
+        let mut undo = Undo::new(
+            Interrupting {
+                memory: memory.clone(),
+                interrupt: interrupt.clone(),
+            },
+            scratch.journal(),
+            Duration::ZERO,
+        );
+        let writes = |value| {
+            [
+                put("K", "", Value::Dword(value)),
+                put("L", "", Value::Dword(value)),
+            ]
+        };
+        undo.apply(&writes(1)).unwrap();
+        interrupt.set(Some((1, Interruption::FailedWrite)));
+        interrupted_apply(&mut undo, &writes(2), Interruption::FailedWrite);
+        // K contains pending 2, L still contains committed 1. A retry with a
+        // third value must not forget either if it fails before its first write.
+        interrupt.set(Some((0, Interruption::FailedWrite)));
+        interrupted_apply(&mut undo, &writes(3), Interruption::FailedWrite);
+        assert_eq!(memory.read("K", "").unwrap(), Some(Value::Dword(2)));
+        assert_eq!(memory.read("L", "").unwrap(), Some(Value::Dword(1)));
+        drop(undo);
+        let mut recovered = Undo::new(memory.clone(), scratch.journal(), Duration::ZERO);
+        assert!(recovered.restore_if_unchanged().unwrap());
+        assert_eq!(memory.read("K", "").unwrap(), None);
+        assert_eq!(memory.read("L", "").unwrap(), None);
+        assert!(!recovered.pending());
+    }
+
+    #[test]
+    fn an_interrupted_first_apply_owns_pending_writes_and_preserves_foreign_changes() {
+        let scratch = Scratch::new("undo-first-pending");
+        let mut memory = Memory::default();
+        let interrupt = Rc::new(Cell::new(Some((1, Interruption::FailedWrite))));
+        let mut undo = Undo::new(
+            Interrupting {
+                memory: memory.clone(),
+                interrupt,
+            },
+            scratch.journal(),
+            Duration::ZERO,
+        );
+        let original = Value::ExpandString("%ORIGINAL%".into());
+        memory.write("L", "", &original).unwrap();
+        interrupted_apply(
+            &mut undo,
+            &[put("K", "", Value::Dword(1)), put("L", "", Value::Dword(2))],
+            Interruption::FailedWrite,
+        );
+        // A foreign deletion is not ownership just because `written` is None.
+        memory.delete("L", "").unwrap();
+        assert!(undo.restore_if_unchanged().unwrap());
+        assert_eq!(memory.read("K", "").unwrap(), None);
+        assert_eq!(memory.read("L", "").unwrap(), None);
+        assert!(!undo.pending());
+    }
+
+    #[test]
+    fn successful_commit_retires_previous_and_pending_ownership() {
+        let scratch = Scratch::new("undo-commit-ownership");
+        let mut memory = Memory::default();
+        let interrupt = Rc::new(Cell::new(None));
+        let mut undo = Undo::new(
+            Interrupting {
+                memory: memory.clone(),
+                interrupt: interrupt.clone(),
+            },
+            scratch.journal(),
+            Duration::ZERO,
+        );
+        undo.apply(&[put("K", "", Value::Dword(1))]).unwrap();
+        interrupt.set(Some((0, Interruption::FailedWrite)));
+        interrupted_apply(
+            &mut undo,
+            &[put("K", "", Value::Dword(2))],
+            Interruption::FailedWrite,
+        );
+        undo.apply(&[put("K", "", Value::Dword(3))]).unwrap();
+        let journal = undo.load().unwrap().unwrap();
+        assert_eq!(journal.entries[0].written, Some(Value::Dword(3)));
+        assert!(journal.entries[0].pending.is_empty());
+
+        // After committing 3, neither retired 1 nor abandoned 2 is ours.
+        for foreign in [Value::Dword(1), Value::Dword(2)] {
+            undo.save(&journal).unwrap();
+            memory.write("K", "", &foreign).unwrap();
+            assert!(!undo.restore_if_unchanged().unwrap());
+            assert_eq!(memory.read("K", "").unwrap(), Some(foreign));
+        }
+    }
+
+    #[test]
+    fn legacy_journals_keep_their_ownership_policy_without_pending_data() {
+        let scratch = Scratch::new("undo-legacy-ownership");
+        std::fs::create_dir_all(&scratch.0).unwrap();
+        let journal = serde_json::json!({ "entries": [
+            { "key": "K", "name": "owned", "original": { "expandstring": "%OLD%" },
+              "written": { "string": "A.exe" } },
+            { "key": "K", "name": "unknown", "original": null }
+        ] });
+        std::fs::write(scratch.journal(), journal.to_string()).unwrap();
+        let mut memory = Memory::default();
+        memory
+            .write("K", "owned", &Value::String("A.exe".into()))
+            .unwrap();
+        memory.write("K", "unknown", &Value::Dword(9)).unwrap();
+        let mut undo = Undo::new(memory.clone(), scratch.journal(), Duration::ZERO);
+        assert!(undo.restore_if_unchanged().unwrap());
+        assert_eq!(
+            memory.read("K", "owned").unwrap(),
+            Some(Value::ExpandString("%OLD%".into()))
+        );
+        assert_eq!(memory.read("K", "unknown").unwrap(), Some(Value::Dword(9)));
+        assert!(!undo.pending());
     }
 }
