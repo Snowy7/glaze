@@ -676,7 +676,8 @@ pub fn picture(
     if wallpaper.is_some_and(|w| w.preview.is_some() || w.video.is_some()) && backdrop.is_none() {
         return None;
     }
-    let mut ui = Ui::new().ok()?;
+    let mut ui = Ui::isolated().ok()?;
+    ui.text.set_capacity(24);
     let mut list = DisplayList::default();
     list.ops.push(Op::Fill {
         rect,
@@ -886,6 +887,7 @@ pub fn picture(
             ));
         }
     }
+    ui.text.clear_cache();
     let picture = mypaper_ui::render(&mut ui, &list, size.0, size.1)
         .ok()
         .map(std::sync::Arc::new);

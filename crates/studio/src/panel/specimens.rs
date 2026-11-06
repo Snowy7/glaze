@@ -919,7 +919,8 @@ fn bars_at(
             append(frame, x, y, &tokens);
         }
         let image = Arc::new(mypaper_ui::render(&mut ui, &list, raster.0, raster.1).ok()?);
-        ui.text.clear_cache();
+        drop(ui);
+        super::measure::finish_raster(app);
         remember(app, cache_key, &image);
         Some(image)
     });

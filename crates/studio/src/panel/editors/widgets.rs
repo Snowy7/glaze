@@ -881,6 +881,11 @@ pub(super) fn face(
             },
             &mut ui.text,
         );
+        // The display list owns its drawing data; do not overlap a widget runtime
+        // and its native-size text layouts with the tile's software bitmap.
+        drop(model);
+        drop(storage);
+        ui.text.clear_cache();
         if !standalone
             && resolved_appearance.surface != Some(mypaper_theme::Surface::None)
             && let Some(image) = crate::panel::specimens::frosted_wallpaper(
@@ -921,7 +926,9 @@ pub(super) fn face(
         let thumb_height = (thumb_width * height / width).max(1);
         crate::panel::measure::scale_picture(&mut list.ops, thumb_width as f32 / width as f32);
         let image = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, thumb_width, thumb_height).ok()?);
-        ui.text.clear_cache();
+        drop(ui);
+        drop(list);
+        crate::panel::measure::finish_raster(app);
         crate::panel::specimens::remember(app, cache_key, &image);
         Some(image)
     });
@@ -1348,6 +1355,36 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     );
                     let k = key(("widget-gallery-tile", id.as_str()));
                     let on = selected.as_deref() == Some(id.as_str());
+                    let name = manifest
+                        .name
+                        .split_once(" · ")
+                        .map_or(manifest.name.as_str(), |(_, face)| face);
+                    let already = layout
+                        .instances
+                        .iter()
+                        .filter(|instance| instance.widget == **id)
+                        .count();
+                    let detail = if already > 0 {
+                        format!("{already} on your desktop")
+                    } else {
+                        manifest.description.clone().unwrap_or_default()
+                    };
+                    b.hit_checked(
+                        k,
+                        rect,
+                        mypaper_ui::Role::RadioButton,
+                        &format!("{name}: {detail}"),
+                        Some(on),
+                        Action::Panel(Command::PickWidget((*id).clone())),
+                        mypaper_ui::controls::Behavior::Click,
+                    );
+                    // Keep every accessible row, but shape and paint only visible tiles.
+                    if b.clip_rect().is_some_and(|clip| {
+                        rect.bottom < clip.top || rect.top > clip.bottom
+                            || rect.right < clip.left || rect.left > clip.right
+                    }) {
+                        continue;
+                    }
                     b.plate(k, rect.inflate(b.px(3.0)), b.px(10.0), on);
                     let instance = Instance {
                         instance: format!("catalog-{id}"),
@@ -1376,10 +1413,6 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                         value,
                         Rect::new(rect.left, rect.top, width, picture_height),
                     );
-                    let name = manifest
-                        .name
-                        .split_once(" · ")
-                        .map_or(manifest.name.as_str(), |(_, face)| face);
                     text(
                         b,
                         Rect::new(
@@ -1394,16 +1427,6 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                         b.p.ink1,
                         Align::Start,
                     );
-                    let already = layout
-                        .instances
-                        .iter()
-                        .filter(|instance| instance.widget == **id)
-                        .count();
-                    let detail = if already > 0 {
-                        format!("{already} on your desktop")
-                    } else {
-                        manifest.description.clone().unwrap_or_default()
-                    };
                     let mut font = b.font(mypaper_ui::controls::Font::Caption);
                     font.size = b.px(11.0) * b.t.text_scale;
                     let lines = b.text.lines(&detail, &font, width - b.px(8.0), 2);
@@ -1424,15 +1447,6 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                             Align::Start,
                         );
                     }
-                    b.hit_checked(
-                        k,
-                        rect,
-                        mypaper_ui::Role::RadioButton,
-                        &format!("{name}: {detail}"),
-                        Some(on),
-                        Action::Panel(Command::PickWidget((*id).clone())),
-                        mypaper_ui::controls::Behavior::Click,
-                    );
                     b.focus_ring(k, rect, b.px(10.0));
                 }
             });

@@ -17,13 +17,19 @@ impl std::fmt::Debug for Raster {
 pub fn raster_ui(app: &crate::app::App) -> Option<std::cell::RefMut<'_, mypaper_ui::Ui>> {
     let mut raster = app.panel.as_ref()?.raster.0.borrow_mut();
     if raster.is_none() {
-        let mut ui = mypaper_ui::Ui::new().ok()?;
+        let mut ui = mypaper_ui::Ui::isolated().ok()?;
         ui.text.set_capacity(24);
         *raster = Some(ui);
     }
     Some(std::cell::RefMut::map(raster, |raster| {
         raster.as_mut().unwrap()
     }))
+}
+
+/// The bitmap is complete: retain pixels and release temporary native font resources.
+pub fn finish_raster(app: &crate::app::App) {
+    app.panel.as_ref().unwrap().raster.0.borrow_mut().take();
+    optimize_heap();
 }
 
 /// Lay out at widget size, then paint those operations once at the displayed pixel size.
@@ -143,6 +149,9 @@ pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
     drop(images);
     *app.stage.borrow_mut() = Default::default();
     text.clear_cache();
+    // Native thumbnail/icon providers are page-owned too. COM unloads only libraries
+    // whose objects and calls have all been released; active UI factories stay live.
+    unsafe { windows::Win32::System::Com::CoFreeUnusedLibrariesEx(0, None); }
     optimize_heap();
 }
 
