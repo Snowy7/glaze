@@ -692,6 +692,9 @@ pub fn fit_height(app: &mut App, surface: &mypaper_ui::Surface, built: &Built) -
 
 /// One additive bridge into the legacy action dispatcher, shared with desktop picking.
 pub fn before_action(app: &mut App, action: &Action) {
+    if app.panel.is_some() && matches!(action, Action::AddWidget(_) | Action::DuplicateWidget) {
+        editors::prepare_widget_grid(app);
+    }
     if matches!(action, Action::AddWallpaper | Action::Panel(Command::Open(Page::AddWallpaper))) {
         app.texts.remove(&FieldId::Text(crate::docs::DocId::Studio, "/add_use_now".into()));
     }
