@@ -784,7 +784,8 @@ fn bars_at(
     let image = cached.or_else(|| {
         let mut config = mypaper_bars::BarsConfig::parse(&raw.to_string()).ok()?;
         config.resolve(shell::default_pins);
-        let mut ui = Ui::new().ok()?;
+        let mut ui = super::measure::raster_ui(app)?;
+        ui.text.clear_cache();
         let mut images = shell::Images::default();
         let mut system = mypaper_bars::accent::read();
         system.scheme = if desktop_dark(app) {
@@ -918,6 +919,7 @@ fn real_pinned_icons(app: &App, frame: &mut mypaper_shell::preview::bars::Frame)
         let initial = item
             .name
             .chars()
+        ui.text.clear_cache();
             .next()
             .unwrap_or('?')
             .to_uppercase()
