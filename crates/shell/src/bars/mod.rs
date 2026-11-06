@@ -1517,24 +1517,9 @@ impl Bars {
                 self.system.animations,
                 config.performance.active(mypaper_desktop::on_battery()),
             );
-            let mut bar_look = config.dock.look.clone();
-            let appearance = config.appearance.over(&self.appearance);
-            look::appearance_layer(config, "dock", &mut bar_look, &appearance);
-            look::popup_font(config, "dock", &mut bar_look);
-            look::glass_layer(config, "dock", &mut bar_look, self.theme_glass);
-            let knobs = Config::load()
-                .map(|c| crate::glass::knobs(&c.look, crate::glass::Family::Menus))
-                .unwrap_or_default();
-            let mut popup = crate::flyouts::look::Look::resolve_with(
-                &bar_look,
-                &appearance,
-                &self.system,
-                &knobs,
-            )
-            .menu_tokens();
-            if config.performance.active(mypaper_desktop::on_battery()) {
-                popup.glass = None;
-            }
+            let popup = dock
+                .and_then(|b| b.tokens.popup.clone())
+                .unwrap_or_else(|| tokens.clone());
             let performance = config.performance.active(mypaper_desktop::on_battery());
             menu.set_interaction_timings(
                 motion::resolve(
@@ -1710,6 +1695,37 @@ impl Bars {
                     let mut tokens = look::Tokens::resolve(&look, &appearance, &self.system);
                     plugin_style::colors(&colors, self.config.raw(), &mut tokens.theme.color);
                     tokens.cache_config(&look, &config);
+                    let mut popup_look = look.clone();
+                    look::popup_font(&config, bar_key, &mut popup_look);
+                    let knobs = Config::load()
+                        .map(|c| crate::glass::knobs(&c.look, crate::glass::Family::Menus))
+                        .unwrap_or_default();
+                    let mut popup = crate::flyouts::look::Look::resolve_with(
+                        &popup_look,
+                        &appearance,
+                        &self.system,
+                        &knobs,
+                    )
+                    .menu_tokens();
+                    if performance {
+                        popup.glass = None;
+                    }
+                    tokens.popup = Some(popup);
+                    let animation = if kind == BarKind::Dock {
+                        &config.dock.animation
+                    } else {
+                        &config.top.animation
+                    };
+                    tokens.glass_style.fade_ms = look::fade_ms(
+                        motion::resolve(
+                            animation,
+                            kind == BarKind::Dock,
+                            motion::Leaf::Show,
+                            self.system.animations,
+                            performance,
+                        ),
+                        motion::presentation(animation, kind == BarKind::Dock, motion::Leaf::Show),
+                    );
                     // No glass on battery saver: the theme's own surface draws instead.
                     if performance {
                         tokens.material = None;

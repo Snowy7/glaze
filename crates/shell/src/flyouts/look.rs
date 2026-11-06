@@ -22,6 +22,7 @@ pub struct Look {
     pub fill: Rgba,
     /// The glass under the body, for the blurred styles.
     pub glass: Option<GlassMaterial>,
+    pub glass_style: mypaper_ui::glass::GlassStyle,
     /// The kit style: the bar's `look.style`, else its family's.
     pub style: Style,
     /// Corner radius in design pixels.
@@ -116,6 +117,7 @@ impl Look {
             false,
             crate::bars::motion::Leaf::Open,
         );
+        look.glass_style.fade_ms = crate::bars::look::fade_ms(look.opening, look.opening_style);
         if performance {
             look.glass = None;
             look.resolved.glass = None;
@@ -235,6 +237,11 @@ impl Look {
                 glass.refraction *= intensity;
                 glass.highlight *= intensity;
                 glass.blur *= intensity;
+                glass.blur += match &bar.background {
+                    Some(mypaper_bars::style::Fill::Wallpaper(fill)) => fill.blur,
+                    Some(mypaper_bars::style::Fill::Blur(fill)) => fill.blur,
+                    _ => 0.0,
+                };
                 if bar.glass.style == Some(mypaper_bars::style::GlassKind::Frosted) {
                     glass.refraction = 0.0;
                     glass.highlight = 0.0;
@@ -280,6 +287,7 @@ impl Look {
             on_accent,
             fill,
             glass,
+            glass_style: tokens.glass_style,
             style: kit,
             radius,
             font: tokens.font.family,
@@ -330,6 +338,7 @@ impl Look {
             icons: self.icons.clone(),
             scale: self.scale,
             shadow: self.shadow,
+            glass_style: self.glass_style,
             ..self.resolved.tokens()
         }
     }

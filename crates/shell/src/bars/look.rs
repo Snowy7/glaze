@@ -33,6 +33,11 @@ pub struct Tokens {
     pub radius: f32,
     /// Engine glass under the body (blur in DIPs); `None` draws the theme's surface.
     pub material: Option<Material>,
+    /// Optics resolved once with the look, copied to both plates and overlays.
+    pub glass_style: mypaper_ui::glass::GlassStyle,
+    pub plate_style: mypaper_glass_ipc::Style,
+    /// Dock command menus resolve alongside the bar, never while publishing or opening.
+    pub popup: Option<mypaper_ui::Tokens>,
     /// `look.transparent` (or `background: none`): no body at all, the items straight on the
     /// wallpaper with a soft shadow.
     pub bare: bool,
@@ -102,6 +107,11 @@ pub fn material(look: &Look, style: Style, tint: Rgba, opacity: Option<f32>) -> 
     m.refraction *= intensity;
     m.highlight *= intensity;
     m.blur *= intensity;
+    m.blur += match &look.background {
+        Some(Fill::Wallpaper(fill)) => fill.blur,
+        Some(Fill::Blur(fill)) => fill.blur,
+        _ => 0.0,
+    };
     if look.glass.style == Some(GlassKind::Frosted) {
         m.refraction = 0.0;
         m.highlight = 0.0;
@@ -226,12 +236,16 @@ impl Tokens {
             &theme,
             &system_colors,
         );
+        let glass_style = glass_style(look);
         Self {
             family,
             font,
             fill,
             radius,
             material,
+            glass_style,
+            plate_style: plate_style(glass_style),
+            popup: None,
             bare,
             theme,
             scale: appearance.scale.unwrap_or(1.0),
@@ -256,6 +270,7 @@ impl Tokens {
             shadow: self.shadow,
             border: self.border && self.material.is_none(),
             glass: self.material,
+            glass_style: self.glass_style,
             ..self.theme.tokens()
         }
     }
@@ -320,6 +335,54 @@ impl Tokens {
             item.scale *= 1.0 - 0.03 * press.clamp(0.0, 1.0);
         }
         item
+    }
+}
+
+/// Optional optics shared by a bar and the popups it opens. The bottom inner-shadow meaning
+/// of legacy `depth` differs from the renderer's shade under the lit top rim (docs/bars.md).
+pub fn glass_style(look: &Look) -> mypaper_ui::glass::GlassStyle {
+    mypaper_ui::glass::GlassStyle {
+        brightness: match &look.background {
+            Some(Fill::Wallpaper(fill)) => fill.brightness,
+            Some(Fill::Blur(fill)) => fill.brightness,
+            _ => 1.0,
+        },
+        saturation: look.saturation.unwrap_or(1.0),
+        smoothing: if look.corners == Some(mypaper_bars::style::Corners::Squircle) {
+            0.6
+        } else {
+            0.0
+        },
+        sheen: look
+            .glass
+            .sheen
+            .map(|v| v * look.glass.intensity.unwrap_or(1.0)),
+        depth: look
+            .glass
+            .depth
+            .map(|v| v * look.glass.intensity.unwrap_or(1.0)),
+        ..Default::default()
+    }
+}
+
+pub fn fade_ms(
+    timing: mypaper_ui::transition::Timing,
+    style: mypaper_bars::style::MotionStyle,
+) -> f32 {
+    if timing.enabled && style != mypaper_bars::style::MotionStyle::None {
+        (timing.duration.as_secs_f32() * 1000.0).min(2000.0)
+    } else {
+        0.0
+    }
+}
+
+pub fn plate_style(style: mypaper_ui::glass::GlassStyle) -> mypaper_glass_ipc::Style {
+    mypaper_glass_ipc::Style {
+        brightness: style.brightness,
+        saturation: style.saturation,
+        smoothing: style.smoothing,
+        sheen: style.sheen,
+        depth: style.depth,
     }
 }
 
@@ -563,7 +626,7 @@ pub fn warn_dropped(value: &serde_json::Value) {
         static ONCE: std::sync::Once = std::sync::Once::new();
         ONCE.call_once(|| {
             log::warn!(
-                "native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners"
+                "native bars ignore CSS, gradient/image fills, noise, glow, neon and bevel/scoop/notch corners"
             )
         });
     }
@@ -594,6 +657,99 @@ fn custom_family(list: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn glass_optics_and_background_frost_resolve_into_cached_plate_and_popup_styles() {
+        let look: Look = serde_json::from_value(serde_json::json!({
+            "background": { "type": "wallpaper", "brightness": 0.65, "blur": 48 },
+            "saturation": 0.0, "corners": "squircle",
+            "glass": { "blur": 32, "sheen": 0.7, "depth": 0.2 }
+        }))
+        .unwrap();
+        let tokens = Tokens::resolve(
+            &look,
+            &Appearance::default(),
+            &crate::flyouts::look::fixed_system(),
+        );
+        assert_eq!(tokens.material.unwrap().blur, 80.0);
+        assert_eq!(
+            tokens.plate_style,
+            mypaper_glass_ipc::Style {
+                brightness: 0.65,
+                saturation: 0.0,
+                smoothing: 0.6,
+                sheen: Some(0.7),
+                depth: Some(0.2),
+            }
+        );
+        let popup = crate::flyouts::look::Look::resolve(
+            &look,
+            &Appearance::default(),
+            &crate::flyouts::look::fixed_system(),
+        );
+        assert_eq!(popup.glass_style, tokens.glass_style);
+        assert_eq!(popup.menu_tokens().glass_style, tokens.glass_style);
+        assert_eq!(popup.glass.unwrap().blur, 80.0);
+        let reset = Tokens::resolve(
+            &Look::default(),
+            &Appearance::default(),
+            &crate::flyouts::look::fixed_system(),
+        );
+        assert_eq!(reset.plate_style, Default::default());
+    }
+
+    #[test]
+    fn overlay_fade_obeys_resolved_motion_policy_and_duration() {
+        use super::super::motion::{self, Leaf};
+        use mypaper_bars::style::{Motion, MotionStyle};
+        for (value, system, performance, expected) in [
+            (
+                serde_json::json!({"duration": 640, "curve": "linear"}),
+                true,
+                false,
+                640.0,
+            ),
+            (serde_json::json!({"enabled": false}), true, false, 0.0),
+            (
+                serde_json::json!({"reduceMotion": "always"}),
+                true,
+                false,
+                0.0,
+            ),
+            (
+                serde_json::json!({"reduceMotion": "system"}),
+                false,
+                false,
+                0.0,
+            ),
+            (
+                serde_json::json!({"reduceMotion": "never", "duration": 640, "curve": "linear"}),
+                false,
+                false,
+                640.0,
+            ),
+            (
+                serde_json::json!({"reduceMotion": "never"}),
+                true,
+                true,
+                0.0,
+            ),
+            (
+                serde_json::json!({"open": {"style": "none"}}),
+                true,
+                false,
+                0.0,
+            ),
+        ] {
+            let animation: Motion = serde_json::from_value(value).unwrap();
+            let timing = motion::resolve(&animation, false, Leaf::Open, system, performance);
+            assert_eq!(
+                fade_ms(timing, motion::presentation(&animation, false, Leaf::Open)),
+                expected
+            );
+            assert_eq!(fade_ms(timing, MotionStyle::None), 0.0);
+        }
+    }
 
     #[test]
     fn every_bar_style_maps_to_a_kit_style() {

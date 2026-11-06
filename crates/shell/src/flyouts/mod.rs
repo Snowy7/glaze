@@ -1122,6 +1122,7 @@ impl Flyouts {
             open.below,
         );
         // The look's blur is in DIPs; the engine takes physical px, as the bars' and widgets'.
+        self.surface.set_glass_style(self.look.glass_style);
         self.surface.set_glass(glass.map(|material| Glass {
             body: Rect::new(0.0, 0.0, width, height),
             radius,
@@ -1554,6 +1555,7 @@ fn build_animated(
     } = kit;
     list.focus = state.2;
     Kit::body(&mut list, (width, height), radius, &theme, glass);
+    mypaper_ui::geom::continuous::surface(&mut list, Rect::new(0.0, 0.0, width, height), look.glass_style.smoothing);
     (list, (width as u32, height as u32))
 }
 

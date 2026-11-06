@@ -3282,6 +3282,7 @@ impl Widgets {
                             .offset(-monitor.rect.x as f32, -monitor.rect.y as f32),
                         radius: view::plate_radius(&e.model, e.rect, e.dpi_scale * e.tokens.scale),
                         material,
+                        style: Default::default(),
                     })
                 })
                 .collect();

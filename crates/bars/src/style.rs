@@ -97,9 +97,7 @@ pub enum Fill {
     /// "Wallpaper glass": the wallpaper engine's blurred snapshot of this monitor, aligned to the
     /// screen, under the tint.
     Wallpaper(WallpaperFill),
-    /// Live blur: whatever is behind the bar (windows too), blurred by Windows (DWM's host
-    /// backdrop) under the tint. Falls back to the tint where Windows can't (docs/bars.md,
-    /// "Live blur").
+    /// Live blur: whatever is behind the bar (windows too), drawn by the engine's overlay.
     Blur(BlurFill),
 }
 
@@ -108,7 +106,7 @@ pub enum Fill {
 pub struct BlurFill {
     #[serde(default = "one")]
     pub brightness: f32,
-    /// Extra blur in DIPs on top of Windows' own (usually 0).
+    /// Extra blur in DIPs on top of the material's frost (usually 0).
     #[serde(default)]
     pub blur: f32,
 }
@@ -537,7 +535,9 @@ pub enum GlassKind {
 /// unless noted: `intensity` scales the whole effect, `refraction` how far the rim bends what's
 /// behind, `highlight` the specular rim, `tint` the tint over the glass (missing: `look.tint`),
 /// `blur` (DIPs 0..32) a light blur of what's behind. `sheen` (a soft light falling from the
-/// top) and `depth` (an inner shadow toward the bottom) work for both materials. A string is
+/// top) and `depth` are optional rim controls. The engine currently maps depth to the shade
+/// under the lit top edge; the legacy bottom inner-shadow meaning remains unimplemented.
+/// A string is
 /// shorthand for the style: `"glass": "liquid"`.
 #[derive(Debug, Clone, PartialEq, Default, Serialize)]
 pub struct GlassStyle {

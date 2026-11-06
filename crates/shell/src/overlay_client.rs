@@ -18,7 +18,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use mypaper_desktop::Rect;
-use mypaper_ui::glass::{Backdrop, GlassMaterial, Shape};
+use mypaper_ui::glass::{Backdrop, GlassMaterial, GlassStyle, Shape};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
     IsWindow, SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE,
@@ -51,6 +51,13 @@ pub fn warm(client: HWND, shape: Shape) {
                     rect: rect(shape),
                     radius: 0.0,
                     material: Material::CLEAR,
+                },
+            );
+            let _ = request::send(
+                engine,
+                &Request::Style {
+                    client,
+                    style: request::Style::DEFAULT,
                 },
             );
             let _ = request::send(engine, &Request::Close { client });
@@ -130,6 +137,17 @@ impl Backdrop for Client {
     }
 
     fn open(&self, client: HWND, shape: Shape, radius: f32, material: &GlassMaterial) -> bool {
+        self.open_styled(client, shape, radius, material, &GlassStyle::default())
+    }
+
+    fn open_styled(
+        &self,
+        client: HWND,
+        shape: Shape,
+        radius: f32,
+        material: &GlassMaterial,
+        style: &GlassStyle,
+    ) -> bool {
         let Ok(channel) = Channel::open(client, true) else {
             return false;
         };
@@ -145,10 +163,25 @@ impl Backdrop for Client {
         if !self.send(&request) {
             return false;
         }
+        self.style(client, style);
         let mut plates = self.plates.borrow_mut();
         plates.retain(|p| p.client != client);
         plates.push(plate);
         true
+    }
+
+    fn style(&self, client: HWND, style: &GlassStyle) {
+        self.send(&Request::Style {
+            client,
+            style: request::Style {
+                brightness: style.brightness,
+                saturation: style.saturation,
+                smoothing: style.smoothing,
+                sheen: style.sheen.unwrap_or(-1.0),
+                depth: style.depth.unwrap_or(-1.0),
+                fade_ms: style.fade_ms,
+            },
+        });
     }
 
     fn place(&self, client: HWND, shape: Shape, radius: f32) {
@@ -212,7 +245,7 @@ fn wire(material: &GlassMaterial) -> Material {
     let t = material.tint;
     Material {
         clarity: material.clarity.clamp(0.0, 1.0),
-        blur: material.blur.max(0.0),
+        blur: material.blur.clamp(0.0, 256.0),
         refraction: material.refraction.clamp(0.0, 1.0),
         highlight: material.highlight.clamp(0.0, 1.0),
         tint: [byte(t.r), byte(t.g), byte(t.b), 0],

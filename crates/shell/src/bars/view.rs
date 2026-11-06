@@ -113,7 +113,7 @@ impl Out {
 /// and Solid's hairline, without) or the config's own background colour.
 fn panel(f: &mut kit::Frame, out: &mut Out, rect: Rect, radius: f32, tokens: &Tokens) {
     out.shapes.push((rect, radius));
-    f.fill(rect, radius, Rgba::HIT);
+    f.fill_continuous(rect, radius, tokens.glass_style.smoothing, Rgba::HIT);
     if tokens.material.is_some() {
         return;
     }
@@ -135,19 +135,30 @@ fn panel(f: &mut kit::Frame, out: &mut Out, rect: Rect, radius: f32, tokens: &To
             color: shadow.color,
         });
     }
-    f.fill(
+    f.fill_continuous(
         rect,
         radius,
+        tokens.glass_style.smoothing,
         tokens.fill.unwrap_or(tokens.theme.color.surface),
     );
     let edge = tokens.styles.edges[state];
     let width = edge.width * f.s;
     if width > 0.0 {
-        f.push(Op::Stroke {
-            rect: rect.inflate(-width / 2.0),
-            radius: (radius - width / 2.0).max(0.0),
-            width,
-            color: edge.color,
+        f.push(if tokens.glass_style.smoothing > 0.0 {
+            Op::Continuous {
+                rect: rect.inflate(-width / 2.0),
+                radius: (radius - width / 2.0).max(0.0),
+                smoothing: tokens.glass_style.smoothing,
+                width,
+                color: edge.color,
+            }
+        } else {
+            Op::Stroke {
+                rect: rect.inflate(-width / 2.0),
+                radius: (radius - width / 2.0).max(0.0),
+                width,
+                color: edge.color,
+            }
         });
     }
 }

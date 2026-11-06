@@ -853,6 +853,7 @@ impl Bar {
             // After the move: the surface opens or places its glass at the origin it has now.
             // Before it, glass opened at the previous frame's origin, ~a magnified dock's headroom
             // too high, and the engine's asynchronous open could miss the correcting place.
+            surface.set_glass_style(self.tokens.glass_style);
             surface.set_glass(glass.filter(|_| visible));
             if visible {
                 if !surface.is_visible() {
@@ -1012,6 +1013,7 @@ impl Bar {
                     ),
                     radius: *radius * transform.scale(),
                     material,
+                    style: self.tokens.plate_style,
                 }
             })
             .collect()
