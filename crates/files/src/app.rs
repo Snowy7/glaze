@@ -1170,6 +1170,11 @@ impl App {
                         .collect();
                     if complete {
                         log::info!("folder: {} entries in {elapsed_ms} ms", self.entries.len());
+                    } else {
+                        log::info!(
+                            "folder first page: {} entries in {elapsed_ms} ms",
+                            self.entries.len()
+                        );
                     }
                 }
                 Reply::Search {
