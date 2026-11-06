@@ -281,3 +281,6 @@ mod tests {
         assert_eq!(Rect::new(2.0, 2.0, 0.0, 5.0).pixels(8, 8), None);
     }
 }
+#[path = "continuous.rs"]
+pub mod continuous;
+

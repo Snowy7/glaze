@@ -499,6 +499,7 @@ pub(crate) struct Canvas {
     brush: ID2D1SolidColorBrush,
     images: RefCell<HashMap<usize, (Arc<Image>, ID2D1Bitmap)>>,
     arcs: RefCell<HashMap<[u32; 4], ID2D1PathGeometry>>,
+    continuous: RefCell<HashMap<[u32; 6], ID2D1PathGeometry>>,
     /// Icon outlines on their 24-unit grid, made on first use.
     icons: RefCell<HashMap<crate::icons::Icon, Option<ID2D1PathGeometry>>>,
     /// Round caps and joins, for icons.
@@ -556,6 +557,7 @@ impl Canvas {
                 brush,
                 images: RefCell::new(HashMap::new()),
                 arcs: RefCell::new(HashMap::new()),
+                continuous: RefCell::new(HashMap::new()),
                 icons: RefCell::new(HashMap::new()),
                 round,
             })
@@ -682,6 +684,29 @@ impl Canvas {
         // SAFETY: per this function's contract.
         unsafe {
             match op {
+                Op::Continuous { rect, radius, smoothing, width, color: c } => {
+                    use windows::Win32::Graphics::Direct2D::Common::{D2D1_FIGURE_BEGIN_FILLED, D2D1_FIGURE_END_CLOSED};
+                    let key = [rect.left, rect.top, rect.right, rect.bottom, *radius, *smoothing].map(f32::to_bits);
+                    let mut paths = self.continuous.borrow_mut();
+                    if !paths.contains_key(&key)
+                        && let Ok(path) = t.GetFactory().and_then(|f| f.CreatePathGeometry())
+                        && let Ok(sink) = path.Open()
+                    {
+                        let points = crate::geom::continuous::outline(*rect, *radius, *smoothing);
+                        sink.BeginFigure(Vector2 { X: points[0].x, Y: points[0].y }, D2D1_FIGURE_BEGIN_FILLED);
+                        for p in &points[1..] { sink.AddLine(Vector2 { X: p.x, Y: p.y }); }
+                        sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+                        if sink.Close().is_ok() {
+                            if paths.len() >= 64 { paths.clear(); }
+                            paths.insert(key, path);
+                        }
+                    }
+                    if let Some(path) = paths.get(&key) {
+                        brush.SetColor(&color(*c));
+                        if *width > 0.0 { t.DrawGeometry(path, brush, *width, None); }
+                        else { t.FillGeometry(path, brush, None); }
+                    }
+                }
                 Op::Clipped { rect, ops } => {
                     t.PushAxisAlignedClip(&d2d(*rect), D2D1_ANTIALIAS_MODE_ALIASED);
                     let damage = Rect {

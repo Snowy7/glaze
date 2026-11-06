@@ -17,6 +17,8 @@ pub type HitId = u32;
 /// One paint operation, in the surface's device pixels, drawn in list order.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
+    /// A continuous corner surface; `width == 0` fills, otherwise strokes its contour.
+    Continuous { rect: Rect, radius: f32, smoothing: f32, width: f32, color: Rgba },
     /// A clipped group, used by windowless scroll views. Bounds never escape the viewport.
     Clipped { rect: Rect, ops: Arc<[Op]> },
     /// Markdown emphasis without changing the shared text style contract.
@@ -112,6 +114,7 @@ impl Op {
     /// Every pixel this operation may touch, antialiasing included.
     pub fn bounds(&self) -> Rect {
         match self {
+            Self::Continuous { rect, width, .. } => rect.inflate(width * 0.5 + 1.0),
             Self::Clipped { rect, .. } => *rect,
             Self::Emphasis { rect, style, .. } => rect.inflate(2.0 + style.size * 0.1),
             Self::Arc {
@@ -197,7 +200,8 @@ impl DisplayList {
                         to.x += dx;
                         to.y += dy;
                     }
-                    Op::Image { rect, .. }
+                    Op::Continuous { rect, .. }
+                    | Op::Image { rect, .. }
                     | Op::RoundedImage { rect, .. }
                     | Op::TextField { rect, .. }
                     | Op::Fill { rect, .. }

@@ -499,7 +499,9 @@ pub fn view_animated<C>(
     let focus = hover
         .map(|i| i as HitId)
         .filter(|id| hits.iter().any(|h| h.id == *id));
-    DisplayList { ops, hits, focus }
+    let mut list = DisplayList { ops, hits, focus };
+    crate::geom::continuous::surface(&mut list, body, tokens.glass_style.smoothing);
+    list
 }
 
 /// What a menu event came to.
@@ -1138,6 +1140,7 @@ impl<C: Clone> Menu<C> {
         );
         let at = (p.origin.0 - edge, p.origin.1 - edge);
         let size = ((w + 2 * edge) as u32, (h + 2 * edge) as u32);
+        p.surface.set_glass_style(self.tokens.glass_style);
         p.surface
             .set_glass(self.tokens.glass.map(|material| crate::glass::Glass {
                 body: Rect::new(edge as f32, edge as f32, w as f32, h as f32),

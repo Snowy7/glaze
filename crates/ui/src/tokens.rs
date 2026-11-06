@@ -28,6 +28,8 @@ pub struct Tokens {
     /// Engine glass under the body instead of the tint (`crate::glass`); `None` draws the tint.
     /// Popups fall back to the thread's style ([`crate::glass::style`]) when this is `None`.
     pub glass: Option<crate::glass::GlassMaterial>,
+    /// Optional optics of this menu's material, resolved alongside the tokens.
+    pub glass_style: crate::glass::GlassStyle,
 }
 
 impl Default for Tokens {
@@ -46,6 +48,7 @@ impl Default for Tokens {
             scale: 1.0,
             menu: MenuMetrics::default(),
             glass: None,
+            glass_style: crate::glass::GlassStyle::default(),
         }
     }
 }

@@ -15,6 +15,31 @@ use windows::Win32::Foundation::HWND;
 
 use crate::geom::{Rect, Rgba};
 
+/// Optional optics and continuous corners, neutral unless a surface opts in. Kept separately
+/// from the base material so existing kit surfaces retain their look.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlassStyle {
+    pub brightness: f32,
+    pub saturation: f32,
+    pub smoothing: f32,
+    pub sheen: Option<f32>,
+    pub depth: Option<f32>,
+    pub fade_ms: f32,
+}
+
+impl Default for GlassStyle {
+    fn default() -> Self {
+        Self {
+            brightness: 1.0,
+            saturation: 1.0,
+            smoothing: 0.0,
+            sheen: None,
+            depth: None,
+            fade_ms: 300.0,
+        }
+    }
+}
+
 /// The glass's material (plan, "Material controls"); values are 0..=1 unless noted.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GlassMaterial {
@@ -70,6 +95,13 @@ pub trait Backdrop {
     fn available(&self) -> bool;
     /// Creates the glass under `client`; `false` when it was refused.
     fn open(&self, client: HWND, shape: Shape, radius: f32, material: &GlassMaterial) -> bool;
+    /// Opens with optional optics; old backdrops can continue implementing only `open`.
+    fn open_styled(&self, client: HWND, shape: Shape, radius: f32, material: &GlassMaterial, style: &GlassStyle) -> bool {
+        let opened = self.open(client, shape, radius, material);
+        if opened { self.style(client, style); }
+        opened
+    }
+    fn style(&self, _client: HWND, _style: &GlassStyle) {}
     fn place(&self, client: HWND, shape: Shape, radius: f32);
     fn material(&self, client: HWND, material: &GlassMaterial);
     fn close(&self, client: HWND);

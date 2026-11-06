@@ -258,6 +258,16 @@ impl<'a> Frame<'a> {
         }
     }
 
+    /// A surface fill with the same continuous corners as the engine glass. Zero smoothing
+    /// retains the existing circular fill and its fast software path.
+    pub fn fill_continuous(&mut self, rect: Rect, radius: f32, smoothing: f32, color: Rgba) {
+        if smoothing > 0.0 {
+            self.push(Op::Continuous { rect, radius, smoothing, width: 0.0, color });
+        } else {
+            self.fill(rect, radius, color);
+        }
+    }
+
     /// A card inside a surface: the card fill at the concentric radius. Returns its content
     /// rect (inset by the panel padding's half, rounded).
     pub fn card(&mut self, rect: Rect) -> Rect {
