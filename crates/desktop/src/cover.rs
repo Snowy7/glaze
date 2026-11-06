@@ -1,49 +1,59 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::time::Duration;
 
-use windows::Win32::Foundation::{HWND, LPARAM, RECT};
+use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
+use windows::Win32::System::Threading::{GetCurrentThreadId, INFINITE};
 use windows::Win32::Graphics::Dwm::{
     DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute,
 };
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CHILDID_SELF, EVENT_OBJECT_CLOAKED, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
+    CHILDID_SELF, DispatchMessageW, EVENT_OBJECT_CLOAKED, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
     EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_UNCLOAKED, EVENT_SYSTEM_FOREGROUND,
     EVENT_SYSTEM_MINIMIZEEND, EnumWindows, GA_PARENT, GWL_EXSTYLE, GetAncestor, GetClassNameW,
     GetDesktopWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsIconic,
-    IsWindowVisible, IsZoomed, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+    IsWindowVisible, IsZoomed, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx,
+    OBJID_WINDOW, PM_NOREMOVE, PM_REMOVE, PeekMessageW, PostThreadMessageW, QS_ALLINPUT,
+    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_NULL, WM_QUIT, WS_EX_NOACTIVATE,
+    WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 use windows::core::BOOL;
 
 use crate::Rect;
 
 static CHANGED: AtomicBool = AtomicBool::new(true);
+/// The thread [`WindowEvents::install`] ran on, woken when `CHANGED` turns true (0: none).
+static CONSUMER: AtomicU32 = AtomicU32::new(0);
 
-/// Subscribes to top-level window changes (focus, move, min/max, show/hide,
-/// cloak). Events arrive through the message loop of the installing thread,
-/// so that thread must pump messages. Unhooks on drop.
+/// How long the hook thread lets events gather after taking a batch. Every cursor move anywhere
+/// is a LOCATIONCHANGE, about 900 a second from a fast mouse; taken one by one on the engine's
+/// frame loop they cost it 1.3% of a core while the mouse moved (2026-11-06).
+const BATCH: Duration = Duration::from_millis(50);
+
+/// Subscribes to top-level window changes (focus, move, min/max, show/hide, cloak) on a thread
+/// of its own, which takes them in batches (at most one wake per [`BATCH`]). When one could
+/// change what covers a monitor it posts `WM_NULL` to the thread that installed it, so that
+/// thread's message wait returns and [`take_changed`](Self::take_changed) has the news. Unhooks
+/// on drop.
 pub struct WindowEvents {
-    hooks: Vec<HWINEVENTHOOK>,
+    thread: Option<std::thread::JoinHandle<()>>,
+    thread_id: u32,
 }
 
 impl WindowEvents {
     pub fn install() -> Self {
-        let ranges = [
-            (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND),
-            (EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE),
-            (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE),
-            (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
-        ];
-        let flags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
-        let hooks = ranges
-            .into_iter()
-            // SAFETY: out-of-context hook with a 'static callback.
-            .map(|(min, max)| unsafe {
-                SetWinEventHook(min, max, None, Some(on_event), 0, 0, flags)
-            })
-            .filter(|h| !h.is_invalid())
-            .collect();
-        Self { hooks }
+        // SAFETY: a read of the calling thread's id.
+        CONSUMER.store(unsafe { GetCurrentThreadId() }, Ordering::Relaxed);
+        let (started, thread_id) = std::sync::mpsc::channel();
+        let thread = std::thread::Builder::new()
+            .name("window-events".into())
+            .spawn(move || hook_thread(started))
+            .inspect_err(|e| log::warn!("window events unavailable: {e}"))
+            .ok();
+        Self {
+            thread,
+            thread_id: thread_id.recv().unwrap_or(0),
+        }
     }
 
     /// True if any top-level window changed since the last call.
@@ -59,9 +69,59 @@ impl WindowEvents {
 
 impl Drop for WindowEvents {
     fn drop(&mut self) {
-        for hook in self.hooks.drain(..) {
-            // SAFETY: hooks came from SetWinEventHook.
-            let _ = unsafe { UnhookWinEvent(hook) };
+        if let Some(thread) = self.thread.take() {
+            // SAFETY: the hook thread's queue exists (made before it sent its id).
+            let _ = unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) };
+            let _ = thread.join();
+        }
+        CONSUMER.store(0, Ordering::Relaxed);
+    }
+}
+
+/// Hooks the window events, sends its thread id once its queue exists, then takes events in
+/// batches until `WM_QUIT`, and unhooks.
+fn hook_thread(started: std::sync::mpsc::Sender<u32>) {
+    let ranges = [
+        (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND),
+        (EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE),
+        (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE),
+        (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
+    ];
+    let flags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
+    // SAFETY: out-of-context hooks with a 'static callback, delivered to and unhooked on this
+    // thread; the message calls only touch this thread's queue.
+    unsafe {
+        let hooks: Vec<HWINEVENTHOOK> = ranges
+            .into_iter()
+            .map(|(min, max)| SetWinEventHook(min, max, None, Some(on_event), 0, 0, flags))
+            .filter(|h| !h.is_invalid())
+            .collect();
+        let mut msg = MSG::default();
+        let _ = PeekMessageW(&mut msg, None, 0, 0, PM_NOREMOVE);
+        let _ = started.send(GetCurrentThreadId());
+        'run: loop {
+            MsgWaitForMultipleObjectsEx(None, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                if msg.message == WM_QUIT {
+                    break 'run;
+                }
+                DispatchMessageW(&msg);
+            }
+            std::thread::sleep(BATCH);
+        }
+        for hook in hooks {
+            let _ = UnhookWinEvent(hook);
+        }
+    }
+}
+
+/// Records a coverage-relevant change and wakes the consumer once per change.
+fn changed() {
+    if !CHANGED.swap(true, Ordering::Relaxed) {
+        let consumer = CONSUMER.load(Ordering::Relaxed);
+        if consumer != 0 {
+            // SAFETY: a no-op thread message; a gone thread just fails the post.
+            let _ = unsafe { PostThreadMessageW(consumer, WM_NULL, WPARAM(0), LPARAM(0)) };
         }
     }
 }
@@ -89,7 +149,7 @@ unsafe extern "system" fn on_event(
             & (WS_EX_TOOLWINDOW.0 | WS_EX_TRANSPARENT.0 | WS_EX_NOACTIVATE.0)
             != 0;
         if (top && !overlay) || event == EVENT_OBJECT_DESTROY || event == EVENT_SYSTEM_FOREGROUND {
-            CHANGED.store(true, Ordering::Relaxed);
+            changed();
         }
     }
 }
