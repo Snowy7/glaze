@@ -33,14 +33,8 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
     if committing {
         let cancel = if page == Page::FirstRun {
             Action::FirstRunSkip
-        } else if page == Page::AddModule {
-            open(if app.nav.bar == Some(Bar::Dock) {
-                Page::Dock
-            } else {
-                Page::Top
-            })
         } else {
-            open(page.parent().unwrap_or(Page::Root))
+            Action::Panel(Command::Back)
         };
         b.button(
             key(("panel-header-cancel", page)),
@@ -952,6 +946,25 @@ mod tests {
         assert_eq!(super::super::editors::footer_height(&app), 0.0);
         app.panel.as_ref().unwrap().history.borrow_mut().selected = Some(0);
         assert_eq!(super::super::editors::footer_height(&app), 64.0);
+        let built = super::super::build(&app, &mut ui.text);
+        let cancel = built
+            .targets
+            .iter()
+            .find(|target| target.key == key(("panel-header-cancel", Page::History)))
+            .unwrap()
+            .action
+            .clone();
+        app.run(cancel);
+        assert_eq!(app.panel.as_ref().unwrap().page, Page::Root);
+        assert!(
+            app.panel
+                .as_ref()
+                .unwrap()
+                .history
+                .borrow()
+                .selected
+                .is_none()
+        );
     }
 
     #[test]
