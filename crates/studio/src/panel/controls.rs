@@ -149,7 +149,7 @@ pub fn first_use_hint(app: &App, b: &mut B, c: &mut Col, page: super::Page) {
         Page::Root => ("home", "Click anything on your desktop to edit it"),
         Page::Widget => (
             "widget",
-            "Drag to move Â· Drag the corner brackets to resize",
+            "Drag to move \u{b7} Drag the corner brackets to resize",
         ),
         Page::Top | Page::Dock | Page::Module => {
             ("bar", "Drag modules by their names to move them")
