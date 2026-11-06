@@ -713,6 +713,9 @@ impl App {
         }
         self.interaction.pressed = None;
         self.interaction.hover = None;
+        if self.interaction.focus.is_some_and(|id| id >= ITEM) {
+            self.interaction.focus = self.selection.focus.map(|i| ITEM + i as u32);
+        }
         self.menu.close();
         if let Field::Rename(path) = &self.field
             && !self.shown.iter().any(|entry| &entry.path == path)
