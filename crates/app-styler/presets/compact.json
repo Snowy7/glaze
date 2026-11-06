@@ -1,0 +1,16 @@
+{
+  "settings": {
+    "rules": {
+      "ButtonEntityItem > Button#ContainerButton": { "MinHeight": "44", "Padding": "12,4,12,4" },
+      "SettingsExpander ExpanderToggleButton#ContainerButton": { "MinHeight": "44", "Padding": "12,4,12,4" },
+      "NavigationViewItemPresenter#NavigationView": { "MinHeight": "30" },
+      "SettingsNavigationViewItem TextBlock": { "FontSize": "13" }
+    }
+  },
+  "explorer": {
+    "rules": {
+      "CommandBar#FileExplorerCommandBar": { "Padding": "0" },
+      "AutoSuggestBox#FileExplorerSearchBox": { "MinHeight": "28" }
+    }
+  }
+}

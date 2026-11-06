@@ -1,0 +1,20 @@
+{
+  "settings": {
+    "rules": {
+      "Grid#RootPageGrid": { "Background": "Transparent" },
+      "ButtonEntityItem > Button#ContainerButton": { "Background": "#10FFFFFF", "BorderBrush": "#18FFFFFF", "CornerRadius": "12" },
+      "SettingsExpander ExpanderToggleButton#ContainerButton": { "Background": "#10FFFFFF", "BorderBrush": "#18FFFFFF", "CornerRadius": "12" },
+      "GridViewItem": { "CornerRadius": "12" },
+      "Rectangle#SelectionIndicator": { "Fill": "$accent" }
+    }
+  },
+  "explorer": {
+    "rules": {
+      "Grid#NavigationBarControlGrid": { "Background": "Transparent" },
+      "CommandBar#FileExplorerCommandBar": { "Background": "Transparent" },
+      "CommandBar#FileExplorerSecondaryCommandBar": { "Background": "Transparent" },
+      "Grid#DetailsViewControlRootGrid": { "Background": "Transparent" },
+      "AutoSuggestBox#FileExplorerSearchBox Border#BorderElement": { "Background": "#10FFFFFF", "BorderBrush": "#18FFFFFF", "CornerRadius": "12" }
+    }
+  }
+}
