@@ -337,6 +337,7 @@ pub fn run(app: &mut App, command: Command) {
         }
         Command::RetryDoc(doc) => match app.docs.retry() {
             Ok(()) => {
+                sync_connections(app);
                 app.panel
                     .as_ref()
                     .unwrap()

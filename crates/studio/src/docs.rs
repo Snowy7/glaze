@@ -278,13 +278,20 @@ pub enum Saved {
     Failed(String),
 }
 
+#[derive(Debug, Clone)]
+enum Pending {
+    Edit(String, Vec<Op>),
+    Undo,
+    Redo,
+}
+
 pub struct Docs {
     docs: Vec<Doc>,
     undo: Vec<Step>,
     redo: Vec<Step>,
     /// A drag in progress: the raw documents before it.
     live: Option<Vec<(DocId, Value)>>,
-    pending: Option<(String, Vec<Op>)>,
+    pending: Option<Pending>,
     failed_live: Option<String>,
     pub saved: Saved,
     /// Bumped on every change: previews cache on it.
@@ -400,7 +407,7 @@ impl Docs {
     pub fn edit(&mut self, label: &str, ops: &[Op]) -> Result<()> {
         let result = self.edit_inner(label, ops);
         if result.is_err() && matches!(self.saved, Saved::Failed(_)) {
-            self.pending = Some((label.into(), ops.to_vec()));
+            self.pending = Some(Pending::Edit(label.into(), ops.to_vec()));
         } else if result.is_ok() {
             self.pending = None;
         }
@@ -411,13 +418,16 @@ impl Docs {
         if let Some(label) = self.failed_live.clone() {
             return self.commit_live(&label);
         }
-        if let Some((label, ops)) = self.pending.clone() {
-            self.edit(&label, &ops)
-        } else {
-            for id in DocId::ALL {
-                self.reload(id);
+        match self.pending.clone() {
+            Some(Pending::Edit(label, ops)) => self.edit(&label, &ops),
+            Some(Pending::Undo) => self.undo().map(|_| ()),
+            Some(Pending::Redo) => self.redo().map(|_| ()),
+            None => {
+                for id in DocId::ALL {
+                    self.reload(id);
+                }
+                Ok(())
             }
-            Ok(())
         }
     }
 
@@ -507,24 +517,34 @@ impl Docs {
     /// Takes back the last step; returns its label.
     pub fn undo(&mut self) -> Result<Option<String>> {
         self.commit_live("Change")?;
-        let Some(step) = self.undo.pop() else {
+        let Some(step) = self.undo.last().cloned() else {
             return Ok(None);
         };
         for (id, before, _) in &step.changes {
-            self.replace(*id, before.clone())?;
+            if let Err(error) = self.replace(*id, before.clone()) {
+                self.pending = Some(Pending::Undo);
+                return Err(error);
+            }
         }
+        self.undo.pop();
+        self.pending = None;
         let label = step.label.clone();
         self.redo.push(step);
         Ok(Some(label))
     }
 
     pub fn redo(&mut self) -> Result<Option<String>> {
-        let Some(step) = self.redo.pop() else {
+        let Some(step) = self.redo.last().cloned() else {
             return Ok(None);
         };
         for (id, _, after) in &step.changes {
-            self.replace(*id, after.clone())?;
+            if let Err(error) = self.replace(*id, after.clone()) {
+                self.pending = Some(Pending::Redo);
+                return Err(error);
+            }
         }
+        self.redo.pop();
+        self.pending = None;
         let label = step.label.clone();
         self.undo.push(step);
         Ok(Some(label))
@@ -670,9 +690,13 @@ impl Docs {
             let (raw, effective) = id.parse(&text).context("that change isn't valid")?;
             staged.push((id, before, raw, effective, text));
         }
+        // Retain the original in-memory snapshots until all writes succeed. A retry of a
+        // multi-file edit must still undo files that were written before a later failure.
+        for (id, _, raw, _, _) in &staged {
+            self.write(*id, raw)?;
+        }
         let mut changes = Vec::new();
         for (id, before, raw, effective, text) in staged {
-            self.write(id, &raw)?;
             let doc = &mut self.docs[id.index()];
             doc.raw = raw.clone();
             doc.effective = effective;
@@ -711,7 +735,10 @@ impl Docs {
                         doc.error = Some(if doc.newer {
                             NEWER.into()
                         } else {
-                            format!("Can't read {}", id.filename())
+                            let ReadIssue::Malformed { line } = issue else {
+                                unreachable!()
+                            };
+                            format!("Can't read {}, line {line}", id.filename())
                         });
                         bail!("{}", doc.error.as_deref().unwrap());
                     }
@@ -874,6 +901,52 @@ mod tests {
             path: path.into(),
             value,
         }
+    }
+
+    #[test]
+    fn retry_preserves_a_multi_file_step_and_failed_undo_and_redo() {
+        let root = folder("multi-retry");
+        let config = root.join("config.json");
+        let bars = root.join("bars.json");
+        std::fs::write(&config, "{}").unwrap();
+        std::fs::write(&bars, "{\"version\":1}").unwrap();
+        let mut docs = Docs::fixture(["{}", "{\"version\":1}", "{}", "{}"]);
+        docs.docs[DocId::Config.index()] = Doc::load(DocId::Config, Some(config.clone()));
+        docs.docs[DocId::Bars.index()] = Doc::load(DocId::Bars, Some(bars.clone()));
+        let blocked = root.join("bars.json.tmp");
+        std::fs::create_dir(&blocked).unwrap();
+        assert!(
+            docs.edit(
+                "Desktop",
+                &[
+                    op(DocId::Config, "/paused", Some(json!(true))),
+                    op(DocId::Bars, "/top/height", Some(json!(40))),
+                ]
+            )
+            .is_err()
+        );
+        assert!(std::fs::read_to_string(&config).unwrap().contains("true"));
+        assert_eq!(docs.doc(DocId::Config).raw, json!({}));
+        std::fs::remove_dir(&blocked).unwrap();
+        docs.retry().unwrap();
+        assert_eq!(docs.undo_count(), 1);
+        std::fs::create_dir(&blocked).unwrap();
+        assert!(docs.undo().is_err());
+        assert_eq!(docs.undo_count(), 1);
+        std::fs::remove_dir(&blocked).unwrap();
+        docs.retry().unwrap();
+        assert_eq!(docs.doc(DocId::Config).raw, json!({}));
+        assert_eq!(docs.doc(DocId::Bars).raw, json!({"version":1}));
+        assert!(docs.can_redo());
+        std::fs::create_dir(&blocked).unwrap();
+        assert!(docs.redo().is_err());
+        assert!(docs.can_redo());
+        std::fs::remove_dir(&blocked).unwrap();
+        docs.retry().unwrap();
+        assert_eq!(docs.get(DocId::Config, "/paused"), Some(&json!(true)));
+        assert_eq!(docs.get(DocId::Bars, "/top/height"), Some(&json!(40)));
+        assert_eq!(docs.undo_count(), 1);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
