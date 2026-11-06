@@ -56,7 +56,16 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
         }
     }
     for heading in groups {
-        group(b, c, heading, |b, c| {
+        let repeated_heading = manifest
+            .settings
+            .iter()
+            .filter(|setting| {
+                legacy::group_of(setting).unwrap_or("Options") == heading
+                    && !matches!(setting, Setting::Font { .. })
+                    && crate::panel::options::visible(&instance.widget, setting, &resolved)
+            })
+            .all(|setting| matches!(setting, Setting::Select { label, .. } if label == heading));
+        group(b, c, if repeated_heading { "" } else { heading }, |b, c| {
             if instance.widget == "photo" && heading == "Photos" {
                 photos(app, b, c, instance, &resolved, &base);
                 return;
