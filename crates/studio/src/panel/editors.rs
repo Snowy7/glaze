@@ -264,6 +264,10 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
         ),
         _ => return,
     };
+    let enabled = enabled
+        && !super::controls::relevant_docs(state.page)
+            .iter()
+            .any(|id| app.docs.doc(*id).issue.is_some());
     if state.page == Page::AddWallpaper {
         let widths = [
             70.0,
@@ -314,10 +318,7 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
         primary,
         None,
         true,
-        enabled
-            && !super::controls::relevant_docs(state.page)
-                .iter()
-                .any(|id| app.docs.doc(*id).issue.is_some()),
+        enabled,
         commit,
     );
 }

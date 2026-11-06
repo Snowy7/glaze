@@ -37,7 +37,11 @@ pub fn finish_page(app: &App, b: &mut B, page: Page, first_op: usize, first_targ
         .list
         .hits
         .iter()
-        .filter(|hit| hit.checked == Some(true) && hit.rect.height() <= b.px(36.0))
+        .filter(|hit| {
+            hit.checked == Some(true)
+                && hit.rect.height() <= b.px(36.0)
+                && hit.rect.width() > b.px(48.0)
+        })
         .map(|hit| hit.rect)
         .collect();
     for op in &mut b.list.ops[first_op..] {
