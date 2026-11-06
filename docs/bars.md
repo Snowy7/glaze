@@ -164,10 +164,13 @@ spring uses its natural bounded settling time. Every transition ends at the exac
 
 Flyout and menu `open` styles support fade, slide (without glass), pop, scale, morph and none.
 Pop/scale/morph keep a bitmap only during opening, transform its hit regions and engine glass
-body together, then restore the original display list and free the bitmap. Glass slides retain
-the stationary fade to avoid repeated overlay capture flashes. Bar show/hide still slides;
-other bar presentation styles, popup/menu hover/press timing, continuous squircle corners,
-backdrop brightness/saturation, glass depth/sheen and Windows-wide one-switch styling remain open.
+body together, then restore the original display list and free the bitmap. Bar show/hide consumes
+slide/fade/pop/scale/morph/none separately from popup opening; pointer coordinates follow the
+same inverse transform as the pixels. Glass popup slides retain the stationary fade to avoid
+repeated overlay capture flashes. That engine fade still ignores reduced motion and configured
+timing. Continuous squircle corners, backdrop brightness/saturation, glass depth/sheen and
+Windows-wide one-switch styling remain open. The IPC validator also still caps physical blur at
+32 px, so accepted larger values (including high-DPI projections) cannot reach the renderer.
 
 Flyout kit controls and menu rows now consume the hover/press leaves too. Their sampled washes
 keep state only for entered controls, remove resting entries, and stop the frame source when
@@ -536,9 +539,9 @@ loop belongs to the binary, while its views now belong to the library.
 | Custom command arguments | typed argv in the custom provider, without shell re-parsing |
 | Taskbar button length, including titled buttons | explicit length wins over the 168 DIP default |
 | Root animation enabled/duration/curve and dock magnify timing | bar motion resolver |
-| Bar-wide border/shadow and item rest/hover/active styling | still partial, C10 |
-| Appearing style, hover/press, bounce/attention durations and popup opening timing | still partial, C14/C15; the menus-opening leaf currently drives bar slide |
-| Appearance font/content scale/shadow and dedicated OneUI/Fluent rendering | still partial, C06/C25 |
+| Bar-wide border/shadow and item rest/hover/active styling | consumed; C10 remains for saturation and continuous corners |
+| Appearing style, hover/press, bounce/attention durations and popup opening timing | consumed; C14 remains for the engine glass fade/slide path, C15 closed |
+| Appearance font/content scale/shadow and dedicated OneUI/Fluent rendering | consumed; C06 remains for physical blur range, C25 for Windows-wide token sync |
 
 The focused shared-preview test checks module weight/color/size, the width-only edge and a titled
 212 DIP taskbar button through `preview::bars`, rather than a duplicate Studio renderer. C06, C10
