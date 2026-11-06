@@ -68,3 +68,6 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
+
+[patch.crates-io]
+accesskit_windows = { path = "crates/ui/vendor/accesskit_windows" }
