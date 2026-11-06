@@ -72,6 +72,8 @@ pub enum DocId {
     /// `integrations.json` (docs/integrations.md): which integrations are on, their endpoints.
     Integrations,
     Plugins,
+    /// A registered user wallpaper's existing `theme.json`; never a new settings field.
+    Theme(usize),
 }
 
 impl DocId {
@@ -93,6 +95,7 @@ impl DocId {
             DocId::Studio => "Studio's settings",
             DocId::Integrations => "Your integration settings",
             DocId::Plugins => "Your connection settings",
+            DocId::Theme(_) => "This wallpaper's look",
         }
     }
 
@@ -104,11 +107,20 @@ impl DocId {
             Self::Studio => "studio.json",
             Self::Integrations => "integrations.json",
             Self::Plugins => "plugin-manager.json",
+            Self::Theme(_) => "theme.json",
         }
     }
 
     fn index(self) -> usize {
-        self as usize
+        match self {
+            Self::Config => 0,
+            Self::Bars => 1,
+            Self::Widgets => 2,
+            Self::Studio => 3,
+            Self::Integrations => 4,
+            Self::Plugins => 5,
+            Self::Theme(index) => Self::ALL.len() + index,
+        }
     }
 
     /// Checks `text` with the owning program's parser; returns the raw JSON and the effective
@@ -146,6 +158,12 @@ impl DocId {
                 raw.clone()
             }
             DocId::Studio => raw.clone(),
+            DocId::Theme(_) => {
+                // The owner validates paths and all appearance/glass ranges. Parsing does
+                // not open assets, so no synthetic folder is used for an actual write.
+                mypaper_theme::LoadedTheme::parse(PathBuf::new(), text)?;
+                raw.clone()
+            }
             DocId::Plugins => {
                 for key in raw.as_object().expect("checked").keys() {
                     if !matches!(key.as_str(), "disabled" | "uninstalled" | "settings") {
@@ -167,6 +185,9 @@ impl DocId {
     fn empty(self) -> &'static str {
         match self {
             DocId::Bars => r#"{ "version": 1 }"#,
+            DocId::Theme(_) => {
+                r#"{"name":"Wallpaper","wallpaper":{"kind":"image","source":"wallpaper.png"}}"#
+            }
             _ => "{}",
         }
     }
@@ -349,6 +370,72 @@ impl Docs {
         &self.docs[id.index()]
     }
 
+    pub fn ids(&self) -> impl Iterator<Item = DocId> + '_ {
+        DocId::ALL
+            .into_iter()
+            .chain((0..self.docs.len() - DocId::ALL.len()).map(DocId::Theme))
+    }
+
+    /// Registers an existing, immediate user-theme child. Built-ins and missing or
+    /// unreadable manifests remain read-only; each folder keeps its own undo identity.
+    pub fn theme(&mut self, dir: &Path) -> Result<DocId> {
+        self.theme_in(dir, &mypaper_config::user_themes_dir()?)
+    }
+
+    fn theme_in(&mut self, dir: &Path, user: &Path) -> Result<DocId> {
+        let dir = dir.canonicalize().context("opening the wallpaper folder")?;
+        let user = user
+            .canonicalize()
+            .context("opening your wallpaper folder")?;
+        if dir.parent() != Some(user.as_path()) {
+            bail!("a built-in wallpaper can't be changed: make a copy first");
+        }
+        let path = dir.join(mypaper_theme::MANIFEST);
+        let source = std::fs::read_to_string(&path).context("reading theme.json")?;
+        let index = self
+            .docs
+            .iter()
+            .position(|doc| doc.path.as_ref() == Some(&path));
+        let id = DocId::Theme(index.map_or(self.docs.len(), |i| i) - DocId::ALL.len());
+        id.parse(&source)
+            .context("this wallpaper can't be edited")?;
+        if index.is_none() {
+            self.docs.push(Doc::from_text(id, Some(path), Some(source)));
+        }
+        Ok(id)
+    }
+
+    /// Expands the editor's shared-family and clarity aliases into ordinary pointer ops.
+    pub fn theme_ops(
+        &mut self,
+        dir: &Path,
+        pointer: &str,
+        value: Option<Value>,
+    ) -> Result<Vec<Op>> {
+        let doc = self.theme(dir)?;
+        let (pointer, value) = match pointer.strip_suffix("/glass/clarity") {
+            Some(base) => (
+                format!("{base}/glass/tint"),
+                value
+                    .and_then(|v| v.as_f64())
+                    .map(|c| serde_json::json!(((1.0 - c) * 1000.0).round() / 1000.0)),
+            ),
+            None => (pointer.to_owned(), value),
+        };
+        let paths = match pointer.strip_prefix("/@both") {
+            Some(rest) => vec![format!("/widgets{rest}"), format!("/bars{rest}")],
+            None => vec![pointer],
+        };
+        Ok(paths
+            .into_iter()
+            .map(|path| Op {
+                doc,
+                path,
+                value: value.clone(),
+            })
+            .collect())
+    }
+
     pub fn error(&self, id: DocId) -> Option<&str> {
         self.doc(id).error.as_deref()
     }
@@ -423,7 +510,7 @@ impl Docs {
             Some(Pending::Undo) => self.undo().map(|_| ()),
             Some(Pending::Redo) => self.redo().map(|_| ()),
             None => {
-                for id in DocId::ALL {
+                for id in self.ids().collect::<Vec<_>>() {
                     self.reload(id);
                 }
                 Ok(())
@@ -517,6 +604,7 @@ impl Docs {
     /// Takes back the last step; returns its label.
     pub fn undo(&mut self) -> Result<Option<String>> {
         self.commit_live("Change")?;
+        self.reload_themes();
         let Some(step) = self.undo.last().cloned() else {
             return Ok(None);
         };
@@ -534,6 +622,7 @@ impl Docs {
     }
 
     pub fn redo(&mut self) -> Result<Option<String>> {
+        self.reload_themes();
         let Some(step) = self.redo.last().cloned() else {
             return Ok(None);
         };
@@ -548,6 +637,12 @@ impl Docs {
         let label = step.label.clone();
         self.undo.push(step);
         Ok(Some(label))
+    }
+
+    fn reload_themes(&mut self) {
+        for index in 0..self.docs.len() - DocId::ALL.len() {
+            self.reload(DocId::Theme(index));
+        }
     }
 
     /// Writes `id`'s file again, byte for byte, so the programs watching it reload what it
@@ -1153,6 +1248,109 @@ mod tests {
 
     fn files_in(root: &Path) -> usize {
         std::fs::read_dir(root).unwrap().count()
+    }
+
+    fn theme_file(root: &Path, name: &str) -> PathBuf {
+        let dir = root.join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("theme.json"), r##"{"name":"Own","wallpaper":{"kind":"image","source":"photo.png"},"widgets":{"appearance":{"tint":"#239569"}}}"##).unwrap();
+        dir
+    }
+
+    #[test]
+    fn theme_drags_and_a_multi_document_restore_use_the_same_undo_stack() {
+        let root = folder("theme-transactions");
+        let dir = theme_file(&root, "own");
+        let mut docs = Docs::fixture(["{}", r#"{"version":1}"#, "{}", "{}"]);
+        let id = docs.theme_in(&dir, &root).unwrap();
+        assert_eq!(docs.theme_in(&dir, &root).unwrap(), id);
+        let original = docs.doc(id).raw.clone();
+        for radius in [12, 18, 24] {
+            docs.live(&[op(
+                id,
+                "/widgets/appearance/radius",
+                Some(serde_json::json!(radius)),
+            )])
+            .unwrap();
+            assert_eq!(
+                serde_json::from_str::<Value>(
+                    &std::fs::read_to_string(dir.join("theme.json")).unwrap()
+                )
+                .unwrap(),
+                original,
+                "a drag writes only on release"
+            );
+        }
+        docs.commit_live("Wallpaper corners").unwrap();
+        assert_eq!(docs.undo_count(), 1);
+        let changed = docs.doc(id).raw.clone();
+        docs.undo().unwrap();
+        assert_eq!(docs.doc(id).raw, original);
+        docs.redo().unwrap();
+        assert_eq!(docs.doc(id).raw, changed);
+        docs.edit(
+            "Restore this desktop",
+            &[
+                op(id, "", Some(original.clone())),
+                op(DocId::Config, "/theme", Some(serde_json::json!("own"))),
+            ],
+        )
+        .unwrap();
+        assert_eq!(docs.undo_count(), 2);
+        docs.undo().unwrap();
+        assert_eq!(docs.doc(id).raw, changed);
+        assert!(docs.doc(DocId::Config).raw.pointer("/theme").is_none());
+        docs.redo().unwrap();
+        assert_eq!(docs.doc(id).raw, original);
+        // The unchanged owner/older-reader schema accepts every saved document.
+        mypaper_theme::LoadedTheme::load(&dir).unwrap();
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn theme_transactions_refuse_other_folders_and_preserve_external_edits() {
+        let root = folder("theme-ownership");
+        let user = root.join("themes");
+        std::fs::create_dir_all(&user).unwrap();
+        let bundled = theme_file(&root, "bundled");
+        let dir = theme_file(&user, "own");
+        let mut docs = Docs::fixture(["{}", r#"{"version":1}"#, "{}", "{}"]);
+        assert!(docs.theme_in(&bundled, &user).is_err());
+        let id = docs.theme_in(&dir, &user).unwrap();
+        docs.edit(
+            "Corners",
+            &[op(
+                id,
+                "/widgets/appearance/radius",
+                Some(serde_json::json!(24)),
+            )],
+        )
+        .unwrap();
+        let path = dir.join("theme.json");
+        let external = r#"{"name":"External","wallpaper":{"kind":"image","source":"new.png"}}"#;
+        std::fs::write(&path, external).unwrap();
+        assert!(
+            docs.undo().unwrap().is_none(),
+            "outside edits invalidate only this file's undo steps"
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), external);
+        let future =
+            r#"{"name":"Future","wallpaper":{"kind":"image","source":"new.png"},"new_field":true}"#;
+        std::fs::write(&path, future).unwrap();
+        assert!(
+            docs.edit(
+                "Corners",
+                &[op(
+                    id,
+                    "/widgets/appearance/radius",
+                    Some(serde_json::json!(12))
+                )]
+            )
+            .is_err()
+        );
+        assert!(docs.newer(id));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), future);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

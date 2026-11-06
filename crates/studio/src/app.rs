@@ -641,6 +641,9 @@ impl App {
         match drag {
             Some(Drag::Slider { edit, .. }) => {
                 if let Some((edit, value)) = self.pending_value.take() {
+                    // Release is its own drag transaction, even after another drag of this
+                    // wallpaper knob; only consecutive list picks coalesce.
+                    if let Some(panel) = &self.panel { panel.history.borrow_mut().end_picks(); }
                     self.set(&edit, value);
                     return;
                 }
@@ -1130,6 +1133,24 @@ impl App {
     /// Applies edits as one step, keeping the shell's look files in step with the user's
     /// look (`look.rs`).
     pub fn apply(&mut self, label: &str, mut ops: Vec<Op>) {
+        // Legacy theme controls use a folder-qualified pseudo pointer. Resolve it before
+        // editing, so picks, resets and typed values share the same document transaction.
+        let mut resolved = Vec::new();
+        for op in ops {
+            if op.doc == DocId::Studio && let Some(rest) = op.path.strip_prefix("/theme:") {
+                if self.fixture { return; }
+                let (folder, pointer) = rest.split_once('/').unwrap_or((rest, ""));
+                let folder = std::path::PathBuf::from(folder.replace("~1", "/").replace("~0", "~"));
+                match self.docs.theme_ops(&folder, &format!("/{pointer}"), op.value) {
+                    Ok(theme_ops) => resolved.extend(theme_ops),
+                    Err(error) => {
+                        crate::panel::theme_failed(self, &folder, &format!("{error:#}"));
+                        return;
+                    }
+                }
+            } else { resolved.push(op); }
+        }
+        ops = resolved;
         if ops
             .iter()
             .any(|op| op.doc == DocId::Config && op.path.starts_with("/look"))
@@ -1154,12 +1175,38 @@ impl App {
 
     /// What follows an edit: Studio's own look, the wallpapers' active state.
     fn after_edit(&mut self, docs: &[DocId]) {
+        let themes: Vec<_> = docs.iter().filter(|id| matches!(id, DocId::Theme(_)))
+            .filter_map(|id| self.docs.doc(*id).path.as_deref()?.parent().map(std::path::Path::to_path_buf))
+            .collect();
+        if !themes.is_empty() {
+            if let Some(panel) = &self.panel { *panel.theme_data.borrow_mut() = Default::default(); }
+            for dir in themes { crate::panel::theme_saved(self, &dir); }
+            self.library = Library::scan(theme_name(&self.docs).as_deref());
+        }
         if docs.contains(&DocId::Plugins) { crate::panel::sync_connections(self); }
         if docs.contains(&DocId::Studio) {
             self.retheme();
         }
         if docs.contains(&DocId::Config) {
             self.library.set_active(theme_name(&self.docs).as_deref());
+        }
+    }
+
+    /// An existing wallpaper manifest is an ordinary undoable document, with its owner's
+    /// parser and ownership check; the on-disk format remains exactly the same.
+    pub fn edit_theme(&mut self, label: &str, dir: &std::path::Path, pointer: &str, value: Option<Value>) {
+        if self.fixture { return; }
+        match self.docs.theme_ops(dir, pointer, value) {
+            Ok(ops) => {
+                self.apply(label, ops);
+                if let crate::docs::Saved::Failed(error) = &self.docs.saved {
+                    crate::panel::theme_failed(self, dir, &error.clone());
+                }
+            }
+            Err(error) => {
+                crate::panel::theme_failed(self, dir, &format!("{error:#}"));
+                if self.panel.is_none() { self.alert(format!("{error:#}")); }
+            }
         }
     }
 
@@ -1412,7 +1459,7 @@ impl App {
             }
             Action::Undo => match self.docs.undo() {
                 Ok(Some(label)) => {
-                    self.after_edit(&DocId::ALL);
+                    self.after_edit(&self.docs.ids().collect::<Vec<_>>());
                     self.toast(format!("Undid {}", label.to_lowercase()), Some(("Redo".into(), Action::Redo)));
                 }
                 Ok(None) => {}
@@ -1420,7 +1467,7 @@ impl App {
             },
             Action::Redo => match self.docs.redo() {
                 Ok(Some(label)) => {
-                    self.after_edit(&DocId::ALL);
+                    self.after_edit(&self.docs.ids().collect::<Vec<_>>());
                     self.toast(format!("Redid {}", label.to_lowercase()), Some(("Undo".into(), Action::Undo)));
                 }
                 Ok(None) => {}
