@@ -46,7 +46,7 @@ pub use menu::{Entry, Menu, MenuIcon, Outcome, Screen, screen_at};
 pub use motion::{Spring, Ticker, Tween, display_frame};
 pub use render::{Image, TextMode, TextQuality, Ui, render};
 pub use scene::{DisplayList, Hit, HitId, Op};
-pub use surface::{Button, Event, Kind, Pointer, Surface, SurfaceId, next_event};
+pub use surface::{Button, Event, Kind, Pointer, Surface, SurfaceId, next_event, queue_event};
 pub use text::{Text, TextStyle, VARIABLE};
 pub use theme::{Palette, Scheme, Style, TextRole, Theme};
 pub use text_field::TextField;
