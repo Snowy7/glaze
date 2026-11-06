@@ -114,21 +114,60 @@ impl Out {
 fn panel(f: &mut kit::Frame, out: &mut Out, rect: Rect, radius: f32, tokens: &Tokens) {
     out.shapes.push((rect, radius));
     f.fill(rect, radius, Rgba::HIT);
-    match tokens.fill {
-        Some(color) => {
-            f.fill(rect, radius, color);
-            if let Some(color) = tokens.theme.border {
-                f.push(Op::Stroke {
-                    rect: rect.inflate(-0.5),
-                    radius: (radius - 0.5).max(0.0),
-                    width: 1.0,
-                    color,
-                });
-            }
-        }
-        None => {
-            f.surface_shaped(rect, radius, tokens.material.is_some());
-        }
+    if tokens.material.is_some() {
+        return;
+    }
+    let state = if f.input.pressed.is_some() {
+        2
+    } else if f.input.hover.is_some() {
+        1
+    } else {
+        0
+    };
+    if let Some(shadow) = tokens.styles.shadows[state].filter(|_| tokens.shadow) {
+        f.push(Op::Shadow {
+            rect: rect
+                .offset(shadow.x * f.s, 0.0)
+                .inflate(shadow.spread * f.s),
+            radius,
+            spread: (shadow.blur * f.s).max(0.0),
+            drop: shadow.y * f.s,
+            color: shadow.color,
+        });
+    }
+    f.fill(
+        rect,
+        radius,
+        tokens.fill.unwrap_or(tokens.theme.color.surface),
+    );
+    let edge = tokens.styles.edges[state];
+    let width = edge.width * f.s;
+    if width > 0.0 {
+        f.push(Op::Stroke {
+            rect: rect.inflate(-width / 2.0),
+            radius: (radius - width / 2.0).max(0.0),
+            width,
+            color: edge.color,
+        });
+    }
+}
+
+fn item_wash(
+    f: &mut kit::Frame,
+    rect: Rect,
+    radius: f32,
+    tokens: &Tokens,
+    visual: super::styling::Item,
+) {
+    f.fill(rect, radius, visual.fill);
+    let width = visual.edge.width * f.s;
+    if tokens.material.is_none() && width > 0.0 {
+        f.push(Op::Stroke {
+            rect: rect.inflate(-width / 2.0),
+            radius: (radius - width / 2.0).max(0.0),
+            width,
+            color: visual.edge.color,
+        });
     }
 }
 
@@ -619,6 +658,7 @@ fn item(
     let wash = rect.inset(Insets::xy(f.px(1.0), f.px(inset)));
     let radius = options
         .and_then(|o| o.style.radius)
+        .or(tokens.styles.item_radius)
         .map_or_else(|| f.control_radius(wash.height()), |r| f.px(r));
     if let Some(Paint::Color(background)) = options.and_then(|o| o.style.background.as_ref()) {
         f.fill(wash, radius, tokens.color(background));
@@ -648,7 +688,19 @@ fn item(
             });
         }
     }
-    f.wash(id, wash, radius, true);
+    let visual = tokens.item(
+        id,
+        f.state(id, true),
+        content.current && tokens.styles.configured_items,
+    );
+    item_wash(f, wash, radius, tokens, visual);
+    let mut shown = content.clone();
+    shown.font = shown.font.scaled(visual.scale);
+    shown.icon = (shown.icon * visual.scale).round();
+    if tokens.styles.item_color && options.is_none_or(|o| o.style.color.is_none()) {
+        shown.color = visual.color;
+    }
+    let content = &shown;
     let label = if let Target::Workspace(i) = content.target {
         format!("Desktop {}", i + 1)
     } else if content.text.is_empty() {
@@ -1185,20 +1237,27 @@ pub fn dock(
         let id = out.add(Target::Dock(app.clone()));
         let active = app.windows.iter().any(|w| w.active);
         let state = f.state(id, true);
-        let radius = f
-            .control_radius(rect.height())
-            .min(f.px(theme.radius.small + 2.0));
+        let radius = tokens.styles.item_radius.map_or_else(
+            || {
+                f.control_radius(rect.height())
+                    .min(f.px(theme.radius.small + 2.0))
+            },
+            |r| f.px(r),
+        );
         let wash = rect.inflate(f.px(3.0));
+        let visual = tokens.item(id, state, active && tokens.styles.configured_items);
         if taskbar {
             // Windows' task buttons: the active app keeps a resting wash.
             let rest = if active { c.hover } else { Rgba::TRANSPARENT };
             f.fill(wash, radius, rest);
-            f.wash(id, wash, radius, true);
+        }
+        if taskbar || tokens.styles.configured_items {
+            item_wash(&mut f, wash, radius, tokens, visual);
         }
         // A pressed icon sinks a little and darkens, as the Dock's do; the rest is the
         // magnification and the name's tooltip.
         let pressed = state == State::Pressed;
-        let sink = icon_rect.width() * (1.0 - state.press_scale()) / 2.0;
+        let sink = icon_rect.width() * (1.0 - visual.scale) / 2.0;
         let shown = icon_rect.inflate(-sink.round());
         let fade = if motion < 0.0 { -motion } else { 1.0 };
         match &icons[i] {
@@ -1342,7 +1401,15 @@ pub fn dock(
         let rect = convert(span(k).0.round(), b.round(), s, s);
         let id = out.add(Target::Extra(*extra));
         let state = f.state(id, true);
-        let sink = (rect.width() * (1.0 - state.press_scale()) / 2.0).round();
+        let visual = tokens.item(id, state, false);
+        let radius = tokens
+            .styles
+            .item_radius
+            .map_or_else(|| f.px(theme.radius.small + 2.0), |r| f.px(r));
+        if tokens.styles.configured_items {
+            item_wash(&mut f, rect, radius, tokens, visual);
+        }
+        let sink = (rect.width() * (1.0 - visual.scale) / 2.0).round();
         let shown = rect.inflate(-sink);
         match &extra_glyphs[i] {
             Glyph::Image(image) => {
@@ -1360,7 +1427,9 @@ pub fn dock(
                 } else {
                     c.label
                 };
-                let ink = if state == State::Pressed {
+                let ink = if tokens.styles.item_color {
+                    visual.color
+                } else if state == State::Pressed {
                     c.secondary
                 } else {
                     ink

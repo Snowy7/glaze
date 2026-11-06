@@ -3,12 +3,13 @@ mod bar;
 pub(crate) mod icons;
 pub(crate) mod look;
 mod maximized;
-mod motion;
+pub(crate) mod motion;
 pub mod plugin_modules;
 pub mod plugin_style;
 mod preview;
 pub(crate) mod services;
 mod sprites;
+mod styling;
 #[cfg(test)]
 mod tests;
 mod tray_menu;
@@ -344,6 +345,7 @@ impl Bars {
             events::SETTINGS => {
                 self.system = providers::accent::read();
                 self.config_changed();
+                crate::inbox::post(crate::inbox::WM_CONFIG, 0);
             }
             events::TIME => self.services.clock_due = Some(now),
             events::POWER => {
@@ -386,7 +388,8 @@ impl Bars {
             Some(Fact::DisplayOff) => self.display_off = lparam != 0,
             Some(Fact::SessionLocked) => self.locked = lparam != 0,
             Some(Fact::OnBattery) if self.config.performance == config::Performance::Auto => {
-                self.config_changed()
+                self.config_changed();
+                crate::inbox::post(crate::inbox::WM_CONFIG, 0);
             }
             _ => {}
         }
@@ -409,6 +412,9 @@ impl Bars {
         at = tick_spent("services", at);
         if changes.config || changes.theme {
             self.config_changed();
+            if load_config().is_ok() {
+                crate::inbox::post(crate::inbox::WM_CONFIG, 0);
+            }
         }
         // A plugin patched or reset a bar's style: restyle in place like a settings change.
         if plugin_style::take_changed() {
@@ -1486,6 +1492,50 @@ impl Bars {
             self.menu = Menu::new("Dock commands").ok();
         }
         if let Some(menu) = &mut self.menu {
+            let dock = self.bars.iter().find(|b| {
+                b.kind == BarKind::Dock
+                    && b.monitor.rect.x <= point.0
+                    && point.0 < b.monitor.rect.x + b.monitor.rect.width
+                    && b.monitor.rect.y <= point.1
+                    && point.1 < b.monitor.rect.y + b.monitor.rect.height
+            });
+            let config = dock.map_or(&self.config, |b| &b.config);
+            let animation = &config.dock.animation;
+            let timing = motion::resolve(
+                animation,
+                true,
+                motion::Leaf::Open,
+                self.system.animations,
+                config.performance.active(mypaper_desktop::on_battery()),
+            );
+            let mut bar_look = config.dock.look.clone();
+            let appearance = config.appearance.over(&self.appearance);
+            look::appearance_layer(config, "dock", &mut bar_look, &appearance);
+            look::glass_layer(config, "dock", &mut bar_look, self.theme_glass);
+            let knobs = Config::load()
+                .map(|c| crate::glass::knobs(&c.look, crate::glass::Family::Menus))
+                .unwrap_or_default();
+            let mut popup = crate::flyouts::look::Look::resolve_with(
+                &bar_look,
+                &appearance,
+                &self.system,
+                &knobs,
+            )
+            .menu_tokens();
+            if config.performance.active(mypaper_desktop::on_battery()) {
+                popup.glass = None;
+            }
+            menu.set_presentation(
+                popup,
+                mypaper_ui::menu::MenuMotion {
+                    timing,
+                    style: motion::reveal(motion::presentation(
+                        animation,
+                        true,
+                        motion::Leaf::Open,
+                    )),
+                },
+            );
             let _ = menu.open(ui, entries, point, screen_at(point.0, point.1), tokens);
         }
     }
@@ -1621,7 +1671,8 @@ impl Bars {
                         || (config.performance == config::Performance::Auto
                             && mypaper_desktop::on_battery());
                     let mut look = look.clone();
-                    look::theme_glass(&mut look, self.theme_glass);
+                    look::appearance_layer(&config, bar_key, &mut look, &appearance);
+                    look::glass_layer(&config, bar_key, &mut look, self.theme_glass);
                     let colors = plugin_style::patch_look(
                         surface,
                         bar_key,
@@ -1631,11 +1682,12 @@ impl Bars {
                     );
                     let mut tokens = look::Tokens::resolve(&look, &appearance, &self.system);
                     plugin_style::colors(&colors, self.config.raw(), &mut tokens.theme.color);
+                    tokens.cache_config(&look, &config);
                     // No glass on battery saver: the theme's own surface draws instead.
                     if performance {
                         tokens.material = None;
                     }
-                    let animate = self.system.animations && !performance;
+                    let animate = self.system.animations;
                     wanted.push((kind, config.clone(), monitor.clone(), tokens, animate));
                 }
             }

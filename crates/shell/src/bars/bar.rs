@@ -93,6 +93,11 @@ pub struct Bar {
     pub reserved: bool,
     magnify_animate: bool,
     magnify_settings: motion::Settings,
+    bounce_settings: motion::Settings,
+    attention_settings: motion::Settings,
+    hover_settings: motion::Settings,
+    press_settings: motion::Settings,
+    interactions: HashMap<u32, (Value, Value)>,
     animations: HashMap<String, (Instant, bool)>,
     /// The floating dock's sprites (DWM places and scales its icons); none for other bars and
     /// styles, or when DirectComposition is unavailable.
@@ -147,8 +152,20 @@ impl Bar {
         } else {
             &config.top.animation
         };
-        let slide_settings = motion::settings(motion, kind == BarKind::Dock, false, animate);
-        let magnify_settings = motion::settings(motion, kind == BarKind::Dock, true, animate);
+        let performance = config.performance.active(mypaper_desktop::on_battery());
+        let dock = kind == BarKind::Dock;
+        let slide_settings =
+            motion::resolve(motion, dock, motion::Leaf::Show, animate, performance);
+        let magnify_settings =
+            motion::resolve(motion, dock, motion::Leaf::Magnify, animate, performance);
+        let bounce_settings =
+            motion::resolve(motion, dock, motion::Leaf::Bounce, animate, performance);
+        let attention_settings =
+            motion::resolve(motion, dock, motion::Leaf::Attention, animate, performance);
+        let hover_settings =
+            motion::resolve(motion, dock, motion::Leaf::Hover, animate, performance);
+        let press_settings =
+            motion::resolve(motion, dock, motion::Leaf::Press, animate, performance);
         let mut slide = Value::new(if autohide { 1.0 } else { 0.0 });
         slide.settings = slide_settings.clone();
         let mut bar = Self {
@@ -198,6 +215,11 @@ impl Bar {
             reserved: autohide,
             magnify_animate: magnify_settings.enabled,
             magnify_settings,
+            bounce_settings,
+            attention_settings,
+            hover_settings,
+            press_settings,
+            interactions: HashMap::new(),
             animations: HashMap::new(),
             sprites: None,
             sprites_failed: false,
@@ -303,13 +325,25 @@ impl Bar {
             &config.top.animation
         };
         let dock = self.kind == BarKind::Dock;
-        let slide = motion::settings(motion, dock, false, animate);
-        self.magnify_settings = motion::settings(motion, dock, true, animate);
+        let performance = config.performance.active(mypaper_desktop::on_battery());
+        let slide = motion::resolve(motion, dock, motion::Leaf::Show, animate, performance);
+        self.magnify_settings =
+            motion::resolve(motion, dock, motion::Leaf::Magnify, animate, performance);
+        self.bounce_settings =
+            motion::resolve(motion, dock, motion::Leaf::Bounce, animate, performance);
+        self.attention_settings =
+            motion::resolve(motion, dock, motion::Leaf::Attention, animate, performance);
+        self.hover_settings =
+            motion::resolve(motion, dock, motion::Leaf::Hover, animate, performance);
+        self.press_settings =
+            motion::resolve(motion, dock, motion::Leaf::Press, animate, performance);
+        self.interactions.clear();
+        self.animations.clear();
         self.magnify_animate = self.magnify_settings.enabled;
-        self.presence.settings = self.magnify_settings.clone();
+        self.presence.configure(self.magnify_settings);
         self.zoom_due = true;
         self.animate = slide.enabled;
-        self.slide.settings = slide;
+        self.slide.configure(slide);
         self.config = config;
         self.tokens = tokens;
         self.dirty = true;
@@ -451,14 +485,51 @@ impl Bar {
         changed
     }
 
+    /// Tracks only entered items. Settlement removes resting entries and disarms the ticker.
+    fn step_interactions(&mut self, now: Instant, moving: &mut bool) -> bool {
+        for id in [self.hover, self.pressed].into_iter().flatten() {
+            self.interactions.entry(id).or_insert_with(|| {
+                let (mut hover, mut press) = (Value::new(0.0), Value::new(0.0));
+                hover.configure(self.hover_settings);
+                press.configure(self.press_settings);
+                (hover, press)
+            });
+        }
+        let mut changed = false;
+        for (&id, (hover, press)) in &mut self.interactions {
+            let before = (hover.value, press.value);
+            let hot = self.hover == Some(id);
+            hover.target(f32::from(hot && self.pressed.is_none()), true, now);
+            press.target(f32::from(hot && self.pressed == Some(id)), true, now);
+            *moving |= hover.step(now) | press.step(now);
+            changed |= before != (hover.value, press.value);
+            self.tokens
+                .interaction
+                .insert(id, (hover.value, press.value));
+        }
+        self.interactions.retain(|id, (hover, press)| {
+            let keep = self.hover == Some(*id)
+                || self.pressed == Some(*id)
+                || hover.value != 0.0
+                || press.value != 0.0;
+            if !keep {
+                self.tokens.interaction.remove(id);
+            }
+            keep
+        });
+        changed
+    }
+
     pub fn animate_item(&mut self, key: String, launch: bool, now: Instant) {
-        if self.animate
-            && (if launch {
-                self.config.dock.bounce
-            } else {
-                self.config.dock.attention != mypaper_bars::config::AttentionStyle::None
-            })
-        {
+        if (if launch {
+            self.bounce_settings.enabled
+        } else {
+            self.attention_settings.enabled
+        }) && (if launch {
+            self.config.dock.bounce
+        } else {
+            self.config.dock.attention != mypaper_bars::config::AttentionStyle::None
+        }) {
             self.animations.insert(key, (now, launch));
             self.dirty = true;
         }
@@ -495,17 +566,17 @@ impl Bar {
         let previous_slide = self.slide.value;
         let mut moving = self.slide.step(now);
         let zoom_changed = self.step_zoom(now, &mut moving);
+        let interaction_changed = self.step_interactions(now, &mut moving);
         let had_animation = !self.animations.is_empty();
         let attention = self.config.dock.attention;
         self.animations.retain(|key, (start, launch)| {
             now.duration_since(*start).as_secs_f32()
                 < if *launch {
-                    4.0
-                } else if attention == mypaper_bars::config::AttentionStyle::Pulse {
-                    2.4
+                    self.bounce_settings.duration
                 } else {
-                    1.8
+                    self.attention_settings.duration
                 }
+                .as_secs_f32()
                 && (!*launch
                     || self
                         .items
@@ -518,7 +589,14 @@ impl Bar {
             .iter()
             .map(|i| {
                 self.animations.get(&i.key).map_or(0.0, |(start, launch)| {
-                    let t = now.duration_since(*start).as_secs_f32();
+                    let timing = if *launch {
+                        self.bounce_settings
+                    } else {
+                        self.attention_settings
+                    };
+                    let t = timing
+                        .start(0.0, timing.duration.as_secs_f32(), *start)
+                        .value(now);
                     if !*launch && attention == mypaper_bars::config::AttentionStyle::Pulse {
                         -(0.7 + 0.3 * (t * std::f32::consts::TAU / 0.4).cos())
                     } else {
@@ -528,7 +606,7 @@ impl Bar {
             })
             .collect();
         moving |= !self.animations.is_empty();
-        let rebuilt = self.dirty || zoom_changed || had_animation;
+        let rebuilt = self.dirty || zoom_changed || interaction_changed || had_animation;
         let timing = Instant::now();
         if rebuilt {
             let scale = self.scale();

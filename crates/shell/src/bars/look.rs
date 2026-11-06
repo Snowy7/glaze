@@ -45,6 +45,10 @@ pub struct Tokens {
     /// Wallpaper backgrounds stay in the desktop plate; live blur always uses an overlay.
     pub wallpaper_only: bool,
     pub live_blur: bool,
+    pub styles: super::styling::Styles,
+    /// Only items whose hover/press has been animated; no timers or state allocation at rest.
+    pub interaction: std::collections::HashMap<u32, (f32, f32)>,
+    colors: std::collections::HashMap<String, Rgba>,
 }
 
 /// The kit style of a bar's style (see the module docs).
@@ -142,14 +146,12 @@ impl Tokens {
         let system_colors =
             std::array::from_fn(|i| hex(&system.accent[i]).unwrap_or(theme.color.accent));
         let fill = match &look.background {
-            Some(Fill::Solid { color }) => Some(color_with_system(
-                color,
-                theme.color.label,
-                theme.color.accent,
-                &system_colors,
-            )),
-            _ if material.is_none()
-                || appearance.surface == Some(mypaper_theme::Surface::Solid) =>
+            Some(Fill::Solid { color }) => Some(color_with_system(color, &theme, &system_colors)),
+            _ if appearance.surface == Some(mypaper_theme::Surface::Solid)
+                || (material.is_none()
+                    && (appearance.tint.is_some()
+                        || appearance.opacity.is_some()
+                        || look.tint.is_some())) =>
             {
                 Some(
                     tint.with_alpha(
@@ -161,7 +163,10 @@ impl Tokens {
             }
             _ => None,
         };
-        theme.color.surface = tint.with_alpha(appearance.opacity.unwrap_or(theme.color.surface.a));
+        if appearance.tint.is_some() || appearance.opacity.is_some() {
+            theme.color.surface =
+                tint.with_alpha(appearance.opacity.unwrap_or(theme.color.surface.a));
+        }
         let body = theme.font.style(TextRole::Body, 1.0);
         let size = look.font.size.unwrap_or(body.size);
         // A family other than the system face replaces the variable font; Segoe UI in any
@@ -180,12 +185,11 @@ impl Tokens {
             optical: size * 0.75,
         };
         // The style shapes the corners too: Fluent's are small (4-8 px), One UI's rounder.
-        let radius = look.radius.or(appearance.radius).unwrap_or(12.0);
-        let radius = match kit {
-            Style::Fluent => radius.min(8.0),
-            Style::OneUi => radius * 1.25,
-            _ => radius,
-        };
+        let radius = look.radius.or(appearance.radius).unwrap_or(match kit {
+            Style::Fluent => 8.0,
+            Style::OneUi => 15.0,
+            _ => 12.0,
+        });
         let bare = look.transparent.unwrap_or_else(|| match look.background {
             Some(Fill::None) => true,
             Some(_) => false,
@@ -196,6 +200,34 @@ impl Tokens {
         theme.font.family = font.family.clone();
         let border = appearance.border.unwrap_or(theme.border.is_some());
         theme.border = (border && material.is_none()).then_some(theme.color.separator);
+        let styles = super::styling::Styles::resolve(look, &theme, |c| {
+            color_with_system(c, &theme, &system_colors)
+        });
+        let mut colors = std::collections::HashMap::new();
+        for name in mypaper_bars::style::COLOR_TOKENS.iter().copied().chain([
+            "var(--fill-1)",
+            "var(--fill-2)",
+            "var(--fill-3)",
+            "var(--edge)",
+            "var(--t0)",
+            "var(--t1)",
+            "var(--t2)",
+            "var(--t3)",
+            "var(--accent)",
+        ]) {
+            if let Some(color) = ColorRef::parse(name) {
+                colors.insert(
+                    name.to_owned(),
+                    color_with_system(&color, &theme, &system_colors),
+                );
+            }
+        }
+        cache_colors(
+            &serde_json::to_value(look).unwrap_or_default(),
+            &mut colors,
+            &theme,
+            &system_colors,
+        );
         Self {
             family,
             font,
@@ -211,6 +243,9 @@ impl Tokens {
             system_colors,
             wallpaper_only: matches!(look.background, Some(Fill::Wallpaper(_))),
             live_blur: matches!(look.background, Some(Fill::Blur(_))),
+            styles,
+            interaction: Default::default(),
+            colors,
         }
     }
 
@@ -228,16 +263,102 @@ impl Tokens {
     }
 
     pub fn color(&self, color: &ColorRef) -> Rgba {
-        color_with_system(
-            color,
-            self.theme.color.label,
-            self.theme.color.accent,
+        self.colors
+            .get(color.as_str())
+            .copied()
+            .unwrap_or_else(|| color_with_system(color, &self.theme, &self.system_colors))
+    }
+
+    pub fn cache_config(&mut self, look: &Look, config: &mypaper_bars::BarsConfig) {
+        for (name, value) in &mut self.colors {
+            if let Some(color) = ColorRef::parse(name) {
+                *value = color_with_system(&color, &self.theme, &self.system_colors);
+            }
+        }
+        cache_colors(
+            &serde_json::to_value(&config.modules).unwrap_or_default(),
+            &mut self.colors,
+            &self.theme,
             &self.system_colors,
-        )
+        );
+        for (name, value) in &config.vars {
+            if let Some(color) = value.as_str().and_then(ColorRef::parse) {
+                self.colors.insert(
+                    format!("var({name})"),
+                    color_with_system(&color, &self.theme, &self.system_colors),
+                );
+            }
+        }
+        self.styles = super::styling::Styles::resolve(look, &self.theme, |c| self.color(c));
+    }
+
+    pub fn item(
+        &self,
+        id: u32,
+        state: mypaper_ui::interact::State,
+        active: bool,
+    ) -> super::styling::Item {
+        let (hover, press) = self.interaction.get(&id).copied().unwrap_or((
+            f32::from(state == mypaper_ui::interact::State::Hover),
+            f32::from(state == mypaper_ui::interact::State::Pressed),
+        ));
+        let rest = if active {
+            self.styles.items[2]
+        } else {
+            self.styles.items[0]
+        };
+        let mut item = rest
+            .mix(self.styles.items[1], hover)
+            .mix(self.styles.items[2], press);
+        if self.styles.press_sink {
+            item.scale *= 1.0 - 0.03 * press.clamp(0.0, 1.0);
+        }
+        item
     }
 }
 
-fn color_with_system(color: &ColorRef, ink: Rgba, accent: Rgba, system: &[Rgba; 7]) -> Rgba {
+fn cache_colors(
+    value: &serde_json::Value,
+    colors: &mut std::collections::HashMap<String, Rgba>,
+    theme: &Theme,
+    system: &[Rgba; 7],
+) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for value in map.values() {
+                cache_colors(value, colors, theme, system);
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                cache_colors(value, colors, theme, system);
+            }
+        }
+        serde_json::Value::String(value) => {
+            if let Some(color) = ColorRef::parse(value) {
+                colors.insert(
+                    color.as_str().to_owned(),
+                    color_with_system(&color, theme, system),
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
+fn color_with_system(color: &ColorRef, theme: &Theme, system: &[Rgba; 7]) -> Rgba {
+    match color.as_str() {
+        "var(--fill-1)" => return theme.color.well,
+        "var(--fill-2)" => return theme.color.hover,
+        "var(--fill-3)" => return theme.color.pressed,
+        "var(--edge)" => return theme.color.separator,
+        "var(--t0)" => return theme.color.label,
+        "var(--t1)" => return theme.color.secondary,
+        "var(--t2)" => return theme.color.tertiary,
+        "var(--t3)" => return theme.color.quaternary,
+        "var(--accent)" => return theme.color.accent,
+        _ => {}
+    }
     let index = match color.as_str() {
         "system-accent" => Some(0),
         "system-accent-light-1" => Some(1),
@@ -248,7 +369,10 @@ fn color_with_system(color: &ColorRef, ink: Rgba, accent: Rgba, system: &[Rgba; 
         "system-accent-dark-3" => Some(6),
         _ => None,
     };
-    index.map_or_else(|| resolve_color(color, ink, accent), |i| system[i])
+    index.map_or_else(
+        || resolve_color(color, theme.color.label, theme.color.accent),
+        |i| system[i],
+    )
 }
 
 /// The menu tokens of the top bar's look from `bars.json` and the theme now: the desktop and
@@ -269,7 +393,10 @@ pub fn menu_tokens(text: &mypaper_ui::Text) -> mypaper_ui::Tokens {
     let mut appearance = bars.appearance.over(&theme_appearance(loaded.as_ref()));
     // The menus follow the top bar's plugin patches, then the `menu` surface's own colours.
     let mut look = bars.top.look.clone();
-    theme_glass(
+    appearance_layer(&bars, "top", &mut look, &appearance);
+    glass_layer(
+        &bars,
+        "top",
         &mut look,
         loaded
             .as_ref()
@@ -300,15 +427,71 @@ pub fn theme_appearance(loaded: Option<&LoadedTheme>) -> Appearance {
     appearance
 }
 
-/// A theme's partial glass layer, below fields supplied by the bar. Rebuilt on every config
-/// change, so removing a theme field restores the style default rather than keeping old values.
-pub fn theme_glass(look: &mut Look, glass: Option<mypaper_theme::Liquid>) {
-    if let Some(glass) = glass {
-        look.glass.intensity = look.glass.intensity.or(glass.intensity);
-        look.glass.refraction = look.glass.refraction.or(glass.refraction);
-        look.glass.highlight = look.glass.highlight.or(glass.highlight);
-        look.glass.tint = look.glass.tint.or(glass.tint);
-        look.glass.blur = look.glass.blur.or(glass.blur);
+/// Design bundles supply defaults. Theme/user appearance beats those defaults, while fields
+/// explicitly written in shared/per-bar `look` (including monitor overrides) still win.
+pub fn appearance_layer(
+    config: &mypaper_bars::BarsConfig,
+    bar: &str,
+    look: &mut Look,
+    appearance: &Appearance,
+) {
+    let own = |path: &str| explicit_look(config, bar, path);
+    if appearance.font.is_some() && !own("/font/family") {
+        look.font.family = None;
+    }
+    if appearance.radius.is_some() && !own("/radius") {
+        look.radius = None;
+    }
+    if appearance.text.is_some() && !own("/scheme") {
+        look.scheme = None;
+    }
+    if appearance.surface.is_some() && !own("/background") && !own("/transparent") {
+        look.background = None;
+        look.transparent = None;
+    }
+    if appearance.blur.is_some() && !own("/glass/blur") {
+        look.glass.blur = appearance.blur;
+    }
+    if appearance.opacity.is_some() {
+        if !own("/tint") {
+            look.tint = None;
+        }
+        if !own("/glass/tint") {
+            look.glass.tint = None;
+        }
+    }
+    if appearance.border.is_some() && !own("/border") {
+        look.border = Default::default();
+    }
+}
+
+fn explicit_look(config: &mypaper_bars::BarsConfig, bar: &str, path: &str) -> bool {
+    config
+        .raw()
+        .get(bar)
+        .and_then(|v| v.get("look"))
+        .and_then(|v| v.pointer(path))
+        .or_else(|| config.raw().get("look").and_then(|v| v.pointer(path)))
+        .is_some_and(|v| !v.is_null())
+}
+
+pub fn glass_layer(
+    config: &mypaper_bars::BarsConfig,
+    bar: &str,
+    look: &mut Look,
+    glass: Option<mypaper_theme::Liquid>,
+) {
+    let Some(glass) = glass else { return };
+    for (name, value, target) in [
+        ("intensity", glass.intensity, &mut look.glass.intensity),
+        ("refraction", glass.refraction, &mut look.glass.refraction),
+        ("highlight", glass.highlight, &mut look.glass.highlight),
+        ("tint", glass.tint, &mut look.glass.tint),
+        ("blur", glass.blur, &mut look.glass.blur),
+    ] {
+        if value.is_some() && !explicit_look(config, bar, &format!("/glass/{name}")) {
+            *target = value;
+        }
     }
 }
 
@@ -376,8 +559,8 @@ fn custom_family(list: &str) -> Option<String> {
         .map(|s| s.trim().trim_matches(['\"', '\'']).trim())
         .find(|f| {
             !f.is_empty()
-                && !f.starts_with("Segoe UI")
-                && !f.starts_with("SF Pro")
+                && !f.to_ascii_lowercase().starts_with("segoe ui")
+                && !f.to_ascii_lowercase().starts_with("sf pro")
                 && !matches!(
                     f.to_ascii_lowercase().as_str(),
                     "system-ui"
@@ -547,29 +730,41 @@ mod tests {
     }
 
     #[test]
-    fn removing_a_theme_glass_layer_restores_defaults() {
-        let base = Look::default();
-        let mut themed = base.clone();
-        theme_glass(
-            &mut themed,
-            Some(mypaper_theme::Liquid {
-                blur: Some(17.0),
-                ..Default::default()
-            }),
-        );
+    fn appearance_beats_design_defaults_but_explicit_look_and_monitor_fields_win() {
+        let config = mypaper_bars::BarsConfig::parse(r#"{"preset":"macos","appearance":{"font":"Inter","radius":7,"surface":"solid","text":"dark"},"overrides":{"secondary":{"look":{"radius":3}}}}"#).unwrap();
+        let mut look = config.top.look.clone();
+        appearance_layer(&config, "top", &mut look, &config.appearance);
         let system = crate::flyouts::look::fixed_system();
+        let resolved = Tokens::resolve(&look, &config.appearance, &system);
+        assert_eq!(&*resolved.font.family, "Inter");
+        assert_eq!(resolved.radius, 7.0);
+        assert!(!resolved.bare && resolved.material.is_none() && !resolved.theme.dark());
+        let second = config.for_monitor("DISPLAY2", false).unwrap();
+        let mut look = second.top.look.clone();
+        appearance_layer(&second, "top", &mut look, &second.appearance);
         assert_eq!(
-            Tokens::resolve(&themed, &Appearance::default(), &system)
-                .material
-                .unwrap()
-                .blur,
-            17.0
+            Tokens::resolve(&look, &second.appearance, &system).radius,
+            3.0
         );
-        let mut reset = base.clone();
-        theme_glass(&mut reset, None);
-        assert_eq!(
-            Tokens::resolve(&reset, &Appearance::default(), &system).material,
-            Tokens::resolve(&base, &Appearance::default(), &system).material
-        );
+    }
+
+    #[test]
+    fn theme_glass_overrides_design_defaults_but_keeps_explicit_user_fields() {
+        let theme = Some(mypaper_theme::Liquid {
+            blur: Some(17.0),
+            refraction: Some(0.2),
+            ..Default::default()
+        });
+        let config = mypaper_bars::BarsConfig::parse(
+            r#"{"preset":"macos","dock":{"look":{"glass":{"blur":4}}}}"#,
+        )
+        .unwrap();
+        let mut look = config.dock.look.clone();
+        glass_layer(&config, "dock", &mut look, theme);
+        assert_eq!(look.glass.blur, Some(4.0));
+        assert_eq!(look.glass.refraction, Some(0.2));
+        let mut reset = config.dock.look.clone();
+        glass_layer(&config, "dock", &mut reset, None);
+        assert_eq!(reset, config.dock.look);
     }
 }

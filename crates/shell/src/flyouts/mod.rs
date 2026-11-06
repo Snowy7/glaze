@@ -51,8 +51,8 @@ use mypaper_bars::flyouts::{self as providers, Done, Lane, Watched};
 use mypaper_bars::wake::{Msg, Waker};
 use mypaper_desktop::Monitor;
 use mypaper_ui::{
-    Button, Event, Glass, HitId, Image, Kind as SurfaceKind, Rect, Role, Spring, Surface,
-    SurfaceId, TextField, Ticker, Tween, Ui, focus,
+    Button, Event, Glass, HitId, Image, Kind as SurfaceKind, Rect, Role, Surface, SurfaceId,
+    TextField, Ticker, Ui, focus,
 };
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -150,6 +150,10 @@ pub enum Reply {
     NotificationAccess(Result<(), String>),
     Apps(Vec<mypaper_bars::flyouts::index::App>),
     Files(Vec<mypaper_bars::flyouts::index::RecentFile>),
+    IndexedFiles {
+        query: String,
+        hits: Option<Vec<mypaper_index::Hit>>,
+    },
     Clipboard(mypaper_bars::flyouts::clipboard::History),
     /// An action failed; the panel shows why.
     Failed(String),
@@ -406,12 +410,9 @@ impl Lanes {
 
 /// How long lanes outlive their flyout (reopening within it reuses their state).
 const LINGER: Duration = Duration::from_secs(5);
-/// The open motion: about 0.3 s, a hint of overshoot.
-const OPEN: Spring = Spring::new(1.0, 420.0, 36.0);
 /// On glass: how long the content waits for the engine's glass (its usual "open to glass"),
 /// and the engine's fade-in, which the content's fade follows (wallpaper `overlay::window::FADE`).
 const GLASS_DELAY: Duration = Duration::from_millis(90);
-const GLASS_FADE: Duration = Duration::from_millis(300);
 
 /// The open flyout.
 struct Open {
@@ -427,7 +428,9 @@ struct Open {
     /// Whether it sits below its anchor (slides down into place) or above (slides up).
     below: bool,
     /// Open progress, 0 to 1, while it moves.
-    motion: Option<Tween>,
+    motion: Option<mypaper_ui::transition::Transition>,
+    motion_style: mypaper_bars::style::MotionStyle,
+    snapshot: Option<mypaper_ui::reveal::Snapshot>,
     /// When its motion started (the fade follows the glass from there).
     opened_at: Instant,
     hover: Option<HitId>,
@@ -489,8 +492,7 @@ impl Flyouts {
         let waker = Waker::new(tx, thread);
         let (replies_tx, replies) = mpsc::channel();
         let look = Look::load(&ui.text);
-        mypaper_ui::glass::set_style(look.glass);
-        mypaper_ui::menu::set_style(Some(look.menu_tokens()));
+        look.install();
         let mut flyouts = Self {
             surface: Surface::new_deferred_accessibility(
                 SurfaceKind::Popup { activate: true },
@@ -571,11 +573,15 @@ impl Flyouts {
     /// `bars.json` or the theme changed: the look is read again (and the Windows key).
     pub fn config_changed(&mut self, ui: &Ui, main: HWND) {
         self.look = Look::load(&ui.text);
-        mypaper_ui::glass::set_style(self.look.glass);
-        mypaper_ui::menu::set_style(Some(self.look.menu_tokens()));
+        self.look.install();
         self.follow_win_key(main);
         if let Some(open) = &mut self.open {
             open.scale = open.monitor.dpi.max(96) as f32 / 96.0 * self.look.scale;
+            open.motion_style = self.look.opening_style;
+            if !self.look.opening.enabled {
+                open.motion = None;
+                open.snapshot = None;
+            }
             open.dirty = true;
         }
     }
@@ -692,7 +698,7 @@ impl Flyouts {
         if self.open.as_ref().is_some_and(|o| o.dirty) {
             self.render(ui);
         }
-        self.animate(now);
+        self.animate(ui, now);
     }
 
     /// Asks the open panel when it next wants a tick.
@@ -891,6 +897,7 @@ impl Flyouts {
         let generation = crate::bars::plugin_style::generation();
         if std::mem::replace(&mut self.style_generation, generation) != generation {
             self.look = Look::load(&ui.text);
+            self.look.install();
         }
         let return_to = bars.external_foreground();
         self.hide();
@@ -934,6 +941,8 @@ impl Flyouts {
             size: (0, 0),
             below: center_y < monitor_mid,
             motion: None,
+            motion_style: self.look.opening_style,
+            snapshot: None,
             opened_at: Instant::now(),
             hover: None,
             pressed: None,
@@ -957,9 +966,22 @@ impl Flyouts {
         let drawn = started.elapsed();
         let Some(open) = &mut self.open else { return };
         // Shown at its first frame of motion, then focused (keys, and a click elsewhere closes).
-        open.motion = Some(Tween::new(0.0, 1.0, OPEN, Instant::now()));
+        let delay = if mypaper_ui::glass::style().is_some() {
+            GLASS_DELAY
+        } else {
+            Duration::ZERO
+        };
+        open.motion = self
+            .look
+            .opening
+            .enabled
+            .then(|| self.look.opening.start(0.0, 1.0, Instant::now() + delay));
+        if open.motion.is_some() && crate::bars::motion::reveal(open.motion_style).scales() {
+            open.snapshot =
+                mypaper_ui::reveal::Snapshot::new(ui, self.surface.shown().clone(), open.size).ok();
+        }
         open.opened_at = Instant::now();
-        self.animate(Instant::now());
+        self.animate(ui, Instant::now());
         self.surface.show();
         let shown = started.elapsed();
         if let Some(open) = &mut self.open {
@@ -1085,6 +1107,11 @@ impl Flyouts {
         let at = position(open, Instant::now());
         match self.surface.present(ui, at, size, list) {
             Ok(drew) => {
+                if open.snapshot.is_some() {
+                    open.snapshot =
+                        mypaper_ui::reveal::Snapshot::new(ui, self.surface.shown().clone(), size)
+                            .ok();
+                }
                 open.draws += u32::from(drew);
                 open.settled_draws += u32::from(drew && open.shown && open.motion.is_none());
             }
@@ -1093,30 +1120,53 @@ impl Flyouts {
     }
 
     /// One frame of the open motion (position and alpha only), or nothing at rest.
-    fn animate(&mut self, now: Instant) {
+    fn animate(&mut self, ui: &mut Ui, now: Instant) {
         let Some(open) = &mut self.open else {
             self.ticker.schedule(false);
             return;
         };
         let Some(motion) = open.motion else {
+            let _ = self.surface.set_alpha(255);
+            let _ = self.surface.move_to(open.origin);
             self.ticker.schedule(false);
             return;
         };
         let p = motion.value(now);
-        // On glass, the content fades in with its glass, on the engine's own curve: its glass
-        // shows some 25-110 ms after the window (it must be shown, at alpha 0, to get one) and
-        // fades in over 300 ms, ease-out. Content shown at once would sit over the bare app
-        // behind it first (a flash). A drawn fill is visible from the first frame.
-        let since = now.saturating_duration_since(open.opened_at);
-        let (alpha, fading) = if mypaper_ui::glass::style().is_some() {
-            let x = (since.saturating_sub(GLASS_DELAY).as_secs_f32() / GLASS_FADE.as_secs_f32())
-                .clamp(0.0, 1.0);
-            (1.0 - (1.0 - x).powi(3), x < 1.0)
+        if let Some(snapshot) = &open.snapshot {
+            let full = Rect::new(0.0, 0.0, open.size.0 as f32, open.size.1 as f32);
+            let anchor = open
+                .anchor
+                .offset(-open.origin.0 as f32, -open.origin.1 as f32);
+            let body = crate::bars::motion::reveal(open.motion_style).body(full, anchor, p);
+            let list = if motion.done(now) {
+                snapshot.original.clone()
+            } else {
+                snapshot.frame(full, body)
+            };
+            let _ = self.surface.present(ui, open.origin, open.size, list);
+            self.surface.set_glass(
+                self.look
+                    .glass
+                    .filter(|_| mypaper_ui::glass::available())
+                    .map(|material| Glass {
+                        body,
+                        radius: self.look.radius * open.scale * body.width() / full.width(),
+                        material: mypaper_ui::GlassMaterial {
+                            blur: material.blur * open.scale,
+                            ..material
+                        },
+                    }),
+            );
+        }
+        // Delay for the overlay's first frame, then use the configured curve for the content.
+        let alpha = if mypaper_ui::glass::style().is_some() {
+            p.clamp(0.0, 1.0)
         } else {
-            ((0.45 + p * 0.8).clamp(0.0, 1.0), false)
+            (0.45 + p * 0.55).clamp(0.0, 1.0)
         };
-        if motion.done(now) && !fading {
+        if motion.done(now) {
             open.motion = None;
+            open.snapshot = None;
         }
         let at = position(open, now);
         let _ = self.surface.set_alpha((alpha * 255.0).round() as u8);
@@ -1521,7 +1571,9 @@ fn on_screen(window: isize) -> bool {
 fn position(open: &Open, now: Instant) -> (i32, i32) {
     // On glass it opens in place: every move makes the engine re-render its glass at the new
     // spot, and a frame of that showed as the glass blinking out while the flyout slid in.
-    if mypaper_ui::glass::style().is_some() {
+    if mypaper_ui::glass::style().is_some()
+        || open.motion_style != mypaper_bars::style::MotionStyle::Slide
+    {
         return open.origin;
     }
     let p = open.motion.map_or(1.0, |m| m.value(now));

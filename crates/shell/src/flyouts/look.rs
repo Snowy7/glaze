@@ -39,6 +39,8 @@ pub struct Look {
     pub scale: f32,
     pub shadow: bool,
     resolved: Theme,
+    pub opening: mypaper_ui::transition::Timing,
+    pub opening_style: mypaper_bars::style::MotionStyle,
 }
 
 impl Look {
@@ -65,7 +67,10 @@ impl Look {
         // Plugin `panel` style patches (docs/plugins.md, "Styling"), under the user's own fields.
         let (mut bar_look, mut appearance) =
             (bars.top.look.clone(), bars.appearance.over(&appearance));
-        crate::bars::look::theme_glass(
+        crate::bars::look::appearance_layer(&bars, "top", &mut bar_look, &appearance);
+        crate::bars::look::glass_layer(
+            &bars,
+            "top",
             &mut bar_look,
             loaded
                 .as_ref()
@@ -79,7 +84,25 @@ impl Look {
             &mut bar_look,
             &mut appearance,
         );
-        let mut look = Self::resolve_with(&bar_look, &appearance, &accent::read(), &knobs);
+        let system = accent::read();
+        let mut look = Self::resolve_with(&bar_look, &appearance, &system, &knobs);
+        let performance = bars.performance.active(mypaper_desktop::on_battery());
+        look.opening = crate::bars::motion::resolve(
+            &bars.top.animation,
+            false,
+            crate::bars::motion::Leaf::Open,
+            system.animations,
+            performance,
+        );
+        look.opening_style = crate::bars::motion::presentation(
+            &bars.top.animation,
+            false,
+            crate::bars::motion::Leaf::Open,
+        );
+        if performance {
+            look.glass = None;
+            look.resolved.glass = None;
+        }
         look.patch_colors(&colors);
         look.icons = icons::system_family(text);
         look.win_key = bars.launcher.win_key;
@@ -117,6 +140,15 @@ impl Look {
                 _ => {}
             }
         }
+    }
+
+    pub fn install(&self) {
+        mypaper_ui::glass::set_style(self.glass);
+        mypaper_ui::menu::set_style(Some(self.menu_tokens()));
+        mypaper_ui::menu::set_open_motion(Some(mypaper_ui::menu::MenuMotion {
+            timing: self.opening,
+            style: crate::bars::motion::reveal(self.opening_style),
+        }));
     }
 
     /// The look of `bar` over `appearance`, as the bars resolve theirs (bars/look.rs).
@@ -200,14 +232,11 @@ impl Look {
             .radius
             .or(appearance.radius)
             .unwrap_or(tokens.theme.radius.surface);
-        let radius = if kit == Style::Fluent {
-            radius.min(8.0)
-        } else {
-            radius
-        };
         let mut resolved = tokens.theme.clone();
         resolved.glass = glass;
-        resolved.color.surface = fill;
+        if appearance.tint.is_some() || appearance.opacity.is_some() || tokens.fill.is_some() {
+            resolved.color.surface = fill;
+        }
         resolved.radius.surface = radius;
         resolved.radius.card = Radii::concentric(radius, resolved.metrics.pad, 6.0);
         resolved.font.family = tokens.font.family.clone();
@@ -244,6 +273,14 @@ impl Look {
             scale: tokens.scale,
             shadow: tokens.shadow,
             resolved,
+            opening: crate::bars::motion::resolve(
+                &Default::default(),
+                false,
+                crate::bars::motion::Leaf::Open,
+                system.animations,
+                false,
+            ),
+            opening_style: mypaper_bars::style::MotionStyle::Slide,
         }
     }
 

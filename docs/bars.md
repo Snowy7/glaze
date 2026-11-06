@@ -145,6 +145,30 @@ brightness and saturation controls still need renderer support. Glass `style: no
 material, `frosted` removes lensing, and `intensity` scales refraction, highlight and frost. Theme
 `bars.glass` is a partial layer under the bar's glass controls; removing fields restores defaults.
 
+### Native state and motion controls (2026-11-06)
+
+Appearance values override design defaults; explicit shared, per-bar and monitor `look` values
+still win. Font, scale, radius, tone and glass resets therefore work with a preset selected too.
+`look.items` resolves rest, hover and active fill, text colour, scale, border and radius. Hover and
+active inherit rest fields. Flat surfaces also consume per-state `look.border` and `look.shadow`;
+glass draws neither of those UI decorations. Built-in `var(--fill-1..3)`, `var(--edge)` and
+`var(--t0..3)` use the native scheme's palette, and named colour choices are cached on reload.
+
+Motion resolves structural defaults (`animation`, `bar`, `top`/`dock`), then the named leaf at each
+level, in that order. A disabled ancestor wins. `reduceMotion: never` overrides Windows' animation
+preference; performance `on`, or `auto` while on battery, still disables motion and glass. The same
+policy, duration and curve reach flyouts and menus. Hover/press transitions, dock magnification,
+launch bounce and attention have separate resolved leaves; show/hide does not take `open` timing.
+Named springs fit an explicitly configured duration; a physical `{mass, stiffness, damping}`
+spring uses its natural bounded settling time. Every transition ends at the exact final value.
+
+Flyout and menu `open` styles support fade, slide (without glass), pop, scale, morph and none.
+Pop/scale/morph keep a bitmap only during opening, transform its hit regions and engine glass
+body together, then restore the original display list and free the bitmap. Glass slides retain
+the stationary fade to avoid repeated overlay capture flashes. Bar show/hide still slides;
+other bar presentation styles, popup/menu hover/press timing, continuous squircle corners,
+backdrop brightness/saturation, glass depth/sheen and Windows-wide one-switch styling remain open.
+
 CSS, gradient/image **surface fills**, noise, glow, neon and shaped corners are ignored with one
 warning per process. Image app icons are retained. There is no CSS renderer or DWM blur fallback.
 
