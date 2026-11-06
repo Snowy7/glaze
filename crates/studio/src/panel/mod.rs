@@ -611,7 +611,7 @@ pub fn build(app: &App, text: &mut Text) -> Built {
         };
         controls::save_banner(app, b, &mut c, page);
         if !app.system.running() {
-            controls::notice(b, &mut c, "mypaper is off. Changes apply when it starts.");
+            controls::notice(b, &mut c, "Changes apply when mypaper starts.");
         }
         pages::view(app, b, &mut c, page);
         controls::boundaries(b);
