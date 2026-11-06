@@ -199,6 +199,7 @@ pub enum Command {
     Display(usize),
     Peek,
     PickColor(crate::actions::Edit),
+    PickFont(crate::actions::Edit, String),
     ColorDrag(crate::actions::Edit, mypaper_ui::color_row::popover::Part, Rect),
     SortRow(SortList, usize),
     SortHandle(SortList, usize),
@@ -227,11 +228,13 @@ pub fn run(app: &mut App, command: Command) {
         &command,
         Command::PickWidget(_)
             | Command::PickColor(_)
+            | Command::PickFont(..)
             | Command::PickModule(_)
             | Command::SortRow(_, _)
             | Command::SortHandle(_, _)
     );
     match command {
+        Command::PickFont(edit, current) => pickers::open_font(app, edit, current),
         Command::Design(bar) => {
             app.nav.bar = bar;
             app.nav.module = None;

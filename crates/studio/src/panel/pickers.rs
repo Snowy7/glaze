@@ -1,7 +1,7 @@
 use super::{
     Command,
     controls::{notice, row},
-    editors::{action_button, field, select},
+    editors::{action_button, field},
 };
 use crate::{
     actions::{Action, Edit, FieldId},
@@ -118,37 +118,51 @@ pub fn launcher(
     }
 }
 
-pub fn font(app: &App, b: &mut B, c: &mut Col, edit: Edit, current: &str) {
-    let fonts = app
-        .panel
-        .as_ref()
-        .unwrap()
-        .fonts
-        .get_or_init(|| b.text.families());
-    let mut options = vec![(
-        Value::Null,
-        if edit.doc == DocId::Config {
-            "From wallpaper"
-        } else if edit.path.starts_with("/theme:") {
-            "The style's"
-        } else {
-            "From Look"
-        }
-        .into(),
-    )];
-    options.extend(fonts.iter().map(|font| (json!(font), font.clone())));
-    select(
+fn inherited_font(edit: &Edit) -> &'static str {
+    if edit.doc == DocId::Config {
+        "From wallpaper"
+    } else if edit.path.starts_with("/theme:") {
+        "The style's"
+    } else {
+        "From Look"
+    }
+}
+
+pub fn font(_app: &App, b: &mut B, c: &mut Col, edit: Edit, current: &str) {
+    row(
         b,
         c,
+        None,
         &edit.label.clone(),
         if current.is_empty() {
+            inherited_font(&edit)
+        } else {
+            current
+        },
+        "",
+        None,
+        Action::Panel(Command::PickFont(edit, current.to_owned())),
+    );
+}
+
+/// Installed families are needed only when opening the chooser, never to display its row.
+pub fn open_font(app: &mut App, edit: Edit, current: String) {
+    let fonts = app.panel.as_ref().unwrap().fonts.get_or_init(|| {
+        mypaper_ui::Ui::isolated()
+            .map(|ui| ui.text.families())
+            .unwrap_or_default()
+    });
+    let mut options = vec![(Value::Null, inherited_font(&edit).into())];
+    options.extend(fonts.iter().map(|font| (json!(font), font.clone())));
+    app.run(Action::Choose(crate::actions::Choices {
+        edit,
+        options,
+        current: Some(if current.is_empty() {
             Value::Null
         } else {
             json!(current)
-        },
-        edit,
-        options,
-    );
+        }),
+    }));
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -417,4 +431,39 @@ pub fn choose_zone(app: &mut App, target: &ZoneTarget, city: usize) {
         }
     }
     app.texts.remove(&query_field(target));
+}
+
+#[cfg(test)]
+mod font_tests {
+    use super::*;
+
+    #[test]
+    fn font_rows_load_installed_families_only_when_opened_without_saving() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State {
+            page: crate::panel::Page::Look,
+            ..Default::default()
+        });
+        app.nav.more.insert(key((
+            "panel-more",
+            key(("studio-panel", crate::panel::Page::Look)),
+        )));
+        let version = app.docs.version;
+        let built = crate::panel::build(&app, &mut ui.text);
+        assert!(app.panel.as_ref().unwrap().fonts.get().is_none());
+        let target = built
+            .targets
+            .iter()
+            .find(|target| matches!(target.action, Action::Panel(Command::PickFont(..))))
+            .unwrap();
+        app.input.focus = Some(target.key);
+        let action = target.action.clone();
+        app.frame.targets = built.targets;
+        app.run(action);
+        assert_eq!(app.docs.version, version);
+        let (_, choices) = app.picking.as_ref().expect("the font chooser opened");
+        assert!(choices.options.iter().any(|(_, name)| name == "Arial"));
+        assert!(app.panel.as_ref().unwrap().fonts.get().is_some());
+    }
 }

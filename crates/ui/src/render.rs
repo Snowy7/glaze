@@ -391,6 +391,15 @@ impl Ui {
     }
     /// Makes the factories. Initializes COM on this thread (apartment-threaded) if nothing has.
     pub fn new() -> Result<Self> {
+        Self::with_text_factory(false)
+    }
+
+    /// A private text factory for pictures whose native font resources can be released.
+    pub fn isolated() -> Result<Self> {
+        Self::with_text_factory(true)
+    }
+
+    fn with_text_factory(isolated: bool) -> Result<Self> {
         // SAFETY: documented factory calls on this thread; a COM apartment that already exists
         // (of either kind) is kept, which WIC accepts.
         unsafe {
@@ -400,7 +409,7 @@ impl Ui {
             let wic: IWICImagingFactory =
                 CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)
                     .context("WIC")?;
-            let text = Text::new()?;
+            let text = if isolated { Text::isolated()? } else { Text::new()? };
             let params = TextQuality::default().params(&text)?;
             Ok(Self {
                 text,

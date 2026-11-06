@@ -10,7 +10,8 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use windows::Win32::Graphics::DirectWrite::{
-    DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_AXIS_TAG_OPTICAL_SIZE, DWRITE_FONT_AXIS_TAG_WEIGHT,
+    DWRITE_FACTORY_TYPE, DWRITE_FACTORY_TYPE_ISOLATED, DWRITE_FACTORY_TYPE_SHARED,
+    DWRITE_FONT_AXIS_TAG_OPTICAL_SIZE, DWRITE_FONT_AXIS_TAG_WEIGHT,
     DWRITE_FONT_AXIS_VALUE, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
     DWRITE_FONT_WEIGHT, DWRITE_HIT_TEST_METRICS, DWRITE_LINE_METRICS, DWRITE_TEXT_METRICS,
     DWRITE_TEXT_RANGE, DWRITE_WORD_WRAPPING_NO_WRAP, DWRITE_WORD_WRAPPING_WRAP,
@@ -117,9 +118,18 @@ impl Text {
     }
 
     pub(crate) fn new() -> Result<Self> {
+        Self::with_factory(DWRITE_FACTORY_TYPE_SHARED)
+    }
+
+    /// A private factory whose native font resources are released with this text context.
+    pub(crate) fn isolated() -> Result<Self> {
+        Self::with_factory(DWRITE_FACTORY_TYPE_ISOLATED)
+    }
+
+    fn with_factory(kind: DWRITE_FACTORY_TYPE) -> Result<Self> {
         // SAFETY: a documented factory call.
         let factory: IDWriteFactory =
-            unsafe { DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED) }.context("DirectWrite")?;
+            unsafe { DWriteCreateFactory(kind) }.context("DirectWrite")?;
         Ok(Self {
             factory,
             formats: HashMap::new(),
