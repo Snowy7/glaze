@@ -218,6 +218,7 @@ pub enum Command {
     ShowFolder(crate::docs::DocId),
     Design(Option<crate::actions::Bar>),
     SameBars,
+    FirstRunBack,
 }
 
 pub fn run(app: &mut App, command: Command) {
@@ -242,6 +243,7 @@ pub fn run(app: &mut App, command: Command) {
             app.panel.as_mut().unwrap().page = Page::BarDesign;
         }
         Command::SameBars => editors::same_bars(app),
+        Command::FirstRunBack => first_run::back(app),
         Command::Open(page) => {
             app.overlay = None;
             if page == Page::FirstRun {
