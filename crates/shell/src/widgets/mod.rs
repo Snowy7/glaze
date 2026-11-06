@@ -175,6 +175,8 @@ pub struct Widgets {
     _bars_watcher: Option<FileWatch>,
     bars: BarsConfig,
     editing: bool,
+    studio_active: bool,
+    studio_lift: BTreeSet<String>,
     drag: Option<Drag>,
     settling: BTreeMap<String, Settle>,
     ghost: Option<EditSurface>,
@@ -281,6 +283,8 @@ impl Widgets {
         holds.set(Fact::OnBattery, mypaper_desktop::on_battery());
         let skin = load_skin(&config);
         let mut widgets = Self {
+            studio_active: false,
+            studio_lift: BTreeSet::new(),
             layout,
             layout_error,
             theme_path: None,
@@ -377,6 +381,7 @@ impl Widgets {
                 }
             }
             WM_EDIT => {
+                if self.studio_active { return; }
                 let on = mode(msg.lparam, self.editing);
                 self.set_editing(ui, on);
             }
@@ -493,6 +498,36 @@ impl Widgets {
                 editing_text: e.model.field.is_some(),
             })
             .collect()
+    }
+
+    /// Transient Studio policy. No layout or widget storage is changed by selection.
+    pub fn studio_session(&mut self, ui: &mut Ui, active: bool, lifted: BTreeSet<String>) {
+        if self.studio_active == active && self.studio_lift == lifted { return; }
+        if active && self.editing { self.set_editing(ui, false); }
+        self.studio_active = active;
+        self.studio_lift = lifted;
+        for entry in self.entries.values() {
+            entry.surface.set_no_activate(active);
+            entry.surface.set_text_field(if active { None } else { entry.model.field.clone() });
+        }
+        self.reconcile_needed = true;
+        self.poll(ui);
+    }
+
+    pub fn studio_targets(&self) -> Vec<crate::studio_pick::Target> {
+        self.entries.values().filter(|e| e.model.visible).map(|e| {
+            let id = &e.model.placed.instance;
+            let label = self.registry.get(&e.model.placed.widget)
+                .map_or(e.model.placed.widget.as_str(), |w| w.manifest.name.as_str());
+            crate::studio_pick::Target {
+                selection: crate::studio_pick::wire::Selection {
+                    kind: crate::studio_pick::wire::Kind::Widget,
+                    id: id.clone(), display: self.monitors[e.monitor].device.clone(),
+                },
+                label: label.into(), rect: e.rect, topmost: e.topmost,
+                surface: e.surface.id(), body_selects: true,
+            }
+        }).collect()
     }
     #[allow(dead_code, reason = "live fixture diagnostics")]
     pub fn costs(&self) -> WorkCosts {
@@ -1005,12 +1040,13 @@ impl Widgets {
             let placed = layout::place(instance, manifest, &grid, &appearance);
             let rect = screen_rect(&grid, placed.cell, placed.size, screen);
             let overlay = manifest.preset == mypaper_widgets::manifest::Preset::Overlay;
-            let topmost = overlay && !self.editing;
+            let lifted = self.studio_active && self.studio_lift.contains(&instance.instance);
+            let topmost = (overlay && !self.editing) || lifted;
             let visible = manifest
                 .fit_size(instance.size.map(f64::from), [grid.cols, grid.rows])
                 .is_some()
                 && !self.hidden
-                && (self.editing
+                && (self.editing || lifted
                     || overlay
                     || !self.covered.get(monitor).copied().unwrap_or(false))
                 && (self.editing || self.layout.overlay || !overlay);
@@ -1052,6 +1088,7 @@ impl Widgets {
                 entry.model.dirty = true;
                 entry.painted = false;
             }
+            entry.surface.set_no_activate(self.studio_active);
             let was_visible = entry.model.visible;
             // Cell/size changes do not invalidate content, decoded art, or service subscriptions.
             let changed = entry.model.placed.widget != placed.widget
@@ -1677,7 +1714,7 @@ impl Widgets {
             Event::Wheel(_, delta) => self.scroll(&id, -f32::from(*delta) / 120.0 * 48.0),
             Event::Press(p, Button::Left) => {
                 let entry = self.entries.get_mut(&id).unwrap();
-                entry.surface.take_focus();
+                if !self.studio_active { entry.surface.take_focus(); }
                 entry.model.pressed = entry.surface.shown().hit_at(p.at).map(|h| h.id);
                 // A click focuses nothing (rings are for the keyboard); a field keeps its own.
                 entry.model.focus = entry.model.pressed.filter(|&h| h == view::FIELD);
@@ -2108,6 +2145,8 @@ impl Widgets {
         let _ = ui;
     }
     fn open_field(&mut self, id: &str, index: Option<usize>) {
+        // The panel owns text input during desktop picking; ordinary widget buttons still run.
+        if self.studio_active { return; }
         self.finish_fields();
         let entry = self.entries.get_mut(id).unwrap();
         let m = &mut entry.model;

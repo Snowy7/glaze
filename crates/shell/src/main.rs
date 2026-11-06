@@ -10,7 +10,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 // The shell's modules are a library (`lib.rs`) so Studio can draw previews with them.
-use mypaper_shell::{bars, desktop_menu, flyouts, inbox, integrations, look, overlay_client, widgets};
+use mypaper_shell::{bars, desktop_menu, flyouts, inbox, integrations, look, overlay_client, studio_pick, widgets};
 
 mod wakes;
 
@@ -80,6 +80,7 @@ fn run() -> Result<()> {
         bars,
         widgets: None,
         pending_widget_facts: Vec::new(),
+        studio: studio_pick::StudioPick::new()?,
     };
     shell.follow_config(&ui);
     shell.bars.tick(&mut ui);
@@ -122,6 +123,7 @@ fn run() -> Result<()> {
                 coalesced.map_or(INFINITE, |at| {
                     wait_ms(at.saturating_duration_since(Instant::now()))
                 }),
+                shell.studio.timeout_ms(),
             ]
             .into_iter()
             .zip(0..)
@@ -226,6 +228,7 @@ fn run() -> Result<()> {
         }
         at = shell.drain(&mut ui, &mut wakes, at, poll_widgets);
         shell.bars.tick(&mut ui);
+        shell.studio_tick(&mut ui);
         wakes.spent("bars.tick", at);
         if widgets_pending {
             widgets_pending = false;
@@ -266,6 +269,7 @@ fn wait_ms(duration: std::time::Duration) -> u32 {
 
 /// What the shell hosts.
 struct Shell {
+    studio: studio_pick::StudioPick,
     bars: bars::Bars,
     inbox: windows::Win32::Foundation::HWND,
     /// The desktop right-click menu, while `desktop_menu.enabled`.
@@ -277,6 +281,19 @@ struct Shell {
 }
 
 impl Shell {
+    fn studio_tick(&mut self, ui: &mut Ui) {
+        let mut targets = Vec::new();
+        if self.studio.active() {
+            targets = self.bars.studio_targets();
+            if let Some(widgets) = &self.widgets { targets.extend(widgets.studio_targets()); }
+        }
+        self.studio.tick(ui, &targets);
+        self.bars.studio_session(self.studio.active());
+        if let Some(widgets) = &mut self.widgets {
+            widgets.studio_session(ui, self.studio.active(), self.studio.lifted());
+        }
+    }
+
     /// Handles everything queued: inbox messages and input, in order, until both are empty.
     /// Handling one may call into Explorer and so let more arrive; they are handled here too.
     /// Adds the time each part took to `wakes`, from `at`; returns when it finished.
@@ -303,6 +320,18 @@ impl Shell {
                     }
                 }
             } else if let Some((id, event)) = next_event() {
+                if self.studio.active() {
+                    let point = match event {
+                        mypaper_ui::Event::Move(p) | mypaper_ui::Event::Press(p, _) => {
+                            Some(mypaper_ui::Point::new(p.screen.0 as f32, p.screen.1 as f32))
+                        }
+                        _ => None,
+                    };
+                    let target = self.widgets.as_ref()
+                        .and_then(|w| w.studio_targets().into_iter().find(|t| t.surface == id))
+                        .or_else(|| point.and_then(|p| self.bars.studio_hit(id, p)));
+                    if self.studio.event(id, &event, target) { continue; }
+                }
                 if self.flyouts.owns(id) {
                     self.flyouts.event(ui, &mut self.bars, id, &event);
                     continue;

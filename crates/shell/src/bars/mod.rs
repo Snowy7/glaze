@@ -68,6 +68,7 @@ struct Press {
 }
 
 pub struct Bars {
+    studio_active: bool,
     bars: Vec<Bar>,
     monitors: Vec<Monitor>,
     services: Services,
@@ -138,6 +139,7 @@ impl Bars {
         let services = Services::new()?;
         startup::ready("shell", "services_ms");
         let mut bars = Self {
+            studio_active: false,
             bars: vec![],
             monitors: vec![],
             services,
@@ -594,6 +596,7 @@ impl Bars {
             self.show_preview(ui, index, &key);
         }
         at = tick_spent("preview", at);
+        for bar in &mut self.bars { bar.studio_session(self.studio_active); }
         if let Err(e) = self.paint(ui, now) {
             log::error!("painting bars: {e:#}");
         }
@@ -823,6 +826,64 @@ impl Bars {
             .filter(|b| b.monitor.device == monitor.device)
             .flat_map(Bar::plates)
             .collect()
+    }
+
+    pub fn studio_session(&mut self, active: bool) {
+        self.studio_active = active;
+        for bar in &mut self.bars { bar.studio_session(active); }
+    }
+
+    pub fn studio_targets(&self) -> Vec<crate::studio_pick::Target> {
+        use crate::studio_pick::{Target as PickTarget, wire::{Kind, Selection}};
+        let mut result = Vec::new();
+        for bar in self.bars.iter().filter(|b| b.shows_content()) {
+            let key = if bar.kind == BarKind::Top { "top" } else { "dock" };
+            let origin = bar.origin();
+            let make = |kind, id, label, rect, body_selects| PickTarget {
+                selection: Selection { kind, id, display: bar.monitor.device.clone() },
+                label, rect, topmost: true, surface: bar.surface.id(), body_selects,
+            };
+            for (rect, _) in &bar.frame.shapes {
+                result.push(make(Kind::Bar, key.into(), if key == "top" { "Top bar" } else { "Dock" }.into(),
+                    rect.offset(origin.0 as f32, origin.1 as f32), true));
+            }
+            for hit in &bar.frame.list.hits {
+                let Some(target) = bar.frame.targets.get(hit.id as usize - 1) else { continue };
+                let module = match target {
+                    Target::Module(module) => Some(module.clone()),
+                    Target::Workspace(_) => Some(ModuleRef::Builtin(Module::Workspaces)),
+                    Target::Tray(_) => Some(ModuleRef::Builtin(Module::Tray)),
+                    _ => None,
+                };
+                let Some(module) = module else { continue };
+                let lists: Vec<(&str, &[ModuleRef])> = if bar.kind == BarKind::Top {
+                    vec![("left", &bar.config.top.left), ("center", &bar.config.top.center), ("right", &bar.config.top.right)]
+                } else { vec![("left", &bar.config.dock.left), ("right", &bar.config.dock.right)] };
+                let occurrence = bar.frame.targets[..(hit.id as usize - 1)].iter()
+                    .filter(|t| matches!(t, Target::Module(m) if *m == module)).count();
+                let Some((list, index)) = lists.into_iter().flat_map(|(list, modules)| {
+                    modules.iter().enumerate().filter(|(_, m)| **m == module).map(move |(i, _)| (list, i))
+                }).nth(occurrence) else { continue };
+                let label = serde_json::to_value(&module).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
+                result.push(make(Kind::Module, format!("{key}/{list}/{index}"), label,
+                    hit.rect.offset(origin.0 as f32, origin.1 as f32), false));
+            }
+        }
+        result
+    }
+
+    /// Screen hit geometry also covers separate island HWNDs.
+    pub fn studio_hit(&self, surface: SurfaceId, point: Point) -> Option<crate::studio_pick::Target> {
+        let bar = self.bars.iter().find(|bar| bar.owns(surface))?;
+        let targets = self.studio_targets();
+        let mut target = targets.into_iter().rev().find(|t| t.surface == bar.surface.id() && t.rect.contains(point))?;
+        let origin = bar.origin();
+        if target.selection.kind == crate::studio_pick::wire::Kind::Bar
+            && bar.frame.target(Point::new(point.x - origin.0 as f32, point.y - origin.1 as f32)).is_some() {
+            target.body_selects = false;
+        }
+        target.surface = surface;
+        Some(target)
     }
 
     pub fn event(&mut self, ui: &mut Ui, id: SurfaceId, event: &Event) {

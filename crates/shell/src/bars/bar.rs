@@ -50,6 +50,7 @@ pub(super) fn total_repaints() -> u64 {
 }
 
 pub struct Bar {
+    studio_active: bool,
     pub surface: Surface,
     pub kind: BarKind,
     pub config: BarsConfig,
@@ -152,6 +153,7 @@ impl Bar {
         let mut slide = Value::new(if autohide { 1.0 } else { 0.0 });
         slide.settings = slide_settings.clone();
         let mut bar = Self {
+            studio_active: false,
             surface,
             kind,
             config,
@@ -223,6 +225,13 @@ impl Bar {
 
     pub fn scale(&self) -> f32 {
         self.monitor.dpi as f32 / 96.0
+    }
+
+    pub fn studio_session(&mut self, active: bool) {
+        self.studio_active = active;
+        self.surface.set_no_activate(active);
+        for island in &self.islands { island.set_no_activate(active); }
+        if let Some(edge) = &self.edge_surface { edge.set_no_activate(active); }
     }
     pub fn owns(&self, id: SurfaceId) -> bool {
         self.surface.id() == id || self.islands.iter().any(|s| s.id() == id)
@@ -658,6 +667,7 @@ impl Bar {
             } else {
                 &mut self.islands[i - 1]
             };
+            surface.set_no_activate(self.studio_active);
             surface.set_click_activates(
                 self.frame
                     .list
