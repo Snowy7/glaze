@@ -89,11 +89,35 @@ pub struct WindowsStyle {
     /// Force dark (`true`) or light (`false`) mode for apps and the system.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dark_mode: Option<bool>,
+    /// Show the accent on Start and the taskbar (`Personalize\\ColorPrevalence`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent_on_taskbar: Option<bool>,
+    /// Show the accent on title bars and borders (`DWM\\ColorPrevalence`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent_on_title_bars: Option<bool>,
     /// A mouse cursor set: the name of a built-in or user set (`mypaper-dark`,
     /// `mypaper-light`, a folder under `%APPDATA%\mypaper\cursors`), or a
     /// folder of `.cur`/`.ani` files (absolute, or relative to the theme).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cursors: Option<String>,
+}
+
+impl WindowsStyle {
+    /// Each field set here overrides the corresponding style default.
+    pub fn over(&self, base: &Self) -> Self {
+        Self {
+            accent: self.accent.or(base.accent),
+            border: self.border.or(base.border),
+            caption: self.caption.or(base.caption),
+            caption_text: self.caption_text.or(base.caption_text),
+            corners: self.corners.or(base.corners),
+            backdrop: self.backdrop.or(base.backdrop),
+            dark_mode: self.dark_mode.or(base.dark_mode),
+            accent_on_taskbar: self.accent_on_taskbar.or(base.accent_on_taskbar),
+            accent_on_title_bars: self.accent_on_title_bars.or(base.accent_on_title_bars),
+            cursors: self.cursors.clone().or_else(|| base.cursors.clone()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
