@@ -413,9 +413,14 @@ pub fn class_name(hwnd: HWND) -> String {
     String::from_utf16_lossy(&class[..len])
 }
 
+/// What [`taskbar_eligible`] needs to know about `hwnd`, and its process. A hidden window (most
+/// top-level windows) is answered without the class name or DWM's cloak state (a call into DWM).
 fn facts(hwnd: HWND, ours: u32) -> (Facts, u32) {
     // SAFETY: read-only queries on a handle from EnumWindows.
     unsafe {
+        if !IsWindowVisible(hwnd).as_bool() {
+            return (Facts::default(), 0);
+        }
         let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
         let mut cloaked = 0u32;
         let _ = DwmGetWindowAttribute(
