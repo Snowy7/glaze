@@ -215,6 +215,8 @@ struct Session {
     cleaned: Condvar,
     /// Restyle rounds started; a thread runs only the latest one queued for it.
     restyles: AtomicU64,
+    /// Removals of elements the map doesn't have (logged when closing, for diagnosis).
+    unknown_removals: AtomicU64,
 }
 
 // SAFETY: the tree service is free-threaded; everything else is behind the mutex or atomic.
@@ -447,6 +449,7 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
         state: Mutex::new(State::default()),
         cleaned: Condvar::new(),
         restyles: AtomicU64::new(0),
+        unknown_removals: AtomicU64::new(0),
     });
     session.reload_rules();
 
@@ -722,6 +725,7 @@ impl Session {
         let (taken, emptied) = {
             let mut state = self.lock();
             let Some(parent) = state.nodes.get(&handle).map(|e| e.parent) else {
+                self.unknown_removals.fetch_add(1, Ordering::Relaxed);
                 return;
             };
             let root = match state.nodes.get_mut(&parent) {
@@ -1101,9 +1105,9 @@ impl Session {
             return;
         }
         self.apply_resources(thread);
-        let handles: Vec<InstanceHandle> = {
+        let (handles, known) = {
             let state = self.lock();
-            state
+            let handles: Vec<InstanceHandle> = state
                 .nodes
                 .iter()
                 .filter(|&(&h, e)| {
@@ -1111,10 +1115,11 @@ impl Session {
                         && (state.styled.contains_key(&h) || !state.wanted(h).is_empty())
                 })
                 .map(|(&h, _)| h)
-                .collect()
+                .collect();
+            (handles, state.nodes.len())
         };
         log(&format!(
-            "restyling {} element(s) on thread {thread}",
+            "restyling {} element(s) on thread {thread} ({known} known in all)",
             handles.len()
         ));
         for handle in handles {
@@ -1258,10 +1263,15 @@ impl Session {
             self.closing.store(true, Ordering::SeqCst);
             state.threads.iter().map(|(&t, &ui)| (t, ui)).collect()
         };
-        let count = self.lock().styled.len();
+        let (count, known) = {
+            let state = self.lock();
+            (state.styled.len(), state.nodes.len())
+        };
         log(&format!(
-            "restoring {count} element(s) on {} thread(s)",
-            threads.len()
+            "restoring {count} element(s) on {} thread(s) ({known} known; {} removal(s) of \
+             elements never seen)",
+            threads.len(),
+            self.unknown_removals.load(Ordering::Relaxed)
         ));
         for &(thread, ui) in &threads {
             let session = self.clone();
