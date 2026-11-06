@@ -1,15 +1,17 @@
 //! A 40-byte record and a single UTF-8 name blob. Snapshots are read-only file mappings;
 //! changed records and new names live in an overlay until the next event-driven checkpoint.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{BufWriter, Write};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
 use bytemuck::{Pod, Zeroable};
 use memmap2::Mmap;
+use serde::{Deserialize, Serialize};
 
 use crate::Hit;
 
@@ -20,7 +22,7 @@ const MAGIC: &[u8; 8] = b"MYPIDX01";
 const HEADER: usize = 64;
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, Default, Pod, Zeroable, Serialize, Deserialize)]
 pub struct Record {
     pub name: u32,
     pub name_len: u16,
@@ -49,10 +51,23 @@ pub fn fold(name: &str) -> String {
     name.to_lowercase()
 }
 
-fn name_hash(name: &[u8]) -> u64 {
+fn name_hash(name: &[u8]) -> u32 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     name.hash(&mut hasher);
-    hasher.finish()
+    hasher.finish() as u32
+}
+
+/// The snapshot stays immutable. Small updates are atomically checkpointed as a bounded
+/// overlay; its generation prevents replay onto a different snapshot after a crash.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Changes<'a> {
+    generation: u64,
+    mapped_count: usize,
+    mapped_names: usize,
+    changed: Cow<'a, BTreeMap<u32, Record>>,
+    records: Cow<'a, [Record]>,
+    names: Cow<'a, str>,
 }
 
 #[derive(Default)]
@@ -60,12 +75,13 @@ pub struct Store {
     mapping: Option<Mmap>,
     mapped_count: usize,
     mapped_names: usize,
+    generation: u64,
     records: Vec<Record>,
     names: Vec<u8>,
     changed: BTreeMap<u32, Record>,
     // Created only for wide directories reached by live updates/path lookup. A compact
     // hash-to-ID table avoids quadratic bursts without retaining a String per indexed file.
-    children: std::sync::Mutex<HashMap<u32, HashMap<u64, u32>>>,
+    children: std::sync::Mutex<HashMap<u32, HashMap<u32, u32>>>,
 }
 
 impl Store {
@@ -89,6 +105,125 @@ impl Store {
     }
     pub fn overlay_len(&self) -> usize {
         self.changed.len() + self.records.len()
+    }
+
+    pub fn should_compact(&self) -> bool {
+        self.mapped_count == 0 || self.overlay_len() > 50_000 || self.names.len() > 4 * 1024 * 1024
+    }
+
+    pub fn save_changes(&self, path: &Path) -> Result<()> {
+        let temporary = path.with_extension("tmp");
+        let mut out = BufWriter::new(File::create(&temporary)?);
+        let changes = Changes {
+            generation: self.generation,
+            mapped_count: self.mapped_count,
+            mapped_names: self.mapped_names,
+            changed: Cow::Borrowed(&self.changed),
+            records: Cow::Borrowed(&self.records),
+            names: Cow::Borrowed(std::str::from_utf8(&self.names)?),
+        };
+        serde_json::to_writer(&mut out, &changes)?;
+        out.flush()?;
+        out.get_ref().sync_all()?;
+        drop(out);
+        std::fs::rename(temporary, path)?;
+        Ok(())
+    }
+
+    /// Validates an overlay completely before changing the live store. Missing or mismatched
+    /// generations leave the snapshot usable; callers may ignore/rebuild an unusable overlay.
+    pub fn load_changes(&mut self, path: &Path) -> Result<()> {
+        let file = File::open(path)?;
+        ensure!(
+            file.metadata()?.len() <= 64 * 1024 * 1024,
+            "overlay exceeds its size limit"
+        );
+        let changes: Changes<'static> = serde_json::from_reader(BufReader::new(file))?;
+        ensure!(
+            changes.generation == self.generation
+                && changes.mapped_count == self.mapped_count
+                && changes.mapped_names == self.mapped_names,
+            "overlay belongs to another snapshot"
+        );
+        let count = self
+            .mapped_count
+            .checked_add(changes.records.len())
+            .context("overlay count overflow")?;
+        ensure!(
+            count < u32::MAX as usize
+                && self.mapped_names + changes.names.len() <= u32::MAX as usize,
+            "overlay too large"
+        );
+        let raw = |id: u32| -> Option<Record> {
+            changes.changed.get(&id).copied().or_else(|| {
+                if (id as usize) < self.mapped_count {
+                    self.base().get(id as usize).copied()
+                } else {
+                    changes
+                        .records
+                        .get(id as usize - self.mapped_count)
+                        .copied()
+                }
+            })
+        };
+        for (id, record) in changes.changed.iter().map(|(id, r)| (*id, *r)).chain(
+            changes
+                .records
+                .iter()
+                .enumerate()
+                .map(|(i, r)| ((self.mapped_count + i) as u32, *r)),
+        ) {
+            ensure!((id as usize) < count, "overlay record out of range");
+            ensure!(
+                record.parent < id || (id == 0 && record.parent == NONE),
+                "invalid overlay parent"
+            );
+            ensure!(
+                record.first == NONE
+                    || (record.first > id
+                        && (record.first as usize) < count
+                        && raw(record.first).is_some_and(|r| r.parent == id)),
+                "invalid overlay child"
+            );
+            ensure!(
+                record.next == NONE
+                    || (record.next < id
+                        && raw(record.next).is_some_and(|r| r.parent == record.parent)),
+                "invalid overlay sibling"
+            );
+            let start = record.name as usize;
+            let length = record.name_len as usize + record.fold_len as usize;
+            let bytes = if start < self.mapped_names {
+                ensure!(
+                    start
+                        .checked_add(length)
+                        .is_some_and(|end| end <= self.mapped_names),
+                    "overlay name crosses blobs"
+                );
+                self.bytes(start, length)
+            } else {
+                changes
+                    .names
+                    .as_bytes()
+                    .get(start - self.mapped_names..)
+                    .and_then(|s| s.get(..length))
+                    .context("invalid overlay name")?
+            };
+            std::str::from_utf8(&bytes[..record.name_len as usize])?;
+            std::str::from_utf8(&bytes[record.name_len as usize..])?;
+        }
+        ensure!(
+            changes
+                .changed
+                .keys()
+                .all(|id| (*id as usize) < self.mapped_count),
+            "overlay replaced an appended record"
+        );
+        self.changed = changes.changed.into_owned();
+        self.records = changes.records.into_owned();
+        self.names = changes.names.into_owned().into_bytes();
+        self.children.get_mut().expect("child lookup").clear();
+        Ok(())
     }
 
     fn base(&self) -> &[Record] {
@@ -247,7 +382,7 @@ impl Store {
             if self.folded(r) == lower.as_bytes() {
                 return r.live().then_some(id);
             }
-            // A 64-bit hash collision falls back to the sibling chain, preserving correctness.
+            // A hash collision falls back to the sibling chain, preserving correctness.
         }
         let mut at = self.record(parent).first;
         let mut count = 0;
@@ -479,6 +614,10 @@ impl Store {
         ensure!(names < u64::from(u32::MAX), "name blob exceeds 4 GiB");
         header[8..16].copy_from_slice(&u64::from(count).to_le_bytes());
         header[16..24].copy_from_slice(&names.to_le_bytes());
+        let generation = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos() as u64;
+        header[24..32].copy_from_slice(&generation.to_le_bytes());
         out.write_all(&header)?;
         let skip_dead = |mut at: u32| {
             while at != NONE && ids[at as usize] == NONE {
@@ -531,10 +670,12 @@ impl Store {
             count > 0 && count < u32::MAX as usize && end == Some(mapping.len()),
             "bad index length"
         );
+        let generation = u64::from_le_bytes(mapping[24..32].try_into()?);
         let store = Self {
             mapping: Some(mapping),
             mapped_count: count,
             mapped_names: names,
+            generation,
             ..Self::default()
         };
         // One streaming UTF-8 validation is much cheaper than two decoder calls for each
@@ -634,6 +775,15 @@ mod tests {
         assert_eq!(store.name(store.record(new)), "FILE-500.TXT");
         let added = store.upsert(root, "fresh.txt", 128, 4, 3);
         assert_eq!(store.child(root, "fresh.txt"), Some(added));
+        // Simulate a hash collision: the original spelling must still win over its hash.
+        store
+            .children
+            .get_mut()
+            .unwrap()
+            .get_mut(&root)
+            .unwrap()
+            .insert(name_hash(b"fresh.txt"), new);
+        assert_eq!(store.child(root, "fresh.txt"), Some(added));
     }
 
     #[test]
@@ -707,5 +857,41 @@ mod tests {
         std::fs::write(&path, bytes).unwrap();
         assert!(Store::open(&path).is_err());
         std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn incremental_checkpoint_restores_names_changes_and_sizes_and_rejects_old_generations() {
+        let base =
+            std::env::temp_dir().join(format!("mypaper-index-delta-{}.bin", std::process::id()));
+        let delta = base.with_extension("json");
+        let mut store = Store::new();
+        let root = store.insert(0, "X:", DIRECTORY, 0, 0);
+        store.upsert(root, "old.txt", 128, 19, 1);
+        store.save(&base).unwrap();
+        let mut mapped = Store::open(&base).unwrap();
+        mapped.remove(2);
+        let dir = mapped.upsert(root, "Photos", DIRECTORY, 0, 2);
+        mapped.upsert(dir, "Été.JPG", 128, 7, 3);
+        mapped.save_changes(&delta).unwrap();
+        let mut restored = Store::open(&base).unwrap();
+        restored.load_changes(&delta).unwrap();
+        assert_eq!(restored.record(root).size, 7);
+        assert_eq!(restored.record(root).files, 1);
+        assert!(restored.find(r"X:\old.txt").is_none());
+        assert_eq!(
+            restored
+                .hit(restored.find(r"x:\photos\été.jpg").unwrap())
+                .size,
+            7
+        );
+        restored.save(&base).unwrap();
+        let mut compact = Store::open(&base).unwrap();
+        assert!(compact.load_changes(&delta).is_err());
+        assert_eq!(compact.record(root).size, 7);
+        drop(mapped);
+        drop(restored);
+        drop(compact);
+        std::fs::remove_file(&base).unwrap();
+        std::fs::remove_file(&delta).unwrap();
     }
 }

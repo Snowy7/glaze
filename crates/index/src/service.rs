@@ -140,17 +140,36 @@ fn checkpoint(state: &RwLock<State>, path: &Path) -> Result<()> {
     state.read().expect("index state").store.save(path)?;
     let mapped = Store::open(path)?;
     state.write().expect("index state").store = mapped;
+    // If a crash left an older overlay behind, its generation also prevents replay.
+    let _ = std::fs::remove_file(path.with_file_name("changes.json"));
     Ok(())
+}
+
+fn checkpoint_changes(state: &RwLock<State>, path: &Path) -> Result<()> {
+    if state.read().expect("index state").store.should_compact() {
+        return checkpoint(state, path);
+    }
+    state
+        .read()
+        .expect("index state")
+        .store
+        .save_changes(&path.with_file_name("changes.json"))
 }
 
 pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     std::fs::create_dir_all(&cache)?;
     let snapshot = cache.join("snapshot.bin");
     let started = Instant::now();
-    let store = Store::open(&snapshot).unwrap_or_else(|error| {
+    let mut store = Store::open(&snapshot).unwrap_or_else(|error| {
         eprintln!("no usable snapshot: {error:#}");
         Store::new()
     });
+    let changes = cache.join("changes.json");
+    if changes.exists()
+        && let Err(error) = store.load_changes(&changes)
+    {
+        eprintln!("ignoring unusable change checkpoint: {error:#}");
+    }
     eprintln!(
         "loaded {} entries in {:.3}ms",
         store.len() - 1,
@@ -245,7 +264,7 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                     }
                 }
                 if dirty.is_some_and(|t| t.elapsed() >= Duration::from_secs(120)) {
-                    checkpoint(&state, &snapshot)?;
+                    checkpoint_changes(&state, &snapshot)?;
                     dirty = None;
                 }
                 if initial_finished {
@@ -254,7 +273,7 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                checkpoint(&state, &snapshot)?;
+                checkpoint_changes(&state, &snapshot)?;
                 dirty = None;
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
