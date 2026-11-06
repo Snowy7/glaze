@@ -213,6 +213,12 @@ impl TextField {
     pub fn select_all(&self) {
         self.send(windows::Win32::UI::Controls::EM_SETSEL, WPARAM(0), LPARAM(-1));
     }
+    /// Arm change notifications after attaching a field that was laid out while inactive.
+    /// Its previous posted invalidation may have arrived while the surface had no field.
+    pub fn request_redraw(&self) {
+        self.inner.state.posted.set(false);
+        self.inner.state.invalidate();
+    }
     pub fn focus(&self) {
         // SAFETY: the field's surface lives throughout the field's use.
         unsafe {
