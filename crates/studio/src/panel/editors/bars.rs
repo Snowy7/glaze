@@ -25,6 +25,9 @@ const MODULES: [(&str, &str); 15] = [
 ];
 
 fn name(id: &str) -> &str {
+    if id == "|" {
+        return "A gap";
+    }
     MODULES
         .iter()
         .find(|(key, _)| *key == id)
@@ -47,6 +50,7 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
             app.nav.display + 1
         ),
     );
+    crate::panel::controls::displays(app, b, c);
     group(b, c, "", |b, c| {
         let ids: &[&str] = if bar == Bar::Top {
             &["top_enabled", "top_edge", "top_height", "top_shape"]
@@ -76,117 +80,46 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
             );
         }
     });
-    group(b, c, "Design · this bar only", |b, c| {
-        let designs: &[(&str, &str)] = if bar == Bar::Top {
-            &crate::pages::bars::TOP_DESIGNS
-        } else {
-            &crate::pages::bars::DOCK_DESIGNS
-        };
-        let path = format!("/{}/design", bar.key());
-        let current = app
-            .get(DocId::Bars, &path)
-            .and_then(Value::as_str)
-            .unwrap_or("monochrome");
-        for &(id, label) in designs {
-            design_row(
-                b,
-                c,
-                id,
-                label,
-                current == id,
-                Action::Set(
-                    Edit::new(DocId::Bars, path.clone(), "Bar design"),
-                    json!(id),
-                ),
-            );
-        }
-    });
-    if bar == Bar::Dock {
-        group(b, c, "Pinned apps", |b, c| {
-            let own = app.docs.is_set(DocId::Bars, "/dock/pinned");
-            row(
-                b,
-                c,
-                None,
-                "Windows' pins",
-                "",
-                "",
-                Some(!own),
-                Action::Unset(Edit::new(DocId::Bars, "/dock/pinned", "Windows' pins")),
-            );
-            row(
-                b,
-                c,
-                None,
-                "Your own pins",
-                "",
-                "",
-                Some(own),
-                Action::PinsOwn(Pins::Dock),
-            );
-            if own {
-                let pins = app
-                    .get(DocId::Bars, "/dock/pinned")
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default();
-                for (i, pin) in pins.iter().enumerate() {
-                    let title = pin["name"]
-                        .as_str()
-                        .or(pin["path"].as_str())
-                        .unwrap_or("App");
-                    let r = Rect::new(c.x, c.y, c.w, b.px(38.0));
-                    text(
-                        b,
-                        Rect::new(r.left, r.top, (r.width() - b.px(90.0)).max(0.0), r.height()),
-                        title,
-                        13.0,
-                        400,
-                        b.p.ink1,
-                        Align::Start,
-                    );
-                    for (n, icon, label, enabled, action) in [
-                        (
-                            0,
-                            mypaper_ui::icons::Icon::ChevronUp.into(),
-                            format!("Move pin {i} up"),
-                            i > 0,
-                            Action::PinMove(Pins::Dock, i, -1),
-                        ),
-                        (
-                            1,
-                            glyph::CHEVRON_DOWN,
-                            format!("Move pin {i} down"),
-                            i + 1 < pins.len(),
-                            Action::PinMove(Pins::Dock, i, 1),
-                        ),
-                        (
-                            2,
-                            glyph::DELETE,
-                            format!("Remove pin {i}"),
-                            true,
-                            Action::PinRemove(Pins::Dock, i),
-                        ),
-                    ] {
-                        crate::panel::controls::icon_button(
-                            b,
-                            Rect::new(
-                                r.right - b.px(84.0) + n as f32 * b.px(28.0),
-                                r.top + b.px(5.0),
-                                b.px(26.0),
-                                b.px(28.0),
-                            ),
-                            icon,
-                            &label,
-                            enabled,
-                            action,
-                        );
-                    }
-                    c.y = r.bottom;
-                }
-                action_button(b, c, "Pin an app", Action::PinAdd(Pins::Dock));
+    let designs_open = key(("panel-bar-designs", bar));
+    row(
+        b,
+        c,
+        Some(glyph::BARS),
+        "Design",
+        &crate::pages::bars::design_name(app, bar),
+        "This bar only",
+        None,
+        Action::More(designs_open),
+    );
+    if app.is_open(designs_open) {
+        group(b, c, "Design · this bar only", |b, c| {
+            let designs: &[(&str, &str)] = if bar == Bar::Top {
+                &crate::pages::bars::TOP_DESIGNS
+            } else {
+                &crate::pages::bars::DOCK_DESIGNS
+            };
+            let path = format!("/{}/design", bar.key());
+            let current = app
+                .get(DocId::Bars, &path)
+                .and_then(Value::as_str)
+                .unwrap_or("monochrome");
+            for &(id, label) in designs {
+                design_row(
+                    b,
+                    c,
+                    id,
+                    label,
+                    current == id,
+                    Action::Set(
+                        Edit::new(DocId::Bars, path.clone(), "Bar design"),
+                        json!(id),
+                    ),
+                );
             }
         });
+    }
+    if bar == Bar::Dock {
+        pinned_apps(app, b, c, Pins::Dock);
     }
     group(b, c, "Modules", |b, c| {
         for (list, label) in [("left", "Start"), ("center", "Middle"), ("right", "End")] {
@@ -211,16 +144,21 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
             for (index, module) in modules.iter().enumerate() {
                 let id = module.as_str().unwrap_or("Custom module");
                 let slot = Slot { bar, list, index };
-                row(
+                let pic = crate::panel::lists::row(
+                    app,
                     b,
                     c,
-                    Some(glyph::GRIP),
+                    &crate::panel::SortList::Modules(bar, list),
+                    index,
                     name(id),
-                    "",
-                    "",
-                    None,
-                    Action::SelectModule(Some(slot)),
+                    id == "|",
+                    Some(crate::panel::icons::module(id)),
+                    Some(Action::SelectModule(Some(slot))),
                 );
+                if let Some(image) = crate::panel::icons::plugin_image(app, id) {
+                    b.fill(pic, b.px(4.0), b.p.panel);
+                    crate::stage::image_round(b, pic, &image, 1.0, b.px(4.0));
+                }
             }
             if modules.is_empty() {
                 notice(b, c, "No modules here");
@@ -430,12 +368,25 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         );
     });
     let selected = app.panel.as_ref().unwrap().add_module.as_deref();
+    let present: Vec<_> = ["left", "center", "right"]
+        .into_iter()
+        .flat_map(|side| {
+            app.get(DocId::Bars, &format!("/{}/{side}", bar.key()))
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+        })
+        .collect();
     group(b, c, "Built in", |b, c| {
         for (id, name) in MODULES {
+            if present.contains(&id) {
+                continue;
+            }
             row(
                 b,
                 c,
-                Some(glyph::BARS),
+                Some(crate::panel::icons::module(id)),
                 name,
                 "",
                 "",
@@ -448,15 +399,19 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         for plugin in &app.plugins.installed {
             for module in &plugin.bars {
                 let id = format!("custom:{}--{}", plugin.id, module.id);
-                row(
+                if present.contains(&id.as_str()) {
+                    continue;
+                }
+                crate::panel::icons::row(
+                    app,
                     b,
                     c,
-                    Some(glyph::INTEGRATIONS),
+                    &id,
+                    glyph::APP,
                     &module.name,
-                    "",
                     &plugin.name,
-                    Some(selected == Some(id.as_str())),
-                    Action::Panel(Command::PickModule(id)),
+                    selected == Some(id.as_str()),
+                    Action::Panel(Command::PickModule(id.clone())),
                 );
             }
         }
@@ -465,7 +420,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         row(
             b,
             c,
-            Some(glyph::GRIP),
+            None,
             "A gap",
             "",
             "",
@@ -575,6 +530,9 @@ pub fn panel(app: &App, b: &mut B, c: &mut Col) {
         Panel::Notifications => ("Notifications", &[]),
     };
     title(b, c, name, "A panel the bars open");
+    if panel == Panel::Start {
+        pinned_apps(app, b, c, Pins::Start);
+    }
     group(b, c, "", |b, c| {
         for &id in ids {
             let s = crate::settings::Setting::get(id).unwrap();
@@ -593,7 +551,12 @@ pub fn panel(app: &App, b: &mut B, c: &mut Col) {
                     b,
                     c,
                     Some(glyph::CLOCK),
-                    zone["zone"].as_str().unwrap_or("Time zone"),
+                    &zone["label"]
+                        .as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| {
+                            crate::panel::pickers::city_name(zone["zone"].as_str().unwrap_or(""))
+                        }),
                     "Remove",
                     "",
                     None,
@@ -603,15 +566,15 @@ pub fn panel(app: &App, b: &mut B, c: &mut Col) {
                     ),
                 );
             }
-            field(
-                app,
-                b,
-                c,
-                FieldId::Text(DocId::Studio, "/new_zone".into()),
-                "Add a time zone",
-                "Europe/London",
-                "",
-            );
+            if zones.len() < 4 {
+                crate::panel::pickers::zones(
+                    app,
+                    b,
+                    c,
+                    crate::panel::pickers::ZoneTarget::Calendar,
+                    "Add a city",
+                );
+            }
         }
         if panel == Panel::Notifications {
             notice(
@@ -620,6 +583,102 @@ pub fn panel(app: &App, b: &mut B, c: &mut Col) {
                 "The bell opens Windows' notification center. Turn on access and choose what it shows under Connections.",
             );
             action_button(b, c, "Connections", open(Page::Connections));
+        }
+    });
+}
+
+fn pinned_apps(app: &App, b: &mut B, c: &mut Col, which: Pins) {
+    group(b, c, "Pinned apps", |b, c| {
+        let own = app
+            .get(DocId::Bars, which.path())
+            .is_some_and(Value::is_array);
+        let follows = if which == Pins::Dock {
+            "Windows' pins"
+        } else {
+            "Dock's pins"
+        };
+        let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(30.0));
+        b.segmented(
+            key(("panel-pin-source", which)),
+            r,
+            &[follows, "Your own"],
+            Some(usize::from(own)),
+            "Pinned apps",
+            true,
+            |i| {
+                if i == 0 {
+                    Action::Unset(Edit::new(DocId::Bars, which.path(), "Follow pins"))
+                } else {
+                    Action::PinsOwn(which)
+                }
+            },
+        );
+        b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
+        c.y = r.bottom + b.px(6.0);
+        let pins = app
+            .get(
+                DocId::Bars,
+                if !own && which == Pins::Start {
+                    "/dock/pinned"
+                } else {
+                    which.path()
+                },
+            )
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for (i, pin) in pins.iter().enumerate() {
+            let title = pin["name"].as_str().map(str::to_owned).unwrap_or_else(|| {
+                mypaper_bars::apps::file_stem(pin["path"].as_str().unwrap_or("App"))
+            });
+            let pic = if own {
+                crate::panel::lists::row(
+                    app,
+                    b,
+                    c,
+                    &crate::panel::SortList::Pins(which),
+                    i,
+                    &title,
+                    false,
+                    Some(glyph::APP),
+                    None,
+                )
+            } else {
+                let r = Rect::new(c.x, c.y, c.w, height(b, 36.0));
+                let pic = Rect::new(r.left, r.top + b.px(7.0), b.px(22.0), b.px(22.0));
+                b.icon(pic, glyph::APP, 16.0, b.p.ink2);
+                text(
+                    b,
+                    Rect::new(
+                        pic.right + b.px(8.0),
+                        r.top,
+                        r.width() - b.px(30.0),
+                        r.height(),
+                    ),
+                    &title,
+                    13.0,
+                    400,
+                    b.p.ink2,
+                    Align::Start,
+                );
+                c.y = r.bottom;
+                pic
+            };
+            if let Some(path) = pin["path"].as_str()
+                && let Some(image) = crate::panel::icons::image(app, path)
+            {
+                b.fill(pic, b.px(4.0), b.p.panel);
+                crate::stage::image_round(b, pic, &image, 1.0, b.px(4.0));
+            }
+        }
+        if own {
+            action_button(b, c, "Pin an app", Action::PinAdd(which));
+        } else if pins.is_empty() {
+            notice(
+                b,
+                c,
+                &format!("Following {follows}. Choose Your own to edit the list."),
+            );
         }
     });
 }

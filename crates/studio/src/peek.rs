@@ -38,6 +38,7 @@ pub fn start(app: &mut App) {
 }
 
 pub fn end(app: &mut App) {
+    crate::panel::end_peek();
     HOOKS.with(|h| {
         for hook in h.borrow_mut().drain(..) {
             // SAFETY: our own hooks, removed once.

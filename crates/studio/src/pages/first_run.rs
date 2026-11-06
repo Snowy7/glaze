@@ -28,6 +28,12 @@ const STARTERS: [Starter; 4] = [
     Starter { name: "Quiet", line: "Mono, just a top bar", style: "mono", wallpaper: "snowfall", preset: "monochrome", widgets: &[] },
 ];
 
+/// Share starter metadata and the native desktop drawing with the compact panel.
+pub(crate) fn panel_starters() -> Vec<(&'static str, &'static str)> { STARTERS.iter().map(|s| (s.name, s.line)).collect() }
+pub(crate) fn panel_starter_tile(app: &App, b: &mut B, index: usize, rect: Rect) {
+    if let Some(starter) = STARTERS.get(index) { starter_tile(app, b, starter, rect, b.p.panel); }
+}
+
 pub fn view(app: &App, b: &mut B) {
     let p = *b.p;
     let Some(Overlay::FirstRun { step, starter, taskbar }) = app.overlay else { return };

@@ -214,6 +214,10 @@ impl App {
                 taskbar: 0,
             });
         }
+        if panel && first_run_due(&app.docs) {
+            app.panel.as_mut().unwrap().page = crate::panel::Page::FirstRun;
+            app.overlay = Some(Overlay::FirstRun { step: 0, starter: 0, taskbar: 0 });
+        }
         app
     }
 
@@ -362,6 +366,7 @@ impl App {
 
     /// Handles one window event. Sets `dirty` when the next frame differs.
     pub fn event(&mut self, event: Event) {
+        if crate::panel::event(self, &event) { return; }
         match event {
             Event::Move(p) => self.pointer_move(p.at),
             Event::Leave => {
@@ -1135,7 +1140,10 @@ impl App {
                 self.after_edit(&docs);
                 crate::panel::record_edit(self, label, &ops, checkpoint);
             }
-            Err(e) => self.alert(format!("{e:#}")),
+            Err(e) => {
+                crate::panel::save_failed(self, docs.first().copied(), &format!("{e:#}"));
+                self.alert(format!("{e:#}"));
+            }
         }
         self.dirty = true;
     }

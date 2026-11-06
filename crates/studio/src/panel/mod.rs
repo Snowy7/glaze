@@ -1,10 +1,19 @@
 //! Opt-in v16 Studio panel. It shares the legacy app's documents, actions, input and workers;
 //! only window placement, navigation and presentation belong to this module.
 
+mod colors;
 mod controls;
 mod editors;
+mod first_run;
 mod history;
+mod icons;
+mod lists;
+mod options;
 mod pages;
+mod peek;
+mod pickers;
+mod specimens;
+pub use lists::List as SortList;
 mod tokens;
 
 #[path = "../pick_client.rs"]
@@ -56,6 +65,7 @@ pub enum Page {
     AddModule,
     Panels,
     BarPanel,
+    FirstRun,
 }
 
 impl Page {
@@ -88,6 +98,7 @@ impl Page {
             Self::AddModule => "Add a module",
             Self::Panels => "Panels",
             Self::BarPanel => "Panel",
+            Self::FirstRun => "Make this desktop yours",
         }
     }
 
@@ -118,6 +129,13 @@ pub struct State {
     pub category: Option<String>,
     pub add_module: Option<String>,
     pub history: std::cell::RefCell<history::History>,
+    pub specimens:
+        std::cell::RefCell<std::collections::HashMap<String, std::sync::Arc<mypaper_ui::Image>>>,
+    pub save_doc: std::cell::Cell<Option<crate::docs::DocId>>,
+    pub sort_drag: Option<lists::Drag>,
+    pub fonts: std::cell::OnceCell<Vec<String>>,
+    pub save_errors: std::cell::RefCell<std::collections::HashMap<crate::docs::DocId, String>>,
+    reset_version: std::cell::Cell<Option<(crate::docs::DocId, u64)>>,
     auto_left: std::cell::Cell<Option<bool>>,
 }
 
@@ -139,13 +157,19 @@ pub enum Command {
     ClearHistory,
     Side(bool),
     PickAsset(String),
-    MovePhotos(usize, i32),
     PickModule(String),
     AddModule,
-    MoveList(String, usize, i32),
-    MenuItem(usize),
-    ListRow(String, usize),
-    PhotoRow(usize),
+    Display(usize),
+    Peek,
+    PickColor(crate::actions::Edit),
+    NoTint,
+    SortRow(SortList, usize),
+    SortHandle(SortList, usize),
+    SortRemove(SortList, usize),
+    AddMenuItem,
+    PickZone(pickers::ZoneTarget, usize),
+    ConnectionModule(String, crate::actions::Bar, bool),
+    HideConnectionWidget(String),
 }
 
 pub fn run(app: &mut App, command: Command) {
@@ -155,15 +179,21 @@ pub fn run(app: &mut App, command: Command) {
     }
     let keep_focus = matches!(
         &command,
-        Command::MenuItem(_)
-            | Command::ListRow(_, _)
-            | Command::PhotoRow(_)
-            | Command::PickWidget(_)
+        Command::PickWidget(_)
             | Command::PickModule(_)
+            | Command::SortRow(_, _)
+            | Command::SortHandle(_, _)
     );
     match command {
         Command::Open(page) => {
             app.overlay = None;
+            if page == Page::FirstRun {
+                app.overlay = Some(crate::app::Overlay::FirstRun {
+                    step: 0,
+                    starter: 0,
+                    taskbar: 0,
+                });
+            }
             if page == Page::AddWallpaper {
                 app.overlay = Some(crate::app::Overlay::AddWallpaper {
                     source: None,
@@ -242,7 +272,54 @@ pub fn run(app: &mut App, command: Command) {
             state.history.borrow_mut().selected = None;
         }
         Command::Done => app.quit = true,
-        Command::PickWidget(id) => app.panel.as_mut().unwrap().add_widget = Some(id),
+        Command::Display(index) => {
+            if index < app.monitors.len() {
+                app.nav.display = index;
+                app.nav.widget = None;
+                app.nav.module = None;
+                pick_client::clear(app);
+                move_to_display(app);
+            }
+        }
+        Command::Peek => peek::start(app, None),
+        Command::PickColor(edit) => colors::pick(app, &edit),
+        Command::NoTint => app.apply(
+            "No tint",
+            vec![
+                crate::docs::Op {
+                    doc: crate::docs::DocId::Config,
+                    path: "/look/material/tint".into(),
+                    value: None,
+                },
+                crate::docs::Op {
+                    doc: crate::docs::DocId::Config,
+                    path: "/look/material/clarity".into(),
+                    value: Some(serde_json::json!(1.0)),
+                },
+            ],
+        ),
+        Command::SortRow(list, index) => {
+            app.input.focus = Some(lists::row_key(&list, index));
+            if let SortList::Widget(path) = &list {
+                app.run(Action::More(key(("panel-list-item", path.as_str(), index))));
+            }
+            if list == SortList::Menu {
+                app.run(Action::More(key(("panel-menu-item", index))));
+            }
+        }
+        Command::SortHandle(list, index) => app.input.focus = Some(lists::row_key(&list, index)),
+        Command::SortRemove(list, index) => lists::remove(app, &list, index),
+        Command::AddMenuItem => editors::add_menu_item(app),
+        Command::PickZone(target, city) => pickers::choose_zone(app, &target, city),
+        Command::ConnectionModule(id, bar, on) => editors::connection_module(app, &id, bar, on),
+        Command::HideConnectionWidget(id) => editors::hide_connection_widget(app, &id),
+        Command::PickWidget(id) => {
+            let state = app.panel.as_mut().unwrap();
+            state.add_widget = Some(id);
+            if state.page != Page::AddWidget {
+                state.page = Page::AddWidget;
+            }
+        }
         Command::AddWidget => {
             if let Some(id) = app.panel.as_ref().unwrap().add_widget.clone() {
                 if !editors::can_add_widget(app, &id) {
@@ -278,16 +355,8 @@ pub fn run(app: &mut App, command: Command) {
             serde_json::json!(if left { "left" } else { "right" }),
         ),
         Command::PickAsset(path) => editors::pick_asset(app, &path),
-        Command::MovePhotos(index, delta) => editors::move_photos(app, index, delta),
         Command::PickModule(id) => app.panel.as_mut().unwrap().add_module = Some(id),
         Command::AddModule => editors::insert_module(app),
-        Command::MoveList(path, index, delta) => editors::move_list(app, &path, index, delta),
-        Command::MenuItem(index) => app.input.focus = Some(key(("menu-item", index))),
-        Command::ListRow(path, index) => {
-            let disclosure = key(("panel-list-item", path.as_str(), index));
-            app.run(Action::More(disclosure));
-        }
-        Command::PhotoRow(index) => app.input.focus = Some(key(("panel-photo-row", index))),
     }
     if !keep_focus {
         app.input.focus = None;
@@ -318,31 +387,11 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
         return true;
     }
     if !ctrl {
-        if alt && matches!(vk, 0x26 | 0x28) && app.field.is_none() {
-            let action = app
-                .input
-                .focus
-                .and_then(|key| app.frame.targets.iter().find(|t| t.key == key))
-                .map(|t| t.action.clone());
-            let delta = if vk == 0x26 { -1 } else { 1 };
-            match action {
-                Some(Action::Panel(Command::MenuItem(index))) => {
-                    app.run(Action::MenuMove(index, delta))
-                }
-                Some(Action::Panel(Command::ListRow(path, index))) => {
-                    editors::move_list(app, &path, index, delta);
-                    let to = (index as i32 + delta).max(0) as usize;
-                    app.input.focus = Some(key(("panel-list-row", path.as_str(), to)));
-                }
-                Some(Action::Panel(Command::PhotoRow(index))) => {
-                    editors::move_photos(app, index, delta);
-                    app.input.focus = Some(key((
-                        "panel-photo-row",
-                        (index as i32 + delta).clamp(0, 5) as usize,
-                    )));
-                }
-                _ => return false,
-            }
+        if alt
+            && matches!(vk, 0x26 | 0x28)
+            && app.field.is_none()
+            && lists::keyboard(app, if vk == 0x26 { -1 } else { 1 })
+        {
             return true;
         }
         if app.panel.as_ref().is_some_and(|s| s.page == Page::Widget)
@@ -370,6 +419,7 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
         return false;
     }
     match vk {
+        0x30 | 0x24 => run(app, Command::Open(Page::Root)),
         0x5A if !shift => app.run(Action::Undo),
         0x5A | 0x59 => app.run(Action::Redo),
         0x57 => run(app, Command::Done),
@@ -404,8 +454,7 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
         ),
         0xBC => run(app, Command::Open(Page::Settings)),
         0x48 => run(app, Command::Open(Page::History)),
-        // Hold-to-peek needs the shell's preview channel; don't use the legacy toggle.
-        0x44 if !shift => {}
+        0x44 if !shift => peek::start(app, Some(0x44)),
         _ => return false,
     }
     true
@@ -448,11 +497,7 @@ pub fn build(app: &App, text: &mut Text) -> Built {
             w: body.width() - b.px(32.0),
             view,
         };
-        for id in crate::docs::DocId::ALL {
-            if let Some(error) = app.docs.error(id) {
-                controls::notice(b, &mut c, &format!("{}: {error}", id.label()));
-            }
-        }
+        controls::save_banner(app, b, &mut c, page);
         if !app.system.running() {
             controls::notice(b, &mut c, "mypaper is off. Changes apply when it starts.");
         }
@@ -555,6 +600,29 @@ pub fn fit_height(app: &mut App, surface: &mypaper_ui::Surface, built: &Built) -
 /// One additive bridge into the legacy action dispatcher, shared with desktop picking.
 pub fn before_action(app: &mut App, action: &Action) {
     history::observe(app);
+    if matches!(action, Action::Undo | Action::Redo) {
+        app.texts.retain(
+            |id, _| !matches!(id, FieldId::Text(doc, _) if *doc != crate::docs::DocId::Studio),
+        );
+    }
+    if let Some(state) = &app.panel {
+        if let Action::StartOver(doc) = action {
+            state.reset_version.set(Some((*doc, app.docs.version)));
+        }
+        let doc = match action {
+            Action::Set(e, _) | Action::Toggle(e, _) | Action::Unset(e) | Action::Slider(e) => {
+                Some(e.doc)
+            }
+            Action::SetStyle(_) | Action::WindowsLook(_) | Action::UseWallpaper(_) => {
+                Some(crate::docs::DocId::Config)
+            }
+            Action::Preset(_) => Some(crate::docs::DocId::Bars),
+            _ => None,
+        };
+        if let Some(doc) = doc {
+            state.save_doc.set(Some(doc));
+        }
+    }
     if matches!(action, Action::AddCommit(_))
         && app
             .panel
@@ -608,10 +676,60 @@ pub fn before_action(app: &mut App, action: &Action) {
     }
 }
 
+/// Remove panel-only hold hooks before the legacy message handler restores our window.
+pub fn end_peek() {
+    peek::end();
+}
+
+/// List drags are transient until release. This early bridge leaves legacy input intact.
+pub fn event(app: &mut App, event: &mypaper_ui::Event) -> bool {
+    app.panel.is_some() && lists::event(app, event)
+}
+
+fn move_to_display(app: &App) {
+    use windows::Win32::{
+        Foundation::{POINT, RECT},
+        Graphics::Gdi::ClientToScreen,
+        UI::WindowsAndMessaging::*,
+    };
+    let Some(window) = app.window else { return };
+    let (x, y, _, _) = placement(app);
+    let mut outer = RECT::default();
+    let mut client = POINT::default();
+    // SAFETY: only our own panel moves; changing display never activates another window.
+    unsafe {
+        if GetWindowRect(window, &mut outer).is_ok()
+            && ClientToScreen(window, &mut client).as_bool()
+        {
+            let _ = SetWindowPos(
+                window,
+                None,
+                x - (client.x - outer.left),
+                y - (client.y - outer.top),
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER,
+            );
+        }
+    }
+}
+
 pub fn after_action(app: &mut App) {
     let Some(state) = app.panel.as_mut() else {
         return;
     };
+    if let Some((doc, version)) = state.reset_version.take()
+        && app.docs.version != version
+        && app.docs.error(doc).is_none()
+    {
+        state.save_errors.borrow_mut().remove(&doc);
+        app.docs.saved = crate::docs::Saved::Done(std::time::Instant::now());
+    }
+    if matches!(app.overlay, Some(crate::app::Overlay::FirstRun { .. })) {
+        state.page = Page::FirstRun;
+    } else if state.page == Page::FirstRun {
+        state.page = Page::Root;
+    }
     // The panel presents creation as a pushed page; legacy actions still own its source data.
     if state.page == Page::AddWidget && matches!(app.overlay, Some(crate::app::Overlay::AddWidget))
     {
@@ -635,7 +753,23 @@ pub fn after_action(app: &mut App) {
 }
 
 pub fn record_edit(app: &mut App, label: &str, ops: &[crate::docs::Op], checkpoint: usize) {
+    if let Some(state) = &app.panel {
+        for op in ops {
+            state.save_errors.borrow_mut().remove(&op.doc);
+        }
+        app.texts.retain(|id,_| !matches!(id,FieldId::Text(doc,path) if ops.iter().any(|op| op.doc == *doc && (path.as_ref() == op.path || path.starts_with(&format!("{}/",op.path))))));
+    }
     history::record_edit(app, label, ops, checkpoint);
+}
+
+pub fn save_failed(app: &mut App, doc: Option<crate::docs::DocId>, error: &str) {
+    if let Some(state) = &app.panel {
+        if let Some(doc) = doc {
+            state.save_doc.set(Some(doc));
+            state.save_errors.borrow_mut().insert(doc, error.into());
+        }
+        app.docs.saved = crate::docs::Saved::Failed(error.into());
+    }
 }
 
 pub fn record_drag(app: &App, label: &str) {
@@ -648,8 +782,62 @@ pub fn intercept_set(
     edit: &crate::actions::Edit,
     value: &serde_json::Value,
 ) -> bool {
+    if app.panel.is_some()
+        && edit.doc == crate::docs::DocId::Config
+        && edit.path.as_ref() == "/look/material/tint"
+        && value.is_string()
+        && app
+            .get(crate::docs::DocId::Config, "/look/material/clarity")
+            .and_then(serde_json::Value::as_f64)
+            == Some(1.0)
+        && app
+            .get(crate::docs::DocId::Config, "/look/material/tint")
+            .is_none()
+    {
+        app.apply(
+            "Tint",
+            vec![
+                crate::docs::Op {
+                    doc: edit.doc,
+                    path: edit.path.to_string(),
+                    value: Some(value.clone()),
+                },
+                crate::docs::Op {
+                    doc: edit.doc,
+                    path: "/look/material/clarity".into(),
+                    value: Some(serde_json::json!(0.88)),
+                },
+            ],
+        );
+        return true;
+    }
     if app.panel.is_none() || edit.doc != crate::docs::DocId::Studio {
         return false;
+    }
+    if edit.path.starts_with("/panel/draft/") {
+        app.texts.insert(
+            FieldId::Text(edit.doc, edit.path.clone()),
+            value.as_str().unwrap_or("").to_owned(),
+        );
+        return true;
+    }
+    if let Some(index) = edit
+        .path
+        .strip_prefix("/panel/menu_args/")
+        .and_then(|s| s.parse::<usize>().ok())
+    {
+        match crate::library::split_args(value.as_str().unwrap_or("")) {
+            Ok(args) => app.set(
+                &crate::actions::Edit::new(
+                    crate::docs::DocId::Config,
+                    format!("/desktop_menu/items/{index}/args"),
+                    "Menu arguments",
+                ),
+                serde_json::json!(args),
+            ),
+            Err(error) => app.alert(error.to_string()),
+        }
+        return true;
     }
     if edit.path.as_ref() == "/panel/header" {
         match value.as_str() {
@@ -693,12 +881,42 @@ pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
     if app.panel.is_none() {
         return None;
     }
-    if let Some(value) = app.texts.get(id) {
-        return Some(value.clone());
+    let draft = matches!(id, FieldId::Text(crate::docs::DocId::Studio, path) if path.starts_with("/panel/draft/") || path.starts_with("/list_new") || matches!(path.as_ref(), "/menu_label" | "/menu_command" | "/new_custom" | "/add_fit" | "/add_module_list"));
+    // Persisted fields compare against their document/default when committing, never their
+    // just-typed cache (which otherwise makes every text edit appear unchanged).
+    if draft || !matches!(id, FieldId::Text(..) | FieldId::Hex(_)) {
+        if let Some(value) = app.texts.get(id) {
+            return Some(value.clone());
+        }
     }
     let FieldId::Text(doc, path) = id else {
         return None;
     };
+    if *doc == crate::docs::DocId::Studio
+        && let Some(index) = path
+            .strip_prefix("/panel/menu_args/")
+            .and_then(|s| s.parse::<usize>().ok())
+    {
+        return Some(
+            app.get(
+                crate::docs::DocId::Config,
+                &format!("/desktop_menu/items/{index}/args"),
+            )
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(serde_json::Value::as_str)
+            .map(|s| {
+                if s.contains(' ') {
+                    format!("\"{s}\"")
+                } else {
+                    s.into()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        );
+    }
     if *doc == crate::docs::DocId::Widgets {
         let parts: Vec<_> = path.split('/').collect();
         if parts.get(1) != Some(&"instances") || parts.get(3) != Some(&"settings") {

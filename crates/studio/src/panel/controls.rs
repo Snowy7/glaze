@@ -27,6 +27,108 @@ pub fn height(b: &B, base: f32) -> f32 {
     b.px(base * b.t.text_scale)
 }
 
+pub fn displays(app: &App, b: &mut B, c: &mut Col) {
+    if app.monitors.len() < 2 {
+        return;
+    }
+    let labels: Vec<_> = (1..=app.monitors.len())
+        .map(|i| format!("Display {i}"))
+        .collect();
+    let labels: Vec<_> = labels.iter().map(String::as_str).collect();
+    let r = Rect::new(c.x, c.y + b.px(6.0), c.w, b.px(30.0));
+    b.segmented(
+        key(("panel-displays", c.view)),
+        r,
+        &labels,
+        Some(app.nav.display),
+        "Display",
+        true,
+        |i| Action::Panel(super::Command::Display(i)),
+    );
+    b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
+    c.y = r.bottom + b.px(4.0);
+}
+
+pub fn save_banner(app: &App, b: &mut B, c: &mut Col, page: super::Page) {
+    use super::Page;
+    use crate::docs::DocId;
+    let relevant: &[DocId] = match page {
+        Page::Widgets | Page::Widget | Page::AddWidget => &[DocId::Widgets],
+        Page::Bars
+        | Page::Top
+        | Page::Dock
+        | Page::Module
+        | Page::AddModule
+        | Page::Panels
+        | Page::BarPanel => &[DocId::Bars],
+        Page::Connections | Page::Connection => &[DocId::Integrations, DocId::Bars, DocId::Widgets],
+        Page::General => &[DocId::Studio, DocId::Config],
+        Page::Keyboard | Page::About => &[DocId::Studio],
+        Page::Look | Page::Windows | Page::Performance => {
+            &[DocId::Config, DocId::Bars, DocId::Widgets]
+        }
+        Page::Root | Page::Troubleshoot => &DocId::ALL,
+        _ => &[DocId::Config],
+    };
+    for &doc in relevant {
+        let failed = app.panel.as_ref().unwrap().save_doc.get() == Some(doc);
+        let error = app
+            .docs
+            .error(doc)
+            .map(str::to_owned)
+            .or_else(|| {
+                app.panel
+                    .as_ref()
+                    .unwrap()
+                    .save_errors
+                    .borrow()
+                    .get(&doc)
+                    .cloned()
+            })
+            .or_else(|| match &app.docs.saved {
+                crate::docs::Saved::Failed(error) if failed => Some(error.clone()),
+                _ => None,
+            });
+        let Some(error) = error else {
+            continue;
+        };
+        group(b, c, "Couldn't save", |b, c| {
+            notice(
+                b,
+                c,
+                &format!(
+                    "{}: {}",
+                    doc.label(),
+                    error.lines().next().unwrap_or(&error)
+                ),
+            );
+            let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(30.0));
+            let w = (c.w - b.px(8.0)) / 2.0;
+            button(
+                b,
+                Rect::new(r.left, r.top, w, r.height()),
+                "Show file",
+                None,
+                false,
+                true,
+                Action::ShowFile(doc),
+            );
+            if !app.docs.newer(doc) {
+                button(
+                    b,
+                    Rect::new(r.left + w + b.px(8.0), r.top, w, r.height()),
+                    "Start over",
+                    None,
+                    false,
+                    true,
+                    Action::StartOver(doc),
+                );
+            }
+            c.y = r.bottom + b.px(8.0);
+        });
+    }
+}
+
 pub fn title(b: &mut B, c: &mut Col, title: &str, subtitle: &str) {
     let h = height(b, 28.0);
     text(
@@ -215,12 +317,7 @@ pub fn row(
 ) {
     let h = height(b, if caption.is_empty() { 40.0 } else { 56.0 });
     let r = Rect::new(c.x, c.y, c.w, h);
-    let k = match &action {
-        Action::Panel(super::Command::ListRow(path, index)) => {
-            key(("panel-list-row", path.as_str(), index))
-        }
-        _ => key(("panel-row", c.view, label, caption)),
-    };
+    let k = key(("panel-row", c.view, label, caption));
     let on = checked == Some(true);
     let area = Rect::new(c.x - b.px(8.0), c.y, c.w + b.px(16.0), h);
     if on {
@@ -320,6 +417,17 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
     let s = Setting::get(id).expect("panel uses known settings");
     crate::ui::anchor(app, id, c.view, c.y);
     let value = app.value(s);
+    if id == "font" {
+        crate::panel::pickers::font(
+            app,
+            b,
+            c,
+            Edit::new(s.doc, s.path, s.label),
+            value.as_str().unwrap_or(""),
+        );
+        return;
+    }
+
     let edit = if let Some(field) = s.path.strip_prefix("/look/windows/") {
         Edit::new(
             crate::docs::DocId::Studio,
@@ -464,6 +572,11 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
                 .iter()
                 .map(|(_, l)| b.measure(l, &style).0 + b.px(16.0))
                 .fold(0.0, f32::max);
+            let cell = if matches!(id, "save_power" | "reduce_motion") {
+                cell.max(b.measure("Like Windows", &style).0 + b.px(16.0))
+            } else {
+                cell
+            };
             let required = cell * options.len() as f32;
             let stacked =
                 c.w < b.px(360.0) || b.t.text_scale > 1.0 || c.w - label_w - b.px(8.0) < required;

@@ -136,30 +136,42 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
             );
         });
         if !plugin.faces.is_empty() || !plugin.bars.is_empty() || !plugin.panels.is_empty() {
-            group(b, c, "Adds to your desktop", |b, c| {
+            group(b, c, "Shows in", |b, c| {
                 for face in &plugin.faces {
-                    row(
+                    let id = format!("{}--{}", plugin.id, face.id);
+                    let layout = crate::pages::widgets::layout(app);
+                    let shown = crate::pages::widgets::here(app, &layout)
+                        .iter()
+                        .any(|i| i.widget == id);
+                    toggle(
                         b,
                         c,
-                        Some(glyph::WIDGETS),
                         &face.name,
-                        "Widget",
-                        "",
-                        None,
-                        open(Page::AddWidget),
+                        &format!("Widget · Display {}", app.nav.display + 1),
+                        shown,
+                        if shown {
+                            Action::Panel(Command::HideConnectionWidget(id))
+                        } else {
+                            Action::Panel(Command::PickWidget(id))
+                        },
                     );
                 }
                 for bar in &plugin.bars {
-                    row(
-                        b,
-                        c,
-                        Some(glyph::BARS),
-                        &bar.name,
-                        "Bar module",
-                        "",
-                        None,
-                        open(Page::Bars),
-                    );
+                    let id = format!("custom:{}--{}", plugin.id, bar.id);
+                    for (which, label) in [
+                        (crate::actions::Bar::Top, "Top bar"),
+                        (crate::actions::Bar::Dock, "Dock"),
+                    ] {
+                        let shown = module_shown(app, &id, which);
+                        toggle(
+                            b,
+                            c,
+                            &format!("{label} · {}", bar.name),
+                            "",
+                            shown,
+                            Action::Panel(Command::ConnectionModule(id.clone(), which, !shown)),
+                        );
+                    }
                 }
                 for panel in &plugin.panels {
                     notice(b, c, &format!("Panel · {}", panel.name));
@@ -303,26 +315,20 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
     if item.module.is_some() {
         group(b, c, "Shows in", |b, c| {
             let module = item.module.unwrap();
-            let shown = ["left", "center", "right"].iter().any(|side| {
-                app.get(DocId::Bars, &format!("/top/{side}"))
-                    .and_then(Value::as_array)
-                    .is_some_and(|list| list.iter().any(|m| m.as_str() == Some(module)))
-            });
-            toggle(
-                b,
-                c,
-                "Top bar",
-                "Its module, at the end",
-                shown,
-                Action::Set(
-                    Edit::new(
-                        DocId::Studio,
-                        format!("/integration_module/{index}"),
-                        "Shows in",
-                    ),
-                    Value::Null,
-                ),
-            );
+            for (bar, label) in [
+                (crate::actions::Bar::Top, "Top bar"),
+                (crate::actions::Bar::Dock, "Dock"),
+            ] {
+                let shown = module_shown(app, module, bar);
+                toggle(
+                    b,
+                    c,
+                    label,
+                    "Its module, at the end",
+                    shown,
+                    Action::Panel(Command::ConnectionModule(module.into(), bar, !shown)),
+                );
+            }
         });
     }
     group(b, c, "Options", |b, c| {
@@ -358,4 +364,52 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
         }
     });
     group(b, c, "Privacy", |b, c| notice(b, c, item.privacy));
+}
+
+fn module_shown(app: &App, id: &str, bar: crate::actions::Bar) -> bool {
+    ["left", "center", "right"].iter().any(|side| {
+        app.get(DocId::Bars, &format!("/{}/{side}", bar.key()))
+            .and_then(Value::as_array)
+            .is_some_and(|list| list.iter().any(|m| m.as_str() == Some(id)))
+    })
+}
+
+pub fn connection_module(app: &mut App, id: &str, bar: crate::actions::Bar, on: bool) {
+    let ops = ["left", "center", "right"]
+        .into_iter()
+        .filter(|side| bar != crate::actions::Bar::Dock || *side != "center")
+        .filter_map(|side| {
+            let path = format!("/{}/{side}", bar.key());
+            let before = app
+                .get(DocId::Bars, &path)
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let mut after = before.clone();
+            after.retain(|m| m.as_str() != Some(id));
+            if on && side == "right" {
+                after.push(json!(id));
+            }
+            (after != before).then_some(crate::docs::Op {
+                doc: DocId::Bars,
+                path,
+                value: Some(json!(after)),
+            })
+        })
+        .collect();
+    app.apply("Connection module", ops);
+}
+
+pub fn hide_connection_widget(app: &mut App, widget: &str) {
+    let mut layout = crate::pages::widgets::layout(app);
+    let here: Vec<_> = crate::pages::widgets::here(app, &layout)
+        .iter()
+        .filter(|i| i.widget == widget)
+        .map(|i| i.instance.clone())
+        .collect();
+    layout.instances.retain(|i| !here.contains(&i.instance));
+    app.set(
+        &Edit::new(DocId::Widgets, "/instances", "Remove connection widget"),
+        json!(layout.instances),
+    );
 }

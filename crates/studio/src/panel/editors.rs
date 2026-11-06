@@ -1,11 +1,13 @@
 mod bars;
 mod connections;
 pub use bars::insert_module;
+pub use connections::{connection_module, hide_connection_widget};
 mod look;
 mod settings;
+pub use settings::add_menu_item;
 mod wallpapers;
 mod widgets;
-pub use widgets::{can_add_widget, move_list, move_photos, pick_asset};
+pub use widgets::{can_add_widget, pick_asset};
 
 use mypaper_ui::controls::{Align, Behavior, key};
 use mypaper_ui::{Rect, Role};
@@ -47,6 +49,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::AddModule => bars::add(app, b, c),
         Page::Panels => bars::panels(b, c),
         Page::BarPanel => bars::panel(app, b, c),
+        Page::FirstRun => super::first_run::view(app, b, c),
         _ => {}
     }
 }
@@ -95,7 +98,29 @@ pub fn design_row(b: &mut B, c: &mut Col, id: &str, name: &str, on: bool, action
             (46., 4., 14., 6., 3.),
             (20., 21., 24., 6., 3.),
         ],
-        "windows11" | "windows10" | "edge" => vec![(0., 25., 64., 7., 1.)],
+        "windows11" => vec![
+            (0., 24., 64., 8., 0.),
+            (23., 26., 3., 3., 1.),
+            (28., 26., 3., 3., 1.),
+            (33., 26., 3., 3., 1.),
+            (38., 26., 3., 3., 1.),
+        ],
+        "windows10" => vec![
+            (0., 24., 64., 8., 0.),
+            (3., 26., 3., 3., 0.),
+            (10., 26., 13., 3., 0.),
+            (27., 26., 3., 3., 0.),
+            (33., 26., 3., 3., 0.),
+        ],
+        "edge" => vec![(0., 0., 64., 5., 0.), (0., 25., 64., 7., 0.)],
+        "fluent" => vec![(0., 0., 64., 6., 0.), (13., 22., 38., 7., 2.)],
+        "minimal" => vec![
+            (3., 4., 58., 2., 0.),
+            (24., 25., 3., 3., 0.),
+            (30., 25., 3., 3., 0.),
+            (36., 25., 3., 3., 0.),
+        ],
+        "neon" => vec![(5., 4., 54., 5., 2.), (17., 22., 30., 6., 3.)],
         "chromeos" => vec![(4., 21., 56., 7., 4.)],
         "floating" | "pill" | "capsule" => vec![(10., 4., 44., 6., 3.), (20., 21., 24., 6., 3.)],
         _ => vec![
@@ -105,11 +130,34 @@ pub fn design_row(b: &mut B, c: &mut Col, id: &str, name: &str, on: bool, action
             (38., 22., 5., 5., 1.),
         ],
     };
-    for (x, y, w, h, radius) in parts {
+    let only = match &action {
+        Action::Set(edit, _) if edit.path.as_ref() == "/top/design" => {
+            Some(crate::actions::Bar::Top)
+        }
+        Action::Set(edit, _) if edit.path.as_ref() == "/dock/design" => {
+            Some(crate::actions::Bar::Dock)
+        }
+        _ => None,
+    };
+    for (part, (x, y, w, h, radius)) in parts.into_iter().enumerate() {
+        if only == Some(crate::actions::Bar::Top) && y > 16.0
+            || only == Some(crate::actions::Bar::Dock) && y < 16.0
+        {
+            continue;
+        }
+        let y = if only.is_some() {
+            if y < 16.0 { y + 10.0 } else { y - 10.0 }
+        } else {
+            y
+        };
         b.fill(
             Rect::new(r.left + b.px(x), r.top + b.px(y), b.px(w), b.px(h)),
             b.px(radius),
-            b.p.ink2,
+            if id.starts_with("windows") && part > 0 {
+                b.p.panel
+            } else {
+                b.p.ink2
+            },
         );
     }
     b.hit(
@@ -227,7 +275,7 @@ pub fn action_button(b: &mut B, c: &mut Col, label: &str, action: Action) {
 
 pub fn footer_height(app: &App) -> f32 {
     match app.panel.as_ref().map(|s| s.page) {
-        Some(Page::AddWidget | Page::AddWallpaper | Page::AddModule) => 64.0,
+        Some(Page::AddWidget | Page::AddWallpaper | Page::AddModule | Page::FirstRun) => 64.0,
         Some(Page::History)
             if app
                 .panel
@@ -252,6 +300,20 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
     b.hline(r.left, r.right, r.top, b.p.line);
     let state = app.panel.as_ref().unwrap();
     let (secondary, cancel, primary, commit, enabled) = match state.page {
+        Page::FirstRun => (
+            "Skip",
+            Action::FirstRunSkip,
+            if matches!(
+                app.overlay,
+                Some(crate::app::Overlay::FirstRun { step: 2, .. })
+            ) {
+                "Open Studio"
+            } else {
+                "Continue"
+            },
+            Action::FirstRunNext,
+            true,
+        ),
         Page::AddWidget => (
             "Cancel",
             open(Page::Widgets),
@@ -265,7 +327,7 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
         Page::AddWallpaper => (
             "Cancel",
             open(Page::Wallpapers),
-            "Add",
+            "Add and use",
             Action::AddCommit(true),
             wallpapers::can_add(app),
         ),
@@ -333,9 +395,21 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
                 b,
                 c,
                 Some(glyph::CLOCK),
-                &entry.title,
-                "",
-                &entry.detail,
+                if entry.summary.is_empty() {
+                    &entry.title
+                } else {
+                    &entry.summary
+                },
+                if i + 1 == history.entries.len() {
+                    "Now"
+                } else {
+                    ""
+                },
+                &format!(
+                    "{} · {}",
+                    super::history::time_label(entry.at),
+                    entry.detail
+                ),
                 Some(history.selected == Some(i)),
                 Action::Panel(Command::History(i)),
             );
@@ -426,12 +500,13 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
                 c,
                 &format!(
                     "{} bars · {count} widgets",
-                    entry
-                        .desktop
-                        .bars()
-                        .get("preset")
-                        .and_then(Value::as_str)
-                        .unwrap_or("Your")
+                    crate::pages::bars::PRESETS
+                        .iter()
+                        .find(
+                            |(id, _)| entry.desktop.bars().get("preset").and_then(Value::as_str)
+                                == Some(id)
+                        )
+                        .map_or("Custom", |(_, name)| *name)
                 ),
             );
         });
@@ -447,7 +522,42 @@ fn search(app: &App, b: &mut B, c: &mut Col) {
     );
     super::controls::search(app, b, c);
     let results = crate::search::results(app);
-    if results.is_empty() {
+    let query = app.text(&FieldId::Palette).trim().to_lowercase();
+    let words: Vec<_> = query.split_whitespace().collect();
+    let wallpapers: Vec<_> = app
+        .library
+        .items
+        .iter()
+        .enumerate()
+        .filter(|(_, w)| {
+            !query.is_empty()
+                && !w.hidden
+                && words
+                    .iter()
+                    .all(|word| format!("wallpaper {}", w.haystack()).contains(word))
+        })
+        .take(6)
+        .map(|(i, _)| i)
+        .collect();
+    let widgets: Vec<_> = app
+        .registry
+        .widgets
+        .iter()
+        .filter(|(_, w)| {
+            !query.is_empty()
+                && words.iter().all(|word| {
+                    format!(
+                        "widget {} {}",
+                        w.manifest.name,
+                        w.manifest.description.as_deref().unwrap_or("")
+                    )
+                    .to_lowercase()
+                    .contains(word)
+                })
+        })
+        .take(8)
+        .collect();
+    if results.is_empty() && wallpapers.is_empty() && widgets.is_empty() {
         notice(
             b,
             c,
@@ -463,10 +573,38 @@ fn search(app: &App, b: &mut B, c: &mut Col) {
         "Go to",
         "Recent",
     ] {
+        if name == "Wallpapers" {
+            if !wallpapers.is_empty() {
+                group(b, c, "Wallpapers", |b, c| {
+                    wallpapers::cards(app, b, c, &wallpapers)
+                });
+            }
+            continue;
+        }
+        if name == "Widgets" {
+            if !widgets.is_empty() {
+                group(b, c, "Widgets", |b, c| {
+                    for (id, widget) in &widgets {
+                        crate::panel::icons::row(
+                            app,
+                            b,
+                            c,
+                            id,
+                            crate::pages::widgets::glyph_of(id),
+                            &widget.manifest.name,
+                            "Add to your desktop",
+                            false,
+                            Action::Panel(Command::PickWidget((*id).clone())),
+                        );
+                    }
+                });
+            }
+            continue;
+        }
         let items: Vec<_> = results
             .iter()
             .enumerate()
-            .filter(|(_, e)| e.group == name)
+            .filter(|(_, e)| e.group == name && e.action != Action::Peek)
             .collect();
         if items.is_empty() {
             continue;

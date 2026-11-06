@@ -41,9 +41,13 @@ fn render_panel_pages() {
             (Page::Bars, "bars"),
             (Page::Performance, "performance"),
             (Page::Top, "top-bar"),
+            (Page::Top, "top-bar-designs"),
             (Page::Dock, "dock"),
+            (Page::Dock, "dock-designs"),
             (Page::Widget, "weather"),
             (Page::Widget, "clock"),
+            (Page::Widget, "clock-world"),
+            (Page::Widget, "clock-greeting"),
             (Page::Widget, "photos"),
             (Page::AddWidget, "add-widget"),
             (Page::Look, "look"),
@@ -68,6 +72,11 @@ fn render_panel_pages() {
             (Page::DesktopMenu, "desktop-menu"),
             (Page::History, "history"),
             (Page::Search, "search"),
+            (Page::Search, "search-widgets"),
+            (Page::Look, "save-failed"),
+            (Page::FirstRun, "first-run"),
+            (Page::FirstRun, "first-run-taskbar"),
+            (Page::FirstRun, "first-run-recovery"),
             (Page::Module, "module"),
             (Page::AddModule, "add-module"),
             (Page::Panels, "panels"),
@@ -81,7 +90,23 @@ fn render_panel_pages() {
             app.panel.as_mut().unwrap().page = page;
             match name {
                 "weather" => app.nav.widget = Some("weather-1".into()),
-                "clock" => app.nav.widget = Some("clock-1".into()),
+                "clock" | "clock-world" | "clock-greeting" => {
+                    app.nav.widget = Some("clock-1".into());
+                    if name != "clock" {
+                        app.run(Action::Set(
+                            crate::actions::Edit::new(
+                                DocId::Widgets,
+                                "/instances/0/settings/variant",
+                                "Face",
+                            ),
+                            json!(if name == "clock-world" {
+                                "world"
+                            } else {
+                                "words"
+                            }),
+                        ));
+                    }
+                }
                 "photos" => {
                     let mut layout = crate::pages::widgets::layout(&app);
                     let mut photo = layout.instances[0].clone();
@@ -168,13 +193,61 @@ fn render_panel_pages() {
                     app.run(Action::Preset("islands"));
                     super::history::observe(&app);
                     app.panel.as_ref().unwrap().history.borrow_mut().selected = Some(0);
+                    for (i, entry) in app
+                        .panel
+                        .as_ref()
+                        .unwrap()
+                        .history
+                        .borrow_mut()
+                        .entries
+                        .iter_mut()
+                        .enumerate()
+                    {
+                        entry.at = 1793958138 + i as u64 * 60;
+                    }
                 }
                 "search" => {
                     app.texts
                         .insert(crate::actions::FieldId::Palette, "wallpaper".into());
                 }
+                "search-widgets" => {
+                    app.texts
+                        .insert(crate::actions::FieldId::Palette, "clock".into());
+                }
+                "save-failed" => {
+                    super::save_failed(
+                        &mut app,
+                        Some(DocId::Config),
+                        "The settings folder is read-only.",
+                    );
+                }
+                "first-run" | "first-run-taskbar" | "first-run-recovery" => {
+                    app.overlay = Some(crate::app::Overlay::FirstRun {
+                        step: match name {
+                            "first-run-taskbar" => 1,
+                            "first-run-recovery" => 2,
+                            _ => 0,
+                        },
+                        starter: 0,
+                        taskbar: 0,
+                    });
+                }
                 "top-bar" => app.nav.bar = Some(crate::actions::Bar::Top),
+                "top-bar-designs" => {
+                    app.nav.bar = Some(crate::actions::Bar::Top);
+                    app.nav.more.insert(mypaper_ui::controls::key((
+                        "panel-bar-designs",
+                        crate::actions::Bar::Top,
+                    )));
+                }
                 "dock" => app.nav.bar = Some(crate::actions::Bar::Dock),
+                "dock-designs" => {
+                    app.nav.bar = Some(crate::actions::Bar::Dock);
+                    app.nav.more.insert(mypaper_ui::controls::key((
+                        "panel-bar-designs",
+                        crate::actions::Bar::Dock,
+                    )));
+                }
                 "module" => {
                     app.nav.bar = Some(crate::actions::Bar::Top);
                     app.nav.module = Some(crate::actions::Slot {
@@ -528,7 +601,7 @@ fn keyboard_can_reorder_menu_items_without_removing_them() {
     super::run(&mut app, Command::Open(Page::DesktopMenu));
     let built = super::build(&app, &mut ui.text);
     app.frame.targets = built.targets;
-    app.input.focus = Some(mypaper_ui::controls::key(("menu-item", 0usize)));
+    app.input.focus = Some(super::lists::row_key(&super::SortList::Menu, 0));
     app.key_with(0x28, (false, false, true));
     let items = app
         .get(DocId::Config, "/desktop_menu/items")
@@ -542,6 +615,214 @@ fn keyboard_can_reorder_menu_items_without_removing_them() {
     );
     assert_eq!(
         app.input.focus,
-        Some(mypaper_ui::controls::key(("menu-item", 1usize)))
+        Some(super::lists::row_key(&super::SortList::Menu, 1))
+    );
+}
+
+#[test]
+fn a_list_drag_writes_once_on_drop_and_is_one_undo_step() {
+    use mypaper_ui::{Button, Event, Point, Pointer};
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    super::run(&mut app, Command::Open(Page::DesktopMenu));
+    let before = app.docs.doc(DocId::Config).raw.clone();
+    let built = super::build(&app, &mut ui.text);
+    let handle = built
+        .targets
+        .iter()
+        .find(|t| t.action == Action::Panel(Command::SortHandle(super::SortList::Menu, 0)))
+        .unwrap()
+        .rect;
+    let destination = built
+        .targets
+        .iter()
+        .find(|t| t.action == Action::Panel(Command::SortRow(super::SortList::Menu, 2)))
+        .unwrap()
+        .rect;
+    let pointer = |r: mypaper_ui::Rect| Pointer {
+        at: Point::new((r.left + r.right) / 2.0, (r.top + r.bottom) / 2.0),
+        screen: (0, 0),
+    };
+    app.frame.targets = built.targets;
+    app.event(Event::Press(pointer(handle), Button::Left));
+    app.event(Event::Move(pointer(destination)));
+    assert_eq!(
+        app.docs.doc(DocId::Config).raw,
+        before,
+        "moving only paints the insertion marker"
+    );
+    assert_eq!(app.docs.undo_count(), 0);
+    app.event(Event::Release(pointer(destination), Button::Left));
+    let items = app
+        .get(DocId::Config, "/desktop_menu/items")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        &items[..3],
+        &[json!("sort"), json!("refresh"), json!("view")]
+    );
+    assert_eq!(app.docs.undo_count(), 1);
+    app.run(Action::Undo);
+    assert_eq!(app.docs.doc(DocId::Config).raw, before);
+}
+
+#[test]
+fn save_failures_are_visible_on_the_affected_page_and_clear_after_a_valid_edit() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    super::run(&mut app, Command::Open(Page::Performance));
+    let edit = crate::actions::Edit::new(DocId::Config, "/engine/fps", "Frame rate");
+    app.run(Action::Set(edit.clone(), json!("invalid")));
+    assert!(matches!(app.docs.saved, crate::docs::Saved::Failed(_)));
+    let built = super::build(&app, &mut ui.text);
+    assert!(
+        built
+            .targets
+            .iter()
+            .any(|t| t.action == Action::ShowFile(DocId::Config))
+    );
+    assert!(
+        built
+            .targets
+            .iter()
+            .any(|t| t.action == Action::StartOver(DocId::Config))
+    );
+    app.run(Action::Set(edit, json!(60)));
+    assert!(app.panel.as_ref().unwrap().save_errors.borrow().is_empty());
+    let built = super::build(&app, &mut ui.text);
+    assert!(
+        !built
+            .targets
+            .iter()
+            .any(|t| t.action == Action::StartOver(DocId::Config))
+    );
+}
+
+#[test]
+fn display_navigation_and_home_shortcuts_do_not_edit_the_desktop() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    for page in [Page::Widgets, Page::Bars] {
+        super::run(&mut app, Command::Open(page));
+        let built = super::build(&app, &mut ui.text);
+        assert!(
+            built
+                .targets
+                .iter()
+                .any(|t| t.action == Action::Panel(Command::Display(1)))
+        );
+    }
+    let before = app.docs.version;
+    super::run(&mut app, Command::Display(1));
+    assert_eq!(app.nav.display, 1);
+    app.key_with(0x30, (true, false, false));
+    assert_eq!(app.panel.as_ref().unwrap().page, Page::Root);
+    assert_eq!(app.docs.version, before);
+    app.monitors.truncate(1);
+    app.nav.display = 0;
+    super::run(&mut app, Command::Open(Page::Widgets));
+    assert!(
+        !super::build(&app, &mut ui.text)
+            .targets
+            .iter()
+            .any(|t| matches!(t.action, Action::Panel(Command::Display(_))))
+    );
+}
+
+#[test]
+fn built_in_wallpaper_fit_requires_an_explicit_copy() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    let index = app
+        .library
+        .items
+        .iter()
+        .position(|w| !w.editable() && w.kind.is_some_and(crate::library::Kind::uses_fit))
+        .unwrap();
+    super::run(&mut app, Command::Wallpaper(index));
+    let built = super::build(&app, &mut ui.text);
+    assert!(
+        built
+            .targets
+            .iter()
+            .any(|t| t.action == Action::CopyWallpaper(index))
+    );
+    assert!(
+        !built.targets.iter().any(
+            |t| matches!(&t.action,Action::Set(edit,_) if edit.path.ends_with("/wallpaper/fit"))
+        )
+    );
+    let copies: Vec<_> = built
+        .list
+        .hits
+        .iter()
+        .filter(|h| h.label.as_ref() == "Make a copy to edit")
+        .collect();
+    assert_eq!(copies.len(), 1);
+}
+
+#[test]
+fn first_run_stays_in_the_panel_and_finishes_through_its_footer() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    super::run(&mut app, Command::Open(Page::FirstRun));
+    let built = super::build(&app, &mut ui.text);
+    assert!(
+        built
+            .targets
+            .iter()
+            .any(|t| t.action == Action::FirstRunNext)
+    );
+    app.run(Action::FirstRunPick(0));
+    app.run(Action::FirstRunNext);
+    assert!(matches!(
+        app.overlay,
+        Some(crate::app::Overlay::FirstRun { step: 1, .. })
+    ));
+    app.run(Action::FirstRunTaskbar(1));
+    app.run(Action::FirstRunNext);
+    assert!(matches!(
+        app.overlay,
+        Some(crate::app::Overlay::FirstRun { step: 2, .. })
+    ));
+    app.run(Action::FirstRunNext);
+    assert_eq!(app.panel.as_ref().unwrap().page, Page::Root);
+    assert_eq!(
+        app.get(DocId::Studio, "/first_run_done"),
+        Some(&json!(true))
+    );
+    assert!(
+        DocId::ALL
+            .into_iter()
+            .all(|id| app.docs.doc(id).path.is_none())
+    );
+}
+
+#[test]
+fn history_summarizes_the_whole_coalesced_style_change_and_fields_ignore_typed_cache() {
+    let ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    super::history::observe(&app);
+    app.run(Action::SetStyle(Some(mypaper_config::look::Style::Solid)));
+    app.run(Action::SetStyle(Some(mypaper_config::look::Style::Fluent)));
+    assert_eq!(
+        app.panel
+            .as_ref()
+            .unwrap()
+            .history
+            .borrow()
+            .entries
+            .last()
+            .unwrap()
+            .summary,
+        "Look: Liquid → Fluent"
+    );
+    let field =
+        crate::actions::FieldId::Text(DocId::Widgets, "/instances/0/settings/zones/0/tz".into());
+    app.texts.insert(field.clone(), "just-typed text".into());
+    assert_eq!(
+        super::field_initial(&app, &field).as_deref(),
+        Some("America/New_York")
     );
 }

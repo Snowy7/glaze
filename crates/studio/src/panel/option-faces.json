@@ -1,0 +1,10 @@
+[
+  {"widget":"clock","key":"showSeconds","when":{"variant":["desk","flip","analog"]}},
+  {"widget":"clock","key":"zones","when":{"variant":["world"]}},
+  {"widget":"clock","key":"name","when":{"variant":["words"]}},
+  {"widget":"photo","key":"caption","when":{"variant":["polaroid"]}},
+  {"widget":"countdown","key":"startDate","when":{"style":["ring"]}},
+  {"widget":"launcher","key":"engine","when":{"search":[true]}},
+  {"widget":"launcher","key":"customUrl","when":{"search":[true],"engine":["custom"]}},
+  {"widget":"system-monitor","key":"drives","when":{"disk":[true]}}
+]

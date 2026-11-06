@@ -66,7 +66,11 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
     let base = format!("/instances/{index}");
     let resolved = manifest.resolve_settings(&instance.settings);
     let mut groups = Vec::new();
-    for setting in &manifest.settings {
+    for setting in manifest
+        .settings
+        .iter()
+        .filter(|s| crate::panel::options::visible(&instance.widget, s, &resolved))
+    {
         let group = legacy::group_of(setting).unwrap_or("Options");
         if !groups.contains(&group) {
             groups.push(group);
@@ -78,11 +82,10 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
                 photos(app, b, c, instance, &resolved, &base);
                 return;
             }
-            for setting in manifest
-                .settings
-                .iter()
-                .filter(|s| legacy::group_of(s).unwrap_or("Options") == heading)
-            {
+            for setting in manifest.settings.iter().filter(|s| {
+                legacy::group_of(s).unwrap_or("Options") == heading
+                    && crate::panel::options::visible(&instance.widget, s, &resolved)
+            }) {
                 manifest_control(app, b, c, &base, &resolved, setting, instance, manifest);
             }
         });
@@ -152,13 +155,14 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
                     .map(|(v, l)| (json!(v), l.into()))
                     .collect(),
             );
-            crate::ui::swatches(
+            crate::panel::colors::swatches(
                 app,
                 b,
                 c,
                 &Edit::new(DocId::Widgets, format!("{base}/appearance/tint"), "Tint"),
                 app.get(DocId::Widgets, &format!("{base}/appearance/tint")),
-                None,
+                false,
+                false,
                 &[
                     [139, 158, 183],
                     [127, 174, 142],
@@ -176,17 +180,6 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
                     "Follow Look",
                 )),
             );
-        } else {
-            row(
-                b,
-                c,
-                Some(glyph::LOOK),
-                "Look",
-                "From Look",
-                "",
-                None,
-                open(Page::Look),
-            );
         }
     });
 }
@@ -202,6 +195,9 @@ fn manifest_control(
     instance: &Instance,
     manifest: &WidgetManifest,
 ) {
+    let placeholder = crate::panel::options::placeholder(&instance.widget, setting);
+    let presentation = crate::panel::options::presentation(setting);
+    let setting = &presentation;
     match setting {
         Setting::Select {
             key: name,
@@ -246,7 +242,7 @@ fn manifest_control(
                 b,
                 c,
                 key(("panel-faces", name)),
-                3,
+                2,
                 false,
                 &tiles,
                 |b, i, pic| face(app, b, instance, manifest, name, options[i].0, pic),
@@ -272,10 +268,22 @@ fn manifest_control(
                 ),
             );
         }
-        Setting::String {
+        Setting::Font {
             key: name, label, ..
+        } => {
+            crate::panel::pickers::font(
+                app,
+                b,
+                c,
+                Edit::new(
+                    DocId::Widgets,
+                    format!("{base}/settings/{}", crate::docs::token(name)),
+                    label.as_str(),
+                ),
+                resolved.get(name).and_then(Value::as_str).unwrap_or(""),
+            );
         }
-        | Setting::Font {
+        Setting::String {
             key: name, label, ..
         } => {
             field(
@@ -287,8 +295,12 @@ fn manifest_control(
                     format!("{base}/settings/{}", crate::docs::token(name)).into(),
                 ),
                 label,
-                "",
-                resolved.get(name).and_then(Value::as_str).unwrap_or(""),
+                &placeholder,
+                instance
+                    .settings
+                    .get(name)
+                    .and_then(Value::as_str)
+                    .unwrap_or(""),
             );
         }
         Setting::List {
@@ -321,21 +333,33 @@ fn manifest_control(
             for (i, item) in items.iter().enumerate() {
                 let summary = fields
                     .iter()
+                    .filter(|f| name != "zones" || f["key"] != "tz")
                     .filter_map(|f| f["key"].as_str().and_then(|k| item[k].as_str()))
                     .collect::<Vec<_>>()
                     .join(" · ");
                 let disclosure = key(("panel-list-item", path.as_str(), i));
-                row(
+                crate::panel::lists::row(
+                    app,
                     b,
                     c,
-                    Some(glyph::GRIP),
-                    &format!("{}", i + 1),
-                    "Edit",
+                    &crate::panel::SortList::Widget(path.clone()),
+                    i,
                     &summary,
+                    false,
                     None,
-                    Action::Panel(Command::ListRow(path.clone(), i)),
+                    None,
                 );
                 if app.is_open(disclosure) {
+                    if name == "zones" {
+                        crate::panel::pickers::zones(
+                            app,
+                            b,
+                            c,
+                            crate::panel::pickers::ZoneTarget::Record(format!("{path}/{i}")),
+                            "Choose a city",
+                        );
+                        continue;
+                    }
                     for schema in &fields {
                         let Some(name) = schema["key"].as_str() else {
                             continue;
@@ -425,32 +449,37 @@ fn manifest_control(
                             ),
                         }
                     }
-                    for (label, action) in [
-                        (
-                            "Move up",
-                            Action::Panel(Command::MoveList(path.clone(), i, -1)),
-                        ),
-                        (
-                            "Move down",
-                            Action::Panel(Command::MoveList(path.clone(), i, 1)),
-                        ),
-                        ("Remove item", Action::ListRemove(path.clone(), i)),
-                    ] {
-                        action_button(b, c, label, action);
-                    }
                 }
             }
             if max_items.is_none_or(|max| items.len() < max) {
-                field(
-                    app,
-                    b,
-                    c,
-                    FieldId::Text(DocId::Studio, format!("/list_new{path}").into()),
-                    "New item",
-                    "Name",
-                    "",
-                );
-                action_button(b, c, "Add item", Action::ListAdd(path));
+                if name == "zones" {
+                    crate::panel::pickers::zones(
+                        app,
+                        b,
+                        c,
+                        crate::panel::pickers::ZoneTarget::AddRecord(path),
+                        "Add a city",
+                    );
+                } else {
+                    let noun = match name.as_str() {
+                        "shortcuts" => "app",
+                        "feeds" => "feed",
+                        "coins" => "coin",
+                        "items" => "item",
+                        "tasks" => "task",
+                        _ => "entry",
+                    };
+                    field(
+                        app,
+                        b,
+                        c,
+                        FieldId::Text(DocId::Studio, format!("/list_new{path}").into()),
+                        &format!("New {noun}"),
+                        "Name",
+                        "",
+                    );
+                    action_button(b, c, &format!("Add {noun}"), Action::ListAdd(path));
+                }
             }
         }
         Setting::File {
@@ -578,39 +607,73 @@ fn face(
             .and_then(|i| app.library.items[i].preview.as_ref())
             .and_then(|p| app.images.borrow_mut().get(p, (256, 160)));
     }
-    let inner = pic.inflate(-b.px(6.0));
-    let aspect = if instance.widget == "weather" && value == "compact" {
-        4.5
+    // Render at native scale before reducing. The shell's text fitting works in DIPs;
+    // tiny fractional scales can otherwise turn the greeting into “Good…”.
+    let (width, height) = if instance.widget == "weather" && value == "compact" {
+        (450, 100)
     } else {
-        1.65
+        (360, 220)
     };
-    let w = inner.width().min(inner.height() * aspect);
-    let h = w / aspect;
-    let x = inner.left + (inner.width() - w) / 2.0;
-    let y = inner.top + (inner.height() - h) / 2.0;
-    let scale = w / 300.0;
-    let list = view(
-        &model,
-        &tokens(&appearance),
-        Frame {
-            size: (w.max(1.0) as u32, h.max(1.0) as u32),
-            scale,
-            now,
-            instant: std::time::Instant::now(),
-            editing: false,
-        },
-        b.text,
+    if instance.widget == "clock" && value == "words" {
+        model.placed.settings.insert("name".into(), json!("Ada"));
+    }
+    let cache_key = format!(
+        "face:{}:{setting}:{value}:{}:{}",
+        instance.widget,
+        serde_json::to_string(&model.placed.settings).unwrap_or_default(),
+        app.library
+            .active()
+            .map_or("", |i| app.library.items[i].id.as_str())
     );
-    b.fill(
-        Rect::new(x, y, w, h),
-        16.0 * scale,
-        crate::panel::tokens::hex(0x344052).with_alpha(0.85),
-    );
-    b.list.ops.push(mypaper_ui::Op::Clip { rect: pic });
-    b.list
-        .ops
-        .extend(crate::stage::offset(&list.ops, x.round(), y.round()));
-    b.list.ops.push(mypaper_ui::Op::Unclip);
+    let state = app.panel.as_ref().unwrap();
+    let cached = state.specimens.borrow().get(&cache_key).cloned();
+    let image = cached.or_else(|| {
+        let mut list = view(
+            &model,
+            &tokens(&appearance),
+            Frame {
+                size: (width, height),
+                scale: 1.0,
+                now,
+                instant: std::time::Instant::now(),
+                editing: false,
+            },
+            b.text,
+        );
+        list.ops.insert(
+            0,
+            mypaper_ui::Op::Fill {
+                rect: Rect::new(0.0, 0.0, width as f32, height as f32),
+                radius: 22.0,
+                color: crate::panel::tokens::hex(0x344052).with_alpha(0.85),
+            },
+        );
+        let mut ui = mypaper_ui::Ui::new().ok()?;
+        let image = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, width, height).ok()?);
+        let mut cache = state.specimens.borrow_mut();
+        if cache.len() >= 80 {
+            cache.clear();
+        }
+        cache.insert(cache_key, image.clone());
+        Some(image)
+    });
+    if let Some(image) = image {
+        let inner = pic.inflate(-b.px(6.0));
+        let factor = (inner.width() / width as f32).min(inner.height() / height as f32);
+        let (w, h) = (width as f32 * factor, height as f32 * factor);
+        crate::stage::image_round(
+            b,
+            Rect::new(
+                inner.left + (inner.width() - w) / 2.0,
+                inner.top + (inner.height() - h) / 2.0,
+                w,
+                h,
+            ),
+            &image,
+            1.0,
+            b.px(8.0),
+        );
+    }
 }
 
 fn photos(
@@ -621,37 +684,32 @@ fn photos(
     resolved: &Map<String, Value>,
     base: &str,
 ) {
-    for n in 1..=6 {
-        let key = format!("image{n}");
-        let value = resolved.get(&key).and_then(Value::as_str).unwrap_or("");
-        let Some(url) = mypaper_widgets::pick::parse_data_url(value) else {
-            continue;
-        };
-        let r = Rect::new(c.x, c.y, c.w, height(b, 44.0));
-        let row_key = mypaper_ui::controls::key(("panel-photo-row", n - 1));
-        let select = Rect::new(r.left, r.top, r.width() - b.px(90.0), r.height());
-        b.hit(
-            row_key,
-            select,
-            mypaper_ui::Role::ListItem,
+    let photos: Vec<_> = (1..=6)
+        .filter_map(|n| {
+            resolved
+                .get(&format!("image{n}"))
+                .and_then(Value::as_str)
+                .and_then(mypaper_widgets::pick::parse_data_url)
+        })
+        .collect();
+    for (index, url) in photos.iter().enumerate() {
+        let pic = crate::panel::lists::row(
+            app,
+            b,
+            c,
+            &crate::panel::SortList::Photos,
+            index,
             &url.name,
-            Action::Panel(Command::PhotoRow(n - 1)),
-            mypaper_ui::controls::Behavior::Click,
+            false,
+            Some(glyph::PHOTO),
+            None,
         );
-        b.focus_ring(row_key, select, b.px(6.0));
-        b.icon(
-            Rect::new(c.x, c.y, b.px(16.0), r.height()),
-            glyph::GRIP,
-            12.0,
-            b.p.ink3,
-        );
-        let pic = Rect::new(c.x + b.px(22.0), c.y + b.px(8.0), b.px(36.0), b.px(28.0));
         let path = if app.fixture {
             app.library
                 .items
                 .iter()
                 .filter_map(|w| w.preview.clone())
-                .nth(n - 1)
+                .nth(index)
         } else {
             mypaper_widgets::files::user("widget-data")
                 .ok()
@@ -662,69 +720,6 @@ fn photos(
         {
             crate::stage::image_round(b, pic, &image, 1.0, b.px(4.0));
         }
-        text(
-            b,
-            Rect::new(
-                pic.right + b.px(8.0),
-                r.top,
-                (r.right - pic.right - b.px(104.0)).max(0.0),
-                r.height(),
-            ),
-            &url.name,
-            12.0,
-            400,
-            b.p.ink1,
-            Align::Start,
-        );
-        for (column, icon, label, enabled, action) in [
-            (
-                0,
-                mypaper_ui::icons::Icon::ChevronUp.into(),
-                format!("Move photo {n} up"),
-                n > 1,
-                Action::Panel(Command::MovePhotos(n - 1, -1)),
-            ),
-            (
-                1,
-                glyph::CHEVRON_DOWN,
-                format!("Move photo {n} down"),
-                n < 6
-                    && resolved
-                        .get(&format!("image{}", n + 1))
-                        .and_then(Value::as_str)
-                        .is_some_and(|v| !v.is_empty()),
-                Action::Panel(Command::MovePhotos(n - 1, 1)),
-            ),
-            (
-                2,
-                glyph::DELETE,
-                format!("Remove photo {n}"),
-                true,
-                Action::Set(
-                    Edit::new(
-                        DocId::Widgets,
-                        format!("{base}/settings/{key}"),
-                        "Remove photo",
-                    ),
-                    json!(""),
-                ),
-            ),
-        ] {
-            crate::panel::controls::icon_button(
-                b,
-                Rect::new(
-                    r.right - b.px(84.0) + column as f32 * b.px(28.0),
-                    r.top + b.px(8.0),
-                    b.px(26.0),
-                    b.px(28.0),
-                ),
-                icon,
-                &label,
-                enabled,
-                action,
-            );
-        }
-        c.y = r.bottom;
     }
     if let Some(n) = (1..=6).find(|n| {
         resolved
@@ -787,74 +782,6 @@ pub fn pick_asset(app: &mut App, path: &str) {
     }
 }
 
-pub fn move_photos(app: &mut App, index: usize, delta: i32) {
-    let layout = legacy::layout(app);
-    let Some((n, instance)) = app.nav.widget.as_deref().and_then(|id| {
-        layout
-            .instances
-            .iter()
-            .enumerate()
-            .find(|(_, i)| i.instance == id)
-    }) else {
-        return;
-    };
-    let Some(manifest) = app.registry.get(&instance.widget).map(|w| &w.manifest) else {
-        return;
-    };
-    let other = index as i32 + delta;
-    if !(0..6).contains(&other) || index >= 6 {
-        return;
-    }
-    let resolved = manifest.resolve_settings(&instance.settings);
-    let first = format!("image{}", index + 1);
-    let second = format!("image{}", other + 1);
-    app.apply(
-        "Move photo",
-        vec![
-            crate::docs::Op {
-                doc: DocId::Widgets,
-                path: format!("/instances/{n}/settings/{first}"),
-                value: Some(resolved.get(&second).cloned().unwrap_or(json!(""))),
-            },
-            crate::docs::Op {
-                doc: DocId::Widgets,
-                path: format!("/instances/{n}/settings/{second}"),
-                value: Some(resolved.get(&first).cloned().unwrap_or(json!(""))),
-            },
-        ],
-    );
-}
-
-pub fn move_list(app: &mut App, path: &str, index: usize, delta: i32) {
-    let parts: Vec<_> = path.split('/').collect();
-    let Some(instance) = parts.get(2).and_then(|n| n.parse::<usize>().ok()) else {
-        return;
-    };
-    let Some(name) = parts.get(4) else { return };
-    let name = name.replace("~1", "/").replace("~0", "~");
-    let layout = legacy::layout(app);
-    let Some(instance) = layout.instances.get(instance) else {
-        return;
-    };
-    let Some(manifest) = app.registry.get(&instance.widget).map(|w| &w.manifest) else {
-        return;
-    };
-    let mut items = manifest
-        .resolve_settings(&instance.settings)
-        .get(&name)
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let other = index as i32 + delta;
-    if index < items.len() && other >= 0 && (other as usize) < items.len() {
-        items.swap(index, other as usize);
-        app.set(
-            &Edit::new(DocId::Widgets, path, "Move item"),
-            Value::Array(items),
-        );
-    }
-}
-
 pub fn can_add_widget(app: &App, id: &str) -> bool {
     let Some(manifest) = app.registry.get(id).map(|w| &w.manifest) else {
         return false;
@@ -900,7 +827,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         "todo",
         "weather",
     ];
-    let mut categories = vec!["Your apps".to_owned()];
+    let mut categories = Vec::new();
     for (id, widget) in &app.registry.widgets {
         if builtins.contains(&id.as_str()) {
             let category = widget.manifest.category.clone().unwrap_or("Other".into());
@@ -909,6 +836,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
             }
         }
     }
+    categories.push("Your apps".to_owned());
     let layout = legacy::layout(app);
     let mut count = 0;
     for category in categories {
@@ -947,14 +875,15 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                 } else {
                     manifest.description.clone().unwrap_or_default()
                 };
-                row(
+                crate::panel::icons::row(
+                    app,
                     b,
                     c,
-                    Some(legacy::glyph_of(id)),
+                    id,
+                    legacy::glyph_of(id),
                     &manifest.name,
-                    "",
                     &detail,
-                    Some(selected.as_deref() == Some(id)),
+                    selected.as_deref() == Some(id),
                     Action::Panel(Command::PickWidget(id.clone())),
                 );
                 count += 1;

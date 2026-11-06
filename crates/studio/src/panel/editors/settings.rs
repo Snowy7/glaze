@@ -4,7 +4,7 @@ use mypaper_ui::controls::Align;
 use serde_json::Value;
 
 use super::*;
-use crate::panel::controls::{icon_button, setting};
+use crate::panel::controls::setting;
 
 pub fn general(app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "General", "mypaper and Studio");
@@ -33,18 +33,28 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
             .get(DocId::Studio, "/panel_side")
             .and_then(Value::as_str)
             == Some("left");
-        for (name, side) in [("Panel on the left", true), ("Panel on the right", false)] {
-            row(
-                b,
-                c,
-                None,
-                name,
-                "",
-                "",
-                Some(left == side),
-                Action::Panel(Command::Side(side)),
-            );
-        }
+        text(
+            b,
+            Rect::new(c.x, c.y, c.w, height(b, 24.0)),
+            "Panel side",
+            13.0,
+            400,
+            b.p.ink1,
+            Align::Start,
+        );
+        c.y += height(b, 28.0);
+        let rect = Rect::new(c.x, c.y, c.w, height(b, 30.0));
+        b.segmented(
+            key("panel-side"),
+            rect,
+            &["Left", "Right"],
+            Some(usize::from(!left)),
+            "Panel side",
+            true,
+            |i| Action::Panel(Command::Side(i == 0)),
+        );
+        b.stroke(rect, b.px(7.0), b.px(1.0), b.p.edge);
+        c.y = rect.bottom + b.px(8.0);
     });
     group(b, c, "History", |b, c| {
         select(
@@ -62,7 +72,17 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
         );
         notice(b, c, "Up to 100 desktops, saved between Studio sessions.");
         action_button(b, c, "Open History", open(Page::History));
-        action_button(b, c, "Clear history", Action::Panel(Command::ClearHistory));
+        let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(30.0));
+        b.button(
+            key("panel-clear-history"),
+            r,
+            "Clear history",
+            None,
+            mypaper_ui::controls::ButtonKind::Ghost,
+            true,
+            Action::Panel(Command::ClearHistory),
+        );
+        c.y = r.bottom + b.px(6.0);
     });
 }
 
@@ -85,6 +105,8 @@ pub fn keyboard(b: &mut B, c: &mut Col) {
         (
             "In Studio",
             &[
+                ("Home", "Ctrl 0 / Ctrl Home"),
+                ("Peek (hold)", "Ctrl D"),
                 ("Search everything", "Ctrl K"),
                 ("Search this page", "Ctrl F"),
                 ("Wallpapers", "Ctrl 1"),
@@ -120,29 +142,31 @@ pub fn keyboard(b: &mut B, c: &mut Col) {
     ] {
         group(b, c, heading, |b, c| {
             for (label, keys) in shortcuts {
+                let h = height(b, 36.0);
+                let style = crate::panel::controls::font(b, 10.5, 500);
+                let key_w = b.measure(keys, &style).0.min(c.w * 0.58);
                 text(
                     b,
-                    Rect::new(c.x, c.y, c.w, height(b, 23.0)),
+                    Rect::new(c.x, c.y, (c.w - key_w - b.px(12.0)).max(1.0), h),
                     label,
-                    13.0,
+                    12.0,
                     400,
                     b.p.ink1,
                     Align::Start,
                 );
                 text(
                     b,
-                    Rect::new(c.x, c.y + height(b, 23.0), c.w, height(b, 20.0)),
+                    Rect::new(c.right() - key_w, c.y, key_w, h),
                     keys,
-                    12.0,
+                    10.5,
                     500,
                     b.p.ink3,
-                    Align::Start,
+                    Align::End,
                 );
-                c.y += height(b, 50.0);
+                c.y += h;
             }
         });
     }
-    notice(b, c, "Peek (Ctrl D) is not available yet.");
 }
 
 pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
@@ -184,16 +208,45 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
             } else {
                 "Stopped".into()
             };
-            row(
+            let r = Rect::new(c.x, c.y, c.w, height(b, 58.0));
+            text(
                 b,
-                c,
-                Some(glyph::CHIP),
+                Rect::new(r.left, r.top, r.width() - b.px(104.0), height(b, 28.0)),
                 label,
-                "Restart",
+                13.0,
+                500,
+                b.p.ink1,
+                Align::Start,
+            );
+            text(
+                b,
+                Rect::new(
+                    r.left,
+                    r.top + height(b, 28.0),
+                    r.width() - b.px(104.0),
+                    height(b, 22.0),
+                ),
                 &detail,
+                11.0,
+                400,
+                b.p.ink3,
+                Align::Start,
+            );
+            button(
+                b,
+                Rect::new(
+                    r.right - b.px(98.0),
+                    r.top + b.px(12.0),
+                    b.px(98.0),
+                    b.px(30.0),
+                ),
+                &format!("Restart {label}"),
                 None,
+                false,
+                true,
                 Action::Restart(id),
             );
+            c.y = r.bottom;
         }
     });
     group(b, c, "Recovery", |b, c| {
@@ -300,6 +353,49 @@ fn menu_name(entry: &Entry) -> String {
     }
 }
 
+pub fn add_menu_item(app: &mut App) {
+    let label = app
+        .text(&FieldId::Text(DocId::Studio, "/menu_label".into()))
+        .trim()
+        .to_owned();
+    let command = app
+        .text(&FieldId::Text(DocId::Studio, "/menu_command".into()))
+        .trim()
+        .to_owned();
+    if label.is_empty() || command.is_empty() {
+        app.alert("Give your item a name and a program");
+        return;
+    }
+    let args = match crate::library::split_args(app.text(&FieldId::Text(
+        DocId::Studio,
+        "/panel/draft/menu_args".into(),
+    ))) {
+        Ok(args) => args,
+        Err(error) => {
+            app.alert(error.to_string());
+            return;
+        }
+    };
+    let mut items: Vec<Entry> = app
+        .get(DocId::Config, "/desktop_menu/items")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_else(default_items);
+    items.push(Entry::Custom(mypaper_config::desktop_menu::Custom {
+        label,
+        command,
+        args,
+    }));
+    app.set(
+        &Edit::new(DocId::Config, "/desktop_menu/items", "Add menu item"),
+        serde_json::to_value(items).unwrap(),
+    );
+    if !matches!(app.docs.saved, crate::docs::Saved::Failed(_)) {
+        for path in ["/menu_label", "/menu_command", "/panel/draft/menu_args"] {
+            app.texts.remove(&FieldId::Text(DocId::Studio, path.into()));
+        }
+    }
+}
+
 pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "Desktop menu", "Right-click on bare wallpaper");
     group(b, c, "", |b, c| {
@@ -309,85 +405,74 @@ pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
         .get(DocId::Config, "/desktop_menu/items")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_else(default_items);
+    menu_preview(app, b, c, &items);
     group(b, c, "Items · top to bottom", |b, c| {
         for (i, item) in items.iter().enumerate() {
-            let h = height(b, 40.0);
-            let r = Rect::new(c.x, c.y, c.w, h);
-            let label = menu_name(item);
-            let item_key = mypaper_ui::controls::key(("menu-item", i));
-            let select = Rect::new(r.left, r.top, r.width() - b.px(90.0), r.height());
-            b.hit(
-                item_key,
-                select,
-                mypaper_ui::Role::ListItem,
-                &label,
-                Action::Panel(Command::MenuItem(i)),
-                mypaper_ui::controls::Behavior::Click,
-            );
-            b.focus_ring(item_key, select, b.px(6.0));
-            b.icon(
-                Rect::new(c.x, c.y, b.px(14.0), h),
-                glyph::GRIP,
-                12.0,
-                b.p.ink3,
-            );
-            text(
+            crate::panel::lists::row(
+                app,
                 b,
-                Rect::new(c.x + b.px(20.0), c.y, c.w - b.px(112.0), h),
-                &label,
-                13.0,
-                400,
-                b.p.ink1,
-                Align::Start,
+                c,
+                &crate::panel::SortList::Menu,
+                i,
+                &menu_name(item),
+                *item == Entry::Builtin(Builtin::Separator),
+                None,
+                None,
             );
-            // Keep keyboard and visible controls equally complete, including separators.
-            for (n, icon, name, enabled, action) in [
-                (
-                    0,
-                    mypaper_ui::icons::Icon::ChevronUp.into(),
-                    format!("Move {label} {i} up"),
-                    i > 0,
-                    Action::MenuMove(i, -1),
-                ),
-                (
-                    1,
-                    glyph::CHEVRON_DOWN,
-                    format!("Move {label} {i} down"),
-                    i + 1 < items.len(),
-                    Action::MenuMove(i, 1),
-                ),
-                (
-                    2,
-                    glyph::DELETE,
-                    format!("Remove {label} {i}"),
-                    true,
-                    Action::MenuRemove(i),
-                ),
-            ] {
-                icon_button(
+            if let Entry::Custom(custom) = item
+                && app.is_open(key(("panel-menu-item", i)))
+            {
+                field(
+                    app,
                     b,
-                    Rect::new(
-                        r.right - b.px(84.0) + n as f32 * b.px(28.0),
-                        r.top + (h - b.px(28.0)) / 2.0,
-                        b.px(26.0),
-                        b.px(28.0),
+                    c,
+                    FieldId::Text(
+                        DocId::Config,
+                        format!("/desktop_menu/items/{i}/label").into(),
                     ),
-                    icon,
-                    &name,
-                    enabled,
-                    action,
+                    "Name",
+                    "Menu item",
+                    &custom.label,
+                );
+                field(
+                    app,
+                    b,
+                    c,
+                    FieldId::Text(
+                        DocId::Config,
+                        format!("/desktop_menu/items/{i}/command").into(),
+                    ),
+                    "Program",
+                    "notepad.exe",
+                    &custom.command,
+                );
+                let args = custom
+                    .args
+                    .iter()
+                    .map(|arg| {
+                        if arg.contains(' ') {
+                            format!("\"{arg}\"")
+                        } else {
+                            arg.clone()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                field(
+                    app,
+                    b,
+                    c,
+                    FieldId::Text(DocId::Studio, format!("/panel/menu_args/{i}").into()),
+                    "Arguments",
+                    "\"D:\\My notes.txt\"",
+                    &args,
                 );
             }
-            c.y += h;
-            b.hline(c.x, c.right(), c.y - 1.0, b.p.line);
         }
     });
     group(b, c, "Add", |b, c| {
         let mut shown = Vec::new();
-        for item in default_items()
-            .into_iter()
-            .filter(|e| !items.contains(e) || *e == Entry::Builtin(Builtin::Separator))
-        {
+        for item in default_items().into_iter() {
             if shown.contains(&item) {
                 continue;
             }
@@ -427,10 +512,53 @@ pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
             "notepad.exe",
             "",
         );
-        action_button(b, c, "Add your item", Action::MenuAdd("custom".into()));
+        field(
+            app,
+            b,
+            c,
+            FieldId::Text(DocId::Studio, "/panel/draft/menu_args".into()),
+            "Arguments",
+            "\"D:\\My notes.txt\"",
+            "",
+        );
+        action_button(b, c, "Add your item", Action::Panel(Command::AddMenuItem));
         action_button(b, c, "Reset to the default menu", Action::MenuReset);
     });
     group(b, c, "Explorer", |b, c| {
         setting(app, b, c, "classic_menu", "Full Windows menus", "")
     });
+}
+
+/// The shell's actual menu drawing, reduced over the active wallpaper.
+fn menu_preview(app: &App, b: &mut B, c: &mut Col, items: &[Entry]) {
+    let r = Rect::new(c.x, c.y + b.px(12.0), c.w, b.px(160.0));
+    crate::panel::specimens::backdrop(app, b, r);
+    let config = mypaper_config::DesktopMenu {
+        enabled: true,
+        items: items.to_vec(),
+    };
+    let items = mypaper_shell::preview::menu::build(
+        &config,
+        mypaper_shell::preview::menu::ViewState {
+            icons_visible: true,
+            ..Default::default()
+        },
+    );
+    let mut tokens = mypaper_shell::preview::menu::tokens(
+        &crate::app::theme_name(&app.docs).unwrap_or_default(),
+        b.text,
+    );
+    tokens.shadow = false;
+    let full = mypaper_ui::menu::layout(&items, &tokens, b.s, b.text);
+    let scale = b.s
+        * ((r.height() - b.px(16.0)) / full.height.max(1.0))
+            .min((r.width() - b.px(16.0)) / full.width.max(1.0));
+    let layout = mypaper_ui::menu::layout(&items, &tokens, scale, b.text);
+    let list = mypaper_ui::menu::view(&items, &layout, None, &tokens);
+    b.list.ops.extend(crate::stage::offset(
+        &list.ops,
+        (r.left + (r.width() - layout.width) / 2.0).round(),
+        (r.top + b.px(8.0)).round(),
+    ));
+    c.y = r.bottom + b.px(4.0);
 }

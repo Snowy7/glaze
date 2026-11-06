@@ -41,19 +41,17 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
     };
     title(b, c, "Look", &subtitle);
     let r = Rect::new(c.x, c.y + b.px(6.0), c.w, b.px(30.0));
-    button(
-        b,
+    let wallpaper_scope = format!("{}'s", wallpaper.map_or("Wallpaper", |w| w.name.as_str()));
+    b.segmented(
+        key("panel-look-scope"),
         r,
-        if app.nav.look_theme {
-            "Switch to your look"
-        } else {
-            "The look the wallpaper brings"
-        },
-        None,
-        false,
+        &["Yours", &wallpaper_scope],
+        Some(usize::from(app.nav.look_theme)),
+        "Look scope",
         wallpaper.is_some(),
-        Action::Panel(Command::Scope(!app.nav.look_theme)),
+        |i| Action::Panel(Command::Scope(i == 1)),
     );
+    b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
     c.y = r.bottom + b.px(4.0);
     if app.nav.look_theme {
         // Reuses the wallpaper editor's validated theme paths and built-in copy protection.
@@ -66,18 +64,19 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         .unwrap_or_default();
     group(b, c, "Style", |b, c| {
         crate::ui::anchor(app, "style", c.view, c.y);
-        for (style, name, caption) in STYLES {
-            row(
-                b,
-                c,
-                Some(glyph::LOOK),
-                name,
-                "",
-                caption,
-                Some(style == current),
-                Action::SetStyle(Some(style)),
-            );
-        }
+        let choices: Vec<_> = STYLES
+            .iter()
+            .map(|(style, name, _)| (*name, *style == current, Action::SetStyle(Some(*style))))
+            .collect();
+        crate::ui::tiles(
+            b,
+            c,
+            key("panel-materials"),
+            3,
+            false,
+            &choices,
+            |b, i, pic| super::super::specimens::material(app, b, pic, STYLES[i].0),
+        );
     });
     group(b, c, "Material", |b, c| {
         for (id, uses) in ["clarity", "blur", "refraction", "highlight"]
@@ -100,13 +99,14 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         );
         crate::ui::anchor(app, "tint", c.view, c.y);
         c.y += height(b, 28.0);
-        crate::ui::swatches(
+        super::super::colors::swatches(
             app,
             b,
             c,
             &Edit::new(DocId::Config, "/look/material/tint", "Tint"),
             app.get(DocId::Config, "/look/material/tint"),
-            Some(super::super::tokens::hex(0x8b9eb7)),
+            true,
+            true,
             &COLORS,
         );
     });
@@ -123,13 +123,14 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         );
         crate::ui::anchor(app, "accent", c.view, c.y);
         c.y += height(b, 28.0);
-        crate::ui::swatches(
+        super::super::colors::swatches(
             app,
             b,
             c,
             &Edit::new(DocId::Config, "/look/accent", "Accent"),
             app.get(DocId::Config, "/look/accent"),
-            Some(super::super::tokens::hex(0x8b9eb7)),
+            true,
+            false,
             &COLORS,
         );
     });
@@ -200,25 +201,34 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
             json!({"accent":"auto","border":"auto","corners":"square","backdrop":"none","apps":"match"}),
         ),
     ];
-    group(b, c, "Look", |b, c| {
-        for (i, (name, value)) in looks.iter().enumerate() {
-            let on = value
-                .as_object()
-                .unwrap()
+    let selected = looks
+        .iter()
+        .position(|(_, preset)| windows_matches(&layer, preset));
+    group(
+        b,
+        c,
+        if selected.is_none() {
+            "Look · Custom"
+        } else {
+            "Look"
+        },
+        |b, c| {
+            let choices: Vec<_> = looks
                 .iter()
-                .all(|(k, v)| layer.get(k) == Some(v));
-            row(
+                .enumerate()
+                .map(|(i, (name, _))| (*name, selected == Some(i), Action::WindowsLook(i)))
+                .collect();
+            crate::ui::tiles(
                 b,
                 c,
-                Some(glyph::APP),
-                name,
-                "",
-                "",
-                Some(on),
-                Action::WindowsLook(i),
+                key("panel-windows-looks"),
+                2,
+                false,
+                &choices,
+                |b, i, pic| super::super::specimens::window(app, b, pic, i),
             );
-        }
-    });
+        },
+    );
     group(b, c, "", |b, c| {
         for id in ["windows_apps", "windows_corners", "windows_material"] {
             let s = crate::settings::Setting::get(id).unwrap();
@@ -281,7 +291,16 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
                     Align::Start,
                 );
                 c.y += b.px(28.0);
-                crate::ui::swatches(app, b, c, &edit, layer.get(key), None, &COLORS);
+                super::super::colors::swatches(
+                    app,
+                    b,
+                    c,
+                    &edit,
+                    layer.get(key),
+                    false,
+                    false,
+                    &COLORS,
+                );
                 action_button(
                     b,
                     c,
@@ -299,4 +318,48 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
         c,
         "Windows' own styling comes back when mypaper stops or you restore the Windows desktop.",
     );
+}
+
+/// Absent native keys mean As is; extra overrides make a preset Custom.
+pub(super) fn windows_matches(layer: &Value, preset: &Value) -> bool {
+    [
+        "accent",
+        "border",
+        "caption",
+        "caption_text",
+        "corners",
+        "backdrop",
+        "apps",
+        "cursors",
+    ]
+    .into_iter()
+    .all(|key| {
+        let default = if key == "apps" {
+            json!("as-is")
+        } else {
+            Value::Null
+        };
+        layer.get(key).filter(|v| !v.is_null()).unwrap_or(&default)
+            == preset.get(key).filter(|v| !v.is_null()).unwrap_or(&default)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn missing_native_fields_are_as_is_and_extra_changes_are_custom() {
+        let as_is = json!({"accent":null,"border":null,"caption":null,"caption_text":null,"corners":null,"backdrop":null,"apps":"as-is","cursors":null});
+        assert!(windows_matches(&json!({}), &as_is));
+        assert!(windows_matches(
+            &json!({"apps":"as-is", "corners":null}),
+            &as_is
+        ));
+        assert!(!windows_matches(&json!({"corners":"round"}), &as_is));
+        let sharp = json!({"accent":"auto","border":"auto","corners":"square","backdrop":"none","apps":"match"});
+        assert!(windows_matches(&sharp, &sharp));
+        let mut custom = sharp.clone();
+        custom["caption"] = json!("#123456");
+        assert!(!windows_matches(&custom, &sharp));
+    }
 }

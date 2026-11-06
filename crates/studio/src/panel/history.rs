@@ -109,6 +109,8 @@ impl Desktop {
 pub struct Entry {
     pub title: String,
     pub detail: String,
+    #[serde(default)]
+    pub summary: String,
     pub at: u64,
     pub desktop: Desktop,
 }
@@ -249,6 +251,18 @@ fn capture(app: &App, label: Option<&str>, merge: bool) {
     let detail = app.library.active().map_or("Your desktop".to_owned(), |i| {
         app.library.items[i].name.clone()
     });
+    let before = if merge && history.entries.len() > 1 {
+        history
+            .entries
+            .get(history.entries.len() - 2)
+            .map(|e| &e.desktop)
+    } else {
+        history.last.as_ref()
+    };
+    let summary = before.map_or_else(
+        || "When Studio opened".into(),
+        |before| summary(app, before, &desktop),
+    );
     if merge && history.entries.len() > 1 {
         history.entries.pop();
     }
@@ -260,6 +274,7 @@ fn capture(app: &App, label: Option<&str>, merge: bool) {
         history.entries.push(Entry {
             title,
             detail,
+            summary,
             at: now(),
             desktop: desktop.clone(),
         });
@@ -272,6 +287,126 @@ fn capture(app: &App, label: Option<&str>, merge: bool) {
     if label.is_some() {
         persist(app, &mut history);
     }
+}
+
+fn summary(app: &App, before: &Desktop, after: &Desktop) -> String {
+    let value = |desktop: &Desktop, path: &str| {
+        desktop
+            .config
+            .iter()
+            .find(|(key, _)| key == path)
+            .and_then(|(_, v)| v.as_ref())
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    if before.wallpaper() != after.wallpaper() {
+        let name = |id: Option<&str>| {
+            app.library
+                .items
+                .iter()
+                .find(|w| Some(w.apply_as.as_str()) == id || Some(w.id.as_str()) == id)
+                .map_or("Your desktop", |w| w.name.as_str())
+        };
+        return format!(
+            "Wallpaper: {} → {}",
+            name(before.wallpaper()),
+            name(after.wallpaper())
+        );
+    }
+    let (old_look, new_look) = (value(before, "/look"), value(after, "/look"));
+    if old_look != new_look {
+        let name = |look: &Value| match look
+            .get("style")
+            .and_then(Value::as_str)
+            .unwrap_or("liquid")
+        {
+            "oneui" => "One UI",
+            "fluent" => "Fluent",
+            "solid" => "Solid",
+            "mono" => "Mono",
+            _ => "Liquid",
+        };
+        if name(&old_look) != name(&new_look) {
+            return format!("Look: {} → {}", name(&old_look), name(&new_look));
+        }
+        if old_look.get("windows") != new_look.get("windows") {
+            return "Windows look changed".into();
+        }
+        if old_look.get("material") != new_look.get("material") {
+            return "Look: material changed".into();
+        }
+        return "Look: color, text or shape changed".into();
+    }
+    if before.bars != after.bars {
+        let name = |bars: &Value| {
+            crate::pages::bars::PRESETS
+                .iter()
+                .find(|(id, _)| bars.get("preset").and_then(Value::as_str) == Some(id))
+                .map_or("Custom", |(_, name)| *name)
+        };
+        if name(&before.bars) != name(&after.bars) {
+            return format!("Bars: {} → {}", name(&before.bars), name(&after.bars));
+        }
+        for (key, label) in [("top", "Top bar"), ("dock", "Dock")] {
+            if before.bars.get(key) != after.bars.get(key) {
+                return format!("{label} changed");
+            }
+        }
+        return "Bar modules or panels changed".into();
+    }
+    if before.widgets != after.widgets {
+        let old = before
+            .widgets
+            .get("instances")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let new = after
+            .widgets
+            .get("instances")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let widget_name = |instance: &Value| {
+            app.registry
+                .get(instance["widget"].as_str().unwrap_or(""))
+                .map_or("Widget", |w| w.manifest.name.as_str())
+        };
+        if new.len() > old.len()
+            && let Some(item) = new
+                .iter()
+                .find(|n| !old.iter().any(|o| o["instance"] == n["instance"]))
+        {
+            return format!("Added {}", widget_name(item));
+        }
+        if new.len() < old.len()
+            && let Some(item) = old
+                .iter()
+                .find(|o| !new.iter().any(|n| n["instance"] == o["instance"]))
+        {
+            return format!("Removed {}", widget_name(item));
+        }
+        if let Some((old, new)) = old.iter().zip(new).find(|(o, n)| o != n) {
+            let name = widget_name(new);
+            if old["size"] != new["size"] {
+                return format!("Resized {name}");
+            }
+            if old["cell"] != new["cell"] {
+                return format!("Moved {name}");
+            }
+            return format!("{name}: options or face changed");
+        }
+        return "Widgets changed".into();
+    }
+    if value(before, "/desktop_menu") != value(after, "/desktop_menu") {
+        return "Desktop menu changed".into();
+    }
+    "Desktop restored".into()
+}
+
+pub fn time_label(at: u64) -> String {
+    let stamp = mypaper_shell::preview::widgets::Stamp::at((at.min(253402300799) * 1000) as i64);
+    format!("{:02}:{:02}", stamp.hour, stamp.minute)
 }
 
 pub fn observe(app: &App) {

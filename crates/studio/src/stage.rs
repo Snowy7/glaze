@@ -108,6 +108,16 @@ pub struct Cache {
 }
 
 impl Cache {
+    /// Share the existing asynchronous shell icon worker with the panel's app lists.
+    pub(crate) fn app_icon(&mut self, thread: u32, source: mypaper_bars::icons::Source) -> Option<PathBuf> {
+        if self.icons.is_none() && thread != 0 {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let dir = mypaper_bars::files::local("icons").ok()?;
+            self.icons = Some((mypaper_bars::icons::Icons::new(mypaper_bars::wake::Waker::new(tx, thread), dir), rx));
+        }
+        self.icons.as_mut()?.0.get(&source)?.icon.as_ref().map(PathBuf::from)
+    }
+
     /// Takes what the icon service found; returns whether the stage must be rebuilt.
     pub fn icons_arrived(&mut self) -> bool {
         let Some((icons, rx)) = &mut self.icons else { return false };

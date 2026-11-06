@@ -64,6 +64,30 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
             action,
         );
     }
+    if editing {
+        let status = if !app.panel.as_ref().unwrap().save_errors.borrow().is_empty() {
+            "Couldn't save"
+        } else if app.drag.is_some() {
+            "Saving…"
+        } else {
+            match &app.docs.saved {
+                crate::docs::Saved::Failed(_) => "Couldn't save",
+                _ => "Saved",
+            }
+        };
+        let style = ui::font(b, 10.0, 400);
+        let width = b.measure(status, &style).0 + b.px(8.0);
+        x -= width;
+        text(
+            b,
+            Rect::new(x, b.px(10.0), width, b.px(28.0)),
+            status,
+            10.0,
+            400,
+            b.p.ink3,
+            Align::Center,
+        );
+    }
     x -= b.px(8.0);
     if editing {
         b.vline(x + b.px(2.0), b.px(15.0), b.px(33.0), b.p.line);
@@ -92,7 +116,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         );
     }
     for (icon, label) in [
-        (glyph::EYE, "Peek (coming soon)"),
+        (glyph::EYE, "Hold to peek (Ctrl D)"),
         (glyph::CLOCK, "History (Ctrl H)"),
     ] {
         if !editing || compact {
@@ -104,13 +128,18 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
             Rect::new(x, b.px(10.0), b.px(24.0), b.px(28.0)),
             icon,
             label,
-            icon == glyph::CLOCK,
+            true,
             if icon == glyph::CLOCK {
                 open(Page::History)
             } else {
-                Action::None
+                Action::Panel(Command::Peek)
             },
         );
+        if icon == glyph::EYE
+            && let Some(target) = b.targets.last_mut()
+        {
+            target.behavior = Behavior::Drag;
+        }
     }
     let left = b.px(12.0);
     let parent = if matches!(page, Page::Module | Page::AddModule) && app.nav.bar == Some(Bar::Dock)
@@ -175,7 +204,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
     let caption_x = end + b.px(8.0);
     // The caption yields to the fixed icon actions on a 360-DIP panel.
     let style = ui::font(b, 12.0, 400);
-    let caption = if editing { "Editing" } else { "Off" };
+    let caption = if editing { "" } else { "Off" };
     if x - caption_x >= b.measure(caption, &style).0 {
         text(
             b,
@@ -491,6 +520,7 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
         "Widgets",
         &format!("Display {} · {} widgets", app.nav.display + 1, items.len()),
     );
+    super::controls::displays(app, b, c);
     group(b, c, "On this display", |b, c| {
         if items.is_empty() {
             notice(b, c, "No widgets on this display yet.");
@@ -550,6 +580,7 @@ fn bars(app: &App, b: &mut B, c: &mut Col) {
         "Bars",
         &format!("Top bar and dock · Display {}", app.nav.display + 1),
     );
+    super::controls::displays(app, b, c);
     let current = app
         .get(DocId::Bars, "/preset")
         .and_then(Value::as_str)
