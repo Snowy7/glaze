@@ -34,7 +34,7 @@ pub(crate) mod pick_client;
 #[cfg(test)]
 mod tests;
 
-use mypaper_ui::controls::{Builder, key};
+use mypaper_ui::controls::key;
 use mypaper_ui::{Chrome, Rect, Text};
 
 use crate::actions::{Action, FieldId};
@@ -589,23 +589,7 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
 
 pub fn palette_for(app: &App) -> mypaper_ui::controls::Palette {
     if app.panel.is_some() && !app.theme.contrast {
-        let mut palette = tokens::palette(app.theme.palette.dark);
-        if app.panel.as_ref().is_some_and(|state| state.windowed) {
-            let color = |dark, light| tokens::hex(if palette.dark { dark } else { light });
-            palette.chrome = color(0x161616, 0xf7f7f7);
-            palette.bg = color(0x0a0a0a, 0xe6e6e6);
-            palette.panel = palette.chrome;
-            palette.fill = color(0x262626, 0xdadada);
-            palette.well = palette.fill;
-            palette.hover = color(0x2e2e2e, 0xd6d6d6);
-            palette.selected = color(0x4a4a4a, 0xb0b0b0);
-            palette.line = color(0x2a2a2a, 0xdadada);
-            palette.ink3 = color(0xa6a6a6, 0x4a4a4a);
-            palette.ink4 = color(0x666666, 0xa3a3a3);
-            palette.solid = color(0xf2f2f2, 0x111111);
-            palette.on_solid = color(0x0a0a0a, 0xfafafa);
-        }
-        palette
+        tokens::palette(app.theme.palette.dark)
     } else {
         app.theme.palette
     }
@@ -634,7 +618,7 @@ pub fn build(app: &App, text: &mut Text) -> Built {
     let page = prepare_page(app, text);
     let p = palette_for(app);
     let ty = app.theme.ty.clone();
-    let mut b = Builder::new(text, &p, &ty, app.scale, &app.input);
+    let mut b = crate::ui::builder(text, &p, &ty, app.scale, &app.input);
     let window = Rect::new(0.0, 0.0, app.size.0 as f32, app.size.1 as f32);
     b.fill(window, 0.0, p.chrome);
     let header = Rect::new(0.0, 0.0, window.width(), b.px(48.0));
@@ -691,7 +675,7 @@ pub(crate) fn content(app: &App, b: &mut crate::ui::B, area: Rect, page: Page) -
     b.scroll(view, body, app.nav.scroll(view), Action::None, |b, top| {
         let mut c = crate::ui::Col {
             x: area.left + b.px(16.0),
-            y: top + b.px(4.0),
+            y: top + b.px(24.0),
             w: body.width() - b.px(32.0),
             view,
         };

@@ -10,6 +10,21 @@ use crate::theme::glyph;
 
 pub type B<'a> = Builder<'a, Action>;
 
+/// Studio uses One UI geometry independently of the style being edited on the desktop.
+pub fn builder<'a>(
+    text: &'a mut mypaper_ui::Text,
+    palette: &'a mypaper_ui::controls::Palette,
+    ty: &'a mypaper_ui::controls::Type,
+    scale: f32,
+    input: &'a mypaper_ui::controls::Input,
+) -> B<'a> {
+    let mut b = Builder::new(text, palette, ty, scale, input).with_style(mypaper_ui::Style::OneUi);
+    b.kit.metrics.pad = 18.0;
+    b.kit.metrics.row_single = b.kit.metrics.row;
+    b.kit.radius.card = 26.0;
+    b
+}
+
 /// A column being filled top to bottom, in device pixels.
 #[derive(Debug, Clone, Copy)]
 pub struct Col {

@@ -467,6 +467,21 @@ impl<'a, A: Clone> Builder<'a, A> {
         v * self.s
     }
 
+    /// Borrow a kit style's geometry while retaining this builder's monochrome palette.
+    pub fn with_style(mut self, style: Style) -> Self {
+        let geometry = Theme::new(style, self.kit.scheme, self.p.solid);
+        self.kit.style = style;
+        self.kit.metrics = geometry.metrics;
+        self.kit.radius = geometry.radius;
+        self.kit.icon_weight = geometry.icon_weight;
+        self
+    }
+
+    /// Capsules for styles without a fixed control radius.
+    pub fn control_radius(&self, rect: Rect) -> f32 {
+        self.kit.radius.control.map_or(rect.height() / 2.0, |r| self.px(r).min(rect.height() / 2.0))
+    }
+
     /// The shared label column for inline value controls.
     pub fn label_width(&self, width: f32) -> f32 {
         self.px(140.0).min(width * 0.46)
@@ -842,7 +857,7 @@ impl<'a, A: Clone> Builder<'a, A> {
         enabled: bool,
         action: A,
     ) {
-        let r = self.px(8.0).min(rect.height() / 2.0);
+        let r = self.control_radius(rect);
         let p = *self.p;
         let (fill, ink) = match kind {
             ButtonKind::Primary => (
@@ -920,7 +935,7 @@ impl<'a, A: Clone> Builder<'a, A> {
         enabled: bool,
         action: A,
     ) {
-        let r = self.px(8.0).min(rect.height() / 2.0);
+        let r = self.control_radius(rect);
         let hot = enabled && self.hovered(key);
         if on {
             self.fill(rect, r, self.p.selected);
@@ -1054,7 +1069,7 @@ impl<'a, A: Clone> Builder<'a, A> {
         selected: Option<usize>,
     ) {
         let c = self.kit.color;
-        let radius = self.px(8.0).min(outer.height() / 2.0);
+        let radius = self.control_radius(outer);
         let inner_radius = (radius - (2.0 * self.s).round()).max(0.0);
         self.fill(outer, radius, c.well);
         let style = self.font(Font::Caption);
@@ -1149,7 +1164,7 @@ impl<'a, A: Clone> Builder<'a, A> {
                 true,
                 |i| action(first + i),
             );
-            self.stroke(r, self.px(7.0), self.px(1.0), self.p.edge);
+            self.stroke(r, self.control_radius(r), self.px(1.0), self.p.edge);
             bottom = r.bottom + self.px(4.0);
         }
         Rect::new(rect.left, rect.top, rect.width(), bottom - rect.top)
@@ -1325,7 +1340,7 @@ impl<'a, A: Clone> Builder<'a, A> {
     /// A select: the gray control fill with the value and a chevron. The app opens its menu.
     pub fn select(&mut self, key: Key, rect: Rect, value: &str, label: &str, action: A) {
         let p = *self.p;
-        let r = self.px(8.0).min(rect.height() / 2.0);
+        let r = self.control_radius(rect);
         self.fill(rect, r, p.fill);
         self.wash(key, rect, r);
         let style = self.font(Font::Body);
@@ -1386,7 +1401,7 @@ impl<'a, A: Clone> Builder<'a, A> {
         action: A,
     ) {
         let p = *self.p;
-        let r = self.px(8.0).min(rect.height() / 2.0);
+        let r = self.control_radius(rect);
         self.fill(rect, r, p.well);
         if !focused {
             self.wash(key, rect, r);

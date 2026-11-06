@@ -299,14 +299,14 @@ pub fn segments(
 }
 
 pub fn toggle(b: &mut B, c: &mut Col, label: &str, caption: &str, on: bool, action: Action) {
-    let h = height(b, if caption.is_empty() { 40.0 } else { 56.0 });
+    let h = super::controls::row_height(b, caption);
     text(
         b,
         Rect::new(
             c.x,
             c.y,
             c.w - b.px(50.0),
-            height(b, if caption.is_empty() { 40.0 } else { 28.0 }),
+            if caption.is_empty() { h } else { height(b, 28.0) },
         ),
         label,
         13.0,

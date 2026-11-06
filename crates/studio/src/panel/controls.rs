@@ -26,6 +26,10 @@ pub fn height(b: &B, base: f32) -> f32 {
     b.px(base * b.t.text_scale)
 }
 
+pub fn row_height(b: &B, caption: &str) -> f32 {
+    height(b, b.kit.metrics.row + if caption.is_empty() { 0.0 } else { 12.0 })
+}
+
 pub use mypaper_ui::controls::format_value as unit;
 
 /// Distance between two boundaries, used for a flexible gap rather than a separator.
@@ -93,7 +97,7 @@ pub fn displays(app: &App, b: &mut B, c: &mut Col) {
         true,
         |i| Action::Panel(super::Command::Display(order[i])),
     );
-    b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
+    b.stroke(r, b.control_radius(r), b.px(1.0), b.p.line);
     c.y = r.bottom + b.px(4.0);
 }
 
@@ -373,13 +377,13 @@ pub fn feedback(b: &mut B, c: &mut Col, message: &str, actions: Vec<(&str, Actio
 }
 
 pub fn title(b: &mut B, c: &mut Col, title: &str, subtitle: &str) {
-    let h = height(b, 28.0);
+    let h = height(b, 40.0);
     text(
         b,
         Rect::new(c.x, c.y, c.w, h),
         title,
-        20.0,
-        600,
+        30.0,
+        700,
         b.p.ink1,
         Align::Start,
     );
@@ -397,12 +401,12 @@ pub fn title(b: &mut B, c: &mut Col, title: &str, subtitle: &str) {
         );
         c.y += h;
     }
-    c.y += b.px(4.0);
+    c.y += b.px(16.0);
 }
 
 pub fn group(b: &mut B, c: &mut Col, heading: &str, content: impl FnOnce(&mut B, &mut Col)) {
     if !heading.is_empty() {
-        c.y += b.px(16.0);
+        c.y += b.px(20.0);
         let h = height(b, 20.0);
         text(
             b,
@@ -419,9 +423,9 @@ pub fn group(b: &mut B, c: &mut Col, heading: &str, content: impl FnOnce(&mut B,
     let start = c.y;
     let at = b.list.ops.len();
     let mut inner = Col {
-        x: c.x + b.px(12.0),
-        y: start + b.px(2.0),
-        w: c.w - b.px(24.0),
+        x: c.x + b.px(b.kit.metrics.pad),
+        y: start + b.px(10.0),
+        w: c.w - b.px(b.kit.metrics.pad * 2.0),
         view: c.view,
     };
     b.group(key(("panel-group", c.view, heading, start as i32)), |b| {
@@ -431,8 +435,8 @@ pub fn group(b: &mut B, c: &mut Col, heading: &str, content: impl FnOnce(&mut B,
     b.list.ops.insert(
         at,
         mypaper_ui::Op::Fill {
-            rect: Rect::new(c.x, start, c.w, inner.y - start + b.px(2.0)),
-            radius: b.px(10.0),
+            rect: Rect::new(c.x, start, c.w, inner.y - start + b.px(10.0)),
+            radius: b.px(b.kit.radius.card),
             color: b.p.panel,
         },
     );
@@ -441,7 +445,7 @@ pub fn group(b: &mut B, c: &mut Col, heading: &str, content: impl FnOnce(&mut B,
         0.0,
         b.p.panel,
     );
-    c.y = inner.y + b.px(2.0);
+    c.y = inner.y + b.px(10.0);
 }
 
 pub fn button(
@@ -458,7 +462,7 @@ pub fn button(
     let hot = b.hovered(k) || b.pressed(k);
     b.fill(
         r,
-        b.px(7.0),
+        b.control_radius(r),
         if primary {
             b.p.solid
         } else if hot && enabled {
@@ -468,7 +472,7 @@ pub fn button(
         },
     );
     if !primary {
-        b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
+        b.stroke(r, b.control_radius(r), b.px(1.0), b.p.line);
     }
     let ink = if !enabled {
         b.p.ink3
@@ -504,7 +508,7 @@ pub fn button(
     );
     if enabled {
         b.hit(k, r, Role::Button, label, action, Behavior::Click);
-        b.focus_ring(k, r, b.px(7.0));
+        b.focus_ring(k, r, b.control_radius(r));
     } else {
         // Keep deferred actions discoverable to screen readers without making them focus stops.
         b.list.hits.push(mypaper_ui::Hit {
@@ -521,7 +525,7 @@ pub fn button(
 pub fn icon_button(b: &mut B, r: Rect, icon: Glyph, label: &str, enabled: bool, action: Action) {
     let k = key(("panel-icon", label));
     if enabled {
-        b.wash(k, r, b.px(6.0));
+        b.wash(k, r, b.control_radius(r));
     }
     b.icon(
         r,
@@ -535,7 +539,7 @@ pub fn icon_button(b: &mut B, r: Rect, icon: Glyph, label: &str, enabled: bool, 
     );
     if enabled {
         b.hit(k, r, Role::Button, label, action, Behavior::Click);
-        b.focus_ring(k, r, b.px(6.0));
+        b.focus_ring(k, r, b.control_radius(r));
     } else {
         b.list.hits.push(mypaper_ui::Hit {
             id: u32::MAX - b.list.hits.len() as u32,
@@ -548,7 +552,7 @@ pub fn icon_button(b: &mut B, r: Rect, icon: Glyph, label: &str, enabled: bool, 
     }
 }
 
-/// A 40-DIP row, or 56 with a caption. Values yield space to the label and ellipsize.
+/// A 52-DIP row, or 64 with a caption. Values yield space to the label and ellipsize.
 pub fn row(
     b: &mut B,
     c: &mut Col,
@@ -559,7 +563,7 @@ pub fn row(
     checked: Option<bool>,
     action: Action,
 ) {
-    let h = height(b, if caption.is_empty() { 40.0 } else { 56.0 });
+    let h = row_height(b, caption);
     let r = Rect::new(c.x, c.y, c.w, h);
     let k = key(("panel-row", c.view, label, caption));
     let choice = matches!(&action, Action::Choose(_));
@@ -685,7 +689,7 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
     } else {
         Edit::new(s.doc, s.path, s.label)
     };
-    let h = height(b, if caption.is_empty() { 40.0 } else { 56.0 });
+    let h = row_height(b, caption);
     let r = Rect::new(c.x, c.y, c.w, h);
     let text_h = if caption.is_empty() {
         h
@@ -805,7 +809,7 @@ pub fn search(app: &App, b: &mut B, c: &mut Col) {
     let k = field_key(&id);
     let r = Rect::new(c.x, c.y, c.w, height(b, 32.0));
     b.fill(r, b.px(7.0), b.p.fill);
-    b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
+    b.stroke(r, b.control_radius(r), b.px(1.0), b.p.line);
     b.icon(
         Rect::new(r.left + b.px(10.0), r.top, b.px(16.0), r.height()),
         glyph::SEARCH,

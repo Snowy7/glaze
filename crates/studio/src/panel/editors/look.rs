@@ -69,7 +69,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
             true,
             |i| Action::Panel(Command::Scope(i == 1)),
         );
-        b.stroke(r, b.px(7.0), b.px(1.0), b.p.edge);
+        b.stroke(r, b.control_radius(r), b.px(1.0), b.p.line);
         c.y = r.bottom + b.px(4.0);
     }
     if app.nav.look_theme {
