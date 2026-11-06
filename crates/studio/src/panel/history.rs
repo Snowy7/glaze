@@ -12,7 +12,7 @@ use crate::docs::{DocId, Op, apply_op};
 
 const SETTINGS_IN_BARS: [&str; 2] = ["/performance", "/animation/reduceMotion"];
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Desktop {
     config: Vec<(String, Option<Value>)>,
@@ -23,6 +23,14 @@ pub struct Desktop {
     theme: Value,
     #[serde(default)]
     dark: Option<bool>,
+}
+
+impl PartialEq for Desktop {
+    fn eq(&self, other: &Self) -> bool {
+        // Theme pixels/skin and the resolved Windows scheme are frozen drawing inputs.
+        // A restore changes the three desktop documents, never Windows or a source theme.
+        self.config == other.config && self.bars == other.bars && self.widgets == other.widgets
+    }
 }
 
 impl Desktop {
@@ -935,6 +943,34 @@ pub fn starter_picture(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn restore_finishes_when_the_snapshot_has_a_different_windows_scheme() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(super::super::State::default());
+        observe(&app);
+        app.panel.as_ref().unwrap().history.borrow_mut().entries[0]
+            .desktop
+            .dark = Some(false);
+        app.run(crate::actions::Action::Preset("islands"));
+        app.panel.as_ref().unwrap().history.borrow_mut().selected = Some(0);
+        assert!(can_restore(&app));
+        restore(&mut app);
+        assert!(
+            app.panel
+                .as_ref()
+                .unwrap()
+                .history
+                .borrow()
+                .selected
+                .is_none()
+        );
+        assert!(
+            app.toast
+                .as_ref()
+                .is_some_and(|toast| toast.text == "Restored this desktop")
+        );
+    }
     #[test]
     fn rebuilds_do_not_record_or_compare_changed_documents() {
         let ui = mypaper_ui::Ui::new().unwrap();
