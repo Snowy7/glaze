@@ -309,6 +309,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
 pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
     let first_op = b.list.ops.len();
     let first_target = b.targets.len();
+    ui::first_use_hint(app, b, c, page);
     if app.system.running()
         && !app.system.parts[2].running
         && matches!(page, Page::Bars | Page::Top | Page::Dock | Page::BarDesign)
@@ -371,7 +372,7 @@ fn metrics(app: &App) -> String {
         .get(DocId::Config, "/engine/fps")
         .and_then(Value::as_u64)
         .map_or("Wallpaper's fps".into(), |n| format!("{n} fps cap"));
-    format!("{gpu} · {fps} · {cpu:.1}% CPU · {memory:.0} MB")
+    format!("{gpu} · {fps} · {cpu:.1}% CPU · mypaper uses {memory:.0} MB")
 }
 
 fn playback_status(app: &App) -> String {
@@ -608,9 +609,9 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             Some(glyph::WIDGETS),
             "Widgets",
             &format!(
-                "{} · Display {}",
+                "{} · {}",
                 crate::pages::widgets::count_here(app),
-                app.nav.display + 1
+                ui::display_name(app, app.nav.display)
             ),
             "",
             None,
@@ -690,7 +691,7 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
         b,
         c,
         "Widgets",
-        &format!("Display {} · {} widgets", app.nav.display + 1, items.len()),
+        &format!("{} · {} widgets", crate::panel::controls::display_name(app, app.nav.display), items.len()),
     );
     super::controls::displays(app, b, c);
     group(b, c, "On this display", |b, c| {
@@ -802,6 +803,9 @@ fn settings(_app: &App, b: &mut B, c: &mut Col) {
 
 fn performance(app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "Performance and power", "");
+    if let Some(memory) = super::measure::memory(app.fixture) {
+        notice(b, c, &format!("Studio uses {:.0} MB", memory.working_mb));
+    }
     // This is the existing Studio process sampler and configured frame cap, not measured GPU
     // utilization or measured fps (neither is exposed by its current model).
     notice(

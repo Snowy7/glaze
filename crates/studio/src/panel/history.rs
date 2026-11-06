@@ -454,13 +454,13 @@ fn summary(app: &App, before: &Desktop, after: &Desktop) -> String {
             };
             if let (Some(old), Some(new)) = (resolve(&before.bars), resolve(&after.bars)) {
                 if old.top.design != new.top.design {
-                    return format!("Display {}: top bar design changed", app.nav.display + 1);
+                    return format!("{}: top bar design changed", super::controls::display_name(app, app.nav.display));
                 }
                 if old.dock.design != new.dock.design {
-                    return format!("Display {}: dock design changed", app.nav.display + 1);
+                    return format!("{}: dock design changed", super::controls::display_name(app, app.nav.display));
                 }
             }
-            return format!("Display {}: bars changed", app.nav.display + 1);
+            return format!("{}: bars changed", super::controls::display_name(app, app.nav.display));
         }
         let name = |bars: &Value| {
             crate::pages::bars::PRESETS

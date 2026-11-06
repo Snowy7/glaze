@@ -52,7 +52,10 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
                 super::controls::feedback(
                     b,
                     c,
-                    &format!("No room for {name} on Display {}", app.nav.display + 1),
+                    &format!(
+                        "No room for {name} on the {} display",
+                        super::controls::display_name(app, app.nav.display)
+                    ),
                     make_room.into_iter().collect(),
                 );
             }
@@ -205,20 +208,63 @@ pub fn select(
         .iter()
         .find(|(v, _)| v == &value)
         .map_or_else(|| "Custom".to_owned(), |(_, l)| l.clone());
-    row(
-        b,
-        c,
-        None,
-        label,
-        &shown,
-        "",
-        None,
-        Action::Choose(Choices {
-            edit,
-            options,
-            current: Some(value),
-        }),
-    );
+    let action = Action::Choose(Choices {
+        edit,
+        options,
+        current: Some(value),
+    });
+    let style = super::controls::font(b, 13.0, 400);
+    let available = c.w - height(b, 16.0) - b.px(8.0);
+    let value_width = b.measure(&shown, &style).0;
+    let label_width = b.measure(label, &super::controls::font(b, 13.0, 500)).0;
+    // Keep the complete value readable, including a long choice at Windows' larger text size.
+    if label_width.max(b.px(140.0)) + value_width + b.px(12.0) > available {
+        let top = c.y;
+        let content_at = b.list.ops.len();
+        let line = height(b, 21.0);
+        c.y += b.px(7.0);
+        c.y += b.paragraph(
+            c.x,
+            c.y,
+            available,
+            label,
+            &super::controls::font(b, 13.0, 500),
+            line,
+            b.p.ink1,
+        );
+        c.y += b.paragraph(c.x, c.y, available, &shown, &style, line, b.p.ink2);
+        c.y += b.px(7.0);
+        let r = Rect::new(c.x, top, c.w, c.y - top);
+        let area = b.list_row_area(r);
+        let k = key(("panel-select", c.view, label));
+        let wash_at = b.list.ops.len();
+        b.wash(k, area, b.px(8.0));
+        let wash = b.list.ops.split_off(wash_at);
+        b.list.ops.splice(content_at..content_at, wash);
+        b.icon(
+            Rect::new(
+                c.right() - height(b, 16.0),
+                top,
+                height(b, 16.0),
+                r.height(),
+            ),
+            glyph::CHEVRON_DOWN,
+            15.0,
+            b.p.ink3,
+        );
+        b.hit(
+            k,
+            area,
+            Role::ComboBox,
+            &format!("{label} {shown}"),
+            action,
+            Behavior::Click,
+        );
+        b.focus_ring(k, area, b.px(8.0));
+        b.hline(c.x, c.right(), c.y - 1.0, b.p.line);
+        return;
+    }
+    row(b, c, None, label, &shown, "", None, action);
 }
 
 /// Small, finite choices use the kit's single page layout.
@@ -338,6 +384,14 @@ pub fn group_action(
 
 pub fn footer_height(app: &App) -> f32 {
     match app.panel.as_ref().map(|s| s.page) {
+        Some(Page::AddWallpaper)
+            if matches!(
+                app.overlay,
+                Some(crate::app::Overlay::AddWallpaper { source: None, .. })
+            ) =>
+        {
+            0.0
+        }
         Some(Page::FirstRun)
             if app.size.0 as f32 / app.scale < 400.0 || app.theme.ty.text_scale > 1.0 =>
         {
@@ -470,6 +524,22 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
     let mut visible_pictures = std::collections::HashSet::new();
     group(b, c, "Desktop changes", |b, c| {
         for (i, entry) in history.entries.iter().enumerate().rev() {
+            if entry.summary == "When Studio opened" || entry.title == "When Studio opened" {
+                c.y += b.px(8.0);
+                let line = height(b, 28.0);
+                text(
+                    b,
+                    Rect::new(c.x, c.y, c.w, line),
+                    &format!("Session started · {}", super::history::time_label(entry.at)),
+                    12.0,
+                    400,
+                    b.p.ink3,
+                    Align::Start,
+                );
+                c.y += line;
+                b.hline(c.x, c.right(), c.y, b.p.line);
+                continue;
+            }
             let row_h = height(b, 84.0);
             let r = b.list_row_area(Rect::new(c.x, c.y, c.w, row_h));
             let k = key(("panel-history", i));
@@ -870,6 +940,49 @@ pub fn number(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn large_select_stacks_and_renders_the_entire_value() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.size = (360, 760);
+        app.theme.ty.text_scale = 1.5;
+        let p = crate::panel::palette_for(&app);
+        let mut b =
+            mypaper_ui::controls::Builder::new(&mut ui.text, &p, &app.theme.ty, 1.0, &app.input);
+        let mut c = Col {
+            x: 28.0,
+            y: 0.0,
+            w: 304.0,
+            view: key("select-test"),
+        };
+        let value = "Follow the wallpaper's appearance and motion";
+        select(
+            &mut b,
+            &mut c,
+            "Background",
+            json!("long"),
+            Edit::new(DocId::Studio, "/test", "Background"),
+            vec![(json!("long"), value.into())],
+        );
+        let texts: Vec<_> = b
+            .list
+            .ops
+            .iter()
+            .filter_map(|op| {
+                if let mypaper_ui::Op::Text { text, .. } = op {
+                    Some(text.as_ref())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(texts[0], "Background");
+        assert_eq!(texts[1..].join(" "), value);
+        assert!(c.y > 70.0);
+        assert_eq!(b.targets.len(), 1);
+    }
     #[test]
     fn widget_room_state_and_creation_use_the_actual_display_extent() {
         let ui = mypaper_ui::Ui::new().unwrap();

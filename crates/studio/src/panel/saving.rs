@@ -364,10 +364,16 @@ fn failure_banner(
     use super::controls::{group, height, notice};
     group(b, c, "", |b, c| {
         let style = super::controls::font(b, 13.0, 600);
+        b.icon(
+            mypaper_ui::Rect::new(c.x, c.y + b.px(2.0), b.px(16.0), height(b, 20.0)),
+            mypaper_ui::icons::Icon::Warning,
+            15.0,
+            b.p.ink1,
+        );
         c.y += b.paragraph(
-            c.x,
+            c.x + b.px(24.0),
             c.y,
-            c.w,
+            c.w - b.px(24.0),
             &format!("Couldn't save {file}"),
             &style,
             height(b, 20.0),

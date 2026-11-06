@@ -291,8 +291,9 @@ fn render_panel_pages() {
                 "history" => {
                     super::history::observe(&app);
                     app.run(Action::Preset("islands"));
+                    app.run(Action::SetStyle(Some(mypaper_config::look::Style::Solid)));
                     super::history::observe(&app);
-                    app.panel.as_ref().unwrap().history.borrow_mut().selected = Some(0);
+                    app.panel.as_ref().unwrap().history.borrow_mut().selected = Some(1);
                     for (i, entry) in app
                         .panel
                         .as_ref()

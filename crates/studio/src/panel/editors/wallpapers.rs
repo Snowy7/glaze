@@ -591,7 +591,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                 ),
                 (
                     Source::Web,
-                    glyph::WALLPAPERS,
+                    mypaper_ui::icons::Icon::Globe.into(),
                     "A web page",
                     "A link or an HTML file",
                 ),

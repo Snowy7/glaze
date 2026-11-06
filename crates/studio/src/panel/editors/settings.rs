@@ -486,6 +486,8 @@ fn menu_name(entry: &Entry) -> String {
             Builtin::Paste => "Paste",
             Builtin::Wallpaper => "Change wallpaper",
             Builtin::Widgets => "Edit widgets",
+            Builtin::AddWidget => "Add widget",
+            Builtin::Studio => "mypaper Studio",
             Builtin::Display => "Display settings",
             Builtin::Personalize => "Personalize",
             Builtin::Terminal => "Open terminal here",
