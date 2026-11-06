@@ -17,7 +17,14 @@ fn open(page: Page) -> Action {
 }
 
 pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
-    let done = Rect::new(r.right - b.px(60.0), b.px(10.0), b.px(52.0), b.px(28.0));
+    let done_style = ui::font(b, 13.0, 500);
+    let done_width = (b.measure("Done", &done_style).0 + b.px(20.0)).max(b.px(52.0));
+    let done = Rect::new(
+        r.right - done_width - b.px(8.0),
+        b.px(10.0),
+        done_width,
+        b.px(28.0),
+    );
     button(
         b,
         done,
@@ -29,6 +36,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
     );
     let mut x = done.left - b.px(6.0);
     let editing = app.system.running();
+    let compact = r.width() <= b.px(360.0) || b.t.text_scale > 1.0;
     for (icon, label, enabled, action) in [
         (
             glyph::REDO,
@@ -43,7 +51,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
             Action::Undo,
         ),
     ] {
-        if !editing {
+        if !editing || compact && icon == glyph::REDO {
             continue;
         }
         x -= b.px(26.0);
@@ -61,11 +69,33 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         b.vline(x + b.px(2.0), b.px(15.0), b.px(33.0), b.p.line);
     }
     x -= b.px(4.0);
+    if compact && editing {
+        x -= b.px(26.0);
+        let mut options = vec![(json!("history"), "History (Ctrl H)".into())];
+        if app.docs.can_undo() {
+            options.push((json!("undo"), "Undo (Ctrl Z)".into()));
+        }
+        if app.docs.can_redo() {
+            options.push((json!("redo"), "Redo (Ctrl Y)".into()));
+        }
+        icon_button(
+            b,
+            Rect::new(x, b.px(10.0), b.px(24.0), b.px(28.0)),
+            glyph::CHEVRON_DOWN,
+            "More actions",
+            true,
+            Action::Choose(crate::actions::Choices {
+                edit: Edit::new(DocId::Studio, "/panel/header", "Header action"),
+                options,
+                current: None,
+            }),
+        );
+    }
     for (icon, label) in [
         (glyph::EYE, "Peek (coming soon)"),
         (glyph::CLOCK, "History (Ctrl H)"),
     ] {
-        if !editing {
+        if !editing || compact {
             continue;
         }
         x -= b.px(26.0);
@@ -129,24 +159,28 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         let mark = Rect::new(left, b.px(16.0), b.px(16.0), b.px(16.0));
         b.fill(mark, b.px(4.0), b.p.ink1);
         b.icon(mark, glyph::WALLPAPERS, 12.0, b.p.chrome);
+        let style = ui::font(b, 13.0, 600);
+        let name_width = b.measure("Studio", &style).0 + b.px(4.0);
         text(
             b,
-            Rect::new(mark.right + b.px(8.0), 0.0, b.px(44.0), r.height()),
+            Rect::new(mark.right + b.px(8.0), 0.0, name_width, r.height()),
             "Studio",
             13.0,
             600,
             b.p.ink1,
             Align::Start,
         );
-        mark.right + b.px(56.0)
+        mark.right + b.px(8.0) + name_width
     };
     let caption_x = end + b.px(8.0);
     // The caption yields to the fixed icon actions on a 360-DIP panel.
-    if x - caption_x >= b.px(40.0) {
+    let style = ui::font(b, 12.0, 400);
+    let caption = if editing { "Editing" } else { "Off" };
+    if x - caption_x >= b.measure(caption, &style).0 {
         text(
             b,
             Rect::new(caption_x, 0.0, x - caption_x, r.height()),
-            if editing { "Editing" } else { "Off" },
+            caption,
             12.0,
             400,
             b.p.ink3,

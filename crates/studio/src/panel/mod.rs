@@ -457,6 +457,7 @@ pub fn build(app: &App, text: &mut Text) -> Built {
             controls::notice(b, &mut c, "mypaper is off. Changes apply when it starts.");
         }
         pages::view(app, b, &mut c, page);
+        controls::boundaries(b);
         c.y + b.px(16.0)
     });
     editors::footer(
@@ -528,7 +529,8 @@ fn first_side(app: &App, work: mypaper_desktop::Rect, right: (i32, i32, i32, i32
             (foreground.bottom.min(right.1 + right.3) - foreground.top.max(right.1)).max(0);
         i64::from(width) * i64::from(height)
     };
-    overlap(right.0) > overlap(work.x + (right.0 + right.2 - work.x - work.width).abs())
+    let margin = work.x + work.width - (right.0 + right.2);
+    overlap(right.0) > overlap(work.x + margin)
 }
 
 /// Fit the client to measured page content; retain the desktop bands as the upper limit.
@@ -648,6 +650,15 @@ pub fn intercept_set(
 ) -> bool {
     if app.panel.is_none() || edit.doc != crate::docs::DocId::Studio {
         return false;
+    }
+    if edit.path.as_ref() == "/panel/header" {
+        match value.as_str() {
+            Some("history") => run(app, Command::Open(Page::History)),
+            Some("undo") => app.run(Action::Undo),
+            Some("redo") => app.run(Action::Redo),
+            _ => {}
+        }
+        return true;
     }
     let Some(field) = edit.path.strip_prefix("/panel/windows/") else {
         return false;

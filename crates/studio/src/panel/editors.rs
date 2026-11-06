@@ -216,12 +216,6 @@ pub fn toggle(b: &mut B, c: &mut Col, label: &str, caption: &str, on: bool, acti
         label,
         action,
     );
-    b.stroke(
-        Rect::new(point.x, point.y, b.px(36.0), b.px(20.0)),
-        b.px(10.0),
-        b.px(1.0),
-        b.p.edge,
-    );
     c.y += h;
 }
 

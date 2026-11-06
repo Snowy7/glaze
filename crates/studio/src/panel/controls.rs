@@ -341,7 +341,12 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
     } else {
         c.y + b.px(6.0)
     };
-    let label_w = b.px(140.0).min(c.w * 0.46);
+    let label_w = match s.kind {
+        Kind::Switch { .. } => c.w - b.px(48.0),
+        Kind::Text { .. } => c.w,
+        _ if c.w < b.px(360.0) || b.t.text_scale > 1.0 => c.w,
+        _ => b.px(140.0).min(c.w * 0.46),
+    };
     text(
         b,
         Rect::new(c.x, y, label_w, text_h),
@@ -371,17 +376,6 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
                 on,
                 label,
                 Action::Toggle(edit, on),
-            );
-            b.stroke(
-                Rect::new(
-                    r.right - b.px(36.0),
-                    c.y + (h - b.px(20.0)) / 2.0,
-                    b.px(36.0),
-                    b.px(20.0),
-                ),
-                b.px(10.0),
-                b.px(1.0),
-                b.p.edge,
             );
             c.y += h;
         }
@@ -710,4 +704,70 @@ pub fn more(app: &App, b: &mut B, c: &mut Col, hint: &str) -> bool {
 pub fn notice(b: &mut B, c: &mut Col, message: &str) {
     let style = font(b, 12.0, 400);
     c.y += b.paragraph(c.x, c.y, c.w, message, &style, height(b, 18.0), b.p.ink3) + b.px(12.0);
+}
+
+/// Give reused kit controls the same visible boundary as the panel's native controls.
+/// Run inside the body's scroll clip, after its controls have registered their geometry.
+pub fn boundaries(b: &mut B) {
+    let mut segments: std::collections::HashMap<_, (Rect, usize, bool)> =
+        std::collections::HashMap::new();
+    for target in b.targets.clone() {
+        match target.behavior {
+            Behavior::Slider {
+                track,
+                min,
+                max,
+                value,
+                ..
+            } => {
+                b.stroke(track, b.px(2.0), b.px(1.0), b.p.edge);
+                let t = ((value - min) / (max - min)).clamp(0.0, 1.0) as f32;
+                let knob = b.px(18.0).round();
+                let r = Rect::new(
+                    (track.left + track.width() * t - knob / 2.0).round(),
+                    (track.top + track.height() / 2.0 - knob / 2.0).round(),
+                    knob,
+                    knob,
+                );
+                b.fill(r, knob / 2.0, b.kit.color.knob);
+                b.stroke(r, knob / 2.0, b.px(1.0), b.p.edge);
+            }
+            Behavior::Toggle => b.stroke(
+                target.rect.inflate(-b.px(4.0)),
+                b.px(12.0),
+                b.px(1.0),
+                b.p.edge,
+            ),
+            Behavior::Field => b.stroke(target.rect, b.px(6.0), b.px(1.0), b.p.edge),
+            _ => match target.action {
+                Action::Choose(_) if target.rect.height() <= b.px(36.0) => {
+                    b.stroke(target.rect, b.px(6.0), b.px(1.0), b.p.edge)
+                }
+                Action::Set(_, _)
+                    if target.rect.height() <= b.px(36.0) && target.rect.width() > b.px(48.0) =>
+                {
+                    if let Some(group) = target.group {
+                        segments
+                            .entry(group)
+                            .and_modify(|(r, count, same_row)| {
+                                *same_row &= (r.top - target.rect.top).abs() < 1.0
+                                    && (r.bottom - target.rect.bottom).abs() < 1.0;
+                                *count += 1;
+                                r.left = r.left.min(target.rect.left);
+                                r.top = r.top.min(target.rect.top);
+                                r.right = r.right.max(target.rect.right);
+                                r.bottom = r.bottom.max(target.rect.bottom);
+                            })
+                            .or_insert((target.rect, 1, true));
+                    }
+                }
+                _ => {}
+            },
+        }
+    }
+    for (r, count, same_row) in segments.into_values() {
+        if count > 1 && same_row {
+            b.stroke(r.inflate(b.px(2.0)), b.px(7.0), b.px(1.0), b.p.edge);
+        }
+    }
 }

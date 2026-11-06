@@ -507,6 +507,11 @@ fn manifest_control(
                 options,
             );
         }
+        Setting::Place { .. } => {
+            let mode = Rect::new(c.x, c.y, c.w, b.px(32.0));
+            legacy::widget_setting(app, b, c, base, resolved, setting, instance, manifest);
+            b.stroke(mode, b.px(7.0), b.px(1.0), b.p.edge);
+        }
         _ => legacy::widget_setting(app, b, c, base, resolved, setting, instance, manifest),
     }
 }
