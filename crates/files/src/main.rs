@@ -6,7 +6,9 @@ mod backend;
 mod look;
 mod model;
 mod native;
+mod preview;
 mod shell;
+mod tabs;
 mod transfer;
 mod view;
 
@@ -34,7 +36,7 @@ fn run() -> anyhow::Result<()> {
         OleInitialize(None)?;
     }
     let mut args = std::env::args().skip(1);
-    let mut path = "shell:profile".to_owned();
+    let mut path = String::new();
     let mut scheme = None;
     while let Some(arg) = args.next() {
         match arg.as_str() {

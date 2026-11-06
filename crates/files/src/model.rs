@@ -89,7 +89,7 @@ pub fn natural(a: &str, b: &str) -> Ordering {
     left.len().cmp(&right.len())
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct History {
     paths: Vec<String>,
     at: usize,
@@ -124,7 +124,7 @@ impl History {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Selection {
     pub items: BTreeSet<usize>,
     pub focus: Option<usize>,
@@ -181,8 +181,27 @@ pub struct Preferences {
     pub pins: Vec<String>,
     pub view: View,
     pub widths: Vec<f32>,
+    pub tabs: Vec<String>,
+    pub active_tab: usize,
+    pub preview: bool,
 }
 impl Preferences {
+    /// Keep old preferences valid and bound restore work from hand-edited files.
+    pub fn session(&self) -> (Vec<String>, usize) {
+        let paths: Vec<_> = self
+            .tabs
+            .iter()
+            .filter(|p| !p.trim().is_empty())
+            .take(32)
+            .cloned()
+            .collect();
+        if paths.is_empty() {
+            (vec!["shell:profile".into()], 0)
+        } else {
+            let active = self.active_tab.min(paths.len() - 1);
+            (paths, active)
+        }
+    }
     pub fn load() -> Self {
         mypaper_config::dir()
             .ok()
@@ -230,5 +249,18 @@ mod tests {
         assert_eq!(natural("HELLO", "hello"), Ordering::Equal);
         assert_eq!(natural("f0002", "f2"), Ordering::Greater);
         assert_eq!(size_label(1024), "1.0 KB");
+    }
+
+    #[test]
+    fn old_preferences_restore_home_and_sessions_are_bounded() {
+        let old: Preferences = serde_json::from_str(r#"{"pins":[],"view":"Details"}"#).unwrap();
+        assert_eq!(old.session(), (vec!["shell:profile".into()], 0));
+        let p = Preferences {
+            tabs: (0..50).map(|n| format!("folder-{n}")).collect(),
+            active_tab: 99,
+            ..Default::default()
+        };
+        let (tabs, active) = p.session();
+        assert_eq!((tabs.len(), active), (32, 31));
     }
 }

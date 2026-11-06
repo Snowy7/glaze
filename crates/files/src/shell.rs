@@ -428,6 +428,16 @@ pub fn open(path: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn terminal(path: &str) -> Result<()> {
+    use std::os::windows::process::CommandExt;
+    // Pass the directory as a distinct argument; no shell command is constructed from a path.
+    std::process::Command::new("wt.exe")
+        .args(["-d", path])
+        .creation_flags(0x08000000)
+        .spawn()?;
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub enum Operation {
     Copy {

@@ -38,9 +38,16 @@ pub const MINIMIZE: u32 = 18;
 pub const MAXIMIZE: u32 = 19;
 pub const CLOSE: u32 = 20;
 pub const EDIT_FIELD: u32 = 21;
+pub const NEW_TAB: u32 = 22;
+pub const PREVIEW: u32 = 23;
+pub const LOOK_CLOSE: u32 = 24;
+pub const LOOK_PREVIOUS: u32 = 25;
+pub const LOOK_NEXT: u32 = 26;
 pub const HEADER: u32 = 100;
 pub const SIDEBAR: u32 = 200;
 pub const CRUMB: u32 = 500;
+pub const TAB: u32 = 1000;
+pub const TAB_CLOSE: u32 = 2000;
 pub const ITEM: u32 = 10_000;
 
 #[derive(Clone, Copy)]
@@ -57,6 +64,9 @@ pub enum Command {
     Details,
     Icons,
     Shell,
+    Terminal,
+    CopyPath,
+    Preview,
 }
 
 #[derive(Clone, PartialEq)]
@@ -69,6 +79,10 @@ pub enum Field {
 }
 
 pub enum Drag {
+    Tab {
+        index: usize,
+        start: Point,
+    },
     Item {
         start: Point,
     },
@@ -86,6 +100,8 @@ pub enum Drag {
 
 #[derive(Default)]
 pub struct Geometry {
+    pub tabs: Rect,
+    pub preview: Rect,
     pub viewport: Rect,
     pub address: Rect,
     pub search: Rect,
@@ -98,6 +114,16 @@ pub struct Geometry {
 }
 
 pub struct App {
+    pub quick_look: bool,
+    pub preview_content: Option<crate::preview::Content>,
+    pub preview_path: String,
+    pub preview_scroll: Scroll,
+    preview_service: Option<crate::preview::Service>,
+    preview_ticket: u64,
+    pub tabs: Vec<crate::tabs::Tab>,
+    pub active_tab: usize,
+    cache: crate::tabs::FolderCache,
+    pending_paint: Option<(Instant, bool, String)>,
     pub layered: mypaper_ui::layered_app::LayeredApp,
     pub surface: Surface,
     pub backdrop: std::rc::Rc<crate::backdrop::Client>,
@@ -185,7 +211,23 @@ impl App {
         let backend = Backend::new(surface.hwnd())?;
         let drop_target = DropTarget::new(surface.hwnd())?;
         let preferences = Preferences::load();
+        let (paths, active_tab) = if path.is_empty() {
+            preferences.session()
+        } else {
+            (vec![path], 0)
+        };
+        let path = paths[active_tab].clone();
         let mut app = Self {
+            quick_look: false,
+            preview_content: None,
+            preview_path: String::new(),
+            preview_scroll: Scroll::new(&theme.motion),
+            preview_service: None,
+            preview_ticket: 0,
+            tabs: paths.into_iter().map(crate::tabs::Tab::new).collect(),
+            active_tab,
+            cache: crate::tabs::FolderCache::default(),
+            pending_paint: None,
             scroll: Scroll::new(&theme.motion),
             sidebar_scroll: Scroll::new(&theme.motion),
             surface,
@@ -327,11 +369,20 @@ impl App {
             self.status =
                 "Finish or cancel the current file operation before closing Files.".into();
         } else {
+            if let Err(error) = self.save_session() {
+                log::warn!("Saving Files session: {error:#}");
+            }
             self.closing = true;
         }
     }
 
     pub fn navigate(&mut self, path: String, record: bool) -> Result<()> {
+        self.quick_look = false;
+        self.remember_folder();
+        let started = Instant::now();
+        let cached = self.cache.get(&path, self.sort);
+        self.pending_paint = Some((started, cached.is_some(), path.clone()));
+        self.tabs[self.active_tab].path = path.clone();
         self.drop_target
             .enabled
             .store(false, std::sync::atomic::Ordering::Relaxed);
@@ -363,7 +414,184 @@ impl App {
             .lock()
             .map(|mut d| *d = None)
             .ok();
+        if let Some(folder) = cached {
+            self.entries = folder.entries.clone();
+            self.shown = folder.entries;
+            self.sizes = folder.sizes;
+            if record {
+                self.history.visit(folder.location.path.clone());
+            }
+            self.pending_history = false;
+            self.location = Some(folder.location);
+            self.refreshing = true;
+        }
         Ok(())
+    }
+
+    fn remember_folder(&mut self) {
+        if !self.loading
+            && let Some(location) = self.location.clone()
+        {
+            self.cache.insert(crate::tabs::Folder {
+                location,
+                entries: self.entries.clone(),
+                sort: self.sort,
+                sizes: self.sizes.clone(),
+            });
+        }
+    }
+
+    fn snapshot_tab(&mut self) {
+        use crate::tabs::Tab;
+        self.tabs[self.active_tab] = Tab {
+            path: self.tabs[self.active_tab].path.clone(),
+            location: self.location.clone(),
+            entries: self.entries.clone(),
+            shown: self.shown.clone(),
+            history: self.history.clone(),
+            selection: self.selection.clone(),
+            sort: self.sort,
+            scroll: self.scroll.clone(),
+            query_text: self.query_text.clone(),
+            indexed: self.indexed,
+            sizes: self.sizes.clone(),
+            loaded: !self.loading,
+        };
+    }
+
+    pub fn save_session(&mut self) -> Result<()> {
+        self.preferences.tabs = self.tabs.iter().map(|t| t.path.clone()).collect();
+        self.preferences.active_tab = self.active_tab;
+        self.preferences.save()
+    }
+
+    pub fn switch_tab(&mut self, index: usize) -> Result<()> {
+        if index == self.active_tab || index >= self.tabs.len() {
+            return Ok(());
+        }
+        self.snapshot_tab();
+        self.remember_folder();
+        let tab = self.tabs[index].clone();
+        self.active_tab = index;
+        self.loading = true; // the previous snapshot was already cached with its own sort.
+        self.sort = tab.sort;
+        // A tab snapshot can be shown immediately; enumeration reconciles inactive changes.
+        if tab.loaded
+            && let Some(location) = tab.location.clone()
+        {
+            self.cache.insert(crate::tabs::Folder {
+                location,
+                entries: tab.entries.clone(),
+                sort: tab.sort,
+                sizes: tab.sizes.clone(),
+            });
+        }
+        self.navigate(tab.path, false)?;
+        self.history = tab.history;
+        if tab.loaded {
+            self.shown = tab.shown;
+            self.selection = tab.selection;
+            self.scroll = tab.scroll;
+            self.query_text = tab.query_text;
+            self.search.set_text(&self.query_text)?;
+            self.indexed = tab.indexed;
+        } else {
+            self.pending_history = true;
+        }
+        self.save_session()
+    }
+
+    pub fn new_tab(&mut self, path: String) -> Result<()> {
+        if self.tabs.len() >= 32 {
+            self.status = "The limit is 32 tabs per window".into();
+            return Ok(());
+        }
+        let index = self.tabs.len();
+        self.tabs.push(crate::tabs::Tab::new(path));
+        self.switch_tab(index)
+    }
+
+    pub fn close_tab(&mut self, index: usize) -> Result<()> {
+        if index >= self.tabs.len() {
+            return Ok(());
+        }
+        if self.tabs.len() == 1 {
+            self.request_close();
+            return Ok(());
+        }
+        if index == self.active_tab {
+            self.switch_tab(if index == 0 { 1 } else { index - 1 })?;
+        }
+        self.tabs.remove(index);
+        if index < self.active_tab {
+            self.active_tab -= 1;
+        }
+        self.save_session()
+    }
+
+    fn detach_tab(&mut self, index: usize) -> Result<()> {
+        use std::os::windows::process::CommandExt;
+        if index >= self.tabs.len() || self.tabs.len() == 1 {
+            return Ok(());
+        }
+        std::process::Command::new(std::env::current_exe()?)
+            .args(["--", &self.tabs[index].path])
+            .creation_flags(0x08000000)
+            .spawn()?;
+        self.close_tab(index)
+    }
+
+    /// Timestamp after the first nonempty frame is actually presented, not worker completion.
+    pub fn painted(&mut self) {
+        if (!self.shown.is_empty() || !self.loading)
+            && let Some((started, cached, path)) = self.pending_paint.take()
+        {
+            log::info!(
+                "first-paint: path={path:?} cached={cached} rows={} elapsed_us={}",
+                self.geometry.rows.len(),
+                started.elapsed().as_micros()
+            );
+        }
+    }
+
+    pub fn update_preview(&mut self) -> Result<()> {
+        let path = (self.preferences.preview || self.quick_look)
+            .then(|| {
+                self.selection
+                    .focus
+                    .and_then(|i| self.shown.get(i))
+                    .filter(|e| !e.directory)
+                    .map(|e| e.path.clone())
+            })
+            .flatten()
+            .unwrap_or_default();
+        if path == self.preview_path {
+            return Ok(());
+        }
+        self.preview_path = path.clone();
+        self.preview_content = None;
+        self.preview_scroll.reset();
+        if path.is_empty() {
+            self.preview_service = None;
+        } else {
+            if self.preview_service.is_none() {
+                self.preview_service = Some(crate::preview::Service::new(self.surface.hwnd())?);
+            }
+            self.preview_ticket = self.preview_service.as_ref().unwrap().request(path);
+        }
+        Ok(())
+    }
+
+    fn quick_step(&mut self, forward: bool) {
+        let current = self.selection.focus.unwrap_or(0);
+        let next = if forward {
+            (current + 1..self.shown.len()).find(|i| !self.shown[*i].directory)
+        } else {
+            (0..current).rev().find(|i| !self.shown[*i].directory)
+        };
+        if let Some(next) = next {
+            self.selection.choose(next, false, false);
+        }
     }
 
     pub fn focus(&mut self, field: Field) -> Result<()> {
@@ -518,6 +746,25 @@ impl App {
                 }
             }
             Command::Refresh => self.refresh()?,
+            Command::Terminal => {
+                if let Some(location) = self.location.as_ref().filter(|l| l.filesystem) {
+                    shell::terminal(&location.path)?;
+                }
+            }
+            Command::CopyPath => {
+                let mut paths = self.selected_paths();
+                if paths.is_empty()
+                    && let Some(location) = &self.location
+                {
+                    paths.push(location.path.clone());
+                }
+                native::copy_text(self.surface.hwnd(), &paths.join("\r\n"))?;
+                self.status = "Path copied".into();
+            }
+            Command::Preview => {
+                self.preferences.preview = !self.preferences.preview;
+                self.preferences.save()?;
+            }
             Command::Details | Command::Icons => {
                 self.preferences.view = if matches!(command, Command::Details) {
                     View::Details
@@ -646,6 +893,14 @@ impl App {
             ]);
         }
         items.extend([
+            Entry::action("Copy path", Command::CopyPath),
+            Entry::Action {
+                label: "Open in Terminal".into(),
+                command: Command::Terminal,
+                checked: None,
+                enabled: self.location.as_ref().is_some_and(|l| l.filesystem),
+            },
+            Entry::Separator,
             Entry::Action {
                 label: "Paste".into(),
                 command: Command::Paste,
@@ -684,6 +939,11 @@ impl App {
                 self.preferences.view == View::Icons,
             ),
             Entry::action("Refresh", Command::Refresh),
+            Entry::radio(
+                "Preview pane (Alt+P)",
+                Command::Preview,
+                self.preferences.preview,
+            ),
             Entry::Separator,
             Entry::action("Show more options", Command::Shell),
         ]);
@@ -694,6 +954,18 @@ impl App {
 
     fn activate(&mut self, ui: &mut Ui, id: u32) -> Result<()> {
         match id {
+            LOOK_CLOSE => self.quick_look = false,
+            LOOK_PREVIOUS | LOOK_NEXT => self.quick_step(id == LOOK_NEXT),
+            NEW_TAB => self.new_tab(
+                self.location
+                    .as_ref()
+                    .map_or_else(|| "shell:profile".into(), |l| l.path.clone()),
+            )?,
+            PREVIEW => self.command(Command::Preview)?,
+            id if (TAB..TAB + 32).contains(&id) => self.switch_tab((id - TAB) as usize)?,
+            id if (TAB_CLOSE..TAB_CLOSE + 32).contains(&id) => {
+                self.close_tab((id - TAB_CLOSE) as usize)?
+            }
             BACK | FORWARD => {
                 if let Some(path) = self.history.go(id == FORWARD) {
                     self.navigate(path, false)?;
@@ -756,7 +1028,7 @@ impl App {
                     self.navigate(path.clone(), true)?;
                 }
             }
-            id if (CRUMB..ITEM).contains(&id) => {
+            id if (CRUMB..TAB).contains(&id) => {
                 if let Some(path) = self.geometry.crumbs.get((id - CRUMB) as usize) {
                     self.navigate(path.clone(), true)?;
                 }
@@ -771,8 +1043,18 @@ impl App {
     }
 
     pub fn key(&mut self, ui: &mut Ui, key: u16, modifiers: native::Modifiers) -> Result<()> {
+        if self.quick_look {
+            match key {
+                0x1b | 0x20 => self.quick_look = false,
+                0x25 | 0x26 => self.quick_step(false),
+                0x27 | 0x28 => self.quick_step(true),
+                _ => {}
+            }
+            return Ok(());
+        }
         if modifiers.alt {
             match key {
+                0x50 => self.command(Command::Preview)?,
                 0x25 => self.activate(ui, BACK)?,
                 0x27 => self.activate(ui, FORWARD)?,
                 0x26 => self.activate(ui, UP)?,
@@ -782,6 +1064,16 @@ impl App {
         }
         if modifiers.control && !matches!(key, 0x21..=0x28) {
             match key {
+                0x54 => self.activate(ui, NEW_TAB)?,
+                0x57 => self.close_tab(self.active_tab)?,
+                0x09 => {
+                    let next = if modifiers.shift {
+                        (self.active_tab + self.tabs.len() - 1) % self.tabs.len()
+                    } else {
+                        (self.active_tab + 1) % self.tabs.len()
+                    };
+                    self.switch_tab(next)?;
+                }
                 0x4c => self.focus(Field::Address)?,
                 0x45 | 0x46 => {
                     self.focus(Field::Search)?;
@@ -834,9 +1126,11 @@ impl App {
                 })?;
             }
             0x20 if self.field == Field::None => {
-                if let Some(index) = self.selection.focus {
-                    self.selection.choose(index, true, false);
-                }
+                self.quick_look = self
+                    .selection
+                    .focus
+                    .and_then(|i| self.shown.get(i))
+                    .is_some_and(|e| !e.directory);
             }
             0x21..=0x28
                 if !self.shown.is_empty() && matches!(self.field, Field::None | Field::Search) =>
@@ -879,7 +1173,8 @@ impl App {
     }
 
     pub fn type_select(&mut self, character: char) {
-        if self.field != Field::None || self.shown.is_empty() {
+        if self.field != Field::None || self.shown.is_empty() || character == ' ' || self.quick_look
+        {
             return;
         }
         if self.typed_at.elapsed() > Duration::from_millis(900) {
@@ -957,7 +1252,10 @@ impl App {
                 }
             }
             Event::Wheel(pointer, delta) => {
-                if pointer.at.x < self.geometry.viewport.left {
+                if self.quick_look || self.geometry.preview.contains(pointer.at) {
+                    self.preview_scroll
+                        .wheel(delta, self.surface.scale(), Instant::now());
+                } else if pointer.at.x < self.geometry.viewport.left {
                     self.sidebar_scroll
                         .wheel(delta, self.surface.scale(), Instant::now());
                 } else {
@@ -984,6 +1282,11 @@ impl App {
                         index,
                         start: pointer.at.x,
                         width: widths[index] / self.surface.scale(),
+                    });
+                } else if let Some(id) = target.filter(|id| (TAB..TAB + 32).contains(id)) {
+                    self.drag = Some(Drag::Tab {
+                        index: (id - TAB) as usize,
+                        start: pointer.at,
                     });
                 } else if let Some(id) = target.filter(|id| *id >= ITEM) {
                     self.focus(Field::None)?;
@@ -1078,7 +1381,20 @@ impl App {
             Event::Release(pointer, Button::Left) => {
                 let target = hit(self, pointer.at);
                 let drag = self.drag.take();
-                if matches!(drag, Some(Drag::Column { .. })) {
+                if let Some(Drag::Tab { index, start }) = drag {
+                    if !self
+                        .geometry
+                        .tabs
+                        .inflate(24.0 * self.surface.scale())
+                        .contains(pointer.at)
+                        && (pointer.at.x - start.x).abs() + (pointer.at.y - start.y).abs()
+                            > 42.0 * self.surface.scale()
+                    {
+                        self.detach_tab(index)?;
+                    } else {
+                        self.switch_tab(index)?;
+                    }
+                } else if matches!(drag, Some(Drag::Column { .. })) {
                     self.preferences.save()?;
                 } else if matches!(drag, Some(Drag::Item { .. })) && !control() && !shift() {
                     if let Some(id) = target.filter(|id| *id >= ITEM) {
@@ -1109,6 +1425,18 @@ impl App {
                         origin.1 + pointer.at.y as i32,
                     ),
                 )?;
+            }
+            Event::Release(pointer, Button::Middle) => {
+                if let Some(id) = hit(self, pointer.at) {
+                    if (TAB..TAB + 32).contains(&id) {
+                        self.close_tab((id - TAB) as usize)?;
+                    } else if id >= ITEM
+                        && let Some(entry) =
+                            self.shown.get((id - ITEM) as usize).filter(|e| e.directory)
+                    {
+                        self.new_tab(entry.path.clone())?;
+                    }
+                }
             }
             Event::DoubleClick(pointer, Button::Left) => {
                 if let Some(id) = hit(self, pointer.at).filter(|id| *id >= ITEM) {
@@ -1156,10 +1484,19 @@ impl App {
 
     pub fn replies(&mut self) -> Result<bool> {
         let mut changed = false;
+        if let Some(service) = &self.preview_service {
+            while let Ok((ticket, content)) = service.replies.try_recv() {
+                if ticket == self.preview_ticket {
+                    self.preview_content = Some(content);
+                    changed = true;
+                }
+            }
+        }
         while let Ok(reply) = self.backend.replies.try_recv() {
             changed = true;
             match reply {
                 Reply::Changed { path } => {
+                    self.cache.invalidate(&path);
                     if self
                         .location
                         .as_ref()
@@ -1213,8 +1550,14 @@ impl App {
                         .enabled
                         .store(!self.busy, std::sync::atomic::Ordering::Relaxed);
                     self.location = Some(location);
+                    if let Some(location) = &self.location {
+                        self.tabs[self.active_tab].path = location.path.clone();
+                        self.tabs[self.active_tab].location = Some(location.clone());
+                    }
                     self.loading = !complete;
                     if complete {
+                        self.remember_folder();
+                        self.save_session()?;
                         self.refreshing = false;
                     }
                     self.elapsed_ms = elapsed_ms;
@@ -1374,12 +1717,14 @@ impl App {
     pub fn tick(&mut self) -> (bool, Option<Duration>) {
         let a = self.scroll.tick(Instant::now());
         let b = self.sidebar_scroll.tick(Instant::now());
+        let c = self.preview_scroll.tick(Instant::now());
         let next = match (a.1, b.1) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
         };
+        let next = next.into_iter().chain(c.1).min();
         (
-            a.0 || b.0,
+            a.0 || b.0 || c.0,
             next.map(|at| at.saturating_duration_since(Instant::now())),
         )
     }

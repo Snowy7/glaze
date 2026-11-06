@@ -11,6 +11,9 @@ use std::time::Instant;
 
 pub fn column_widths(app: &App, width: f32) -> Vec<f32> {
     let s = app.surface.scale();
+    if width < 700.0 * s {
+        return vec![width * 0.42, width * 0.24, width * 0.18, width * 0.16];
+    }
     if app.preferences.widths.len() == 4
         && app
             .preferences
@@ -68,6 +71,7 @@ fn field(
 }
 
 pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
+    app.update_preview()?;
     let (width, height) = app.surface.client_size();
     if width == 0 || height == 0 {
         app.prepare_backdrop(Rect::default());
@@ -83,10 +87,16 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     let mut f = Frame::new(&mut ui.text, theme, s, &app.interaction);
     f.surface(bounds, glass);
     let (title, rest) = bounds.take_top(px(46.0), 0.0);
+    let (tabs, rest) = rest.take_top(px(40.0), 0.0);
     let (navigation, rest) = rest.take_top(px(58.0), 0.0);
     let (status, body) = rest.take_bottom(px(32.0), 0.0);
     let (sidebar, main) = body.take_left(px(208.0), 0.0);
     let (commands, main) = main.take_top(px(52.0), 0.0);
+    let (preview, main) = if app.preferences.preview {
+        main.take_right(px(320.0).min(main.width() * 0.40), px(8.0))
+    } else {
+        (Rect::default(), main)
+    };
     let inset = px(16.0);
 
     // Our title area keeps native drag, resize, Aero Snap and caption button semantics.
@@ -116,10 +126,75 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
             px(46.0),
             buttons.height(),
         );
-        f.icon_button(id, rect, icon, 15.0, label, false);
+        f.quiet_icon_button(id, rect, icon, label, true, false);
         chrome.push((rect, kind));
     }
     app.surface.set_chrome(&chrome);
+
+    let tab_area = tabs.inset(Insets::xy(px(14.0), px(3.0)));
+    let visible_tabs = app
+        .tabs
+        .len()
+        .min(((tab_area.width() - px(42.0)) / px(120.0)).floor().max(1.0) as usize);
+    let first_tab = app
+        .active_tab
+        .saturating_sub(visible_tabs - 1)
+        .min(app.tabs.len() - visible_tabs);
+    let tab_width = ((tab_area.width() - px(42.0)) / visible_tabs as f32).min(px(208.0));
+    for (index, tab) in app
+        .tabs
+        .iter()
+        .enumerate()
+        .skip(first_tab)
+        .take(visible_tabs)
+    {
+        let rect = Rect::new(
+            tab_area.left + tab_width * (index - first_tab) as f32,
+            tab_area.top,
+            tab_width - px(4.0),
+            tab_area.height(),
+        );
+        let id = TAB + index as u32;
+        if index == app.active_tab {
+            f.fill(rect, px(7.0), color.fill);
+        }
+        f.wash(id, rect, px(7.0), true);
+        let (close, label) = rect.take_right(px(28.0), px(2.0));
+        f.text_in(
+            label.inset(Insets::xy(px(10.0), 0.0)),
+            tab.label(),
+            TextRole::Callout,
+            if index == app.active_tab {
+                color.label
+            } else {
+                color.secondary
+            },
+            Align::Start,
+        );
+        f.hit(
+            id,
+            rect,
+            Role::Tab,
+            tab.label(),
+            true,
+            Some(index == app.active_tab),
+        );
+        f.quiet_icon_button(
+            TAB_CLOSE + index as u32,
+            close,
+            Icon::Close,
+            "Close tab (Ctrl+W)",
+            true,
+            false,
+        );
+    }
+    let new = Rect::new(
+        tab_area.left + tab_width * visible_tabs as f32,
+        tab_area.top,
+        px(34.0),
+        tab_area.height(),
+    );
+    f.quiet_icon_button(NEW_TAB, new, Icon::Add, "New tab (Ctrl+T)", true, false);
 
     let nav = navigation.inset(Insets::xy(px(14.0), px(9.0)));
     let (moves, nav) = nav.take_left(px(122.0), px(10.0));
@@ -152,10 +227,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
             px(36.0),
             moves.height(),
         );
-        f.button(id, rect, "", Some(icon), ButtonKind::Plain, enabled);
-        if let Some(hit) = f.list.hits.last_mut() {
-            hit.label = label.into();
-        }
+        f.quiet_icon_button(id, rect, icon, label, enabled, false);
     }
     let (search, address) = nav.take_right(px(260.0).min(nav.width() * 0.36), px(12.0));
     let search_inner = field(
@@ -312,7 +384,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     });
 
     let command_inner = commands.inset(Insets::xy(inset, px(8.0)));
-    let (modes, mut actions) = command_inner.take_right(px(114.0), px(10.0));
+    let (modes, mut actions) = command_inner.take_right(px(152.0), px(10.0));
     let new_width = f.button_size("New folder", true).0;
     let (new, remaining) = actions.take_left(new_width, px(12.0));
     actions = remaining;
@@ -358,51 +430,36 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     ] {
         let (rect, rest) = actions.take_left(px(36.0), px(2.0));
         actions = rest;
-        f.button(
-            id,
-            rect,
-            "",
-            Some(icon),
-            ButtonKind::Plain,
-            enabled && !app.busy,
-        );
-        if let Some(hit) = f.list.hits.last_mut() {
-            hit.label = label.into();
-        }
+        f.quiet_icon_button(id, rect, icon, label, enabled && !app.busy, false);
     }
     let (detail, modes) = modes.take_left(px(36.0), px(3.0));
-    let (icons, more) = modes.take_left(px(36.0), px(3.0));
-    f.button(
+    let (icons, rest_modes) = modes.take_left(px(36.0), px(3.0));
+    let (preview_button, more) = rest_modes.take_left(px(36.0), px(3.0));
+    f.quiet_icon_button(
+        PREVIEW,
+        preview_button,
+        Icon::Window,
+        "Preview pane (Alt+P)",
+        true,
+        app.preferences.preview,
+    );
+    f.quiet_icon_button(
         DETAILS,
         detail,
-        "",
-        Some(Icon::Grip),
-        if app.preferences.view == View::Details {
-            ButtonKind::Tinted
-        } else {
-            ButtonKind::Plain
-        },
+        Icon::Grip,
+        "Details view",
         true,
+        app.preferences.view == View::Details,
     );
-    if let Some(hit) = f.list.hits.last_mut() {
-        hit.label = "Details view".into();
-    }
-    f.button(
+    f.quiet_icon_button(
         ICONS,
         icons,
-        "",
-        Some(Icon::Apps),
-        if app.preferences.view == View::Icons {
-            ButtonKind::Tinted
-        } else {
-            ButtonKind::Plain
-        },
+        Icon::Apps,
+        "Icons view",
         true,
+        app.preferences.view == View::Icons,
     );
-    if let Some(hit) = f.list.hits.last_mut() {
-        hit.label = "Icons view".into();
-    }
-    f.icon_button(MORE, more, Icon::More, 18.0, "More actions", false);
+    f.quiet_icon_button(MORE, more, Icon::More, "More actions", true, false);
 
     let (heading, content) = main.take_top(px(44.0), 0.0);
     let content = content.inset(Insets::xy(inset, px(3.0)));
@@ -600,6 +657,18 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
                         .or(entry.size)
                         .map(model::size_label)
                         .unwrap_or_default();
+                    if entry.directory
+                        && let Some(bytes) = app.sizes.get(&entry.path)
+                    {
+                        let max = app.sizes.values().copied().max().unwrap_or(1).max(1);
+                        let bar = ((widths[3] - px(24.0)) * (*bytes as f64 / max as f64) as f32)
+                            .max(px(2.0));
+                        f.fill(
+                            Rect::new(x + px(10.0), rect.bottom - px(5.0), bar, px(2.0)),
+                            px(1.0),
+                            color.accent.with_alpha(0.28),
+                        );
+                    }
                     f.text_in(
                         Rect::new(x + px(10.0), rect.top, widths[3] - px(24.0), rect.height()),
                         &size,
@@ -688,7 +757,25 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     let selected = if app.selection.items.is_empty() {
         String::new()
     } else {
-        format!("  ·  {} selected", app.selection.items.len())
+        let bytes: u64 = app
+            .selection
+            .items
+            .iter()
+            .filter_map(|i| app.shown.get(*i))
+            .filter_map(|e| app.sizes.get(&e.path).copied().or(e.size))
+            .sum();
+        let unknown = app
+            .selection
+            .items
+            .iter()
+            .filter_map(|i| app.shown.get(*i))
+            .any(|e| e.directory && !app.sizes.contains_key(&e.path) && e.size.is_none());
+        format!(
+            "  ·  {} selected · {}{}",
+            app.selection.items.len(),
+            model::size_label(bytes),
+            if unknown { " + uncounted folders" } else { "" }
+        )
     };
     f.text_in(
         status_inner,
@@ -715,6 +802,24 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
         );
     }
 
+    if app.preferences.preview {
+        preview_panel(&mut f, app, preview, now, false);
+    }
+    if app.quick_look {
+        f.fill(bounds, 0.0, color.shadow.with_alpha(0.46));
+        let panel = bounds.inset(Insets::xy(px(64.0), px(40.0)));
+        f.fill(panel, px(14.0), color.elevated);
+        f.list.hits.clear();
+        preview_panel(&mut f, app, panel, now, true);
+    } else if let Some(hit) = app
+        .interaction
+        .hover
+        .and_then(|id| f.list.hits.iter().find(|h| h.id == id && id < HEADER))
+        .cloned()
+        && !hit.label.is_empty()
+    {
+        f.tooltip(hit.rect, &hit.label, bounds.inset(Insets::all(px(8.0))));
+    }
     let mut edit = Rect::default();
     if matches!(app.field, Field::Rename(_) | Field::NewFolder) {
         f.fill(bounds, 0.0, color.shadow.with_alpha(0.30));
@@ -773,6 +878,8 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
             .retain(|h| h.id == SUBMIT || h.id == CANCEL || h.id == EDIT_FIELD);
     }
     app.geometry = Geometry {
+        tabs,
+        preview,
         viewport: content,
         address: address_inner,
         search: search_inner,
@@ -797,8 +904,141 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
         app.surface
             .present(ui, app.surface.origin(), (width, height), list)?;
     }
+    app.painted();
     app.request_images();
     Ok(())
+}
+
+fn preview_panel(f: &mut Frame<'_>, app: &App, area: Rect, now: Instant, large: bool) {
+    let s = app.surface.scale();
+    let px = |v: f32| (v * s).round();
+    let color = f.theme.color;
+    let area = area.inset(Insets::all(px(16.0)));
+    let (heading, rest) = area.take_top(px(36.0), px(12.0));
+    let title = app
+        .selection
+        .focus
+        .and_then(|i| app.shown.get(i))
+        .map_or("Preview", |e| e.name.as_str());
+    let (close, label) = heading.take_right(px(if large { 108.0 } else { 32.0 }), px(8.0));
+    f.text_in(label, title, TextRole::Headline, color.label, Align::Start);
+    if large {
+        let (previous, tail) = close.take_left(px(32.0), px(4.0));
+        let (next, close) = tail.take_left(px(32.0), px(4.0));
+        f.quiet_icon_button(
+            LOOK_PREVIOUS,
+            previous,
+            Icon::ChevronLeft,
+            "Previous file",
+            true,
+            false,
+        );
+        f.quiet_icon_button(
+            LOOK_NEXT,
+            next,
+            Icon::ChevronRight,
+            "Next file",
+            true,
+            false,
+        );
+        f.quiet_icon_button(
+            LOOK_CLOSE,
+            close,
+            Icon::Close,
+            "Close quick look (Space/Esc)",
+            true,
+            false,
+        );
+    } else {
+        f.quiet_icon_button(
+            PREVIEW,
+            close,
+            Icon::Close,
+            "Close preview pane (Alt+P)",
+            true,
+            false,
+        );
+    }
+    let (footer, body) = rest.take_bottom(px(26.0), px(10.0));
+    match &app.preview_content {
+        Some(crate::preview::Content::Image(image)) => {
+            let scale = (body.width() / image.width as f32)
+                .min(body.height() / image.height as f32)
+                .min(1.0);
+            let rect = body.place(
+                (image.width as f32 * scale).round(),
+                (image.height as f32 * scale).round(),
+                Align::Center,
+                Align::Center,
+            );
+            f.push(Op::Image {
+                rect,
+                image: image.clone(),
+                opacity: 1.0,
+                source: None,
+            });
+        }
+        Some(crate::preview::Content::Text { lines, truncated }) => {
+            let line = px(20.0);
+            let offset = app.preview_scroll.offset(now);
+            let style = TextStyle::new("Cascadia Mono", px(12.0));
+            f.scroll(body, &app.preview_scroll, now, |f, origin| {
+                for i in model::visible_range(lines.len(), offset, body.height(), line) {
+                    // Clip long lines before DirectWrite shaping; one malicious line cannot make a giant layout.
+                    let text: String = lines[i]
+                        .chars()
+                        .take((body.width() / px(6.0)) as usize + 8)
+                        .collect();
+                    f.push(Op::Text {
+                        rect: Rect::new(origin.x, origin.y + i as f32 * line, body.width(), line),
+                        text: text.into(),
+                        style: style.clone(),
+                        color: color.label,
+                    });
+                }
+                lines.len() as f32 * line
+            });
+            f.text_in(
+                footer,
+                if *truncated {
+                    "First 64 KB · scroll to read"
+                } else {
+                    "Text preview · scroll to read"
+                },
+                TextRole::Footnote,
+                color.tertiary,
+                Align::Start,
+            );
+        }
+        Some(crate::preview::Content::Other) => {
+            f.empty(
+                body,
+                Some(Icon::File),
+                "No preview available",
+                Some("Open this file with its default app."),
+            );
+        }
+        Some(crate::preview::Content::Error(error)) => {
+            f.empty(
+                body,
+                Some(Icon::Warning),
+                "Couldn’t preview this file",
+                Some(error),
+            );
+        }
+        None => {
+            f.empty(
+                body,
+                Some(Icon::Photo),
+                if app.preview_path.is_empty() {
+                    "Select a file to preview"
+                } else {
+                    "Loading preview…"
+                },
+                None,
+            );
+        }
+    }
 }
 
 fn breadcrumbs(location: &shell::Location) -> Vec<(String, String)> {
