@@ -50,7 +50,13 @@ pub fn backdrop(app: &App, b: &mut B, r: Rect) {
 
 /// Two-pass box blur on a cropped, small bitmap. Its cache key includes the source and blur.
 fn softened(app: &App, image: &Arc<Image>, radius: usize) -> Arc<Image> {
-    let cache_key = format!("{:p}:{radius}", Arc::as_ptr(image));
+    let cache_key = format!(
+        "{}:{:p}:{radius}",
+        app.library
+            .active()
+            .map_or("", |i| app.library.items[i].id.as_str()),
+        Arc::as_ptr(image)
+    );
     let state = app.panel.as_ref().unwrap();
     if let Some(image) = state.specimens.borrow().get(&cache_key) {
         return image.clone();

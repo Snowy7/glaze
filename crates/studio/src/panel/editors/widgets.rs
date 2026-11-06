@@ -170,16 +170,6 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
                     [230, 230, 230],
                 ],
             );
-            action_button(
-                b,
-                c,
-                "Follow Look",
-                Action::Unset(Edit::new(
-                    DocId::Widgets,
-                    format!("{base}/appearance"),
-                    "Follow Look",
-                )),
-            );
         }
     });
 }
@@ -618,12 +608,17 @@ fn face(
         model.placed.settings.insert("name".into(), json!("Ada"));
     }
     let cache_key = format!(
-        "face:{}:{setting}:{value}:{}:{}",
+        "face:{}:{setting}:{value}:{}:{}:{:p}",
         instance.widget,
         serde_json::to_string(&model.placed.settings).unwrap_or_default(),
         app.library
             .active()
-            .map_or("", |i| app.library.items[i].id.as_str())
+            .map_or("", |i| app.library.items[i].id.as_str()),
+        model
+            .photo
+            .current
+            .as_ref()
+            .map_or(std::ptr::null(), std::sync::Arc::as_ptr)
     );
     let state = app.panel.as_ref().unwrap();
     let cached = state.specimens.borrow().get(&cache_key).cloned();

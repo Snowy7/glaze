@@ -33,9 +33,13 @@ pub fn swatches(
     let current = if no_tint {
         ""
     } else {
-        current
-            .and_then(Value::as_str)
-            .unwrap_or(if auto { "auto" } else { "" })
+        current.and_then(Value::as_str).unwrap_or(
+            if auto && !edit.path.starts_with("/look/windows/") {
+                "auto"
+            } else {
+                ""
+            },
+        )
     };
     if none {
         let r = Rect::new(c.x, c.y + b.px(2.0), b.px(70.0), b.px(28.0));

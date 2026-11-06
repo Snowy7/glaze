@@ -394,7 +394,54 @@ fn summary(app: &App, before: &Desktop, after: &Desktop) -> String {
             if old["cell"] != new["cell"] {
                 return format!("Moved {name}");
             }
-            return format!("{name}: options or face changed");
+            if let Some(widget) = app.registry.get(new["widget"].as_str().unwrap_or("")) {
+                let old_values = widget
+                    .manifest
+                    .resolve_settings(&old["settings"].as_object().cloned().unwrap_or_default());
+                let new_values = widget
+                    .manifest
+                    .resolve_settings(&new["settings"].as_object().cloned().unwrap_or_default());
+                for setting in &widget.manifest.settings {
+                    let key = setting.key();
+                    if old_values.get(key) == new_values.get(key) {
+                        continue;
+                    }
+                    if let mypaper_widgets::manifest::Setting::Select { options, .. } = setting {
+                        let label = |value: Option<&Value>| {
+                            let value = value.and_then(Value::as_str).unwrap_or("");
+                            options
+                                .iter()
+                                .find_map(|o| match o {
+                                    mypaper_widgets::manifest::SelectOption::Plain(v)
+                                        if v == value =>
+                                    {
+                                        Some(v.as_str())
+                                    }
+                                    mypaper_widgets::manifest::SelectOption::Detailed(v)
+                                        if v.value == value =>
+                                    {
+                                        Some(v.label.as_deref().unwrap_or(&v.value))
+                                    }
+                                    _ => None,
+                                })
+                                .unwrap_or(value)
+                                .to_owned()
+                        };
+                        return format!(
+                            "{name}: {} → {}",
+                            label(old_values.get(key)),
+                            label(new_values.get(key))
+                        );
+                    }
+                    let schema = serde_json::to_value(super::options::presentation(setting))
+                        .unwrap_or_default();
+                    return format!(
+                        "{name}: {} changed",
+                        schema["label"].as_str().unwrap_or("options")
+                    );
+                }
+            }
+            return format!("{name}: look changed");
         }
         return "Widgets changed".into();
     }

@@ -234,17 +234,38 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
             let s = crate::settings::Setting::get(id).unwrap();
             setting(app, b, c, id, s.label, "");
         }
-        select(
+        text(
+            b,
+            Rect::new(c.x, c.y, c.w, height(b, 28.0)),
+            "Accent",
+            13.0,
+            400,
+            b.p.ink1,
+            Align::Start,
+        );
+        c.y += height(b, 28.0);
+        super::super::colors::swatches(
+            app,
             b,
             c,
-            "Accent",
-            layer.get("accent").cloned().unwrap_or(Value::Null),
-            Edit::new(DocId::Studio, "/panel/windows/accent", "Windows accent"),
-            vec![
-                (json!("auto"), "Same as mypaper".into()),
-                (json!("#8b9eb7"), "Blue gray".into()),
-                (Value::Null, "As is".into()),
-            ],
+            &Edit::new(DocId::Config, "/look/windows/accent", "Windows accent"),
+            layer.get("accent"),
+            true,
+            false,
+            &COLORS,
+        );
+        row(
+            b,
+            c,
+            None,
+            "Keep Windows' accent",
+            "As is",
+            "",
+            Some(layer.get("accent").is_none_or(Value::is_null)),
+            Action::Set(
+                Edit::new(DocId::Studio, "/panel/windows/accent", "Windows accent"),
+                Value::Null,
+            ),
         );
     });
     group(b, c, "Pointer", |b, c| {

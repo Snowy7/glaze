@@ -19,9 +19,28 @@ pub fn font(app: &App, b: &mut B, c: &mut Col, edit: Edit, current: &str) {
         .unwrap()
         .fonts
         .get_or_init(|| b.text.families());
-    let mut options = vec![(json!(""), "From Look".into())];
+    let mut options = vec![(
+        Value::Null,
+        if edit.doc == DocId::Config {
+            "From wallpaper"
+        } else {
+            "From Look"
+        }
+        .into(),
+    )];
     options.extend(fonts.iter().map(|font| (json!(font), font.clone())));
-    select(b, c, &edit.label.clone(), json!(current), edit, options);
+    select(
+        b,
+        c,
+        &edit.label.clone(),
+        if current.is_empty() {
+            Value::Null
+        } else {
+            json!(current)
+        },
+        edit,
+        options,
+    );
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
