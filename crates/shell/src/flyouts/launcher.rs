@@ -1037,7 +1037,12 @@ impl Panel for Launcher {
                         if hit.directory {
                             self.file_sizes.insert(
                                 id.clone(),
-                                format!("{} · {} files", file_size(hit.size), hit.files),
+                                format!(
+                                    "{} · {} {}",
+                                    file_size(hit.size),
+                                    hit.files,
+                                    if hit.files == 1 { "file" } else { "files" }
+                                ),
                             );
                         }
                         App {
@@ -1181,20 +1186,39 @@ fn file_size(bytes: u64) -> String {
 /// Path classification stays on a worker: a disconnected share must not hold up the launcher.
 fn open_with_native_files(app: &App) {
     let enabled = mypaper_config::Config::load().is_ok_and(|c| c.experimental.files_default);
-    if !enabled { system::open(app.path.clone()); return; }
+    if !enabled {
+        system::open(app.path.clone());
+        return;
+    }
     let path = app.path.clone();
-    let files_entry = app.name.eq_ignore_ascii_case("File Explorer") || app.name.eq_ignore_ascii_case("Files");
-    let _ = std::thread::Builder::new().name("launcher-folder".into()).spawn(move || {
-        use std::os::windows::process::CommandExt;
-        let folder = if files_entry { Some("shell:profile".to_owned()) }
-            else if std::path::Path::new(&path).is_dir() || (path.starts_with("shell:") && !path.starts_with("shell:AppsFolder")) { Some(path.clone()) }
-            else { None };
-        if let Some(folder) = folder
-            && let Ok(executable) = std::env::current_exe().map(|p| p.with_file_name("mypaper-files.exe"))
-            && std::process::Command::new(executable).args(["--", &folder]).creation_flags(0x08000000).spawn().is_ok()
-        { return; }
-        system::open(path);
-    });
+    let files_entry =
+        app.name.eq_ignore_ascii_case("File Explorer") || app.name.eq_ignore_ascii_case("Files");
+    let _ = std::thread::Builder::new()
+        .name("launcher-folder".into())
+        .spawn(move || {
+            use std::os::windows::process::CommandExt;
+            let folder = if files_entry {
+                Some("shell:profile".to_owned())
+            } else if std::path::Path::new(&path).is_dir()
+                || (path.starts_with("shell:") && !path.starts_with("shell:AppsFolder"))
+            {
+                Some(path.clone())
+            } else {
+                None
+            };
+            if let Some(folder) = folder
+                && let Ok(executable) =
+                    std::env::current_exe().map(|p| p.with_file_name("mypaper-files.exe"))
+                && std::process::Command::new(executable)
+                    .args(["--", &folder])
+                    .creation_flags(0x08000000)
+                    .spawn()
+                    .is_ok()
+            {
+                return;
+            }
+            system::open(path);
+        });
 }
 
 /// A shortcut path and an AppsFolder id are different launch representations of one app.
