@@ -145,6 +145,43 @@ impl<S: Store> Undo<S> {
     /// call even if `writes` is empty. Returns whether any value changed.
     /// Ownership retains committed and pending values until the batch succeeds.
     pub fn apply(&mut self, writes: &[Write]) -> Result<bool> {
+        let mut journal = self.prepared(writes)?;
+
+        let mut changed = false;
+        for w in writes {
+            if self.store.read(w.key, w.name)?.as_ref() != Some(&w.value) {
+                self.store.write(w.key, w.name, &w.value)?;
+                changed = true;
+            }
+        }
+
+        // Only retire previous ownership after the entire batch succeeded. A crash,
+        // failed write or failed commit save retains all possible owned values on disk.
+        let mut committed = false;
+        for entry in &mut journal.entries {
+            if let Some(w) = writes
+                .iter()
+                .rev()
+                .find(|w| entry.key == w.key && entry.name == w.name)
+                && (entry.written.as_ref() != Some(&w.value) || !entry.pending.is_empty())
+            {
+                entry.written = Some(w.value.clone());
+                entry.pending.clear();
+                committed = true;
+            }
+        }
+        if committed {
+            self.save(&journal)?;
+        }
+        Ok(changed)
+    }
+
+    /// Makes a forthcoming registry/window transition recoverable before either is touched.
+    pub fn prepare(&mut self, writes: &[Write]) -> Result<()> {
+        self.prepared(writes).map(|_| ())
+    }
+
+    fn prepared(&self, writes: &[Write]) -> Result<Journal> {
         let mut journal = self.load()?.unwrap_or_default();
         let mut grown = !self.path.exists();
         for w in writes {
@@ -174,30 +211,38 @@ impl<S: Store> Undo<S> {
             self.save(&journal)?;
         }
 
-        let mut changed = false;
-        for w in writes {
-            if self.store.read(w.key, w.name)?.as_ref() != Some(&w.value) {
-                self.store.write(w.key, w.name, &w.value)?;
-                changed = true;
-            }
-        }
+        Ok(journal)
+    }
 
-        // Only retire previous ownership after the entire batch succeeded. A crash,
-        // failed write or failed commit save retains all possible owned values on disk.
-        let mut committed = false;
-        for entry in &mut journal.entries {
-            if let Some(w) = writes
+    /// Replaces the managed set without restoring values that remain managed. New originals
+    /// and pending writes are durable before mutation, as in `apply`. Released entries stay
+    /// journaled until their originals have survived Windows' reaction to the single broadcast.
+    /// An interruption at any boundary therefore leaves a complete recovery journal.
+    pub fn transition(&mut self, writes: &[Write], announce: impl FnOnce()) -> Result<bool> {
+        let mut changed = self.apply(writes)?;
+        let mut journal = self.load()?.context("transition journal disappeared")?;
+        let released = Journal {
+            entries: journal
+                .entries
                 .iter()
-                .rev()
-                .find(|w| entry.key == w.key && entry.name == w.name)
-                && (entry.written.as_ref() != Some(&w.value) || !entry.pending.is_empty())
-            {
-                entry.written = Some(w.value.clone());
-                entry.pending.clear();
-                committed = true;
+                .filter(|e| !writes.iter().any(|w| e.key == w.key && e.name == w.name))
+                .cloned()
+                .collect(),
+        };
+        changed |= self.put_back_all(&released)?;
+        if changed {
+            announce();
+            if !released.entries.is_empty() {
+                for _ in 0..SETTLE_ROUNDS {
+                    std::thread::sleep(self.settle);
+                    if !self.put_back_all(&released)? {
+                        break;
+                    }
+                }
             }
         }
-        if committed {
+        if !released.entries.is_empty() {
+            journal.entries.retain(|e| writes.iter().any(|w| e.key == w.key && e.name == w.name));
             self.save(&journal)?;
         }
         Ok(changed)

@@ -28,7 +28,63 @@ pub struct WindowStyle {
     pub dark_mode: Option<bool>,
 }
 
+/// A direct attribute change. Reset is used only when a previously managed field is released.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Change<T> {
+    Keep,
+    Set(T),
+    Reset,
+}
+
+impl<T: Copy + PartialEq> Change<T> {
+    fn between(before: Option<T>, after: Option<T>) -> Self {
+        if before == after {
+            Self::Keep
+        } else {
+            after.map_or(Self::Reset, Self::Set)
+        }
+    }
+}
+
+/// The six independent writes needed to move a window directly to its next style.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WindowTransition {
+    pub border: Change<Color>,
+    pub caption: Change<Color>,
+    pub caption_text: Change<Color>,
+    pub corners: Change<Corners>,
+    pub backdrop: Change<Backdrop>,
+    pub dark_mode: Change<bool>,
+}
+
+impl WindowTransition {
+    pub fn writes(&self) -> usize {
+        [
+            self.border != Change::Keep,
+            self.caption != Change::Keep,
+            self.caption_text != Change::Keep,
+            self.corners != Change::Keep,
+            self.backdrop != Change::Keep,
+            self.dark_mode != Change::Keep,
+        ]
+        .into_iter()
+        .filter(|changed| *changed)
+        .count()
+    }
+}
+
 impl WindowStyle {
+    pub fn transition_to(self, next: Self) -> WindowTransition {
+        WindowTransition {
+            border: Change::between(self.border, next.border),
+            caption: Change::between(self.caption, next.caption),
+            caption_text: Change::between(self.caption_text, next.caption_text),
+            corners: Change::between(self.corners, next.corners),
+            backdrop: Change::between(self.backdrop, next.backdrop),
+            dark_mode: Change::between(self.dark_mode, next.dark_mode),
+        }
+    }
+
     pub fn resolve(style: &WindowsStyle, palette: Option<&Palette>) -> Self {
         Self {
             border: resolve(style.border, palette),
