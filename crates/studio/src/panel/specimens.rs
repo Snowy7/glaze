@@ -791,7 +791,7 @@ fn bars_at(
     size: (u32, u32),
 ) {
     use mypaper_shell::preview::bars as shell;
-    use mypaper_ui::{DisplayList, Op, Ui};
+    use mypaper_ui::{DisplayList, Op};
     let icon_stamp: Vec<_> = raw
         .pointer("/dock/pinned")
         .and_then(serde_json::Value::as_array)
