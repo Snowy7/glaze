@@ -60,6 +60,14 @@ while (-not (New-Item -ItemType Directory -Path $lockDir -ErrorAction SilentlyCo
   Start-Sleep -Seconds 2
 }
 try {
+  # Start from a loaded, exercised full index, rather than certifying a tiny startup stub.
+  $status = & $deployed --status | ConvertFrom-Json
+  if ($LASTEXITCODE -ne 0 -or $status.entries -lt 1000000) { throw 'Full cached index is not ready for the game test' }
+  $warm = & $deployed --bench-query 1 | ConvertFrom-Json
+  if ($LASTEXITCODE -ne 0 -or $warm.queries -ne 11) { throw 'Game test query warmup did not complete' }
+  $index.Refresh()
+  $beforePrivate = $index.PrivateMemorySize64
+  $beforeWorkingSet = $index.WorkingSet64
   $fixture = Start-Process -FilePath $FixtureExe -ArgumentList '180' -WindowStyle Normal -PassThru
   $null = $fixture.Handle
   Start-Sleep -Seconds 1
@@ -92,6 +100,8 @@ try {
   foreach ($tid in $threadsAfter.Keys) { $old = if ($threadsBefore.ContainsKey($tid)) { $threadsBefore[$tid] } else { 0 }; $switches += $threadsAfter[$tid]-$old }
   [pscustomobject]@{
     index_pid=$index.Id;fixture_pid=$fixture.Id;seconds=$elapsed
+    entries_before_game=$status.entries;warmup_queries=$warm.queries
+    before_private_bytes=$beforePrivate;before_working_set_bytes=$beforeWorkingSet
     cpu_core_pct=($index.TotalProcessorTime.TotalMilliseconds-$cpuBefore)/($elapsed*10)
     context_switches_per_second=$switches/$elapsed
     max_private_bytes=($samples|Measure-Object private_bytes -Maximum).Maximum
