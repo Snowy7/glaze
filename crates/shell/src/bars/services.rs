@@ -83,8 +83,11 @@ pub struct Services {
 }
 
 pub struct Changes {
-    pub data: bool,
-    pub stats: bool,
+    /// What changed on screen: only bars showing one of these topics repaint.
+    pub topics: BTreeSet<Topic>,
+    /// The app list was refreshed (or an app's icon described): dock items, the front app and
+    /// the windows' rectangles follow it.
+    pub apps: bool,
     pub config: bool,
     pub theme: bool,
     pub moved: bool,
@@ -247,45 +250,50 @@ impl Services {
 
     /// Drains typed worker messages; returns config/appearance changes separately.
     pub fn tick(&mut self, now: Instant) -> Changes {
-        let (mut changed, mut config, mut theme) = (false, false, false);
+        let (mut topics, mut apps, mut config, mut theme) = (BTreeSet::new(), false, false, false);
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
                 Msg::Config => config = true,
                 Msg::Theme => theme = true,
                 Msg::Described(source, value) => {
                     self.icons.on_described(source, value);
-                    self.refresh_apps();
-                    changed = true;
+                    apps = true;
                 }
                 Msg::Media(info) => {
-                    self.model.media = info;
-                    changed = true;
+                    if self.model.media != info {
+                        self.model.media = info;
+                        topics.insert(Topic::Media);
+                    }
                 }
                 Msg::Volume => {
                     if let Some(a) = &mut self.audio {
                         a.follow_default();
                         self.model.volume = a.read();
                     }
-                    changed = true;
+                    topics.insert(Topic::Volume);
                 }
                 Msg::Network => {
                     self.model.network = self.network.as_ref().map(|n| network::read(n.wlan()));
-                    changed = true;
+                    topics.insert(Topic::Network);
                 }
                 Msg::Tray(items) => {
                     self.model.tray = items;
-                    changed = true;
+                    topics.insert(Topic::Tray);
                 }
                 Msg::Custom(id, output) => {
-                    changed |= self.model.custom.finished(id, output);
+                    if self.model.custom.finished(id, output) {
+                        topics.insert(Topic::Custom);
+                    }
                     self.custom_due = self.model.custom.tick(now);
                 }
                 Msg::Flyout(Done::Changed(Watched::Core(Topic::Language))) => {
                     self.read_language();
-                    changed = true;
+                    topics.insert(Topic::Language);
                 }
                 Msg::Flyout(Done::NotificationCount(count)) => {
-                    changed |= self.model.notifications != count;
+                    if self.model.notifications != count {
+                        topics.insert(Topic::Notifications);
+                    }
                     self.model.notifications = count;
                     self.notification_pending = false;
                 }
@@ -294,28 +302,31 @@ impl Services {
             }
         }
         let bits = self.hooks.as_mut().map_or(0, Hooks::take);
-        if bits & (hooks::WINDOWS | hooks::FOREGROUND) != 0 {
+        if bits & (hooks::WINDOWS | hooks::FOREGROUND | hooks::TITLE) != 0 {
             self.windows_due
                 .get_or_insert(now + Duration::from_millis(50));
         }
         if take_due(&mut self.windows_due, now) {
+            apps = true;
+        }
+        if apps {
+            // Once for any number of described icons and window events.
             self.refresh_apps();
-            changed = true;
+            topics.extend([Topic::Apps, Topic::Foreground, Topic::Language]);
         }
         if let Some(d) = &self.desktops {
             // SAFETY: owned event handle, non-blocking read.
             if unsafe { WaitForSingleObject(d.event(), 0) } == WAIT_OBJECT_0 {
                 self.model.workspaces = d.changed();
-                changed = true;
+                topics.insert(Topic::Workspaces);
             }
         }
         if take_due(&mut self.clock_due, now) {
             // SAFETY: read-only system time query.
             self.model.clock = unsafe { GetLocalTime() };
             self.clock_due = Some(now + next_tick(self.seconds));
-            changed = true;
+            topics.insert(Topic::Clock);
         }
-        let mut stats_changed = false;
         if take_due(&mut self.stats_due, now)
             && let Some(s) = &mut self.sampler
         {
@@ -323,21 +334,24 @@ impl Services {
             let stats = s.sample();
             self.stats_costs.0 += 1;
             self.stats_costs.2 += started.elapsed().as_micros() as u64;
-            stats_changed = self
+            let changed = self
                 .model
                 .stats
                 .as_ref()
                 .is_none_or(|old| displayed_stats(old) != displayed_stats(&stats));
             self.model.stats = Some(stats);
-            self.stats_costs.1 += u64::from(stats_changed);
             self.stats_due = Some(now + Duration::from_secs(2));
+            self.stats_costs.1 += u64::from(changed);
+            if changed {
+                topics.insert(Topic::Stats);
+            }
         }
         if take_due(&mut self.custom_due, now) {
             self.custom_due = self.model.custom.tick(now);
         }
         Changes {
-            data: changed,
-            stats: stats_changed,
+            topics,
+            apps,
             config,
             theme,
             moved: bits & hooks::MOVED != 0,

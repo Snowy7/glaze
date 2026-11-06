@@ -21,8 +21,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     OBJID_WINDOW,
 };
 
-/// The window list may have changed (created, destroyed, shown, hidden, cloaked, renamed,
-/// minimized or restored).
+/// The window list may have changed (created, destroyed, shown, hidden, cloaked, minimized or
+/// restored).
 pub const WINDOWS: u32 = 1;
 /// Another window came to the front.
 pub const FOREGROUND: u32 = 2;
@@ -31,6 +31,9 @@ pub const MOVED: u32 = 4;
 /// A taskbar window was created, shown or moved (Explorer re-showing, or sliding in, a taskbar we
 /// hid, or building a new one).
 pub const TASKBAR_SHOWN: u32 = 8;
+/// A visible top-level window was renamed (terminals retitle many times a second during a
+/// build): the app list's titles are stale, but no window moved, appeared or changed z-order.
+pub const TITLE: u32 = 16;
 
 thread_local! {
     // WinEvent callbacks run on the installing thread. A dead child/control window must not
@@ -99,10 +102,10 @@ fn classify(event: u32, top: bool, watching: bool, taskbar: impl Fn() -> bool) -
         EVENT_OBJECT_LOCATIONCHANGE if top => MOVED,
         // A new taskbar (a monitor came back, Explorer restarted) is born visible and unveiled.
         EVENT_OBJECT_SHOW | EVENT_OBJECT_CREATE if top && taskbar() => WINDOWS | TASKBAR_SHOWN,
+        EVENT_OBJECT_NAMECHANGE if top => TITLE,
         EVENT_OBJECT_CREATE
         | EVENT_OBJECT_SHOW
         | EVENT_OBJECT_HIDE
-        | EVENT_OBJECT_NAMECHANGE
         | EVENT_OBJECT_CLOAKED
         | EVENT_OBJECT_UNCLOAKED
         | EVENT_SYSTEM_MINIMIZESTART
@@ -167,7 +170,11 @@ mod tests {
             0,
             "destroyed controls/tooltips outside the app snapshot don't rebuild the window list"
         );
-        assert_eq!(classify(EVENT_OBJECT_NAMECHANGE, true, false, no), WINDOWS);
+        assert_eq!(
+            classify(EVENT_OBJECT_NAMECHANGE, true, false, no),
+            TITLE,
+            "a retitled window refreshes titles, not the z-order"
+        );
         assert_eq!(
             classify(EVENT_OBJECT_NAMECHANGE, false, false, no),
             0,

@@ -481,19 +481,18 @@ impl Bars {
             self.schedule_reservations();
         }
         at = tick_spent("due", at);
-        if changes.data {
+        if changes.apps {
             self.update_items();
-            self.dirty();
         }
-        if changes.stats {
+        if !changes.topics.is_empty() {
             for bar in &mut self.bars {
-                if bar.topics().contains(&providers::actions::Topic::Stats) {
+                if !bar.topics().is_disjoint(&changes.topics) {
                     bar.dirty = true;
                 }
             }
         }
         at = tick_spent("items", at);
-        if changes.data || changes.moved || changes.windows {
+        if changes.apps || changes.moved || changes.windows {
             let windows: Vec<_> = self
                 .services
                 .apps
