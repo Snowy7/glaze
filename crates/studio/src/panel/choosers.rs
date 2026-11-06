@@ -48,10 +48,12 @@ pub fn draw(
     let rows_top = c.y + picture_height + b.px(8.0);
     let row_height = height(b, 34.0);
     let row_rect = |index| Rect::new(c.x, rows_top + index as f32 * row_height, c.w, row_height);
-    let pointer = b
-        .input
-        .pointer
-        .filter(|point| b.clip_rect().is_none_or(|clip| clip.contains(*point)));
+    let pointer = if app.fixture || app.window.is_none() {
+        b.input.pointer
+    } else {
+        super::pick_client::panel_pointer(app)
+    }
+    .filter(|point| b.clip_rect().is_none_or(|clip| clip.contains(*point)));
     let keyboard =
         b.input.focus_visible && !app.panel.as_ref().unwrap().chooser.borrow().pointer_mode;
     let hot = pointer
