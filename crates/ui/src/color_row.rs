@@ -2,6 +2,8 @@
 use crate::controls::{Align, Behavior, Builder, Font, Key, key};
 use crate::{Rect, Rgba, Role};
 
+pub mod popover;
+
 pub struct Choice<A> {
     pub label: String,
     pub color: Option<Rgba>,
