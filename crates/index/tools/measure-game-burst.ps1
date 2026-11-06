@@ -34,11 +34,20 @@ public static class IndexGameThreads {
  [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(Point p);
  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h,out uint pid);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h,System.Text.StringBuilder name,int count);
  [DllImport("user32.dll")] static extern bool GetCursorPos(out Point p);
  [DllImport("user32.dll")] static extern bool SetCursorPos(int x,int y);
  [DllImport("user32.dll")] static extern void mouse_event(uint flags,uint x,uint y,uint data,UIntPtr extra);
  public static uint ForegroundPid() {uint pid;GetWindowThreadProcessId(GetForegroundWindow(),out pid);return pid;}
+ public static bool SafeForeground(int fixturePid) {
+  var h=GetForegroundWindow();uint pid;GetWindowThreadProcessId(h,out pid);
+  if(h==IntPtr.Zero || (fixturePid!=0 && pid==(uint)fixturePid))return true;
+  var name=new System.Text.StringBuilder(128);GetClassName(h,name,128);
+  if(name.ToString()=="Progman" || name.ToString()=="WorkerW")return true;
+  try{return System.Diagnostics.Process.GetProcessById((int)pid).ProcessName.StartsWith("mypaper-",StringComparison.OrdinalIgnoreCase);}catch{return false;}
+ }
  public static void ActivateOwn(IntPtr hwnd,int pid) {
+  if(!SafeForeground(pid))throw new Exception("user app is foreground; fixture activation skipped");
   SetProcessDpiAwarenessContext(new IntPtr(-4)); Rect r; Point before; uint owner;
   if(!GetWindowRect(hwnd,out r))throw new Exception("fixture has no window");
   var p=new Point{X=r.Left+(r.Right-r.Left)/2,Y=r.Top+(r.Bottom-r.Top)/2};
@@ -48,6 +57,7 @@ public static class IndexGameThreads {
   try {
    SetCursorPos(p.X,p.Y);GetWindowThreadProcessId(WindowFromPoint(p),out owner);
    if(owner!=pid)throw new Exception("fixture activation target changed; click skipped");
+   if(!SafeForeground(pid))throw new Exception("user app became foreground; click skipped");
    mouse_event(2,0,0,0,UIntPtr.Zero);mouse_event(4,0,0,0,UIntPtr.Zero);
   }finally{SetCursorPos(before.X,before.Y);}
  }
@@ -78,6 +88,12 @@ public static class IndexGameThreads {
  }
 }
 '@
+if (-not [IndexGameThreads]::SafeForeground(0)) {
+  $foreground = [IndexGameThreads]::ForegroundPid()
+  [pscustomobject]@{skipped=$true;reason='User app is foreground; no fixture launched and no synthetic input sent';foreground_pid=$foreground;foreground_process=(Get-Process -Id $foreground -ErrorAction SilentlyContinue).ProcessName;recorded_at=(Get-Date -Format o)} | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $evidence ($Prefix + '-skipped.json'))
+  Write-Output 'Fullscreen fixture skipped: user app is foreground.'
+  exit 0
+}
 $until = [DateTime]::UtcNow.AddMinutes(2)
 while (-not (New-Item -ItemType Directory -Path $lockDir -ErrorAction SilentlyContinue)) {
   if ([DateTime]::UtcNow -ge $until) { throw 'Desktop lock remained busy' }
@@ -112,6 +128,7 @@ try {
   $index.Refresh()
   $beforePrivate = $index.PrivateMemorySize64
   $beforeWorkingSet = $index.WorkingSet64
+  if (-not [IndexGameThreads]::SafeForeground(0)) { throw 'User app became foreground; fixture launch skipped' }
   $fixture = Start-Process -FilePath $FixtureExe -ArgumentList '180' -WindowStyle Normal -PassThru
   $null = $fixture.Handle
   Start-Sleep -Seconds 1

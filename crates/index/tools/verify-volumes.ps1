@@ -52,7 +52,7 @@ function Await-Hit([string]$Name,[bool]$Present) {
     Start-Sleep -Milliseconds 50
   } while ($true)
 }
-$drive = @('Z:','Y:','X:','W:') | Where-Object { -not [IndexVolumeFixture]::Mapping($_) } | Select-Object -First 1
+$drive = @('K:','Z:','Y:','X:','W:') | Where-Object { -not [IndexVolumeFixture]::Mapping($_) } | Select-Object -First 1
 if (-not $drive) { throw 'No free fixture drive letter' }
 $root = $drive + '\'
 $letter = [int][char]$drive[0] - [int][char]'A'
@@ -83,6 +83,36 @@ try {
   $returnMs = Await-Hit $tag $true
   $returned = Request-Index @{method='sizes';path=$root;limit=10}
   if ($returned.hits[0].size -ne 456 -or $returned.hits[0].files -ne 1) { throw 'Returned volume kept stale records' }
+  $unicodeRequests = 0
+  $listeners = 0
+  if ($drive -eq 'K:') {
+    $kelvinRoot = [string][char]0x212A + ':\'
+    for ($i=0; $i -lt 20; $i++) {
+      $unicode = Request-Index @{method='sizes';path=$kelvinRoot;limit=10}
+      if ($unicode.hits[0].size -ne 456 -or $unicode.hits[0].files -ne 1) { throw 'Unicode Sizes path failed' }
+      $unicodeRequests++
+    }
+    $connections = [Collections.Generic.List[IO.Pipes.NamedPipeClientStream]]::new()
+    try {
+      # Keep four transactions open together, so each native listener must answer.
+      for ($i=0; $i -lt 4; $i++) {
+        $client = [IO.Pipes.NamedPipeClientStream]::new('.', 'mypaper-index', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
+        $connections.Add($client)
+        $client.Connect(1500)
+        $client.ReadMode = [IO.Pipes.PipeTransmissionMode]::Message
+        $message = [Text.Encoding]::UTF8.GetBytes((@{method='sizes';path=$kelvinRoot;limit=10} | ConvertTo-Json -Compress))
+        $client.Write($message,0,$message.Length)
+      }
+      foreach ($client in $connections) {
+        $buffer = [byte[]]::new(1024*1024)
+        $read = $client.ReadAsync($buffer,0,$buffer.Length)
+        if (-not $read.Wait(5000)) { throw 'Concurrent listener response timed out' }
+        $answer = [Text.Encoding]::UTF8.GetString($buffer,0,$read.Result) | ConvertFrom-Json
+        if ($answer.hits[0].size -ne 456) { throw 'Concurrent listener returned incorrect Sizes' }
+        $listeners++
+      }
+    } finally { foreach ($client in $connections) { $client.Dispose() } }
+  }
   if ([IndexVolumeFixture]::Mapping($drive) -ne ('\??\' + $scratch)) { throw 'Fixture drive mapping changed' }
   & subst.exe $drive /d
   if ($LASTEXITCODE -ne 0) { throw 'SUBST removal failed' }
@@ -91,7 +121,7 @@ try {
   $removalMs = Await-Hit $tag $false
   $index.Refresh()
   if ($index.HasExited -or $index.StartTime -ne $indexStart) { throw 'Index restarted during volume lifecycle' }
-  [pscustomobject]@{index_pid=$index.Id;fixture_drive=$root;arrival_ms=$arrivalMs;watch_failure_hide_ms=$failureMs;return_ms=$returnMs;removal_hide_ms=$removalMs;arrived_sizes=$before;returned_sizes=$returned;other_volume_available=[bool]$other.hits.Count;peak_working_set_bytes=$index.PeakWorkingSet64} | ConvertTo-Json -Depth 6
+  [pscustomobject]@{index_pid=$index.Id;fixture_drive=$root;arrival_ms=$arrivalMs;watch_failure_hide_ms=$failureMs;return_ms=$returnMs;removal_hide_ms=$removalMs;arrived_sizes=$before;returned_sizes=$returned;other_volume_available=[bool]$other.hits.Count;unicode_sizes_requests=$unicodeRequests;concurrent_listeners=$listeners;peak_working_set_bytes=$index.PeakWorkingSet64} | ConvertTo-Json -Depth 6
 } finally {
   if ($created) {
     if ([IndexVolumeFixture]::Mapping($drive) -ne ('\??\' + $scratch)) { throw 'Refusing cleanup of a changed drive mapping' }
