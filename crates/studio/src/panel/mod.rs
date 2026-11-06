@@ -733,6 +733,7 @@ pub fn before_action(app: &mut App, action: &Action) {
         app.panel.as_mut().unwrap().theme_retry = Some(action.clone());
     }
     if matches!(action, Action::Undo | Action::Redo) {
+        history::cancel(app);
         app.texts.retain(
             |id, _| !matches!(id, FieldId::Text(doc, _) if *doc != crate::docs::DocId::Studio),
         );
