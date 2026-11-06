@@ -140,9 +140,10 @@ surfaces; glass keeps the engine's single edge.
 
 Every `system-accent-light-1..3` and `system-accent-dark-1..3` colour token uses its actual Windows
 palette entry (separate from a theme's `accent`). `wallpaper` backgrounds keep the wallpaper plate
-even when a window overlaps the bar; `blur` backgrounds always use the live overlay. Their legacy
-brightness and saturation controls still need renderer support. Glass `style: none` disables the
-material, `frosted` removes lensing, and `intensity` scales refraction, highlight and frost. Theme
+even when a window overlaps the bar; `blur` backgrounds always use the live overlay. Background
+brightness and `look.saturation` tune the engine's backdrop; background blur adds to the material's
+frost. Glass `style: none` disables the material, `frosted` removes lensing, and `intensity` scales
+refraction, highlight, frost and explicitly set sheen/depth. Theme
 `bars.glass` is a partial layer under the bar's glass controls; removing fields restores defaults.
 
 ### Native state and motion controls (2026-11-06)
@@ -167,10 +168,12 @@ Pop/scale/morph keep a bitmap only during opening, transform its hit regions and
 body together, then restore the original display list and free the bitmap. Bar show/hide consumes
 slide/fade/pop/scale/morph/none separately from popup opening; pointer coordinates follow the
 same inverse transform as the pixels. Glass popup slides retain the stationary fade to avoid
-repeated overlay capture flashes. That engine fade still ignores reduced motion and configured
-timing. Continuous squircle corners, backdrop brightness/saturation, glass depth/sheen and
-Windows-wide one-switch styling remain open. The IPC validator also still caps physical blur at
-32 px, so accepted larger values (including high-DPI projections) cannot reach the renderer.
+repeated overlay capture flashes. The engine fade now takes the resolved duration (up to the
+wire's 2,000 ms limit), or zero for reduced motion, disabled motion and presentation `none`.
+The engine still uses its cubic ease-out for that separate glass fade; the shell's content follows
+the configured curve. Motion accepts durations up to 5,000 ms, so the complete C14 contract remains
+partial. Continuous corners and the finer glass controls are described below. Windows style
+synchronization is implemented (C25).
 
 Flyout kit controls and menu rows now consume the hover/press leaves too. Their sampled washes
 keep state only for entered controls, remove resting entries, and stop the frame source when
@@ -178,6 +181,80 @@ settled. `mypaper_ui::interact::motion::InteractionMotion`, `Frame::with_motion`
 optional interaction timings add this behavior without changing existing kit callers. Configured
 flat-surface shadows reserve a bounded outset, including for cropped islands and docks; their
 screen anchors remain unchanged.
+
+### Finer glass controls (2026-11-06)
+
+The shell resolves optics with each surface's look, caches the IPC plate style and popup tokens,
+and copies them when publishing or opening. It uses `Writer::publish_styled` for wallpaper plates
+and sends `Request::Style` after every overlay `Open`, including a capture warm-up. Style-only
+changes invalidate a plate snapshot. No timer or frame work was added at rest.
+
+- `background.brightness` (wallpaper/live blur) and `look.saturation` reach bars, dock, previews,
+  flyouts and menus; removing them restores inherited design defaults (neutral 1/1 when unset).
+- Blur stays in design pixels until each surface's DPI/content-scale projection; both transport
+  paths accept up to 256 physical px and clamp larger projections to that wire limit. The background's
+  extra blur is added to the material's frost, including flyouts (unless `flyouts.blur: false`).
+- `look.corners: squircle` sends smoothing 0.6 and draws the same superellipse extent/exponent as
+  liquid-rust in the kit body and its invisible hit fill. Circular/default surfaces retain the
+  existing renderer path. Software contour geometry is cached, bounded to 64 entries per canvas.
+  The engine overlay's **DirectComposition clip is still circular**; at nominal radius 24 and
+  smoothing 0.6 it can trim about 0.14 px from the shader contour. C10 remains partial until the
+  engine owner makes that clip agree with the smoothed shader (plates already agree).
+- `glass.sheen` drives the light inside the top rim. `glass.depth` is sent too, but the engine
+  draws its broad shade **under the lit top edge**. The legacy bar contract specified an inner
+  shadow toward the bottom. That semantic gap remains C12; it is not claimed as parity.
+- Widgets do not inherit `bars.json` optics; they retain their own look/material controls and
+  publish a neutral style in the same merged snapshot. Their appearance remains unchanged.
+
+The kit additions are opt-in: `glass::GlassStyle`, `Backdrop::open_styled`/`style`,
+`Surface::set_glass_style`, menu `Tokens::glass_style`, `Op::Continuous`,
+`geom::continuous::surface` and `Frame::fill_continuous`. Existing backdrops inherit the default
+trait methods and existing surfaces keep neutral optics and circular corners.
+
+Round-two verification: `cargo check --workspace` and the release workspace build passed; the
+final fractional-DPI radius correction also passed the shell tests and release shell build.
+Library tests passed: UI 62, shell 143 (10 ignored), bars 118 (one ignored). Clippy for those
+libraries passed with existing warnings. New checks cover cached optics/reset inheritance,
+motion-policy/2,000 ms wire bounds, the continuous contour's engine coefficients, alpha hit
+geometry, translation and unchanged-list damage. The only Studio edit was an explicitly
+authorized one-line compile fix: translate `Op::Continuous` like the other rectangle ops.
+
+Verified with DPI-aware captures on both 2560x1440 screens at content scale 1.2: dark/desaturated
+squircle glass and bright/vivid circular glass, a reduced-motion launcher, and a 1,200 ms fade
+dock command menu (opening and settled). No menu command was invoked. The bar fixtures explicitly
+set `look.transparent: false` so the macOS design's default bare top bar does not hide the body
+under test. Read-only shared-memory inspection confirmed matching plate/style sequence stamps,
+blur 76.8 physical px, brightness 0.55/1.6, saturation 0/3, smoothing 0.6/0 and sheen/depth 0/1.
+These are the transmitted controls; the engine's documented 64-point frost ceiling still applies.
+The reduced-motion launcher drew twice, with no content transition. Its cold capture took
+615 ms to supply glass, which `fade_ms: 0` does not remove. The timed menu's glass arrived in 99 ms.
+
+Artifacts and reproduction scripts are in `%TEMP%\mypaper-tools\bars-parity-2`: inspect
+`desaturated-squircle-{0,1}-{top,dock}.png`, `vivid-round-{0,1}-{top,dock}.png`,
+`{desaturated-squircle,vivid-round}-plates.json`, `launcher-reduced-motion-{opening,settled}.png`,
+and `menu-timed-glass-{opening,settled}.png`. Every experiment restored the original `bars.json`
+bytes; SHA-256 remained `88032FB713BEDDF3D3B8386859655E7A0E2C05DCBDB2F8E9718C5607C0C61BA0`.
+The current shell is deployed under core supervision; the user's Studio remained running.
+
+The prescribed `measure.ps1` samples are three settled 30-second runs per state, with the user's
+default config and no popup. CPU is percent of **one core**. Other agents built, deployed and
+reconciled the index during this live-desktop run; these numbers establish no idle regression,
+not a performance improvement or the native plan's quieter fixed-fixture CPU gate.
+
+| Shell / sample | Before CPU % | After CPU % | Before private MB | After private MB |
+|---|---:|---:|---:|---:|
+| 1 | 0.52 | 0.10 | 37 | 36 |
+| 2 | 0.36 | 0.21 | 37 | 35 |
+| 3 | 0.16 | 0.21 | 36 | 35 |
+| Median | **0.36** | **0.21** | **37** | **35** |
+
+Raw artifacts are `%TEMP%\mypaper-tools\measure-bars2-{before,after}-{1,2,3}.json` and
+`bars-parity-2\settled-samples.json`. The sampling shell was PID 67424 after deployment.
+The final radius-only fix was deployed as PID 44212. A later agent replaced the executable at
+06:28 (PID 79660, a different hash); two additional post-interaction samples on that build were
+1.09% then 0.42%, both 36 MB. They are retained as `measure-bars2-after-interactions{,-repeat}.json`
+and excluded from the six-sample comparison. No sustained regression was reproduced, and no
+diagnostic switch, keeper process or timer was left enabled.
 
 ### Night verification (2026-11-06)
 
@@ -219,8 +296,9 @@ startup sample (2.24%, 33 MB) is retained separately as `measure-bars-after-star
 not called idle. No performance improvement is claimed from these unlike desktop states.
 
 Studio follow-ups are recorded in `plans/night/2026-11-06.md`: expose the now-consumed appearance
-and state controls, separate motion leaves and show/open styles, and inheritance resets. Renderer
-knobs and the separate Windows-wide style synchronization remain explicitly pending.
+and state controls, separate motion leaves and show/open styles, and inheritance resets. At this
+first-round handoff, renderer knobs and Windows style synchronization remained pending; the
+round-two section above and C25 record their later implementations and remaining contracts.
 
 CSS, gradient/image **surface fills**, noise, glow, neon and shaped corners are ignored with one
 warning per process. Image app icons are retained. There is no CSS renderer or DWM blur fallback.
