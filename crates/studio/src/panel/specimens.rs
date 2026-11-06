@@ -1,5 +1,8 @@
 //! Small software material specimens over the current wallpaper. No GPU or engine needed.
-use super::{controls::text, tokens::hex};
+use super::{
+    controls::text,
+    tokens::{hex, radius},
+};
 use crate::{app::App, docs::DocId, ui::B};
 use mypaper_config::look::Style;
 use mypaper_ui::controls::Align;
@@ -97,9 +100,9 @@ fn average_color(image: &Image) -> Option<Rgba> {
 }
 
 pub fn backdrop(app: &App, b: &mut B, r: Rect) {
-    b.fill(r, b.px(8.0), b.p.fill);
+    b.fill(r, b.px(radius::CONTROL), b.p.fill);
     if let Some(image) = wallpaper(app) {
-        crate::stage::image_round(b, r, &image, 1.0, b.px(8.0));
+        crate::stage::image_round(b, r, &image, 1.0, b.px(radius::CONTROL));
     }
 }
 
@@ -132,7 +135,7 @@ pub fn fit_tiles(
     } else {
         4
     };
-    let gap = b.px(8.0);
+    let gap = b.px(12.0);
     let width = (c.w - (columns - 1) as f32 * gap) / columns as f32;
     let display = app.display().map_or((1920, 1080), |display| {
         (
@@ -140,7 +143,7 @@ pub fn fit_tiles(
             display.rect.height.max(1) as u32,
         )
     });
-    let picture_height = (width - b.px(12.0)) * display.1 as f32 / display.0 as f32;
+    let picture_height = width * display.1 as f32 / display.0 as f32;
     let row_height = picture_height + height(b, 29.0) + b.px(12.0);
     let top = c.y;
     let values = [
@@ -159,44 +162,47 @@ pub fn fit_tiles(
             );
             let k = key(("panel-fit", edit.path.as_ref(), i));
             let on = current == value;
-            b.plate(k, rect, b.px(7.0), on);
-            let screen = Rect::new(
-                rect.left + b.px(6.0),
-                rect.top + b.px(6.0),
-                width - b.px(12.0),
-                picture_height,
-            );
-            b.fill(screen, b.px(3.0), hex(0x111114));
-            if let Some(image) = &image {
-                let native = app
-                    .images
-                    .borrow()
-                    .source_size(image)
-                    .unwrap_or((image.width, image.height));
-                let (target, source) =
-                    fit_geometry(screen, (image.width, image.height), native, display, i);
-                b.list.ops.push(Op::RoundedImage {
-                    rect: target,
-                    image: image.clone(),
-                    opacity: 1.0,
-                    source,
-                    radius: b.px(2.0),
-                });
-            } else {
-                b.icon(screen, crate::theme::glyph::PHOTO, 18.0, b.p.ink3);
-            }
-            b.stroke(screen, b.px(3.0), b.px(1.0), b.p.edge);
+            super::controls::card(b, rect, b.hovered(k));
+            let screen = Rect::new(rect.left, rect.top, width, picture_height);
+            super::controls::card_picture(b, rect, screen, |b, screen| {
+                b.fill(screen, 0.0, hex(0x111114));
+                if let Some(image) = &image {
+                    let native = app
+                        .images
+                        .borrow()
+                        .source_size(image)
+                        .unwrap_or((image.width, image.height));
+                    let (target, source) =
+                        fit_geometry(screen, (image.width, image.height), native, display, i);
+                    b.list.ops.push(Op::RoundedImage {
+                        rect: target,
+                        image: image.clone(),
+                        opacity: 1.0,
+                        source,
+                        radius: 0.0,
+                    });
+                } else {
+                    b.icon(screen, crate::theme::glyph::PHOTO, 18.0, b.p.ink3);
+                }
+            });
             text(
                 b,
-                Rect::new(rect.left, screen.bottom + b.px(2.0), width, height(b, 29.0)),
+                Rect::new(
+                    rect.left + b.px(8.0), screen.bottom + b.px(2.0),
+                    width - b.px(32.0), height(b, 29.0),
+                ),
                 label,
                 12.0,
                 if on { 600 } else { 400 },
                 b.p.ink1,
-                Align::Center,
+                Align::Start,
             );
             if on {
-                b.stroke(rect, b.px(7.0), b.px(1.5), b.p.ink1);
+                super::controls::card_selection(b, rect);
+                b.icon(
+                    Rect::new(rect.right - b.px(24.0), screen.bottom + b.px(2.0), b.px(16.0), height(b, 29.0)),
+                    crate::theme::glyph::CHECK, 12.0, b.p.ink1,
+                );
             }
             b.hit_checked(
                 k,
@@ -207,7 +213,7 @@ pub fn fit_tiles(
                 crate::actions::Action::Set(edit.clone(), serde_json::json!(value)),
                 Behavior::Click,
             );
-            b.focus_ring(k, rect, b.px(7.0));
+            b.focus_ring(k, rect, b.px(radius::CARD));
         }
     });
     c.y += 4usize.div_ceil(columns) as f32 * (row_height + gap);

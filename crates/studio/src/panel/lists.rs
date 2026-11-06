@@ -1,4 +1,5 @@
 use super::Command;
+use super::tokens::radius;
 use crate::{
     actions::{Action, Bar, Edit, Pins},
     app::App,
@@ -295,7 +296,7 @@ pub fn drop_overlay(app: &App, b: &mut B) {
         at + 1,
         mypaper_ui::Op::Fill {
             rect: plate,
-            radius: b.px(10.0),
+            radius: b.px(radius::CARD),
             color: b.p.chrome,
         },
     );
@@ -303,7 +304,7 @@ pub fn drop_overlay(app: &App, b: &mut B) {
         at + 2,
         mypaper_ui::Op::Stroke {
             rect: plate,
-            radius: b.px(10.0),
+            radius: b.px(radius::CARD),
             width: b.px(1.0),
             color: b.p.edge,
         },

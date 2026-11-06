@@ -787,6 +787,9 @@ use crate::panel::controls::unit as number_readout;
 pub(crate) fn plugin_data(app: &App, widget: &str) -> Option<Value> {
     let mut chooser = app.panel.as_ref()?.chooser.borrow_mut();
     let faces = chooser.plugin_faces.get_or_insert_with(|| {
+        if app.fixture {
+            return json!({});
+        }
         mypaper_widgets::files::local("plugins/studio-faces.json")
             .ok()
             .and_then(|path| {
@@ -1080,7 +1083,7 @@ pub(crate) fn face(
             {
                 *op = mypaper_ui::Op::RoundedImage {
                     rect: *rect, image: image.clone(), opacity: *opacity, source: *source,
-                    radius: b.px(7.0) / scale,
+                    radius: b.px(radius::CONTROL) / scale,
                 };
             }
         }
@@ -1116,7 +1119,7 @@ fn unavailable_face(app: &App, b: &mut B, manifest: &WidgetManifest, pic: Rect) 
         size,
     );
     if let Some(image) = crate::panel::icons::plugin_image(app, &manifest.id) {
-        crate::stage::image_round(b, icon, &image, 1.0, b.px(5.0));
+        crate::stage::image_round(b, icon, &image, 1.0, b.px(radius::SMALL));
     } else {
         b.icon(
             icon,
