@@ -54,18 +54,15 @@ pub fn frame_cap(app: &App, b: &mut B, c: &mut Col, path: &str, inherit: &str) {
         let current = value
             .as_f64()
             .unwrap_or_else(|| refresh.unwrap_or(60) as f64);
-        let r = Rect::new(c.x, c.y + b.px(4.0), c.w, height(b, 36.0));
-        b.slider(
-            key(("panel-fps-number", path)),
-            r,
+        crate::panel::material::row(
+            b,
+            c,
+            "Custom cap",
             current,
             (1.0, 360.0, 1.0),
             &crate::panel::controls::unit(current, "fps"),
-            b.px(66.0),
-            "Custom frame rate, 1 to 360 fps",
-            Action::Slider(Edit::new(DocId::Config, path, "Frame rate")),
+            Edit::new(DocId::Config, path, "Custom frame rate"),
         );
-        c.y = r.bottom + b.px(6.0);
     }
 }
 
