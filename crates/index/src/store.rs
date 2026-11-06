@@ -1,8 +1,9 @@
 //! A 40-byte record and a single UTF-8 name blob. Snapshots are read-only file mappings;
 //! changed records and new names live in an overlay until the next event-driven checkpoint.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
@@ -48,6 +49,12 @@ pub fn fold(name: &str) -> String {
     name.to_lowercase()
 }
 
+fn name_hash(name: &[u8]) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    name.hash(&mut hasher);
+    hasher.finish()
+}
+
 #[derive(Default)]
 pub struct Store {
     mapping: Option<Mmap>,
@@ -56,6 +63,9 @@ pub struct Store {
     records: Vec<Record>,
     names: Vec<u8>,
     changed: BTreeMap<u32, Record>,
+    // Created only for wide directories reached by live updates/path lookup. A compact
+    // hash-to-ID table avoids quadratic bursts without retaining a String per indexed file.
+    children: std::sync::Mutex<HashMap<u32, HashMap<u64, u32>>>,
 }
 
 impl Store {
@@ -211,20 +221,58 @@ impl Store {
         });
         p.first = id;
         self.set(parent, p);
+        if self
+            .children
+            .get_mut()
+            .expect("child lookup")
+            .contains_key(&parent)
+        {
+            let key = name_hash(self.folded(self.record(id)));
+            self.children
+                .get_mut()
+                .expect("child lookup")
+                .get_mut(&parent)
+                .expect("existing lookup")
+                .insert(key, id);
+        }
         id
     }
 
     pub fn child(&self, parent: u32, name: &str) -> Option<u32> {
         let lower = fold(name);
+        let mut indexes = self.children.lock().expect("child lookup");
+        if let Some(index) = indexes.get(&parent) {
+            let id = *index.get(&name_hash(lower.as_bytes()))?;
+            let r = self.record(id);
+            if self.folded(r) == lower.as_bytes() {
+                return r.live().then_some(id);
+            }
+            // A 64-bit hash collision falls back to the sibling chain, preserving correctness.
+        }
         let mut at = self.record(parent).first;
+        let mut count = 0;
+        let mut found = None;
         while at != NONE {
             let r = self.record(at);
+            count += 1;
             if r.live() && self.folded(r) == lower.as_bytes() {
-                return Some(at);
+                found = Some(at);
             }
             at = r.next;
         }
-        None
+        if count > 128 && !indexes.contains_key(&parent) {
+            let mut index = HashMap::with_capacity(count);
+            let mut at = self.record(parent).first;
+            while at != NONE {
+                let r = self.record(at);
+                if r.live() {
+                    index.insert(name_hash(self.folded(r)), at);
+                }
+                at = r.next;
+            }
+            indexes.insert(parent, index);
+        }
+        found
     }
 
     pub fn find(&self, path: &str) -> Option<u32> {
@@ -525,6 +573,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn wide_directory_lookup_survives_delete_recreate_and_case_changes() {
+        let mut store = Store::new();
+        let root = store.insert(0, "X:", DIRECTORY, 0, 0);
+        for i in 0..1000 {
+            store.insert(root, &format!("file-{i}.txt"), 128, 1, 0);
+        }
+        let old = store.child(root, "FILE-500.TXT").unwrap();
+        store.remove(old);
+        assert!(store.child(root, "file-500.txt").is_none());
+        let new = store.upsert(root, "File-500.txt", 128, 2, 1);
+        assert_ne!(old, new);
+        assert_eq!(store.child(root, "FILE-500.TXT"), Some(new));
+        store.upsert(root, "FILE-500.TXT", 128, 3, 2);
+        assert_eq!(store.name(store.record(new)), "FILE-500.TXT");
+        let added = store.upsert(root, "fresh.txt", 128, 4, 3);
+        assert_eq!(store.child(root, "fresh.txt"), Some(added));
+    }
+
+    #[test]
     fn sizes_follow_add_resize_delete_and_directory_removal() {
         assert_eq!(size_of::<Record>(), 40);
         let mut s = Store::new();
@@ -561,6 +628,16 @@ mod tests {
         assert_eq!(reopened.record(root).files, 2);
         drop(mapped);
         drop(reopened);
+        let mut compact = Store::open(&path).unwrap();
+        let removed = compact.find(r"D:\b.txt").unwrap();
+        compact.remove(removed);
+        compact.save(&path).unwrap();
+        drop(compact);
+        let compact = Store::open(&path).unwrap();
+        assert_eq!(compact.len(), 3);
+        assert_eq!(compact.record(root).files, 1);
+        assert_eq!(compact.hit(2).path, r"D:\a.TXT");
+        drop(compact);
         let mut bytes = std::fs::read(&path).unwrap();
         bytes[HEADER + 2 * size_of::<Record>() + 8..HEADER + 2 * size_of::<Record>() + 12]
             .copy_from_slice(&2u32.to_le_bytes());

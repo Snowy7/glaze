@@ -158,15 +158,23 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     // Watches are armed before reconciliation so scan races are replayed afterwards. A
     // non-admin snapshot cannot know what changed while the service was off: reconcile once
     // in the background while cached queries are already available (USN replay is future work).
+    let initial = state.clone();
+    std::thread::Builder::new()
+        .name("index-initial".into())
+        .spawn(move || {
+            let _background = Background::enter();
+            for root in roots {
+                if let Err(error) = reconcile(&initial, &root) {
+                    eprintln!("scan {}: {error:#}", root.display());
+                }
+            }
+            let _ = tx.send(Change::InitialDone);
+        })?;
     let _background = Background::enter();
-    for root in roots {
-        if let Err(error) = reconcile(&state, &root) {
-            eprintln!("scan {}: {error:#}", root.display());
-        }
-    }
-    state.write().expect("index state").scanning = false;
-    // Replay buffered events after importing scans, never before a scan can overwrite them.
-    let mut dirty = Some(Instant::now());
+    let mut initializing = true;
+    let mut pending_paths = BTreeSet::new();
+    let mut pending_overflows = BTreeSet::new();
+    let mut dirty = None::<Instant>;
     loop {
         let message = if dirty.is_some() {
             rx.recv_timeout(Duration::from_secs(2))
@@ -179,6 +187,11 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 let mut overflows = BTreeSet::new();
                 for change in std::iter::once(first).chain(rx.try_iter().take(255)) {
                     match change {
+                        Change::InitialDone => {
+                            initializing = false;
+                            state.write().expect("index state").scanning = false;
+                            dirty = Some(Instant::now());
+                        }
                         Change::Paths {
                             root: _,
                             paths: changed,
@@ -190,6 +203,16 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                         }
                     }
                 }
+                // Keep draining watch completions during initial scans. Applying them before
+                // import would race the scan; blocking the reader would overflow the kernel
+                // buffer. A deduplicated set retains only the final state of each changed path.
+                if initializing {
+                    pending_paths.extend(paths);
+                    pending_overflows.extend(overflows);
+                    continue;
+                }
+                paths.append(&mut pending_paths);
+                overflows.append(&mut pending_overflows);
                 if !paths.is_empty() || !overflows.is_empty() {
                     dirty.get_or_insert_with(Instant::now);
                 }
@@ -369,9 +392,20 @@ fn benchmark(count: usize) -> Result<()> {
         elapsed.extend(samples);
     }
     elapsed.sort_by(f64::total_cmp);
+    let mut memory = windows::Win32::System::ProcessStatus::PROCESS_MEMORY_COUNTERS_EX::default();
+    memory.cb = size_of_val(&memory) as u32;
+    // SAFETY: querying this process into a correctly sized extended counter structure.
+    unsafe {
+        windows::Win32::System::ProcessStatus::GetProcessMemoryInfo(
+            windows::Win32::System::Threading::GetCurrentProcess(),
+            (&mut memory as *mut windows::Win32::System::ProcessStatus::PROCESS_MEMORY_COUNTERS_EX)
+                .cast(),
+            size_of_val(&memory) as u32,
+        )?;
+    }
     println!(
         "{}",
-        serde_json::json!({"entries":count,"record_bytes":size_of::<crate::store::Record>(),"snapshot_bytes":std::fs::metadata(&path)?.len(),"load_ms":load_ms,"queries":elapsed.len(),"p50_ms":elapsed[elapsed.len()/2],"p95_ms":elapsed[elapsed.len()*95/100],"max_ms":elapsed.last(),"by_query":by_query})
+        serde_json::json!({"entries":count,"record_bytes":size_of::<crate::store::Record>(),"snapshot_bytes":std::fs::metadata(&path)?.len(),"load_ms":load_ms,"queries":elapsed.len(),"p50_ms":elapsed[elapsed.len()/2],"p95_ms":elapsed[elapsed.len()*95/100],"max_ms":elapsed.last(),"by_query":by_query,"private_bytes":memory.PrivateUsage,"peak_pagefile_bytes":memory.PeakPagefileUsage,"working_set_bytes":memory.WorkingSetSize})
     );
     drop(store);
     std::fs::remove_file(&path)?;

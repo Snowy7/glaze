@@ -13,6 +13,7 @@ use crate::scan::{Background, long};
 
 #[derive(Debug)]
 pub enum Change {
+    InitialDone,
     Paths {
         root: PathBuf,
         paths: Vec<PathBuf>,
