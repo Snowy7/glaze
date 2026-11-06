@@ -964,6 +964,7 @@ pub fn intercept_set(
 
 /// Manifest defaults and transient drafts aren't stored in the raw documents yet.
 pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
+    if app.panel.is_some() && let Some(value) = editors::field_initial(app, id) { return Some(value); }
     if app.panel.is_none() {
         return None;
     }
