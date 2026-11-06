@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use mypaper_app_styler::presets::{self, Colors};
 use mypaper_app_styler::{Attach, Framework};
-use mypaper_config::{Config, Paint};
+use mypaper_config::Config;
 use mypaper_theme::LoadedTheme;
 use windows::Win32::Foundation::{
     CloseHandle, ERROR_ALREADY_EXISTS, GetLastError, HANDLE, HWND, LPARAM, WAIT_OBJECT_0, WPARAM,
@@ -167,13 +167,19 @@ impl Helper {
             .inspect_err(|e| log::warn!("theme: {e:#}; using the look's rules alone"))
             .ok();
         let palette = read_palette(theme.as_ref().map(|t| t.dir.as_path()));
-        let accent = match config.look.accent {
-            Some(Paint::Color(c)) => Some(c.0),
-            _ => palette.map(|p| p.0),
-        };
+        // The same `$accent` / `$dominant` the native look and Windows styling use.
+        let shared = mypaper_theme::windows::resolve(
+            &config.look,
+            theme.as_ref().map(|t| &t.theme),
+            palette.map(|(accent, dominant)| mypaper_theme::windows::Palette {
+                accent: mypaper_config::Color(accent),
+                dominant: mypaper_config::Color(dominant),
+            }),
+            system_dark(),
+        );
         let colors = Colors {
-            accent,
-            dominant: palette.map(|p| p.1),
+            accent: shared.accent.map(|c| c.0),
+            dominant: shared.dominant.map(|c| c.0),
         };
         let theme_apps = theme.as_ref().and_then(|t| t.theme.apps.as_ref());
         for app in mypaper_config::apps::APPS {
@@ -369,6 +375,27 @@ fn root_class(hwnd: HWND) -> Option<String> {
     // SAFETY: the buffer is passed with its length.
     let len = unsafe { GetClassNameW(root, &mut buffer) } as usize;
     (len > 0).then(|| String::from_utf16_lossy(&buffer[..len]))
+}
+
+/// Whether Windows apps are in dark mode (`AppsUseLightTheme` is 0). Only read when the rules
+/// are resolved; swap for `mypaper_tweaks::system_prefers_dark()` once that is public.
+fn system_dark() -> bool {
+    use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
+    let mut value = 1u32;
+    let mut size = size_of::<u32>() as u32;
+    // SAFETY: a DWORD-sized out buffer and its size.
+    let read = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"),
+            w!("AppsUseLightTheme"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some((&raw mut value).cast()),
+            Some(&mut size),
+        )
+    };
+    read.is_ok() && value == 0
 }
 
 /// The wallpaper's (accent, dominant) colours, if `palette.json` is for the active theme.
