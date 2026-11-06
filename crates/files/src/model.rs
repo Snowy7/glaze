@@ -202,6 +202,22 @@ pub struct Selection {
     anchor: Option<usize>,
 }
 impl Selection {
+    /// Preserve selection identities when a directory, sort or search replaces its rows.
+    pub fn remap(&mut self, old: &[Entry], new: &[Entry]) {
+        let positions: std::collections::HashMap<_, _> = new
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (e.path.as_str(), i))
+            .collect();
+        let remap = |index: usize| {
+            old.get(index)
+                .and_then(|e| positions.get(e.path.as_str()))
+                .copied()
+        };
+        self.items = self.items.iter().filter_map(|&i| remap(i)).collect();
+        self.focus = self.focus.and_then(remap);
+        self.anchor = self.anchor.and_then(remap);
+    }
     pub fn clear(&mut self) {
         *self = Self::default();
     }
@@ -294,6 +310,58 @@ impl Preferences {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn selection_replacement_preserves_focus_and_range_by_path() {
+        let rows = |names: &[&str]| {
+            names
+                .iter()
+                .map(|name| Entry {
+                    path: format!(r"C:\scratch\{name}"),
+                    name: (*name).into(),
+                    directory: false,
+                    size: None,
+                    modified: 0,
+                    kind: String::new(),
+                    hidden: false,
+                })
+                .collect::<Vec<_>>()
+        };
+        let old = rows(&["a.txt", "b.exe", "c.txt"]);
+        let refreshed = rows(&["0setup.msi", "a.txt", "b.exe", "c.txt"]);
+        let mut selection = Selection::default();
+        selection.choose(2, false, false);
+        selection.remap(&old, &refreshed);
+        assert_eq!(selection.items, BTreeSet::from([3]));
+        assert_eq!(
+            selection.focus.map(|i| refreshed[i].name.as_str()),
+            Some("c.txt"),
+            "Enter and preview must follow the highlighted path"
+        );
+        selection.choose(2, false, true);
+        assert_eq!(
+            selection.items,
+            BTreeSet::from([2, 3]),
+            "Shift range must start at c.txt after insertion"
+        );
+
+        // Sort/search can reorder the focus independently of the first selected row.
+        let sorted = rows(&["c.txt", "b.exe", "a.txt", "0setup.msi"]);
+        selection.remap(&refreshed, &sorted);
+        assert_eq!(selection.focus, Some(1));
+        selection.choose(2, false, true);
+        assert_eq!(selection.items, BTreeSet::from([0, 1, 2]));
+
+        let filtered = rows(&["b.exe"]);
+        selection.remap(&sorted, &filtered);
+        assert_eq!(selection.items, BTreeSet::from([0]));
+        assert_eq!(
+            selection.focus, None,
+            "a removed focus must never open another row"
+        );
+        assert_eq!(selection.anchor, None);
+        selection.choose(0, false, true);
+        assert_eq!(selection.items, BTreeSet::from([0]));
+    }
     #[test]
     fn indexed_sizes_labels_bars_and_selection_totals_preserve_uncertainty() {
         assert_eq!(

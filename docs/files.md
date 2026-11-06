@@ -38,6 +38,13 @@ run-only appearance overrides, useful when checking a look without changing the 
 - Hidden and protected files follow Explorer's current `Hidden` and `ShowSuperHidden` settings.
 - Native directory notifications refresh the open folder after external changes. The watch
   sleeps on kernel events and closes on navigation; there is no polling timer.
+- Every row replacement remaps selected items, keyboard focus and the Shift-selection anchor
+  by path. Refresh, sorting and search cannot redirect Enter or previews to a shifted row;
+  a missing focused path clears focus. Tabs restore selection with their matching snapshot,
+  then reconcile paths on refresh. A replacement cancels an item/rubber-band gesture and closes
+  the kit context menu, whose hit targets belonged to the old layout. Rename carries its path
+  and is dismissed if that path disappears. Thumbnail requests/replies use `(path, size)` keys
+  and navigation epochs, and OLE drag sources snapshot paths before entering the drag loop.
 - Arrow keys, Home/End, Page Up/Down, type-to-select, Enter, Backspace, Alt+arrows, mouse Back/
   Forward, Ctrl/Shift selection and rubber-band selection are supported. `F5` refreshes.
 

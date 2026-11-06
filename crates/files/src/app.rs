@@ -411,7 +411,7 @@ impl App {
         self.selection.clear();
         self.scroll.reset();
         self.entries = Arc::default();
-        self.shown = Arc::default();
+        self.replace_shown(Arc::default())?;
         self.sizes.clear();
         self.pending_images.clear();
         self.drop_target
@@ -421,7 +421,7 @@ impl App {
             .ok();
         if let Some(folder) = cached {
             self.entries = folder.entries.clone();
-            self.shown = folder.entries;
+            self.replace_shown(folder.entries)?;
             self.sizes = folder.sizes;
             if record {
                 self.history.visit(folder.location.path.clone());
@@ -495,7 +495,7 @@ impl App {
         self.navigate(tab.path, false)?;
         self.history = tab.history;
         if tab.loaded {
-            self.shown = tab.shown;
+            self.replace_shown(tab.shown)?;
             self.selection = tab.selection;
             self.scroll = tab.scroll;
             self.query_text = tab.query_text;
@@ -701,6 +701,25 @@ impl App {
             .iter()
             .filter_map(|index| self.shown.get(*index).map(|entry| entry.path.clone()))
             .collect()
+    }
+
+    /// Every row replacement reconciles all selection indexes and cancels gestures/menu hits
+    /// made against the previous layout. Rename and image work already carry paths, not indexes.
+    fn replace_shown(&mut self, entries: Arc<Vec<FileEntry>>) -> Result<()> {
+        self.selection.remap(&self.shown, &entries);
+        self.shown = entries;
+        if matches!(self.drag, Some(Drag::Item { .. } | Drag::Rubber { .. })) {
+            self.drag = None;
+        }
+        self.interaction.pressed = None;
+        self.interaction.hover = None;
+        self.menu.close();
+        if let Field::Rename(path) = &self.field
+            && !self.shown.iter().any(|entry| &entry.path == path)
+        {
+            self.focus(Field::None)?;
+        }
+        Ok(())
     }
 
     fn open_selection(&mut self) -> Result<()> {
@@ -1586,7 +1605,6 @@ impl App {
                             self.backend.watch(location.path.clone())?,
                         ));
                     }
-                    let selected: HashSet<_> = self.selected_paths().into_iter().collect();
                     if self.pending_history {
                         self.history.visit(location.path.clone());
                         self.pending_history = false;
@@ -1625,7 +1643,7 @@ impl App {
                         self.remember_folder();
                     }
                     if self.query_text.is_empty() {
-                        self.shown = entries;
+                        self.replace_shown(entries)?;
                     } else {
                         self.query = self.backend.search(
                             self.query_text.clone(),
@@ -1634,12 +1652,6 @@ impl App {
                             self.sizes.clone(),
                         );
                     }
-                    self.selection.items = self
-                        .shown
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, e)| selected.contains(&e.path).then_some(i))
-                        .collect();
                     if complete {
                         log::info!("folder: {} entries in {elapsed_ms} ms", self.entries.len());
                     } else {
@@ -1655,17 +1667,8 @@ impl App {
                     entries,
                     indexed,
                 } if epoch == self.epoch && query == self.query => {
-                    let selected: HashSet<_> = self.selected_paths().into_iter().collect();
-                    self.shown = entries;
+                    self.replace_shown(entries)?;
                     self.indexed = indexed;
-                    self.selection.clear();
-                    self.selection.items = self
-                        .shown
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, e)| selected.contains(&e.path).then_some(i))
-                        .collect();
-                    self.selection.focus = self.selection.items.first().copied();
                     if self.query_text.is_empty() {
                         self.entries = self.shown.clone();
                     }
