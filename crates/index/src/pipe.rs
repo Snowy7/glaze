@@ -200,6 +200,10 @@ fn serve_one(handle: HANDLE, state: &RwLock<State>) -> Result<()> {
             Request::Search { query: text, limit } => query::search(&state.store, &text, limit),
             Request::Sizes { path, limit } => state.store.sizes(&path, limit),
             Request::Status => Vec::new(),
+            Request::Rescan => {
+                state.rescan()?;
+                Vec::new()
+            }
         };
         if queried {
             state.queried();

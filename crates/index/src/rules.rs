@@ -284,6 +284,7 @@ mod tests {
         let config = IndexConfig {
             exclude: vec!["D:/secret/**".into()],
             include: vec!["D:/p/node_modules/keep/**".into()],
+            ..Default::default()
         };
         let rules = Rules::new(&config, Path::new("C:/cache")).unwrap();
         for path in [

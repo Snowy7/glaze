@@ -40,6 +40,14 @@ pub struct State {
 }
 
 impl State {
+    pub(crate) fn rescan(&self) -> Result<()> {
+        self.activity
+            .as_ref()
+            .context("index service is not running")?
+            .try_send(Change::Rescan)
+            .context("index service queue is busy")?;
+        Ok(())
+    }
     pub(crate) fn queried(&self) {
         if let Some(activity) = &self.activity {
             let _ = activity.try_send(Change::Queried);
@@ -388,6 +396,29 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
     let snapshot = cache.join("snapshot.bin");
     let (tx, rx) = mpsc::sync_channel(256);
     let quiet = crate::quiet::Quiet::start(tx.clone())?;
+    let config = mypaper_config::Config::load()?;
+    let rules = Arc::new(RwLock::new(Rules::new(&config.index, &cache)?));
+    // Arm notifications before loading/validating the snapshot, closing the startup gap
+    // even when a recent volume will skip offline reconciliation completely.
+    let mut watches = BTreeMap::new();
+    let mut failed = Vec::new();
+    if discover {
+        crate::volumes::start(tx.clone())?;
+    }
+    for root in &roots {
+        match watch::start(root.clone(), tx.clone(), rules.clone(), quiet.clone()) {
+            Ok(watch) => {
+                watches.insert(root.clone(), watch);
+            }
+            Err(error) => {
+                event(
+                    &cache,
+                    format_args!("watch {} offline: {error:#}", root.display()),
+                );
+                failed.push(root.clone());
+            }
+        }
+    }
     let started = Instant::now();
     let mut store = Store::open_quiet(&snapshot, quiet.clone()).unwrap_or_else(|error| {
         eprintln!("no usable snapshot: {error:#}");
@@ -407,12 +438,10 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
         store.len() - 1,
         started.elapsed().as_secs_f64() * 1000.0
     );
-    let config = mypaper_config::Config::load()?;
-    let rules = Arc::new(RwLock::new(Rules::new(&config.index, &cache)?));
     let offline = hide_missing_roots(&mut store, &roots);
     let state = Arc::new(RwLock::new(State {
         store,
-        scanning: true,
+        scanning: false,
         cache: cache.clone(),
         activity: Some(tx.clone()),
         rules: rules.clone(),
@@ -429,62 +458,124 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
     });
     pipe::start(state.clone())?;
     crate::spool::cleanup(&cache.join("scan"));
-    let mut watches = BTreeMap::new();
-    if discover {
-        crate::volumes::start(tx.clone())?;
-    }
-    for root in roots {
-        match watch::start(root.clone(), tx.clone(), rules.clone(), quiet.clone()) {
-            Ok(watch) => {
-                watches.insert(root, watch);
-            }
-            Err(error) => {
-                eprintln!("watch {} offline: {error:#}", root.display());
-                offline_root(&state, &root);
-            }
-        }
+    for root in failed {
+        offline_root(&state, &root);
     }
     let mut roots: BTreeSet<_> = watches.keys().cloned().collect();
-    // Watches are armed before reconciliation so scan races are replayed afterwards. A
-    // non-admin snapshot cannot know what changed while the service was off: reconcile once
-    // in the background while cached queries are already available (USN replay is future work).
-    let initial = state.clone();
-    let scan_roots = roots.clone();
-    let scan_tx = tx.clone();
+    // While waiting for catch-up, live notifications are applied immediately. Only an
+    // active scan buffers events to replay final states after its snapshot replacement.
+    let freshness = crate::startup::Freshness::load(&cache, &config.index);
+    let generation = state.read().expect("index state").store.generation();
+    let now = crate::startup::now();
+    let mut scheduled: BTreeMap<_, _> = roots
+        .iter()
+        .map(|root| {
+            let present = state
+                .read()
+                .expect("index state")
+                .store
+                .find(&root.to_string_lossy())
+                .is_some();
+            let remaining = if present {
+                freshness.remaining(root, generation, now, config.index.startup_rescan_after)
+            } else {
+                0
+            };
+            (
+                root.clone(),
+                quiet.now().saturating_add(Duration::from_secs(
+                    remaining.max(config.index.startup_rescan_delay),
+                )),
+            )
+        })
+        .collect();
+    let stale = roots
+        .iter()
+        .filter(|root| freshness.due(root, generation, now, config.index.startup_rescan_after))
+        .count();
+    event(
+        &cache,
+        format_args!(
+            "startup catch-up: {} stale, {} recent volumes; delay={}s",
+            stale,
+            roots.len() - stale,
+            config.index.startup_rescan_delay
+        ),
+    );
     let config_tx = tx.clone();
     let _config_watch =
         mypaper_fswatch::Watch::files(&mypaper_config::dir()?, &["config.json"], move || {
             let _ = config_tx.try_send(Change::RulesChanged);
         })?;
-    std::thread::Builder::new()
-        .name("index-initial".into())
-        .spawn(move || {
-            let _background = Background::enter();
-            for root in scan_roots {
-                if let Err(error) = reconcile(&initial, &root, true) {
-                    eprintln!("scan {}: {error:#}", root.display());
-                    offline_root(&initial, &root);
-                }
-            }
-            let _ = scan_tx.send(Change::InitialDone);
-        })?;
     let _background = Background::enter();
-    let mut initializing = true;
+    let mut initializing = false;
     let mut pending_paths = BTreeSet::new();
     let mut pending_overflows = BTreeSet::new();
     let mut pending_directories = BTreeSet::new();
     let mut dirty = None::<Duration>;
-    let mut trim_at = None::<Duration>;
+    let mut trim_at = Some(quiet.now() + Duration::from_secs(2));
     let mut current_config = config.index;
+    let mut completed = None::<Vec<PathBuf>>;
+    let mut catchup_config = None;
     loop {
+        let catchup_at = scheduled.values().copied().min();
+        if !initializing && !quiet.paused() && catchup_at.is_some_and(|at| quiet.now() >= at) {
+            let initial = state.clone();
+            let selected: Vec<_> = scheduled
+                .iter()
+                .filter(|(_, at)| **at <= quiet.now())
+                .map(|(root, _)| root.clone())
+                .collect();
+            for root in &selected {
+                scheduled.remove(root);
+            }
+            let selected: Vec<_> = selected
+                .into_iter()
+                .filter(|root| roots.contains(root))
+                .collect();
+            let scan_tx = tx.clone();
+            let config = current_config.clone();
+            catchup_config = Some(config.clone());
+            initializing = true;
+            state.write().expect("index state").scanning = true;
+            std::thread::Builder::new().name("index-catchup".into()).spawn(move || {
+                let _background = Background::enter();
+                let _budget = crate::budget::Budget::enter();
+                let mut complete = Vec::new();
+                for root in selected {
+                    let cache = initial.read().expect("index state").cache.clone();
+                    let freshness = crate::startup::Freshness::load(&cache, &config);
+                    match freshness.changed_top_level(&root) {
+                        Ok(changed) => event(&cache, format_args!("catch-up {}: {} changed top-level markers; recursive drift unverified, full fallback", root.display(), changed.len())),
+                        Err(error) => event(&cache, format_args!("catch-up {}: markers unavailable ({error:#}); full fallback", root.display())),
+                    }
+                    // Markers are hints, not recursive change tokens. Do not lose deep
+                    // edits/size changes by treating a matching ancestor as proof.
+                    if let Err(error) = reconcile(&initial, &root, true) {
+                        event(&cache, format_args!("catch-up {}: {error:#}", root.display()));
+                        offline_root(&initial, &root);
+                    } else {
+                        complete.push(root);
+                    }
+                }
+                let _ = scan_tx.send(Change::InitialDone(complete));
+            })?;
+        }
         let trim_wait = trim_at.map(|at| at.saturating_sub(quiet.now()));
-        let wait = if quiet.paused() {
+        let mut wait = if quiet.paused() || initializing {
             None
         } else if dirty.is_some() {
             Some(trim_wait.map_or(Duration::from_secs(2), |t| t.min(Duration::from_secs(2))))
         } else {
             trim_wait
         };
+        if !initializing
+            && !quiet.paused()
+            && let Some(at) = catchup_at
+        {
+            let until = at.saturating_sub(quiet.now());
+            wait = Some(wait.map_or(until, |other| other.min(until)));
+        }
         let message = if let Some(wait) = wait {
             rx.recv_timeout(wait)
         } else {
@@ -492,13 +583,16 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
         };
         match message {
             Ok(first) => {
-                let mut initial_finished = false;
                 let mut paths = BTreeSet::new();
                 let mut overflows = BTreeSet::new();
                 let mut directories = BTreeSet::new();
                 for change in std::iter::once(first).chain(rx.try_iter().take(255)) {
                     match change {
                         Change::Activity => {}
+                        Change::Rescan => {
+                            scheduled.extend(roots.iter().map(|root| (root.clone(), quiet.now())));
+                            event(&cache, "manual full rescan requested");
+                        }
                         Change::VolumesChanged => {
                             if discover {
                                 let available: BTreeSet<_> = scan::volumes().into_iter().collect();
@@ -559,17 +653,22 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
                             {
                                 match Rules::new(&config.index, &cache) {
                                     Ok(next) => {
+                                        let rules_changed = config.index.exclude
+                                            != current_config.exclude
+                                            || config.index.include != current_config.include;
                                         *rules.write().expect("index rules") = next;
                                         current_config = config.index;
-                                        overflows.extend(roots.iter().cloned());
+                                        if rules_changed {
+                                            overflows.extend(roots.iter().cloned());
+                                        }
                                     }
                                     Err(error) => eprintln!("invalid index rules: {error:#}"),
                                 }
                             }
                         }
-                        Change::InitialDone => {
+                        Change::InitialDone(roots) => {
                             initializing = false;
-                            initial_finished = true;
+                            completed = Some(roots);
                             dirty = Some(quiet.now());
                             trim_at = Some(quiet.now() + Duration::from_secs(2));
                         }
@@ -657,6 +756,9 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
                     continue;
                 }
                 paths.append(&mut pending_paths);
+                // Replay belongs to catch-up too; retain its one-thread budget through
+                // the durable checkpoint before certifying any volume as recent.
+                let _replay_budget = completed.as_ref().map(|_| crate::budget::Budget::enter());
                 overflows.append(&mut pending_overflows);
                 directories.append(&mut pending_directories);
                 overflows.retain(|root| roots.contains(root));
@@ -710,7 +812,28 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
                     dirty = None;
                     trim_at = Some(quiet.now() + Duration::from_secs(2));
                 }
-                if initial_finished || state.read().expect("index state").scanning {
+                if let Some(scanned_roots) = completed.take() {
+                    checkpoint_changes(&state, &snapshot)?;
+                    dirty = None;
+                    if catchup_config
+                        .take()
+                        .is_some_and(|config: mypaper_config::IndexConfig| {
+                            config.exclude == current_config.exclude
+                                && config.include == current_config.include
+                        })
+                    {
+                        let mut freshness =
+                            crate::startup::Freshness::load(&cache, &current_config);
+                        let state = state.read().expect("index state");
+                        for root in scanned_roots {
+                            if !state.offline.contains(&root) {
+                                freshness.complete(&root, &state.store, crate::startup::now());
+                            }
+                        }
+                        if let Err(error) = freshness.save(&cache) {
+                            event(&cache, format_args!("save scan freshness: {error:#}"));
+                        }
+                    }
                     state.write().expect("index state").scanning = false;
                     event(
                         &cache,
@@ -719,7 +842,7 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
                 }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                if dirty.take().is_some() {
+                if !initializing && dirty.take().is_some() {
                     checkpoint_changes(&state, &snapshot)?;
                 }
             }
@@ -848,7 +971,7 @@ pub fn cli(args: Vec<String>) -> Result<()> {
             );
             Ok(())
         }
-        Some("--query" | "--sizes" | "--status") => {
+        Some("--query" | "--sizes" | "--status" | "--rescan") => {
             let request = match args[0].as_str() {
                 "--query" => Request::Search {
                     query: args[1..].join(" "),
@@ -858,6 +981,7 @@ pub fn cli(args: Vec<String>) -> Result<()> {
                     path: args.get(1).context("--sizes PATH")?.clone(),
                     limit: 50,
                 },
+                "--rescan" => Request::Rescan,
                 _ => Request::Status,
             };
             println!(
@@ -1030,7 +1154,7 @@ pub fn cli(args: Vec<String>) -> Result<()> {
         }
         None => run(scan::volumes(), cache_dir()?),
         _ => bail!(
-            "mypaper-index [--query QUERY | --sizes PATH | --status | --bench [COUNT] | --bench-query | --bench-scan PATH | --root PATH [CACHE]]"
+            "mypaper-index [--query QUERY | --sizes PATH | --status | --rescan | --bench [COUNT] | --bench-query | --bench-scan PATH | --root PATH [CACHE]]"
         ),
     }
 }

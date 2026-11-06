@@ -361,96 +361,102 @@ fn scan_with_store(root: &Path, fetch: Fetch, mut store: Store, rules: &Rules) -
         }),
         Condvar::new(),
     );
-    std::thread::scope(|scope| {
-        for _ in 0..4 {
-            let shared = &shared;
-            let work_quiet = quiet.clone();
-            scope.spawn(move || {
-                let _background = Background::enter();
+    let worker = || {
+        let shared = &shared;
+        let work_quiet = &quiet;
+        loop {
+            let (id, path, conditional) = {
+                let mut work = shared.0.lock().expect("scan queue");
                 loop {
-                    let (id, path, conditional) = {
-                        let mut work = shared.0.lock().expect("scan queue");
-                        loop {
-                            if let Some(task) = work.pending.pop_front() {
-                                work.active += 1;
-                                break task;
-                            }
-                            if work.active == 0 {
-                                return;
-                            }
-                            work = shared.1.wait(work).expect("scan queue wake");
-                        }
-                    };
-                    if let Some(quiet) = &work_quiet {
-                        quiet.wait();
+                    if let Some(task) = work.pending.pop_front() {
+                        work.active += 1;
+                        break task;
                     }
-                    let entries =
-                        enumerate_quiet(&path, fetch, work_quiet.as_deref()).map(|entries| {
-                            let has_project = entries.iter().any(|entry| {
-                                entry.attributes & DIRECTORY == 0
-                                    && Path::new(&entry.name)
-                                        .extension()
-                                        .is_some_and(|ext| ext.eq_ignore_ascii_case("csproj"))
-                            });
-                            entries
-                                .into_iter()
-                                .map(|entry| {
-                                    let child_path = path.join(&entry.name);
-                                    let child_condition = Rules::child_condition(
-                                        &child_path,
-                                        entry.attributes & DIRECTORY != 0,
-                                        conditional,
-                                        has_project,
-                                    );
-                                    let decision = rules.decide_known(
-                                        &child_path,
-                                        entry.attributes & DIRECTORY != 0,
-                                        child_condition,
-                                    );
-                                    (entry, child_path, decision, child_condition)
-                                })
-                                .collect::<Vec<_>>()
-                        });
-                    let mut work = shared.0.lock().expect("scan queue");
-                    match entries {
-                        Ok(entries) => {
-                            for (entry, child_path, decision, child_condition) in entries {
-                                let child = work.store.insert(
-                                    id,
-                                    &entry.name,
-                                    entry.attributes
-                                        | if decision != Decision::Index {
-                                            EXCLUDED | SIZE_UNKNOWN
-                                        } else {
-                                            0
-                                        },
-                                    if decision == Decision::Excluded {
-                                        0
-                                    } else {
-                                        entry.size
-                                    },
-                                    entry.modified,
-                                );
-                                if entry.attributes & DIRECTORY != 0
-                                    && decision != Decision::Excluded
-                                {
-                                    work.pending.push_back((child, child_path, child_condition));
-                                }
-                            }
-                        }
-                        Err(_) => {
-                            work.denied += 1;
-                            let mut record = work.store.record(id);
-                            record.attributes |= EXCLUDED | SIZE_UNKNOWN;
-                            work.store.set(id, record);
-                        }
+                    if work.active == 0 {
+                        return;
                     }
-                    work.active -= 1;
-                    shared.1.notify_all();
+                    work = shared.1.wait(work).expect("scan queue wake");
                 }
+            };
+            if let Some(quiet) = &work_quiet {
+                quiet.wait();
+            }
+            let entries = enumerate_quiet(&path, fetch, work_quiet.as_deref()).map(|entries| {
+                let has_project = entries.iter().any(|entry| {
+                    entry.attributes & DIRECTORY == 0
+                        && Path::new(&entry.name)
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("csproj"))
+                });
+                entries
+                    .into_iter()
+                    .map(|entry| {
+                        let child_path = path.join(&entry.name);
+                        let child_condition = Rules::child_condition(
+                            &child_path,
+                            entry.attributes & DIRECTORY != 0,
+                            conditional,
+                            has_project,
+                        );
+                        let decision = rules.decide_known(
+                            &child_path,
+                            entry.attributes & DIRECTORY != 0,
+                            child_condition,
+                        );
+                        (entry, child_path, decision, child_condition)
+                    })
+                    .collect::<Vec<_>>()
             });
+            let mut work = shared.0.lock().expect("scan queue");
+            match entries {
+                Ok(entries) => {
+                    for (entry, child_path, decision, child_condition) in entries {
+                        let child = work.store.insert(
+                            id,
+                            &entry.name,
+                            entry.attributes
+                                | if decision != Decision::Index {
+                                    EXCLUDED | SIZE_UNKNOWN
+                                } else {
+                                    0
+                                },
+                            if decision == Decision::Excluded {
+                                0
+                            } else {
+                                entry.size
+                            },
+                            entry.modified,
+                        );
+                        if entry.attributes & DIRECTORY != 0 && decision != Decision::Excluded {
+                            work.pending.push_back((child, child_path, child_condition));
+                        }
+                    }
+                }
+                Err(_) => {
+                    work.denied += 1;
+                    let mut record = work.store.record(id);
+                    record.attributes |= EXCLUDED | SIZE_UNKNOWN;
+                    work.store.set(id, record);
+                }
+            }
+            work.active -= 1;
+            shared.1.notify_all();
         }
-    });
+    };
+    if crate::budget::Budget::active() {
+        // Stay on the budgeted thread; spawning here would bypass its CPU accounting.
+        worker();
+    } else {
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                let worker = &worker;
+                scope.spawn(move || {
+                    let _background = Background::enter();
+                    worker();
+                });
+            }
+        });
+    }
     let mut work = shared.0.into_inner().expect("completed scan");
     work.store.roll_up();
     Ok(Scanned {

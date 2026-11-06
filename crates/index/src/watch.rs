@@ -20,7 +20,8 @@ use crate::scan::{Background, long};
 
 #[derive(Debug)]
 pub enum Change {
-    InitialDone,
+    InitialDone(Vec<PathBuf>),
+    Rescan,
     Queried,
     RulesChanged,
     Activity,

@@ -81,16 +81,31 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct IndexConfig {
     pub exclude: Vec<String>,
     pub include: Vec<String>,
+    /// Minimum age of a volume's last complete reconciliation, in seconds.
+    pub startup_rescan_after: u64,
+    /// Give login/deployment foreground work time to settle before offline catch-up.
+    pub startup_rescan_delay: u64,
+}
+
+impl Default for IndexConfig {
+    fn default() -> Self {
+        Self {
+            exclude: Vec::new(),
+            include: Vec::new(),
+            startup_rescan_after: 6 * 60 * 60,
+            startup_rescan_delay: 120,
+        }
+    }
 }
 
 impl IndexConfig {
     pub fn is_empty(&self) -> bool {
-        self.exclude.is_empty() && self.include.is_empty()
+        self == &Self::default()
     }
 }
 
@@ -157,6 +172,17 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn index_startup_policy_defaults_and_explicit_seconds_round_trip() {
+        let config = super::Config::parse("{}").unwrap();
+        assert_eq!(config.index.startup_rescan_after, 21_600);
+        assert_eq!(config.index.startup_rescan_delay, 120);
+        assert!(config.index.is_empty());
+        let config = super::Config::parse(r#"{"index":{"startup_rescan_after":0,"startup_rescan_delay":3}}"#).unwrap();
+        assert!(!config.index.is_empty());
+        assert_eq!(config, super::Config::parse(&serde_json::to_string(&config).unwrap()).unwrap());
+        assert!(super::Config::parse(r#"{"index":{"startup_rescan_after":-1}}"#).is_err());
+    }
     use super::*;
 
     #[test]

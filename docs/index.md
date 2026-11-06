@@ -12,6 +12,50 @@ and supervises crashes with its existing backoff. A wait-only parent handle also
 the helper exit if core disappears. Disabled means no index process, watch, thread or timer.
 No code runs in Explorer or in a plugin.
 
+## Deferred offline catch-up
+
+Cached startup arms live watches **before** opening the snapshot. Search becomes available
+after the usual snapshot validation/summary load; it does not wait for reconciliation.
+Live changes apply during the startup delay. When a catch-up scan is active, its racing
+notifications use the existing bounded queue and final-state replay.
+
+`index.startup_rescan_after` is a number of seconds (default **21,600**, six hours).
+`index.startup_rescan_delay` is also seconds (default **120**). `freshness.json` records
+each volume's last completed full scan, snapshot generation, rules and direct-child directory
+timestamps. Ordinary overlay saves/compactions do **not** refresh that age. Missing/corrupt
+freshness, changed include/exclude rules, clock rollback, an older snapshot generation, and
+missing roots all require catch-up. The first run after upgrading a legacy cache therefore
+does one delayed, throttled verification. Freshness is saved only after scan completion,
+notification replay and a durable checkpoint. Recovery failures do not certify freshness.
+
+Recent volumes skip startup scanning. A one-shot deadline at their age limit eventually
+verifies the offline interval even if this process stays running for days. Stale volumes
+wait at least the startup delay. Deadlines stop throughout the existing game signal;
+enumeration, generation writing, validation and replay also park at its work boundaries.
+There is no keyboard/mouse hook or user-idle polling. Windows offers `GetLastInputInfo`
+as a query, not an idle notification, so the delay and background CPU/I/O priority are the
+fallback for ordinary foreground activity.
+
+Catch-up uses **one** background worker, including replacement validation. A cooperative
+thread CPU-time budget sleeps at work boundaries to target **25% of one logical core**
+over time; it yields between directories. This is not a hard instantaneous process cap:
+directory batches can burst, and live notifications/queries have their own work. Overflow,
+returning-volume and explicit rule-change recovery retain their full-reconciliation paths.
+`mypaper-index --rescan` requests an immediate full catch-up of every online volume through
+the running service, bypassing freshness and delay while retaining the game gate and CPU
+budget. `--status.scanning` describes active reconciliation, not a future deadline.
+
+Before a stale-volume scan, a non-admin root enumeration compares direct-child directory
+last-write timestamps with the saved markers. This detects many immediate child-list edits,
+but **does not prove recursive cleanliness**: nested creation/deletion/rename need not touch
+the top-level timestamp; in-place file writes/size changes need not touch even their parent;
+timestamps have one-second precision here and can be restored. Therefore matching markers
+do **not** justify skipping subtrees: this implementation logs changed top-level hints and
+uses the conservative full-volume fallback at the throttled rate. A correct selective skip
+needs a durable recursive change token such as journal replay; timestamp-only pruning would
+silently leave stale results. Recent-volume skipping intentionally permits offline drift
+until the age deadline or a manual rescan. Live changes after the watch starts are still caught.
+
 With `launcher.files` enabled in `bars.json`, typing in the launcher queries the helper
 on a dedicated panel-owned worker lane. Superseded queued queries are skipped, and
 replies for old text are ignored. Files retain the helper's ranking; folder results show

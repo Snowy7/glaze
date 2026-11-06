@@ -146,6 +146,9 @@ pub struct Store {
 }
 
 impl Store {
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation
+    }
     pub(crate) fn set_quiet(&mut self, quiet: std::sync::Arc<crate::quiet::Quiet>) {
         self.quiet = Some(quiet);
     }
@@ -1487,26 +1490,30 @@ impl Store {
             }
             Ok(())
         };
-        let workers = if count >= 250_000 { 4 } else { 1 };
-        std::thread::scope(|scope| -> Result<()> {
-            let mut tasks = Vec::new();
-            for worker in 0..workers {
-                let validate = &validate;
-                tasks.push(
-                    std::thread::Builder::new()
-                        .name(format!("index-load-{worker}"))
-                        .stack_size(256 * 1024)
-                        .spawn_scoped(scope, move || {
-                            validate(count * worker / workers, count * (worker + 1) / workers)
-                        })?,
-                );
-            }
-            for task in tasks {
-                task.join()
-                    .map_err(|_| anyhow::anyhow!("index validation worker panicked"))??;
-            }
-            Ok(())
-        })?;
+        if crate::budget::Budget::active() {
+            validate(0, count)?;
+        } else {
+            let workers = if count >= 250_000 { 4 } else { 1 };
+            std::thread::scope(|scope| -> Result<()> {
+                let mut tasks = Vec::new();
+                for worker in 0..workers {
+                    let validate = &validate;
+                    tasks.push(
+                        std::thread::Builder::new()
+                            .name(format!("index-load-{worker}"))
+                            .stack_size(256 * 1024)
+                            .spawn_scoped(scope, move || {
+                                validate(count * worker / workers, count * (worker + 1) / workers)
+                            })?,
+                    );
+                }
+                for task in tasks {
+                    task.join()
+                        .map_err(|_| anyhow::anyhow!("index validation worker panicked"))??;
+                }
+                Ok(())
+            })?;
+        }
         if let Some(windows) = store.windows.take() {
             windows.release();
         }

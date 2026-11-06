@@ -76,6 +76,7 @@ impl Quiet {
             clock = self.resumed.wait(clock).expect("quiet resume");
         }
         drop(clock);
+        crate::budget::checkpoint();
         std::thread::yield_now();
     }
     pub fn start(tx: SyncSender<Change>) -> Result<Arc<Self>> {

@@ -2,6 +2,7 @@
 //! watches live in the opt-in `mypaper-index` process. See `docs/index.md`.
 
 mod backing;
+mod budget;
 mod names;
 pub mod pipe;
 pub mod query;
@@ -11,6 +12,7 @@ pub mod rules;
 pub mod scan;
 pub mod service;
 mod spool;
+mod startup;
 pub mod store;
 mod volumes;
 pub mod watch;
@@ -25,6 +27,7 @@ pub enum Request {
     Search { query: String, limit: usize },
     Sizes { path: String, limit: usize },
     Status,
+    Rescan,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
