@@ -742,20 +742,17 @@ pub(super) fn face(
     pic: Rect,
 ) {
     use mypaper_shell::preview::widgets::{Frame, Model, Stamp, tokens, view};
+    if b.clip_rect().is_some_and(|clip| {
+        pic.bottom < clip.top
+            || pic.top > clip.bottom
+            || pic.right < clip.left
+            || pic.left > clip.right
+    }) {
+        return;
+    }
     let standalone = setting.is_empty();
     if !standalone {
-        b.fill(pic, b.px(8.0), crate::panel::tokens::hex(0x293246));
-        if let Some(path) = app
-            .library
-            .active()
-            .and_then(|i| app.library.items[i].preview.as_ref())
-            && let Some(image) = app
-                .images
-                .borrow_mut()
-                .get(path, (pic.width() as u32, pic.height() as u32))
-        {
-            crate::stage::image_round(b, pic, &image, 1.0, b.px(8.0));
-        }
+        b.fill(pic, b.px(8.0), b.p.well);
     }
     let mut settings = instance.settings.clone();
     if !setting.is_empty() {
@@ -810,8 +807,13 @@ pub(super) fn face(
         std::env::temp_dir().join("mypaper-panel-face-preview"),
     );
     let Ok(mut model) = Model::new(placed, &mut storage, now) else {
+        unavailable_face(app, b, manifest, pic);
         return;
     };
+    if instance.widget.contains("--") && model.data.get("face").is_none() {
+        unavailable_face(app, b, manifest, pic);
+        return;
+    }
     sample_content(&mut model, now);
     if instance.widget == "weather" {
         model.data = json!({"current":{"temperature":22,"condition":"Partly cloudy","code":2,"isDay":true,"location":{"name":"Hong Kong"}},"forecast":{"days":[{"date":"2026-11-06","max":24,"min":19,"code":2},{"date":"2026-11-07","max":23,"min":18,"code":3},{"date":"2026-11-08","max":25,"min":20,"code":0}]}});
@@ -842,6 +844,7 @@ pub(super) fn face(
             ("clock", "analog") => (240, 220),
             ("clock", "world") => (320, 220),
             ("media-pill", _) => (360, 90),
+            ("countdown", _) => (360, 120),
             ("now-playing", "strip") => (360, 112),
             ("notes" | "calendar" | "photo", _) => (280, 240),
             _ => (360, 220),
@@ -939,6 +942,18 @@ pub(super) fn face(
         };
         let factor = (inner.width() / width as f32).min(inner.height() / height as f32);
         let (w, h) = (width as f32 * factor, height as f32 * factor);
+        if !standalone {
+            crate::panel::specimens::backdrop(
+                app,
+                b,
+                Rect::new(
+                    inner.left + (inner.width() - w) / 2.0 - b.px(3.0),
+                    inner.top + (inner.height() - h) / 2.0 - b.px(3.0),
+                    w + b.px(6.0),
+                    h + b.px(6.0),
+                ),
+            );
+        }
         crate::stage::image_round(
             b,
             Rect::new(
@@ -952,6 +967,38 @@ pub(super) fn face(
             b.px(8.0),
         );
     }
+}
+
+/// Plugin views arrive from the host at runtime. Keep an unavailable picture useful without
+/// starting a plugin or inventing its live data while browsing the catalog.
+fn unavailable_face(app: &App, b: &mut B, manifest: &WidgetManifest, pic: Rect) {
+    b.fill(pic, b.px(8.0), b.p.well);
+    let size = (pic.height() * 0.38).min(b.px(42.0));
+    let icon = Rect::new(
+        pic.left + (pic.width() - size) / 2.0,
+        pic.top + pic.height() * 0.13,
+        size,
+        size,
+    );
+    if let Some(image) = crate::panel::icons::plugin_image(app, &manifest.id) {
+        crate::stage::image_round(b, icon, &image, 1.0, b.px(5.0));
+    } else {
+        b.icon(icon, legacy::glyph_of(&manifest.id), size / b.s, b.p.ink2);
+    }
+    text(
+        b,
+        Rect::new(
+            pic.left + b.px(6.0),
+            icon.bottom + b.px(5.0),
+            pic.width() - b.px(12.0),
+            b.px(24.0),
+        ),
+        "Preview unavailable",
+        11.0,
+        400,
+        b.p.ink3,
+        Align::Center,
+    );
 }
 
 /// Representative inputs for pictures only. Never queries or starts a service or writes data.
@@ -1203,6 +1250,39 @@ fn development_plugin(id: &str, name: &str) -> bool {
             .to_lowercase()
             .split(|ch: char| !ch.is_alphanumeric())
             .any(|word| matches!(word, "demo" | "test" | "example" | "experimental"))
+}
+
+#[cfg(test)]
+mod gallery_tests {
+    use super::*;
+
+    #[test]
+    fn development_catalog_entries_are_hidden_until_developer_mode_is_enabled() {
+        for (id, name) in [
+            ("hello", "Hello"),
+            ("hello-ts", "Hello TypeScript"),
+            ("native-echo", "Echo"),
+            ("weather-demo", "Weather"),
+            ("clock", "Clock (experimental)"),
+            ("test-face", "Example"),
+        ] {
+            assert!(development_plugin(id, name));
+        }
+        for (id, name) in [
+            ("t3", "T3 Code"),
+            ("tailscale", "Tailscale"),
+            ("obs", "OBS Studio"),
+        ] {
+            assert!(!development_plugin(id, name));
+        }
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.run(Action::Set(
+            Edit::new(DocId::Studio, "/developer_mode", "Developer mode"),
+            json!(true),
+        ));
+        assert!(developer_mode(&app));
+    }
 }
 
 pub fn add(app: &App, b: &mut B, c: &mut Col) {

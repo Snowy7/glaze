@@ -138,4 +138,69 @@ mod tests {
         app.run(Action::Undo);
         assert_eq!(app.docs.doc(DocId::Widgets).raw, original);
     }
+
+    #[test]
+    fn render_narrow_look_and_widget_controls() {
+        use crate::{
+            actions::{Action, Edit},
+            panel::{Page, State},
+        };
+        use mypaper_ui::{Ui, golden, render};
+        let out = std::env::var_os("MYPAPER_STUDIO_PANEL_SHOTS")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a")
+            });
+        let mut ui = Ui::new().unwrap();
+        for dark in [true, false] {
+            for scale in [1.0, 1.5] {
+                for page in [Page::Look, Page::Widget] {
+                    let mut app = crate::goldens::app(dark, &ui);
+                    app.panel = Some(State {
+                        page,
+                        ..Default::default()
+                    });
+                    app.size = (360, 760);
+                    app.theme.ty.text_scale = scale;
+                    if page == Page::Widget {
+                        app.nav.widget = Some("clock-1".into());
+                        let layout = crate::pages::widgets::layout(&app);
+                        let own = appearance(&app, &layout.instances[0], Style::Liquid);
+                        app.run(Action::Set(
+                            Edit::new(DocId::Widgets, "/instances/0/appearance", "Its own look"),
+                            own,
+                        ));
+                    } else {
+                        app.nav.more.insert(mypaper_ui::controls::key((
+                            "panel-color-picker",
+                            DocId::Config,
+                            "/look/material/tint",
+                        )));
+                    }
+                    let built = crate::panel::build(&app, &mut ui.text);
+                    app.size.1 = (built.scrolls.last().unwrap().content + 48.0).ceil() as u32;
+                    let built = crate::panel::build(&app, &mut ui.text);
+                    for target in &built.targets {
+                        assert!(
+                            target.rect.left >= 0.0 && target.rect.right <= 360.0,
+                            "{:?}",
+                            target.rect
+                        );
+                    }
+                    let image = render(&mut ui, &built.list, 360, app.size.1).unwrap();
+                    let name = format!(
+                        "{}-360{}-{}.png",
+                        if page == Page::Look {
+                            "look"
+                        } else {
+                            "clock-own-look"
+                        },
+                        if scale > 1.0 { "-large-text" } else { "" },
+                        if dark { "dark" } else { "light" }
+                    );
+                    golden::write(&image, &out.join(name)).unwrap();
+                }
+            }
+        }
+    }
 }
