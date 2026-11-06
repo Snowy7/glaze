@@ -81,7 +81,9 @@ fn apply(state: &RwLock<State>, path: &Path) -> Result<()> {
 }
 
 fn reconcile(state: &RwLock<State>, root: &Path) -> Result<()> {
-    let scanned = scan::scan(root, Fetch::Large)?;
+    // Measured warm trees on this machine favor Basic over LARGE_FETCH; the CLI retains both
+    // so the choice can be remeasured on another disk or Windows version.
+    let scanned = scan::scan(root, Fetch::Basic)?;
     eprintln!(
         "scan {}: {} entries, {:.3}s, {} inaccessible directories",
         root.display(),
@@ -90,6 +92,11 @@ fn reconcile(state: &RwLock<State>, root: &Path) -> Result<()> {
         scanned.denied
     );
     let mut state = state.write().expect("index state");
+    if state.store.is_empty() {
+        // First volume: move its buffers instead of allocating a duplicate full index.
+        state.store = scanned.store;
+        return Ok(());
+    }
     let text = root.to_string_lossy();
     let old = state.store.find(&text);
     let parent = old
@@ -159,6 +166,7 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     // non-admin snapshot cannot know what changed while the service was off: reconcile once
     // in the background while cached queries are already available (USN replay is future work).
     let initial = state.clone();
+    let initial_snapshot = snapshot.clone();
     std::thread::Builder::new()
         .name("index-initial".into())
         .spawn(move || {
@@ -166,6 +174,8 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
             for root in roots {
                 if let Err(error) = reconcile(&initial, &root) {
                     eprintln!("scan {}: {error:#}", root.display());
+                } else if let Err(error) = checkpoint(&initial, &initial_snapshot) {
+                    eprintln!("checkpoint after {}: {error:#}", root.display());
                 }
             }
             let _ = tx.send(Change::InitialDone);
@@ -403,9 +413,25 @@ fn benchmark(count: usize) -> Result<()> {
             size_of_val(&memory) as u32,
         )?;
     }
+    let lookup_started = Instant::now();
+    std::hint::black_box(store.child(root, "PROJECT-0000500-REPORT.TXT"));
+    let lookup_ms = lookup_started.elapsed().as_secs_f64() * 1000.0;
+    let mut after_lookup =
+        windows::Win32::System::ProcessStatus::PROCESS_MEMORY_COUNTERS_EX::default();
+    after_lookup.cb = size_of_val(&after_lookup) as u32;
+    // SAFETY: same current-process query and correctly sized counter output as above.
+    unsafe {
+        windows::Win32::System::ProcessStatus::GetProcessMemoryInfo(
+            windows::Win32::System::Threading::GetCurrentProcess(),
+            (&mut after_lookup
+                as *mut windows::Win32::System::ProcessStatus::PROCESS_MEMORY_COUNTERS_EX)
+                .cast(),
+            size_of_val(&after_lookup) as u32,
+        )?;
+    }
     println!(
         "{}",
-        serde_json::json!({"entries":count,"record_bytes":size_of::<crate::store::Record>(),"snapshot_bytes":std::fs::metadata(&path)?.len(),"load_ms":load_ms,"queries":elapsed.len(),"p50_ms":elapsed[elapsed.len()/2],"p95_ms":elapsed[elapsed.len()*95/100],"max_ms":elapsed.last(),"by_query":by_query,"private_bytes":memory.PrivateUsage,"peak_pagefile_bytes":memory.PeakPagefileUsage,"working_set_bytes":memory.WorkingSetSize})
+        serde_json::json!({"entries":count,"record_bytes":size_of::<crate::store::Record>(),"snapshot_bytes":std::fs::metadata(&path)?.len(),"load_ms":load_ms,"queries":elapsed.len(),"p50_ms":elapsed[elapsed.len()/2],"p95_ms":elapsed[elapsed.len()*95/100],"max_ms":elapsed.last(),"by_query":by_query,"private_bytes":memory.PrivateUsage,"peak_pagefile_bytes":memory.PeakPagefileUsage,"working_set_bytes":memory.WorkingSetSize,"private_with_wide_lookup_bytes":after_lookup.PrivateUsage,"wide_lookup_build_ms":lookup_ms})
     );
     drop(store);
     std::fs::remove_file(&path)?;

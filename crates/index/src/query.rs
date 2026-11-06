@@ -95,7 +95,14 @@ fn shard(store: &Store, query: &Query, start: usize, end: usize, limit: usize) -
         .iter()
         .map(|term| memchr::memmem::Finder::new(term.as_bytes()))
         .collect();
-    let mut parents = std::collections::HashMap::<u32, String>::new();
+    let path_finders: Vec<_> = query
+        .paths
+        .iter()
+        .map(|part| memchr::memmem::Finder::new(part.as_bytes()))
+        .collect();
+    let mut last_parent = crate::store::NONE;
+    let mut parent_path = String::new();
+    let mut missing_filters = Vec::new();
     for (id, record) in store.reverse_range(start, end) {
         if id == 0 || !record.live() || query.directory.is_some_and(|d| d != record.directory()) {
             continue;
@@ -128,18 +135,27 @@ fn shard(store: &Store, query: &Query, start: usize, end: usize, limit: usize) -
             continue;
         }
         if !query.paths.is_empty() {
-            // Cache directory paths, not one allocated full path per file. A match lies in
+            // Reuse adjacent siblings' parent, not one allocated full path per file. A match lies in
             // the parent, in the name, or spans their one separator. This also makes a
             // nonmatching path filter cheap across a million siblings.
-            let parent = parents
-                .entry(record.parent)
-                .or_insert_with(|| fold(&store.path(record.parent)));
-            if !query.paths.iter().all(|part| {
-                parent.contains(part)
-                    || memchr::memmem::find(name, part.as_bytes()).is_some()
+            if last_parent != record.parent {
+                last_parent = record.parent;
+                parent_path = fold(&store.path(record.parent));
+                missing_filters.clear();
+                missing_filters.extend(
+                    query
+                        .paths
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, part)| (!parent_path.contains(part)).then_some(i)),
+                );
+            }
+            if !missing_filters.iter().all(|i| {
+                let part = &query.paths[*i];
+                path_finders[*i].find(name).is_some()
                     || (record.parent != 0
                         && part.rsplit_once('\\').is_some_and(|(before, after)| {
-                            parent.trim_end_matches('\\').ends_with(before)
+                            parent_path.trim_end_matches('\\').ends_with(before)
                                 && name.starts_with(after.as_bytes())
                         }))
             }) {
