@@ -38,7 +38,8 @@ pub fn finish_page(app: &App, b: &mut B, page: Page, first_op: usize, first_targ
         .hits
         .iter()
         .filter(|hit| {
-            hit.checked == Some(true)
+            hit.role == mypaper_ui::Role::RadioButton
+                && hit.checked == Some(true)
                 && hit.rect.height() <= b.px(36.0)
                 && hit.rect.width() > b.px(48.0)
         })
@@ -296,6 +297,34 @@ fn reset_file(dir: &Path, user_root: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn expanded_more_keeps_its_theme_contrast_instead_of_segment_text() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        for dark in [true, false] {
+            let mut app = crate::goldens::app(dark, &ui);
+            app.panel = Some(super::super::State::default());
+            app.panel.as_mut().unwrap().page = Page::Look;
+            app.size = (480, 760);
+            let built = super::super::build(&app, &mut ui.text);
+            let action = built
+                .targets
+                .iter()
+                .find(|target| matches!(target.action, Action::More(_)))
+                .unwrap()
+                .action
+                .clone();
+            app.run(action);
+            let built = super::super::build(&app, &mut ui.text);
+            assert!(built.list.ops.iter().any(|op| matches!(
+                op,
+                mypaper_ui::Op::Text { text, color, .. }
+                    if text.as_ref() == "More"
+                        && *color == super::super::palette_for(&app).ink2
+            )));
+        }
+    }
+
     #[test]
     fn theme_reset_preserves_source_and_playback_keeps_a_backup_and_refuses_other_folders() {
         let root = std::env::temp_dir().join(format!(
