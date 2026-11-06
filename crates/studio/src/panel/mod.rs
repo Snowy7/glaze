@@ -159,9 +159,9 @@ pub struct State {
     pub color_overlay: std::cell::RefCell<Vec<mypaper_ui::Op>>,
     pub color_values: std::cell::RefCell<std::collections::HashMap<mypaper_ui::controls::Key, (String, mypaper_ui::color_row::popover::Hsv)>>,
     pub fonts: std::cell::OnceCell<Vec<String>>,
-    pub save_errors: std::cell::RefCell<std::collections::HashMap<crate::docs::DocId, String>>,
+    pub save_errors: std::cell::RefCell<std::collections::HashMap<crate::docs::DocId, saving::Failure>>,
     pub theme_retry: Option<crate::actions::Action>,
-    pub theme_errors: std::cell::RefCell<std::collections::HashMap<std::path::PathBuf, String>>,
+    pub theme_errors: std::cell::RefCell<std::collections::HashMap<std::path::PathBuf, saving::Failure>>,
     reset_version: std::cell::Cell<Option<(crate::docs::DocId, u64)>>,
     auto_left: std::cell::Cell<Option<bool>>,
 }
@@ -467,6 +467,7 @@ pub fn run(app: &mut App, command: Command) {
 /// Panel shortcuts are resolved before the legacy app's page shortcuts.
 pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) -> bool {
     if colors::on_key(app, vk, ctrl, shift, alt) { return true; }
+    if editors::widgets::on_key(app, vk, ctrl, shift, alt) { return true; }
     if choosers::on_key(app, vk, ctrl, shift, alt) { return true; }
     if vk == 0x1B && choosers::end(app) { app.dirty = true; return true; }
     if pick_client::on_key(app, vk) {
@@ -596,11 +597,16 @@ pub fn build(app: &App, text: &mut Text) -> Built {
     let header = Rect::new(0.0, 0.0, window.width(), b.px(48.0));
     pages::header(app, &mut b, header, page);
     let footer = editors::footer_height(app);
+    let mut failures = crate::ui::Col {
+        x: b.px(16.0), y: header.bottom,
+        w: window.width() - b.px(32.0), view: key("panel-save-feedback"),
+    };
+    saving::write_banners(app, &mut b, &mut failures);
     let body = Rect::new(
         0.0,
-        header.bottom,
+        failures.y,
         window.width(),
-        (window.height() - header.height() - app.px(footer)).max(0.0),
+        (window.height() - failures.y - app.px(footer)).max(0.0),
     );
     let view = key(("studio-panel", page));
     b.scroll(view, body, app.nav.scroll(view), Action::None, |b, top| {
@@ -699,7 +705,7 @@ pub fn fit_height(app: &mut App, surface: &mypaper_ui::Surface, built: &Built) -
         return false;
     };
     let mut rect = placement(app);
-    rect.3 = (area.content + app.px(48.0 + editors::footer_height(app))).ceil() as i32;
+    rect.3 = (area.content + area.viewport.top + app.px(editors::footer_height(app))).ceil() as i32;
     rect.3 = rect.3.clamp(
         (app.px(160.0) as i32).min(placement(app).3),
         placement(app).3,
@@ -815,6 +821,7 @@ pub fn end_peek() {
 /// List drags are transient until release. This early bridge leaves legacy input intact.
 pub fn event(app: &mut App, event: &mypaper_ui::Event) -> bool {
     if app.panel.is_some() { choosers::event(app, event); }
+    if editors::widgets::event(app, event) { return true; }
     if app.panel.is_some() && colors::event(app, event) { return true; }
     app.panel.is_some() && lists::event(app, event)
 }
@@ -896,13 +903,7 @@ pub fn record_edit(app: &mut App, label: &str, ops: &[crate::docs::Op], checkpoi
 }
 
 pub fn save_failed(app: &mut App, doc: Option<crate::docs::DocId>, error: &str) {
-    if let Some(state) = &app.panel {
-        if let Some(doc) = doc {
-            state.save_doc.set(Some(doc));
-            state.save_errors.borrow_mut().insert(doc, error.into());
-        }
-        app.docs.saved = crate::docs::Saved::Failed(error.into());
-    }
+    saving::failed(app, doc, error);
 }
 
 pub fn record_drag(app: &App, label: &str) {

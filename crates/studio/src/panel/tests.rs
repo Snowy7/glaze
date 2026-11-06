@@ -402,7 +402,8 @@ fn render_panel_pages() {
             }
             app.toast = None;
             let built = super::build(&app, &mut ui.text);
-            let content = built.scrolls.last().unwrap().content;
+            let area = built.scrolls.last().unwrap();
+            let content = area.content + area.viewport.top - 48.0;
             app.size.1 = (content + 48.0 + super::editors::footer_height(&app))
                 .ceil()
                 .clamp(160.0, 760.0) as u32;
@@ -768,6 +769,7 @@ fn a_list_drag_writes_once_on_drop_and_is_one_undo_step() {
     use mypaper_ui::{Button, Event, Point, Pointer};
     let mut ui = Ui::new().unwrap();
     let mut app = app(&ui, true);
+    app.size.1 = 1400;
     super::run(&mut app, Command::Open(Page::DesktopMenu));
     let before = app.docs.doc(DocId::Config).raw.clone();
     let built = super::build(&app, &mut ui.text);

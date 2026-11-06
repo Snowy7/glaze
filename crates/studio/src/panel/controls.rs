@@ -2,9 +2,8 @@
 
 use mypaper_ui::controls::{Align, Behavior, Font, Glyph, key};
 use mypaper_ui::{Point, Rect, Rgba, Role, TextStyle};
-use serde_json::Value;
 
-use crate::actions::{Action, Choices, Edit, FieldId};
+use crate::actions::{Action, Edit, FieldId};
 use crate::app::{App, field_key};
 use crate::settings::{Kind, Setting};
 use crate::theme::glyph;
@@ -42,6 +41,14 @@ pub fn displays(app: &App, b: &mut B, c: &mut Col) {
         .map(|i| format!("Display {i}"))
         .collect();
     let labels: Vec<_> = labels.iter().map(String::as_str).collect();
+    let style = b.font(Font::Caption);
+    let needed: f32 = labels.iter().map(|label| b.measure(label, &style).0 + b.px(20.0)).sum();
+    if labels.len() > 4 || needed > c.w - b.px(4.0) {
+        group(b, c, "", |b, c| super::editors::select(b, c, "Display", serde_json::json!(app.nav.display),
+            Edit::new(crate::docs::DocId::Studio, "/panel/display", "Display"),
+            labels.iter().enumerate().map(|(index, label)| (serde_json::json!(index), (*label).to_owned())).collect()));
+        return;
+    }
     let r = Rect::new(c.x, c.y + b.px(6.0), c.w, height(b, 30.0));
     b.segmented(
         key(("panel-displays", c.view)),
@@ -56,7 +63,7 @@ pub fn displays(app: &App, b: &mut B, c: &mut Col) {
     c.y = r.bottom + b.px(4.0);
 }
 
-/// File feedback stays beside the pages that can edit that file.
+/// Read failures stay beside their editors; write failures remain visible on every page.
 pub fn relevant_docs(page: super::Page) -> &'static [crate::docs::DocId] {
     use super::Page;
     use crate::docs::DocId;
@@ -95,10 +102,8 @@ pub fn save_banner(app: &App, b: &mut B, c: &mut Col, page: super::Page) {
     super::saving::banner(app, b, c, page);
     use crate::docs::ReadIssue;
     for &doc in relevant_docs(page) {
-        let state = app.panel.as_ref().unwrap();
         let issue = app.docs.doc(doc).issue;
-        let write_failed = state.save_errors.borrow().contains_key(&doc);
-        if issue.is_none() && !write_failed {
+        if issue.is_none() {
             continue;
         }
         let message = app.docs.error(doc).unwrap_or("Couldn't save");
@@ -358,6 +363,7 @@ pub fn row(
     let h = height(b, if caption.is_empty() { 40.0 } else { 56.0 });
     let r = Rect::new(c.x, c.y, c.w, h);
     let k = key(("panel-row", c.view, label, caption));
+    let choice = matches!(&action, Action::Choose(_));
     let on = checked == Some(true);
     let area = b.list_row_area(r);
     if on {
@@ -382,7 +388,7 @@ pub fn row(
             b.icon(tail, glyph::CHECK, 16.0, b.p.ink1);
         }
     } else {
-        b.icon(tail, glyph::CHEVRON_RIGHT, 15.0, b.p.ink3);
+        b.icon(tail, if choice { glyph::CHEVRON_DOWN } else { glyph::CHEVRON_RIGHT }, 15.0, b.p.ink3);
     }
     let end = tail.left - b.px(8.0);
     let value_w = if value.is_empty() {
@@ -441,6 +447,8 @@ pub fn row(
         area,
         if checked.is_some() {
             Role::RadioButton
+        } else if choice {
+            Role::ComboBox
         } else {
             Role::Button
         },
@@ -530,104 +538,21 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
             c.y += h;
         }
         Kind::Select { options, .. } => {
-            let shown = options
-                .iter()
-                .find(|(v, _)| serde_json::from_str::<Value>(v).is_ok_and(|v| v == value))
-                .map_or("Custom", |(_, l)| *l);
-            let stacked = c.w < b.px(360.0) || b.t.text_scale > 1.0;
-            let width = if stacked {
-                c.w
-            } else {
-                b.px(164.0).min(c.w - label_w - b.px(8.0))
-            };
-            let control = Rect::new(
-                r.right - width,
-                if stacked {
-                    c.y + height(b, if caption.is_empty() { 28.0 } else { 52.0 })
-                } else {
-                    c.y + (h - b.px(28.0)) / 2.0
-                },
-                width,
-                height(b, 28.0),
+            b.list.ops.truncate(label_op);
+            super::editors::select(
+                b, c, label, value, edit,
+                options.iter().map(|(value, label)| (
+                    serde_json::from_str(value).expect("setting value"), (*label).to_owned()
+                )).collect(),
             );
-            let k = key(("panel-setting", id));
-            b.fill(control, b.px(6.0), b.p.fill);
-            b.stroke(control, b.px(6.0), b.px(1.0), b.p.edge);
-            b.wash(k, control, b.px(6.0));
-            text(
-                b,
-                Rect::new(
-                    control.left + b.px(10.0),
-                    control.top,
-                    width - b.px(30.0),
-                    control.height(),
-                ),
-                shown,
-                13.0,
-                400,
-                b.p.ink1,
-                Align::Start,
-            );
-            b.icon(
-                Rect::new(
-                    control.right - b.px(22.0),
-                    control.top,
-                    b.px(16.0),
-                    control.height(),
-                ),
-                glyph::CHEVRON_DOWN,
-                12.0,
-                b.p.ink2,
-            );
-            b.hit(
-                k,
-                control,
-                Role::ComboBox,
-                label,
-                Action::Choose(Choices {
-                    edit,
-                    options: options
-                        .iter()
-                        .map(|(v, l)| {
-                            (
-                                serde_json::from_str(v).expect("setting value"),
-                                (*l).to_owned(),
-                            )
-                        })
-                        .collect(),
-                    current: Some(value),
-                }),
-                Behavior::Click,
-            );
-            b.focus_ring(k, control, b.px(6.0));
-            c.y = if stacked {
-                control.bottom + b.px(8.0)
-            } else {
-                r.bottom
-            };
         }
         Kind::Choice { options, .. } => {
             let mut options: Vec<_> = options.iter().collect();
             options.sort_by_key(|(_, label)| *label != "As is");
-            let labels: Vec<_> = options.iter().map(|(_, label)| *label).collect();
-            let selected = options
-                .iter()
-                .position(|(v, _)| serde_json::from_str::<Value>(v).is_ok_and(|v| v == value));
             b.list.ops.truncate(label_op);
-            let r = b.labeled_segments(
-                key(("panel-segment", id)),
-                r,
-                label,
-                &labels,
-                selected,
-                |i| {
-                    Action::Set(
-                        edit.clone(),
-                        serde_json::from_str(options[i].0).expect("setting value"),
-                    )
-                },
-            );
-            c.y = r.bottom + b.px(8.0);
+            super::editors::segments(b, c, label, value, edit, options.into_iter().map(|(value, label)| (
+                serde_json::from_str(value).expect("setting value"), (*label).to_owned()
+            )).collect());
         }
         Kind::Slider {
             min,
@@ -829,7 +754,7 @@ pub fn boundaries(b: &mut B) {
             ),
             Behavior::Field => b.stroke(target.rect, b.px(6.0), b.px(1.0), b.p.edge),
             _ => match target.action {
-                Action::Choose(_) if target.rect.height() <= b.px(36.0) => {
+                Action::Choose(_) if target.rect.height() < b.px(36.0) => {
                     b.stroke(target.rect, b.px(6.0), b.px(1.0), b.p.edge)
                 }
                 Action::Set(_, _)
