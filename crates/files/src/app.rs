@@ -1233,7 +1233,16 @@ impl App {
                     self.pending_images.remove(&key);
                     self.decorations.insert(key.clone(), decoration);
                     self.image_order.push_back(key);
-                    while self.image_order.len() > 384 {
+                    while self.image_order.len() > 384
+                        || self
+                            .decorations
+                            .values()
+                            .filter_map(|d| d.as_ref())
+                            .filter_map(|d| d.image.as_ref())
+                            .map(|image| image.pixels.len())
+                            .sum::<usize>()
+                            > 16 * 1024 * 1024
+                    {
                         if let Some(key) = self.image_order.pop_front() {
                             self.decorations.remove(&key);
                         }

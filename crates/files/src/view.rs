@@ -176,6 +176,14 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     );
     let address_inner;
     let mut crumbs = Vec::new();
+    f.hit(
+        ADDRESS,
+        address,
+        Role::TextInput,
+        "Address (Ctrl+L)",
+        true,
+        None,
+    );
     if app.field == Field::Address {
         address_inner = field(
             &mut f,
@@ -187,14 +195,6 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
         );
     } else {
         address_inner = f.field_frame(address, "", false, false, None);
-        f.hit(
-            ADDRESS,
-            address,
-            Role::TextInput,
-            "Address (Ctrl+L)",
-            true,
-            None,
-        );
         f.icon(
             Rect::new(
                 address_inner.left,

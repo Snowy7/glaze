@@ -293,7 +293,7 @@ pub fn decorate(path: &str, size: i32, thumbnail: bool) -> Result<Decoration> {
             factory.GetImage(
                 SIZE { cx: size, cy: size },
                 if thumbnail {
-                    SIIGBF_RESIZETOFIT | SIIGBF_BIGGERSIZEOK
+                    SIIGBF_RESIZETOFIT
                 } else {
                     SIIGBF_ICONONLY
                 },
@@ -532,6 +532,18 @@ pub fn validate_name(name: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shell_locations_resolve_and_enumerate_without_filesystem_paths() {
+        let _apartment = Apartment::new().unwrap();
+        let location = resolve("shell:MyComputerFolder", None).unwrap();
+        assert!(!location.filesystem);
+        let entries = enumerate(&location, || false, |_| {}).unwrap();
+        assert!(
+            entries.iter().any(|entry| entry.path.starts_with("C:")),
+            "{entries:?}"
+        );
+    }
 
     #[test]
     fn enumeration_names_and_shell_operations_round_trip_in_a_private_scratch_folder() {
