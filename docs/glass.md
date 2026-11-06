@@ -64,6 +64,9 @@ liquid-rust's springs materialize glass in and out and fade material changes.
   wallpaper it hasn't blurred (`KeptFrame::drawn`), and only over the texels each group reads.
   It draws over the restored swapchain image through sRGB views. Nothing runs while the
   wallpaper and plates hold still.
+- **Studio's previews**: `preview.rs` draws each request from the first drawn kept frame of any
+  screen, with a fork of the plates' renderer (`GlassPass::fork`: its compiled pipelines, its own
+  pyramid), so an answer compiles nothing.
 - **Overlays** (flyouts and menus over app windows): `overlay/glass.rs` copies the WGC crop into
   an sRGB texture, draws the glass over a transparent clear (premultiplied for
   DirectComposition) and copies it out. The window grows by `Material::outset` (shadow or
