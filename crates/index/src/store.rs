@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{BufReader, BufWriter, Write};
+use std::os::windows::fs::OpenOptionsExt;
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
@@ -72,6 +73,7 @@ struct Changes<'a> {
 
 #[derive(Default)]
 pub struct Store {
+    windows: Option<crate::residency::Windows>,
     spool: Option<crate::spool::Spool>,
     mapping: Option<Mmap>,
     source: Option<std::sync::Arc<File>>,
@@ -97,6 +99,7 @@ impl Store {
             None => None,
         };
         Ok(Self {
+            windows: None,
             spool: None,
             mapping,
             source: self.source.clone(),
@@ -268,12 +271,23 @@ impl Store {
         })
     }
 
+    fn touch_mapping(&self, offset: usize, length: usize) {
+        if let Some(windows) = &self.windows {
+            let map = self.mapping.as_ref().expect("maintenance mapping");
+            windows.touch(map.as_ptr(), map.len(), offset, length);
+        }
+    }
+
     pub fn record(&self, id: u32) -> Record {
         if let Some(spool) = &self.spool {
             return spool.record(id as usize);
         }
         self.changed.get(&id).copied().unwrap_or_else(|| {
             if (id as usize) < self.mapped_count {
+                self.touch_mapping(
+                    HEADER + id as usize * size_of::<Record>(),
+                    size_of::<Record>(),
+                );
                 self.base()[id as usize]
             } else {
                 self.records[id as usize - self.mapped_count]
@@ -302,6 +316,7 @@ impl Store {
             } else if let Some(spool) = &self.spool {
                 spool.record(id)
             } else if id < self.mapped_count {
+                self.touch_mapping(HEADER + id * size_of::<Record>(), size_of::<Record>());
                 self.base()[id]
             } else {
                 self.records[id - self.mapped_count]
@@ -328,6 +343,7 @@ impl Store {
             } else if let Some(spool) = &self.spool {
                 spool.record(id)
             } else if id < self.mapped_count {
+                self.touch_mapping(HEADER + id * size_of::<Record>(), size_of::<Record>());
                 self.base()[id]
             } else {
                 self.records[id - self.mapped_count]
@@ -342,6 +358,7 @@ impl Store {
         }
         if offset < self.mapped_names {
             let start = HEADER + self.mapped_count * size_of::<Record>() + offset;
+            self.touch_mapping(start, len);
             &self.mapping.as_ref().expect("mapped names")[start..start + len]
         } else {
             &self.names[offset - self.mapped_names..offset - self.mapped_names + len]
@@ -662,7 +679,12 @@ impl Store {
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
-        self.save_snapshot(path, None)
+        if self.mapping.is_none() {
+            return self.save_snapshot(path, None);
+        }
+        let mut streamed = self.fork()?;
+        streamed.windows = Some(crate::residency::Windows::default());
+        streamed.save_snapshot(path, None)
     }
 
     /// Streams a freshly scanned volume beside the other cached volumes. A four-byte ID
@@ -679,12 +701,20 @@ impl Store {
             source.record(0).first == 1,
             "replacement must contain one scanned root"
         );
-        self.save_snapshot(path, Some((source, excluded)))
+        let mut streamed = self.fork()?;
+        streamed.windows = Some(crate::residency::Windows::default());
+        streamed.save_snapshot(path, Some((source, excluded)))
     }
 
     fn save_snapshot(&self, path: &Path, replacement: Option<(&Store, Option<u32>)>) -> Result<()> {
         let temporary = path.with_extension("tmp");
-        let mut out = BufWriter::new(File::create(&temporary)?);
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .custom_flags(windows::Win32::Storage::FileSystem::FILE_FLAG_SEQUENTIAL_SCAN.0)
+            .open(&temporary)?;
+        let mut out = BufWriter::with_capacity(1024 * 1024, file);
         let mut header = [0; HEADER];
         header[..8].copy_from_slice(MAGIC);
         // Compact tombstones and superseded names on checkpoint. IDs are internal to a
@@ -804,7 +834,10 @@ impl Store {
     }
 
     pub fn open(path: &Path) -> Result<Self> {
-        let file = File::open(path)?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(windows::Win32::Storage::FileSystem::FILE_FLAG_SEQUENTIAL_SCAN.0)
+            .open(path)?;
         // SAFETY: snapshot files are immutable, replaced by rename. We never truncate a mapped file.
         let mapping = unsafe { Mmap::map(&file)? };
         ensure!(
@@ -822,7 +855,8 @@ impl Store {
             "bad index length"
         );
         let generation = u64::from_le_bytes(mapping[24..32].try_into()?);
-        let store = Self {
+        let mut store = Self {
+            windows: Some(crate::residency::Windows::default()),
             mapping: Some(mapping),
             source: Some(std::sync::Arc::new(file)),
             mapped_count: count,
@@ -832,10 +866,21 @@ impl Store {
         };
         // One streaming UTF-8 validation is much cheaper than two decoder calls for each
         // short name. Record slices are then checked against character boundaries below.
-        let blob = std::str::from_utf8(
-            &store.mapping.as_ref().expect("mapped snapshot")
-                [HEADER + count * size_of::<Record>()..],
-        )?;
+        let names_start = HEADER + count * size_of::<Record>();
+        let blob_bytes = &store.mapping.as_ref().expect("mapped snapshot")[names_start..];
+        let mut start = 0;
+        while start < blob_bytes.len() {
+            let mut end = (start + 4 * 1024 * 1024).min(blob_bytes.len());
+            while end < blob_bytes.len() && end > start && blob_bytes[end] & 0xc0 == 0x80 {
+                end -= 1;
+            }
+            ensure!(end > start, "invalid UTF-8 name blob");
+            store.touch_mapping(names_start + start, end - start);
+            std::str::from_utf8(&blob_bytes[start..end])?;
+            start = end;
+        }
+        // SAFETY: every byte was decoded above, splitting only at UTF-8 character boundaries.
+        let blob = unsafe { std::str::from_utf8_unchecked(blob_bytes) };
         let validate = |start: usize, end: usize| -> Result<()> {
             for (id, r) in store.range(start, end) {
                 ensure!(
@@ -863,6 +908,7 @@ impl Store {
                 let start = r.name as usize;
                 let middle = start + r.name_len as usize;
                 let end = middle + r.fold_len as usize;
+                store.touch_mapping(names_start + start, end - start + usize::from(end < names));
                 ensure!(
                     blob.is_char_boundary(start)
                         && blob.is_char_boundary(middle)
@@ -872,35 +918,11 @@ impl Store {
             }
             Ok(())
         };
-        let workers = if count >= 250_000 {
-            std::thread::available_parallelism().map_or(2, |n| n.get().min(8))
-        } else {
-            1
-        };
-        if workers == 1 {
-            validate(0, count)?;
-        } else {
-            // Temporary workers keep validation and page faults parallel without retaining
-            // another idle pool in the helper. The mapping outlives every scoped worker.
-            std::thread::scope(|scope| -> Result<()> {
-                let mut tasks = Vec::new();
-                for worker in 0..workers {
-                    let validate = &validate;
-                    tasks.push(
-                        std::thread::Builder::new()
-                            .name(format!("index-load-{worker}"))
-                            .stack_size(256 * 1024)
-                            .spawn_scoped(scope, move || {
-                                validate(count * worker / workers, count * (worker + 1) / workers)
-                            })?,
-                    );
-                }
-                for task in tasks {
-                    task.join()
-                        .map_err(|_| anyhow::anyhow!("index validation worker panicked"))??;
-                }
-                Ok(())
-            })?;
+        // Serial validation keeps one bounded resident window set; parallel fault streams
+        // defeated the RAM bound and provided little benefit once pages are trimmed.
+        validate(0, count)?;
+        if let Some(windows) = store.windows.take() {
+            windows.release();
         }
         Ok(store)
     }

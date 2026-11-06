@@ -3,6 +3,7 @@
 
 pub mod pipe;
 pub mod query;
+mod residency;
 pub mod scan;
 mod spool;
 pub mod service;

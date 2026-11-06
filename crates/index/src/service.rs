@@ -390,9 +390,23 @@ pub fn cli(args: Vec<String>) -> Result<()> {
                 .unwrap_or(cache_dir()?.join("snapshot.bin"));
             let at = Instant::now();
             let store = Store::open(&path)?;
+            let load_ms = at.elapsed().as_secs_f64() * 1000.0;
+            let mut memory =
+                windows::Win32::System::ProcessStatus::PROCESS_MEMORY_COUNTERS_EX::default();
+            memory.cb = size_of_val(&memory) as u32;
+            // SAFETY: current-process counters, correctly sized output structure.
+            unsafe {
+                windows::Win32::System::ProcessStatus::GetProcessMemoryInfo(
+                    windows::Win32::System::Threading::GetCurrentProcess(),
+                    (&mut memory
+                        as *mut windows::Win32::System::ProcessStatus::PROCESS_MEMORY_COUNTERS_EX)
+                        .cast(),
+                    size_of_val(&memory) as u32,
+                )?;
+            }
             println!(
                 "{}",
-                serde_json::json!({"entries":store.len()-1,"load_ms":at.elapsed().as_secs_f64()*1000.0,"snapshot_bytes":std::fs::metadata(path)?.len()})
+                serde_json::json!({"entries":store.len()-1,"load_ms":load_ms,"snapshot_bytes":std::fs::metadata(path)?.len(),"peak_working_set_bytes":memory.PeakWorkingSetSize,"working_set_bytes":memory.WorkingSetSize,"private_bytes":memory.PrivateUsage})
             );
             Ok(())
         }
