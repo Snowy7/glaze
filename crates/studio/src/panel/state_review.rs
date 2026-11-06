@@ -119,6 +119,7 @@ fn render_panel_states() {
             ("stopped-part", Page::Root),
             ("bars-stopped", Page::Bars),
             ("wallpapers-none-own", Page::Wallpapers),
+            ("wallpapers-brings-look", Page::Wallpapers),
             ("search-empty", Page::Search),
             ("widgets-empty", Page::Widgets),
             ("no-room", Page::AddWidget),
@@ -163,6 +164,15 @@ fn render_panel_states() {
                 "wallpapers-none-own" => {
                     app.nav.filter = 1;
                     app.library.items.retain(|wallpaper| !wallpaper.editable());
+                }
+                "wallpapers-brings-look" => {
+                    let mut wallpaper = app.library.items[app.library.active().unwrap()].clone();
+                    wallpaper.name = "Rain with a look".into();
+                    wallpaper.id = "rain-look-fixture".into();
+                    wallpaper.origin = crate::library::Origin::User;
+                    wallpaper.active = false;
+                    wallpaper.brings_look = true;
+                    app.library.items.insert(0, wallpaper);
                 }
                 "search-empty" => {
                     app.texts
