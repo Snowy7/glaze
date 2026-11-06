@@ -857,9 +857,10 @@ mod tests {
             target.rect
         );
         let ring = built.list.ops.iter().find_map(|op| match op {
-            mypaper_ui::Op::Stroke { rect, .. }
-                if rect.width() > 300.0
-                    && rect.height() < 80.0
+            mypaper_ui::Op::Stroke { rect, width, color, .. }
+                if *width == app.px(2.0)
+                    && *color == super::super::palette_for(&app).ink1
+                    && rect.width() > target.rect.width()
                     && rect.top >= target.rect.top
                     && rect.bottom <= target.rect.bottom =>
             {

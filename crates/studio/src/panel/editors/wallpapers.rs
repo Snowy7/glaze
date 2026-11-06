@@ -92,7 +92,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
         "",
         "Search wallpapers",
     );
-    b.stroke(search, b.px(6.0), b.px(1.0), b.p.edge);
+    b.stroke(search, b.control_radius(search), b.px(1.0), b.p.edge);
     let filter = Rect::new(
         r.right - filter_w,
         if stacked { r.bottom + b.px(8.0) } else { r.top },
@@ -108,7 +108,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
         true,
         |i| Action::WallpaperFilter(i as u8),
     );
-    b.stroke(filter, b.px(7.0), b.px(1.0), b.p.edge);
+    b.stroke(filter, b.control_radius(filter), b.px(1.0), b.p.edge);
     c.y = filter.bottom + b.px(4.0);
     let query = app.text(&FieldId::WallpaperSearch).to_lowercase();
     let category = &app.panel.as_ref().unwrap().category;
