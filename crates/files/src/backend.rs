@@ -68,6 +68,7 @@ enum Job {
         epoch: u64,
         entries: Arc<Vec<Entry>>,
         sort: Sort,
+        sizes: HashMap<String, u64>,
     },
 }
 
@@ -242,8 +243,18 @@ impl Backend {
                                     },
                                 );
                             }
-                            Job::Sort { entries, sort, .. } => {
+                            Job::Sort {
+                                entries,
+                                sort,
+                                sizes,
+                                ..
+                            } => {
                                 let mut entries = entries.as_ref().clone();
+                                for entry in &mut entries {
+                                    if entry.directory {
+                                        entry.size = sizes.get(&entry.path).copied();
+                                    }
+                                }
                                 entries.sort_by(|a, b| sort.compare(a, b));
                                 if active_query.load(Ordering::Relaxed) == 0 {
                                     send(
@@ -331,12 +342,13 @@ impl Backend {
         });
         query
     }
-    pub fn sort(&self, entries: Arc<Vec<Entry>>, sort: Sort) {
+    pub fn sort(&self, entries: Arc<Vec<Entry>>, sort: Sort, sizes: HashMap<String, u64>) {
         self.query.store(0, Ordering::Relaxed);
         let _ = self.jobs.send(Job::Sort {
             epoch: self.epoch.load(Ordering::Relaxed),
             entries,
             sort,
+            sizes,
         });
     }
     pub fn image(&self, path: String, size: i32, thumbnail: bool) -> bool {

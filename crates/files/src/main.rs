@@ -66,9 +66,13 @@ fn run() -> anyhow::Result<()> {
     let hwnd = app.surface.hwnd().0 as usize;
     let reload = WM_APP + 172;
     let mut watches = Vec::new();
-    for path in [mypaper_config::path(), mypaper_bars::config::path()]
-        .into_iter()
-        .flatten()
+    for path in [
+        mypaper_config::path(),
+        mypaper_bars::config::path(),
+        mypaper_tweaks::palette::path(),
+    ]
+    .into_iter()
+    .flatten()
     {
         watches.push(FileWatch::new(&path, move || {
             // SAFETY: the callback posts no borrowed pointers; a closed window rejects the wake.

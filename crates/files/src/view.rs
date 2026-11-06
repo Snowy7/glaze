@@ -93,7 +93,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     f.icon(
         Rect::new(px(18.0), title.top + px(10.0), px(26.0), px(26.0)),
         Icon::Folder,
-        px(21.0),
+        21.0,
         color.accent,
     );
     f.text_in(
@@ -116,7 +116,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
             px(46.0),
             buttons.height(),
         );
-        f.icon_button(id, rect, icon, px(15.0), label, false);
+        f.icon_button(id, rect, icon, 15.0, label, false);
         chrome.push((rect, kind));
     }
     app.surface.set_chrome(&chrome);
@@ -203,7 +203,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
                 address_inner.height(),
             ),
             Icon::Folder,
-            px(16.0),
+            16.0,
             color.secondary,
         );
         let mut x = address_inner.left + px(30.0);
@@ -250,7 +250,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
                     f.icon(
                         Rect::new(x, address_inner.top, px(18.0), address_inner.height()),
                         Icon::ChevronRight,
-                        px(12.0),
+                        12.0,
                         color.tertiary,
                     );
                     x += px(18.0);
@@ -341,7 +341,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
             PASTE,
             Icon::Clipboard,
             "Paste (Ctrl+V)",
-            app.location.as_ref().is_some_and(|l| l.filesystem),
+            app.location.as_ref().is_some_and(|l| l.filesystem) && clipboard_has_files(),
         ),
         (
             RENAME,
@@ -402,7 +402,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     if let Some(hit) = f.list.hits.last_mut() {
         hit.label = "Icons view".into();
     }
-    f.icon_button(MORE, more, Icon::More, px(18.0), "More actions", false);
+    f.icon_button(MORE, more, Icon::More, 18.0, "More actions", false);
 
     let (heading, content) = main.take_top(px(44.0), 0.0);
     let content = content.inset(Insets::xy(inset, px(3.0)));
@@ -558,7 +558,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
                         f.icon(
                             icon_rect,
                             icon,
-                            px(18.0),
+                            18.0,
                             if entry.directory {
                                 color.accent
                             } else {
@@ -635,7 +635,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
                         f.icon(
                             icon_rect,
                             icon,
-                            px(48.0),
+                            48.0,
                             if entry.directory {
                                 color.accent
                             } else {
@@ -718,7 +718,12 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     let mut edit = Rect::default();
     if matches!(app.field, Field::Rename(_) | Field::NewFolder) {
         f.fill(bounds, 0.0, color.shadow.with_alpha(0.30));
-        let panel = bounds.place(px(440.0), px(182.0), Align::Center, Align::Center);
+        let panel = bounds.place(
+            px(440.0),
+            px(if app.error.is_some() { 214.0 } else { 182.0 }),
+            Align::Center,
+            Align::Center,
+        );
         f.fill(panel, px(14.0), color.elevated);
         let inner = panel.inset(Insets::all(px(22.0)));
         let (heading, inner) = inner.take_top(px(32.0), px(10.0));
@@ -733,8 +738,19 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
             color.label,
             Align::Start,
         );
-        let (well, buttons) = inner.take_top(px(38.0), px(16.0));
+        let (well, mut buttons) = inner.take_top(px(38.0), px(16.0));
         edit = field(&mut f, well, &app.editor, "Name", true, None);
+        if let Some(error) = &app.error {
+            let (notice, rest) = buttons.take_top(px(24.0), px(8.0));
+            f.text_in(
+                notice,
+                error,
+                TextRole::Footnote,
+                color.destructive,
+                Align::Start,
+            );
+            buttons = rest;
+        }
         let (save, remaining) = buttons.take_right(px(96.0), px(8.0));
         let cancel = remaining.take_right(px(86.0), 0.0).0;
         f.button(

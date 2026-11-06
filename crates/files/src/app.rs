@@ -153,6 +153,11 @@ pub fn shift() -> bool {
     unsafe { GetKeyState(VK_SHIFT.0 as i32) < 0 }
 }
 
+pub fn clipboard_has_files() -> bool {
+    // SAFETY: this read-only format query neither opens the clipboard nor borrows its data.
+    unsafe { windows::Win32::System::DataExchange::IsClipboardFormatAvailable(15) }.is_ok()
+}
+
 impl App {
     pub fn new(path: String, scheme_override: Option<Scheme>) -> Result<Self> {
         let surface = Surface::new(Kind::App { min: (900, 560) }, "mypaper Files", Role::Window)?;
@@ -310,6 +315,15 @@ impl App {
         enabled
     }
 
+    fn request_close(&mut self) {
+        if self.busy {
+            self.status =
+                "Finish or cancel the current file operation before closing Files.".into();
+        } else {
+            self.closing = true;
+        }
+    }
+
     pub fn navigate(&mut self, path: String, record: bool) -> Result<()> {
         self.focus(Field::None)?;
         self.menu.close();
@@ -362,6 +376,7 @@ impl App {
                 self.search.focus();
             }
             Field::Rename(path) => {
+                self.error = None;
                 let name = Path::new(path)
                     .file_name()
                     .map(|s| s.to_string_lossy().into_owned())
@@ -376,6 +391,7 @@ impl App {
                 self.editor.select_all();
             }
             Field::NewFolder => {
+                self.error = None;
                 self.editor.set_text("New folder")?;
                 self.surface.set_text_field(Some(self.editor.clone()));
                 self.editor.request_redraw();
@@ -446,7 +462,9 @@ impl App {
                 }
             }
             Command::Rename => {
-                if let Some(path) = self.selected_paths().first() {
+                if self.selection.items.len() == 1
+                    && let Some(path) = self.selected_paths().first()
+                {
                     self.focus(Field::Rename(path.clone()))?;
                 }
             }
@@ -541,6 +559,7 @@ impl App {
     }
 
     pub fn context(&mut self, ui: &mut Ui, at: (i32, i32)) -> Result<()> {
+        self.focus(Field::None)?;
         self.menu_at = at;
         let mut items = Vec::new();
         if !self.selection.items.is_empty() {
@@ -549,14 +568,31 @@ impl App {
                 Entry::Separator,
                 Entry::action("Cut", Command::Cut),
                 Entry::action("Copy", Command::Copy),
-                Entry::action("Rename…", Command::Rename),
+                Entry::Action {
+                    label: "Rename…".into(),
+                    command: Command::Rename,
+                    checked: None,
+                    enabled: self.selection.items.len() == 1,
+                },
                 Entry::action("Move to Recycle Bin", Command::Delete),
                 Entry::Separator,
             ]);
         }
         items.extend([
-            Entry::action("Paste", Command::Paste),
-            Entry::action("New folder…", Command::NewFolder),
+            Entry::Action {
+                label: "Paste".into(),
+                command: Command::Paste,
+                checked: None,
+                enabled: self.location.as_ref().is_some_and(|l| l.filesystem)
+                    && clipboard_has_files()
+                    && !self.busy,
+            },
+            Entry::Action {
+                label: "New folder…".into(),
+                command: Command::NewFolder,
+                checked: None,
+                enabled: self.location.as_ref().is_some_and(|l| l.filesystem) && !self.busy,
+            },
             Entry::action(
                 if self
                     .location
@@ -631,7 +667,7 @@ impl App {
             CANCEL => self.focus(Field::None)?,
             MINIMIZE => self.surface.minimize(),
             MAXIMIZE => self.surface.toggle_maximize(),
-            CLOSE => self.closing = true,
+            CLOSE => self.request_close(),
             id if (HEADER..HEADER + 4).contains(&id) => {
                 let column = [Column::Name, Column::Modified, Column::Type, Column::Size]
                     [(id - HEADER) as usize];
@@ -640,7 +676,8 @@ impl App {
                     descending: self.sort.column == column && !self.sort.descending,
                 };
                 if self.query_text.is_empty() {
-                    self.backend.sort(self.entries.clone(), self.sort);
+                    self.backend
+                        .sort(self.entries.clone(), self.sort, self.sizes.clone());
                     self.query = 0;
                 } else {
                     self.run_search();
@@ -817,7 +854,7 @@ impl App {
         }
         let hit = |app: &Self, at: Point| app.surface.shown().hit_at(at).map(|h| h.id);
         match event {
-            Event::Close => self.closing = true,
+            Event::Close => self.request_close(),
             Event::Activated => {
                 self.backdrop.restack(self.surface.hwnd());
             }
@@ -1105,6 +1142,10 @@ impl App {
                 }
                 Reply::Sizes { epoch, sizes } if epoch == self.epoch => {
                     self.sizes = sizes;
+                    if self.sort.column == Column::Size && self.query_text.is_empty() {
+                        self.backend
+                            .sort(self.entries.clone(), self.sort, self.sizes.clone());
+                    }
                 }
                 Reply::Image {
                     epoch,
@@ -1137,7 +1178,7 @@ impl App {
                     self.refresh()?;
                     match result {
                         Ok(()) => self.status = "Operation complete".into(),
-                        Err(error) => self.error = Some(error),
+                        Err(error) => self.status = error,
                     }
                 }
                 Reply::Error { epoch, message } if epoch == self.epoch => {
