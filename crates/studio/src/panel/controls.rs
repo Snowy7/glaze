@@ -115,6 +115,7 @@ pub fn save_banner(app: &App, b: &mut B, c: &mut Col, page: super::Page) {
 
 /// A compact alert sentence with correctly sized recovery actions.
 pub fn feedback(b: &mut B, c: &mut Col, message: &str, actions: Vec<(&str, Action)>) {
+    let first_op = b.list.ops.len();
     let mut right = c.right();
     for (label, action) in actions.into_iter().rev() {
         let width = b.measure(label, &font(b, 13.0, 500)).0 + b.px(16.0);
@@ -137,6 +138,7 @@ pub fn feedback(b: &mut B, c: &mut Col, message: &str, actions: Vec<(&str, Actio
         b.p.ink2,
     );
     let style = font(b, 11.0, 400);
+    let style = mypaper_ui::TextStyle { size: style.size * 12.0 / 11.0, ..style };
     let lines = b
         .text
         .lines(message, &style, (right - c.x - b.px(21.0)).max(1.0), 2);
@@ -152,6 +154,7 @@ pub fn feedback(b: &mut B, c: &mut Col, message: &str, actions: Vec<(&str, Actio
         );
     }
     c.y += h;
+    super::saving::emphasize_feedback(b, first_op);
 }
 
 pub fn title(b: &mut B, c: &mut Col, title: &str, subtitle: &str) {
@@ -235,6 +238,7 @@ pub fn button(
     enabled: bool,
     action: Action,
 ) {
+    let primary = primary && enabled;
     let k = key(("panel-button", label));
     let hot = b.hovered(k) || b.pressed(k);
     b.fill(
