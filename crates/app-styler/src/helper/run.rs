@@ -225,7 +225,13 @@ impl Helper {
                     match msg.message {
                         WM_QUIT => return Ok(()),
                         WM_RESOLVE => {
-                            if !self.resolve() {
+                            // A config writer that isn't atomic can show a moment with no file
+                            // (defaults: off). Only an "off" that is still off a second later
+                            // counts; core stops us when the flag really goes off anyway.
+                            if !self.resolve() && {
+                                std::thread::sleep(Duration::from_secs(1));
+                                !self.resolve()
+                            } {
                                 log::info!("experimental.app_styler turned off; exiting");
                                 return Ok(());
                             }
