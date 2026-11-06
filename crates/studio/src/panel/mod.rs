@@ -641,6 +641,7 @@ pub fn build(app: &App, text: &mut Text) -> Built {
         Rect::new(0.0, body.bottom, window.width(), app.px(footer)),
     );
     pages::toast(app, &mut b, window);
+    controls::flash_hovered_display(app, &b);
     choosers::finish(app);
     Built {
         list: b.list,
@@ -836,6 +837,7 @@ pub fn event(app: &mut App, event: &mypaper_ui::Event) -> bool {
 }
 
 fn move_to_display(app: &App) {
+    if pick_client::place_panel(app) { return; }
     use windows::Win32::{
         Foundation::{POINT, RECT},
         Graphics::Gdi::ClientToScreen,
