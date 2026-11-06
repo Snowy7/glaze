@@ -2,7 +2,7 @@
 //! changed records and new names live in an overlay until the next event-driven checkpoint.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write};
@@ -19,6 +19,7 @@ use crate::Hit;
 pub const NONE: u32 = u32::MAX;
 pub const DIRECTORY: u32 = 0x10;
 pub const REPARSE: u32 = 0x400;
+const OFFLINE: u32 = 0x2000_0000;
 // Private snapshot bits, outside Win32's currently defined file attribute range.
 pub const EXCLUDED: u32 = 0x4000_0000;
 pub const SIZE_UNKNOWN: u32 = 0x8000_0000;
@@ -120,6 +121,7 @@ impl PathCache {
 
 #[derive(Default)]
 pub struct Store {
+    offline: HashSet<u32>,
     quiet: Option<std::sync::Arc<crate::quiet::Quiet>>,
     column: Option<crate::names::Column>,
     column_start: usize,
@@ -165,6 +167,7 @@ impl Store {
             None => None,
         };
         Ok(Self {
+            offline: self.offline.clone(),
             quiet: self.quiet.clone(),
             column: None,
             column_start: self.column_start,
@@ -254,7 +257,9 @@ impl Store {
     ) -> Option<Vec<crate::names::Candidate>> {
         self.column
             .as_ref()?
-            .short_prefix(name, directory, limit, extra, |id| self.overridden(id))
+            .short_prefix(name, directory, limit, extra, |id| {
+                self.overridden(id) || !self.online(id)
+            })
     }
 
     pub(crate) fn path_possible(&self, parent: u32, name: &[u8], required: &[[u64; 2]]) -> bool {
@@ -466,6 +471,7 @@ impl Store {
             self.cache_search_change(id, record);
         }
         self.children.get_mut().expect("child lookup").clear();
+        self.load_offline_roots();
         Ok(())
     }
 
@@ -748,6 +754,10 @@ impl Store {
     }
 
     pub fn find(&self, path: &str) -> Option<u32> {
+        self.find_any(path).filter(|id| self.online(*id))
+    }
+
+    fn find_any(&self, path: &str) -> Option<u32> {
         let path = path.trim_start_matches(r"\\?\").replace('/', "\\");
         let path = path.trim_end_matches('\\');
         let lower = fold(path);
@@ -768,6 +778,57 @@ impl Store {
             root = r.next;
         }
         None
+    }
+
+    /// Hide a failed root immediately with one overlay record, without tombstoning millions
+    /// of descendants. The next streamed generation drops it through parent reachability.
+    pub(crate) fn mark_offline(&mut self, root: &Path) {
+        if let Some(id) = self.find_any(&root.to_string_lossy()) {
+            let mut record = self.record(id);
+            if record.parent == 0 {
+                record.attributes |= OFFLINE;
+                self.set(id, record);
+                self.offline.insert(id);
+            }
+        }
+    }
+
+    pub(crate) fn roots(&self) -> Vec<std::path::PathBuf> {
+        let mut result = Vec::new();
+        let mut id = self.record(0).first;
+        while id != NONE {
+            let record = self.record(id);
+            if record.live() {
+                result.push(std::path::PathBuf::from(self.path(id)));
+            }
+            id = record.next;
+        }
+        result
+    }
+
+    pub(crate) fn online(&self, mut id: u32) -> bool {
+        if self.offline.is_empty() {
+            return true;
+        }
+        while id != 0 && id != NONE {
+            if self.offline.contains(&id) {
+                return false;
+            }
+            id = self.record(id).parent;
+        }
+        true
+    }
+
+    fn load_offline_roots(&mut self) {
+        self.offline.clear();
+        let mut id = self.record(0).first;
+        while id != NONE {
+            let record = self.record(id);
+            if record.attributes & OFFLINE != 0 {
+                self.offline.insert(id);
+            }
+            id = record.next;
+        }
     }
 
     pub fn path(&self, mut id: u32) -> String {
@@ -1020,7 +1081,7 @@ impl Store {
     /// Streams a freshly scanned volume beside the other cached volumes. A four-byte ID
     /// map replaces the former private copy plus millions of deletion overlay entries.
     pub fn save_replacing_volume(&self, path: &Path, source: &Store, root: &Path) -> Result<()> {
-        let excluded = self.find(&root.to_string_lossy());
+        let excluded = self.find_any(&root.to_string_lossy());
         if let Some(id) = excluded {
             ensure!(
                 self.record(id).parent == 0,
@@ -1055,6 +1116,7 @@ impl Store {
         let mut names = 0u64;
         for (id, r) in self.range(0, self.len()) {
             if r.live()
+                && r.attributes & OFFLINE == 0
                 && replacement.is_none_or(|(_, excluded)| excluded != Some(id))
                 && (id == 0 || ids[r.parent as usize] != NONE)
             {
@@ -1352,6 +1414,7 @@ impl Store {
         }
         store.windows = Some(crate::residency::Windows::query_records());
         store.quiet = None;
+        store.load_offline_roots();
         Ok(store)
     }
 }
@@ -1359,6 +1422,49 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn offline_root_hides_cached_search_and_sizes_and_drops_from_next_generation() {
+        let path = std::env::temp_dir().join(format!("mypaper-offline-{}.bin", std::process::id()));
+        let delta = path.with_extension("json");
+        let mut store = Store::new();
+        let c = store.insert(0, "C:", DIRECTORY, 0, 0);
+        let z = store.insert(0, "Z:", DIRECTORY, 0, 0);
+        store.insert(c, "report-online.txt", 128, 3, 0);
+        store.insert(z, "report-offline.txt", 128, 5, 100);
+        store.roll_up();
+        store.save(&path).unwrap();
+        let mut mapped = Store::open(&path).unwrap();
+        mapped.mark_offline(Path::new(r"Z:\"));
+        assert_eq!(mapped.overlay_len(), 1);
+        for query in ["r", "report", "report-", "ext:txt report"] {
+            let hits = crate::query::search(&mapped, query, 1);
+            assert_eq!(hits.len(), 1, "{query}");
+            assert_eq!(hits[0].name, "report-online.txt", "{query}");
+        }
+        assert!(mapped.sizes(r"Z:\", 50).is_empty());
+        assert!(mapped.sizes(r"Z:\report-offline.txt", 50).is_empty());
+        mapped.save_changes(&delta).unwrap();
+        let mut restored = Store::open(&path).unwrap();
+        restored.load_changes(&delta).unwrap();
+        assert!(restored.sizes(r"Z:\", 50).is_empty());
+        let mut fresh = Store::new();
+        let c = fresh.insert(0, "C:", DIRECTORY, 0, 0);
+        fresh.insert(c, "report-fresh.txt", 128, 9, 0);
+        fresh.roll_up();
+        restored
+            .save_replacing_volume(&path, &fresh, Path::new(r"C:\"))
+            .unwrap();
+        let compact = Store::open(&path).unwrap();
+        assert_eq!(compact.roots(), vec![std::path::PathBuf::from(r"C:\")]);
+        assert_eq!(
+            crate::query::search(&compact, "report", 50)[0].name,
+            "report-fresh.txt"
+        );
+        drop((mapped, restored, compact));
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_file(delta).unwrap();
+    }
 
     #[test]
     fn sizes_walks_folded_components_when_unicode_changes_byte_length() {

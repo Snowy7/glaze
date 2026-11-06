@@ -159,6 +159,9 @@ fn shard(
             if base && store.overridden(id) {
                 return;
             }
+            if !store.online(id) {
+                return;
+            }
             let candidate = (score, modified, std::cmp::Reverse(id));
             if top.len() == limit
                 && top

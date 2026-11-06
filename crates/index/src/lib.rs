@@ -12,6 +12,7 @@ pub mod scan;
 pub mod service;
 mod spool;
 pub mod store;
+mod volumes;
 pub mod watch;
 
 use serde::{Deserialize, Serialize};

@@ -38,6 +38,10 @@ impl Default for Quiet {
     }
 }
 impl Quiet {
+    #[cfg(test)]
+    pub(crate) fn set_paused_for_test(&self, paused: bool) {
+        self.set(paused);
+    }
     pub fn on_pause(&self, release: impl Fn() + Send + Sync + 'static) {
         *self.release.lock().expect("quiet release") = Some(Box::new(release));
     }

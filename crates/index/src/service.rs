@@ -1,6 +1,6 @@
 //! Process lifecycle, event-driven reconciliation/checkpointing, and measurement CLI.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock, mpsc};
 use std::time::{Duration, Instant};
@@ -36,6 +36,7 @@ pub struct State {
     activity: Option<mpsc::SyncSender<Change>>,
     rules: Arc<RwLock<Rules>>,
     quiet: Arc<crate::quiet::Quiet>,
+    offline: BTreeSet<PathBuf>,
 }
 
 impl State {
@@ -44,6 +45,34 @@ impl State {
             let _ = activity.try_send(Change::Queried);
         }
     }
+}
+
+fn offline_root(state: &RwLock<State>, root: &Path) {
+    let mut state = state.write().expect("index state");
+    state.offline.insert(root.to_owned());
+    state.store.mark_offline(root);
+}
+
+fn hide_missing_roots(store: &mut Store, available: &[PathBuf]) -> BTreeSet<PathBuf> {
+    let offline: BTreeSet<_> = store
+        .roots()
+        .into_iter()
+        .filter(|root| !available.contains(root))
+        .collect();
+    for root in &offline {
+        store.mark_offline(root);
+    }
+    offline
+}
+
+fn replace_store(state: &RwLock<State>, mut replacement: Store) -> Store {
+    let mut state = state.write().expect("index state");
+    // A watch may fail while the initial worker is streaming/opening a generation.
+    // Reapply its current status at the swap so that worker cannot revive stale hits.
+    for root in &state.offline {
+        replacement.mark_offline(root);
+    }
+    std::mem::replace(&mut state.store, replacement)
 }
 
 pub(crate) fn trim_working_set() {
@@ -66,9 +95,34 @@ pub fn cache_dir() -> Result<PathBuf> {
     )
 }
 
+/// Infrequent lifecycle/recovery evidence for the hidden helper. Never called per file.
+fn event(cache: &Path, message: impl std::fmt::Display) {
+    use std::io::Write;
+    eprintln!("{message}");
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(cache.join("service.log"))
+    {
+        let at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let _ = writeln!(file, "{at} {} {message}", std::process::id());
+    }
+}
+
 /// Applies the final state after a burst. A remove/rename event is just a missing old path;
 /// metadata I/O happens outside the store write lock. Access-denied never erases an entry.
 fn apply(state: &RwLock<State>, path: &Path) -> Result<()> {
+    apply_cached(state, path, &mut crate::rules::Markers::default())
+}
+
+fn apply_cached(
+    state: &RwLock<State>,
+    path: &Path,
+    markers: &mut crate::rules::Markers,
+) -> Result<()> {
     state.read().expect("index state").quiet.wait();
     let rules = state
         .read()
@@ -81,7 +135,7 @@ fn apply(state: &RwLock<State>, path: &Path) -> Result<()> {
     let metadata = scan::metadata(path);
     match metadata {
         Ok(entry) if entry.attributes & REPARSE == 0 => {
-            let decision = rules.decide(path, entry.attributes & DIRECTORY != 0);
+            let decision = rules.decide_cached(path, entry.attributes & DIRECTORY != 0, markers);
             if decision != Decision::Index {
                 if decision == Decision::Traverse {
                     return reconcile(state, path, false);
@@ -185,12 +239,15 @@ fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
         scan::subtree(root, Fetch::Basic, &rules, &quiet)?
     };
     if parallel {
-        eprintln!(
-            "scan {}: {} entries, {:.3}s, {} inaccessible directories",
-            root.display(),
-            scanned.store.len() - 1,
-            scanned.seconds,
-            scanned.denied
+        event(
+            &state.read().expect("index state").cache,
+            format_args!(
+                "scan {}: {} entries, {:.3}s, {} inaccessible directories",
+                root.display(),
+                scanned.store.len() - 1,
+                scanned.seconds,
+                scanned.denied
+            ),
         );
     }
     if parallel {
@@ -209,10 +266,7 @@ fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
         drop(scanned);
         trim_working_set();
         let replacement = Store::open_quiet(&snapshot, quiet.clone())?;
-        let old = {
-            let mut state = state.write().expect("index state");
-            std::mem::replace(&mut state.store, replacement)
-        };
+        let old = replace_store(state, replacement);
         drop(old);
         let _ = std::fs::remove_file(snapshot.with_file_name("changes.json"));
         return Ok(());
@@ -272,10 +326,7 @@ fn checkpoint(state: &RwLock<State>, path: &Path) -> Result<()> {
     }
     let quiet = state.read().expect("index state").quiet.clone();
     let mapped = Store::open_quiet(path, quiet)?;
-    let old = {
-        let mut state = state.write().expect("index state");
-        std::mem::replace(&mut state.store, mapped)
-    };
+    let old = replace_store(state, mapped);
     drop(old);
     // If a crash left an older overlay behind, its generation also prevents replay.
     let _ = std::fs::remove_file(path.with_file_name("changes.json"));
@@ -294,6 +345,10 @@ fn checkpoint_changes(state: &RwLock<State>, path: &Path) -> Result<()> {
 }
 
 pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
+    run_roots(roots, cache, true)
+}
+
+fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> {
     std::fs::create_dir_all(&cache)?;
     let snapshot = cache.join("snapshot.bin");
     let (tx, rx) = mpsc::sync_channel(256);
@@ -319,6 +374,7 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     );
     let config = mypaper_config::Config::load()?;
     let rules = Arc::new(RwLock::new(Rules::new(&config.index, &cache)?));
+    let offline = hide_missing_roots(&mut store, &roots);
     let state = Arc::new(RwLock::new(State {
         store,
         scanning: true,
@@ -326,6 +382,7 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
         activity: Some(tx.clone()),
         rules: rules.clone(),
         quiet: quiet.clone(),
+        offline,
     }));
     let weak = Arc::downgrade(&state);
     quiet.on_pause(move || {
@@ -337,15 +394,28 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     });
     pipe::start(state.clone())?;
     crate::spool::cleanup(&cache.join("scan"));
-    for root in &roots {
-        watch::start(root.clone(), tx.clone(), rules.clone(), quiet.clone())
-            .with_context(|| format!("watch {}", root.display()))?;
+    let mut watches = BTreeMap::new();
+    if discover {
+        crate::volumes::start(tx.clone())?;
     }
+    for root in roots {
+        match watch::start(root.clone(), tx.clone(), rules.clone(), quiet.clone()) {
+            Ok(watch) => {
+                watches.insert(root, watch);
+            }
+            Err(error) => {
+                eprintln!("watch {} offline: {error:#}", root.display());
+                offline_root(&state, &root);
+            }
+        }
+    }
+    let mut roots: BTreeSet<_> = watches.keys().cloned().collect();
     // Watches are armed before reconciliation so scan races are replayed afterwards. A
     // non-admin snapshot cannot know what changed while the service was off: reconcile once
     // in the background while cached queries are already available (USN replay is future work).
     let initial = state.clone();
     let scan_roots = roots.clone();
+    let scan_tx = tx.clone();
     let config_tx = tx.clone();
     let _config_watch =
         mypaper_fswatch::Watch::files(&mypaper_config::dir()?, &["config.json"], move || {
@@ -358,14 +428,16 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
             for root in scan_roots {
                 if let Err(error) = reconcile(&initial, &root, true) {
                     eprintln!("scan {}: {error:#}", root.display());
+                    offline_root(&initial, &root);
                 }
             }
-            let _ = tx.send(Change::InitialDone);
+            let _ = scan_tx.send(Change::InitialDone);
         })?;
     let _background = Background::enter();
     let mut initializing = true;
     let mut pending_paths = BTreeSet::new();
     let mut pending_overflows = BTreeSet::new();
+    let mut pending_directories = BTreeSet::new();
     let mut dirty = None::<Duration>;
     let mut trim_at = None::<Duration>;
     let mut current_config = config.index;
@@ -388,9 +460,61 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 let mut initial_finished = false;
                 let mut paths = BTreeSet::new();
                 let mut overflows = BTreeSet::new();
+                let mut directories = BTreeSet::new();
                 for change in std::iter::once(first).chain(rx.try_iter().take(255)) {
                     match change {
                         Change::Activity => {}
+                        Change::VolumesChanged => {
+                            if discover {
+                                let available: BTreeSet<_> = scan::volumes().into_iter().collect();
+                                for root in
+                                    roots.difference(&available).cloned().collect::<Vec<_>>()
+                                {
+                                    watches.remove(&root);
+                                    roots.remove(&root);
+                                    offline_root(&state, &root);
+                                    dirty.get_or_insert_with(|| quiet.now());
+                                    eprintln!("volume {} offline", root.display());
+                                }
+                                for root in available {
+                                    if watches.contains_key(&root)
+                                        && !state
+                                            .read()
+                                            .expect("index state")
+                                            .offline
+                                            .contains(&root)
+                                    {
+                                        continue;
+                                    }
+                                    watches.remove(&root);
+                                    match watch::start(
+                                        root.clone(),
+                                        tx.clone(),
+                                        rules.clone(),
+                                        quiet.clone(),
+                                    ) {
+                                        Ok(watch) => {
+                                            watches.insert(root.clone(), watch);
+                                            roots.insert(root.clone());
+                                            state
+                                                .write()
+                                                .expect("index state")
+                                                .offline
+                                                .remove(&root);
+                                            overflows.insert(root);
+                                        }
+                                        Err(error) => {
+                                            eprintln!(
+                                                "watch {} still offline: {error:#}",
+                                                root.display()
+                                            );
+                                            offline_root(&state, &root);
+                                            roots.remove(&root);
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         Change::RulesChanged => {
                             if let Ok(config) = mypaper_config::Config::load()
                                 && config.index != current_config
@@ -417,16 +541,44 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                             }
                         }
                         Change::Paths {
-                            root: _,
+                            root,
                             paths: changed,
                         } => {
-                            paths.extend(changed.into_iter().filter(|p| !p.starts_with(&cache)));
+                            if roots.contains(&root) {
+                                if quiet.paused() {
+                                    directories.extend(
+                                        changed
+                                            .into_iter()
+                                            .filter_map(|p| p.parent().map(Path::to_owned)),
+                                    );
+                                } else {
+                                    paths.extend(
+                                        changed.into_iter().filter(|p| !p.starts_with(&cache)),
+                                    );
+                                }
+                            }
+                        }
+                        Change::Directories {
+                            root,
+                            paths: changed,
+                        } => {
+                            if roots.contains(&root) {
+                                directories.extend(changed);
+                            }
                         }
                         Change::Overflow(root) => {
-                            overflows.insert(root);
+                            if roots.contains(&root) {
+                                overflows.insert(root);
+                            }
                         }
                         Change::Failed { root, error } => {
-                            bail!("watch {} failed: {error}", root.display())
+                            if watches.get(&root).is_some_and(|watch| watch.failed()) {
+                                eprintln!("watch {} offline: {error}", root.display());
+                                watches.remove(&root);
+                                roots.remove(&root);
+                                offline_root(&state, &root);
+                                dirty.get_or_insert_with(|| quiet.now());
+                            }
                         }
                     }
                 }
@@ -436,29 +588,78 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 if initializing || quiet.paused() {
                     pending_paths.extend(paths);
                     pending_overflows.extend(overflows);
+                    pending_directories.extend(directories);
                     if pending_paths.len() > 128_000 {
+                        pending_overflows.extend(
+                            roots
+                                .iter()
+                                .filter(|root| {
+                                    pending_paths.iter().any(|path| path.starts_with(root))
+                                })
+                                .cloned(),
+                        );
                         pending_paths.clear();
-                        pending_overflows.extend(roots.iter().cloned());
+                    }
+                    if pending_directories.len() > watch::MAX_DIRTY {
+                        pending_overflows.extend(
+                            roots
+                                .iter()
+                                .filter(|root| {
+                                    pending_directories
+                                        .iter()
+                                        .any(|path| path.starts_with(root))
+                                })
+                                .cloned(),
+                        );
+                        pending_directories.clear();
                     }
                     continue;
                 }
                 paths.append(&mut pending_paths);
                 overflows.append(&mut pending_overflows);
-                if !paths.is_empty() || !overflows.is_empty() {
+                directories.append(&mut pending_directories);
+                overflows.retain(|root| roots.contains(root));
+                let online = |path: &Path| roots.iter().any(|root| path.starts_with(root));
+                paths.retain(|path| online(path));
+                directories.retain(|path| online(path) && !path.starts_with(&cache));
+                if !paths.is_empty() || !overflows.is_empty() || !directories.is_empty() {
                     dirty.get_or_insert_with(|| quiet.now());
                 }
                 for root in &overflows {
-                    reconcile(&state, root, true)?;
+                    event(&cache, format_args!("reconcile root {}", root.display()));
+                    if let Err(error) = reconcile(&state, root, true) {
+                        eprintln!("reconcile {} offline: {error:#}", root.display());
+                        offline_root(&state, root);
+                    }
                     trim_at = Some(quiet.now() + Duration::from_secs(2));
+                }
+                let mut replayed = overflows.clone();
+                for directory in directories {
+                    if !directory
+                        .ancestors()
+                        .any(|parent| replayed.contains(parent))
+                    {
+                        event(
+                            &cache,
+                            format_args!("replay directory {}", directory.display()),
+                        );
+                        if roots.contains(&directory) {
+                            reconcile(&state, &directory, true)?;
+                        } else {
+                            reconcile(&state, &directory, false)?;
+                        }
+                        replayed.insert(directory);
+                    }
                 }
                 // Parent paths sort before their children. New directories import complete
                 // subtrees; later events are idempotent final-state updates.
+                let mut markers = crate::rules::Markers::default();
                 for path in paths {
-                    if !overflows.iter().any(|r| path.starts_with(r)) {
+                    if !path.ancestors().any(|parent| replayed.contains(parent)) {
                         if let Some(root) = Rules::marker_root(&path) {
                             reconcile(&state, &root, false)?;
                         } else {
-                            apply(&state, &path)?;
+                            apply_cached(&state, &path, &mut markers)?;
                         }
                     }
                 }
@@ -470,7 +671,10 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
                 }
                 if initial_finished || state.read().expect("index state").scanning {
                     state.write().expect("index state").scanning = false;
-                    eprintln!("initial reconciliation and notification replay complete");
+                    event(
+                        &cache,
+                        "initial reconciliation and notification replay complete",
+                    );
                 }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
@@ -642,9 +846,10 @@ pub fn cli(args: Vec<String>) -> Result<()> {
             }
             Ok(())
         }
-        Some("--root") => run(
+        Some("--root") => run_roots(
             vec![PathBuf::from(args.get(1).context("--root PATH [CACHE]")?)],
             args.get(2).map(PathBuf::from).unwrap_or(cache_dir()?),
+            false,
         ),
         Some("--parent") => {
             let pid: u32 = args.get(1).context("--parent PID")?.parse()?;
@@ -780,6 +985,36 @@ mod tests {
     use super::*;
 
     #[test]
+    fn cached_roots_absent_at_startup_stay_hidden_across_a_racing_scan_swap() {
+        let mut store = Store::new();
+        let c = store.insert(0, "C:", DIRECTORY, 0, 0);
+        let z = store.insert(0, "Z:", DIRECTORY, 0, 0);
+        store.insert(c, "report-live", 128, 1, 0);
+        store.insert(z, "report-stale", 128, 1, 0);
+        let stale_worker = store.fork().unwrap();
+        let offline = hide_missing_roots(&mut store, &[PathBuf::from(r"C:\")]);
+        assert_eq!(offline, BTreeSet::from([PathBuf::from(r"Z:\")]));
+        let state = RwLock::new(State {
+            store,
+            offline,
+            scanning: false,
+            cache: PathBuf::new(),
+            activity: None,
+            rules: Arc::new(RwLock::new(
+                Rules::new(&Default::default(), Path::new("")).unwrap(),
+            )),
+            quiet: Arc::new(crate::quiet::Quiet::default()),
+        });
+        replace_store(&state, stale_worker);
+        assert_eq!(
+            query::search(&state.read().unwrap().store, "report", 50).len(),
+            1
+        );
+        offline_root(&state, Path::new(r"C:\"));
+        assert!(query::search(&state.read().unwrap().store, "report", 50).is_empty());
+    }
+
+    #[test]
     fn marker_below_unindexed_parent_cannot_import_an_orphan_root() {
         let dir = std::env::temp_dir().join(format!("mypaper-orphan-{}", std::process::id()));
         let target = dir.join("node_modules/project/target");
@@ -791,8 +1026,11 @@ mod tests {
             scanning: false,
             cache: dir.join("cache"),
             activity: None,
-            rules: Arc::new(RwLock::new(Rules::new(&Default::default(), Path::new("")).unwrap())),
+            rules: Arc::new(RwLock::new(
+                Rules::new(&Default::default(), Path::new("")).unwrap(),
+            )),
             quiet: Arc::new(crate::quiet::Quiet::default()),
+            offline: BTreeSet::new(),
         });
         let before = state.read().unwrap().store.len();
         reconcile(&state, &target, false).unwrap();
@@ -819,6 +1057,7 @@ mod tests {
                 Rules::new(&Default::default(), Path::new("")).unwrap(),
             )),
             quiet: Arc::new(crate::quiet::Quiet::default()),
+            offline: BTreeSet::new(),
         });
         std::fs::write(dir.join("a/test.txt"), b"1234567").unwrap();
         assert_eq!(scan::metadata(&dir.join("a/test.txt")).unwrap().size, 7);
