@@ -65,11 +65,14 @@ impl Quiet {
             .duration_since(self.epoch)
             .saturating_sub(clock.stopped)
     }
+    /// A background checkpoint: park through games, then offer the CPU to ready work.
     pub fn wait(&self) {
         let mut clock = self.clock.lock().expect("quiet clock");
         while clock.paused_at.is_some() {
             clock = self.resumed.wait(clock).expect("quiet resume");
         }
+        drop(clock);
+        std::thread::yield_now();
     }
     pub fn start(tx: SyncSender<Change>) -> Result<Arc<Self>> {
         let gate = Arc::new(Self::default());

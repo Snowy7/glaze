@@ -1,0 +1,11 @@
+{
+    "pid":  12136,
+    "scope":  "startup/reconciliation, generation replacement and notification replay",
+    "sample_start_seconds":  0.13,
+    "sample_end_seconds":  226.34,
+    "cpu_ms":  162609.375,
+    "cpu_one_core_pct":  71.884255780027408160558772822,
+    "peak_one_second_cpu_core_pct":  175.97087378640776,
+    "observed_seconds":  257.25,
+    "full_observation_cpu_one_core_pct":  63.466306884480746791131855309
+}

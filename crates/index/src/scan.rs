@@ -29,18 +29,24 @@ pub fn long(path: &Path) -> Vec<u16> {
     })
 }
 
-pub struct Background;
+pub struct Background(bool);
 impl Background {
     pub fn enter() -> Self {
         // SAFETY: background mode applies only to this worker thread and is reverted on drop.
-        let _ = unsafe { SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN) };
-        Self
+        let entered =
+            unsafe { SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN) };
+        if let Err(error) = &entered {
+            eprintln!("index background CPU/I/O priority unavailable: {error}");
+        }
+        Self(entered.is_ok())
     }
 }
 impl Drop for Background {
     fn drop(&mut self) {
-        // SAFETY: this is the same worker thread that entered background mode.
-        let _ = unsafe { SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END) };
+        if self.0 {
+            // SAFETY: this is the same worker thread that entered background mode.
+            let _ = unsafe { SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END) };
+        }
     }
 }
 

@@ -148,6 +148,10 @@ reparse points (junctions, symlinks and cloud placeholders marked reparse) are o
 Fixed NTFS/ReFS drive-letter volumes are enumerated without elevation, through
 `FindFirstFileExW(FindExInfoBasic)` and `FindNextFileW`,
 with four background-priority directory workers. No file contents are opened.
+`THREAD_MODE_BACKGROUND_BEGIN` lowers CPU and I/O priority for enumeration and
+maintenance workers; an unsuccessful priority change is logged. Existing bounded
+game checkpoints also call `yield_now` after releasing their gate lock, so runnable
+foreground work gets a scheduling opportunity without adding a periodic timer.
 `--bench-scan PATH` compares `FIND_FIRST_EX_LARGE_FETCH` with basic fetch in alternating
 order. On this machine the best warm registry-tree sample was **0.471 s Basic** versus
 **0.565 s Large** for 136,889 entries; Basic is selected. Concurrent disk/build activity
@@ -261,6 +265,16 @@ memory was **16.82 MiB**, with **7.65 MiB working set**. The preceding private-s
 design retained 108.65 MiB private after settling; the mapped arrays remove that cost.
 These are live machine results with differing cache/load conditions, not controlled
 estimates of the speed gain from each change.
+
+Recorded process CPU during the active startup/reconciliation interval was **71.88%
+of one core** (162.61 CPU seconds over 226.21 elapsed seconds), including enumeration,
+generation replacement and notification replay. Across the full 257.25-second sample,
+including settling, it averaged **63.47% of one core**. The highest approximately
+one-second interval was **175.97% of one core** across the four workers. This is active
+background work, not idle CPU; the game sample below measured 0.000%. Evidence is
+`round2-replay-scan-cpu.json`, derived from the original per-second counters. Explicit
+checkpoint yields and checked background-mode entry were added after that run, so these
+CPU numbers are not a measurement of a CPU reduction from the scheduling hardening.
 
 | Final non-admin enumeration | Entries | Seconds | Inaccessible directories |
 |---|---:|---:|---:|
