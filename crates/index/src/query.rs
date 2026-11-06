@@ -74,7 +74,11 @@ impl Query {
                 3
             } else if at == 0 {
                 2
-            } else if !name[at - 1].is_ascii_alphanumeric() && name[at - 1].is_ascii() {
+            } else if word_start(name, at)
+                || finder
+                    .find_iter(&name[at + 1..])
+                    .any(|next| word_start(name, at + 1 + next))
+            {
                 1
             } else {
                 0
@@ -82,6 +86,10 @@ impl Query {
         }
         Some(score)
     }
+}
+
+fn word_start(name: &[u8], at: usize) -> bool {
+    at == 0 || (name[at - 1].is_ascii() && !name[at - 1].is_ascii_alphanumeric())
 }
 
 type Candidate = (u8, u32, std::cmp::Reverse<u32>);
@@ -263,5 +271,14 @@ mod tests {
         assert!(search(&s, "report path:nonexistent", 10).is_empty());
         assert_eq!(search(&s, "folder:program", 10)[0].size, 5);
         assert!(search(&s, "report ext:jpg", 10).is_empty());
+        s.insert(dir, "xreport Report", 128, 1, 89);
+        let words: Vec<_> = search(&s, "report", 10)
+            .into_iter()
+            .map(|h| h.name)
+            .collect();
+        assert!(
+            words.iter().position(|s| s == "xreport Report").unwrap()
+                < words.iter().position(|s| s == "xreport.txt").unwrap()
+        );
     }
 }
