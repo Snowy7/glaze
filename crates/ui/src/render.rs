@@ -618,6 +618,38 @@ impl Canvas {
         self.read_regions(&[area], |_, row, bytes| sink(row, bytes))
     }
 
+    /// Pack a dirty area into bounded horizontal bands without copying the full frame.
+    pub(crate) fn read_bands(
+        &self,
+        area: PixelRect,
+        budget: usize,
+        mut sink: impl FnMut(PixelRect, &[u8]),
+    ) -> Result<()> {
+        let row_bytes = area.width as usize * 4;
+        if row_bytes == 0 || area.height == 0 {
+            return Ok(());
+        }
+        let rows = (budget / row_bytes).max(1).min(area.height as usize);
+        let mut pixels = vec![0; rows * row_bytes];
+        let mut used = 0;
+        self.read(area, |row, bytes| {
+            pixels[used * row_bytes..(used + 1) * row_bytes].copy_from_slice(bytes);
+            used += 1;
+            if used == rows || row + 1 == area.height {
+                sink(
+                    PixelRect {
+                        x: area.x,
+                        y: area.y + row + 1 - used as u32,
+                        width: area.width,
+                        height: used as u32,
+                    },
+                    &pixels[..used * row_bytes],
+                );
+                used = 0;
+            }
+        })
+    }
+
     /// One WIC lock for a sparse frame. Each returned row still contains only its dirty area.
     pub(crate) fn read_regions(
         &self,
@@ -1359,4 +1391,53 @@ fn canvas_releases_pictures_that_left_the_display_list() {
     assert!(old.upgrade().is_some(), "canvas retained its live bitmap");
     canvas.draw(&mut ui.text, &DisplayList::default(), PixelRect::full(8,8)).unwrap();
     assert!(old.upgrade().is_none(), "the previous page's pixels were freed");
+}
+
+#[test]
+#[cfg(test)]
+fn bounded_canvas_bands_preserve_partial_damage_and_the_last_short_band() {
+    let mut ui = Ui::new().unwrap();
+    let image = Arc::new(Image {
+        width: 64,
+        height: 48,
+        pixels: (0..48)
+            .flat_map(|y| (0..64).flat_map(move |x| [x, y, x + y, 255]))
+            .collect(),
+    });
+    let canvas = Canvas::new(&ui, 64, 48).unwrap();
+    let list = DisplayList {
+        ops: vec![Op::Image {
+            rect: Rect::new(0.0, 0.0, 64.0, 48.0),
+            image: image.clone(),
+            opacity: 1.0,
+            source: None,
+        }],
+        ..Default::default()
+    };
+    canvas
+        .draw(&mut ui.text, &list, PixelRect::full(64, 48))
+        .unwrap();
+    let area = PixelRect {
+        x: 3,
+        y: 4,
+        width: 31,
+        height: 20,
+    };
+    let mut heights = Vec::new();
+    canvas
+        .read_bands(area, 31 * 4 * 7 + 5, |band, bytes| {
+            heights.push(band.height);
+            assert_eq!(band.x, area.x);
+            assert_eq!(band.width, area.width);
+            for row in 0..band.height {
+                let source = ((band.y + row) * 64 + band.x) as usize * 4;
+                let packed = row as usize * band.width as usize * 4;
+                assert_eq!(
+                    &bytes[packed..packed + 31 * 4],
+                    &image.pixels[source..source + 31 * 4]
+                );
+            }
+        })
+        .unwrap();
+    assert_eq!(heights, [7, 7, 6]);
 }
