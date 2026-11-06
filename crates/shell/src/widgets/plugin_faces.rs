@@ -80,6 +80,34 @@ impl Widgets {
             }
             m.dirty = true;
         }
+        self.publish_studio_faces();
+    }
+
+    /// Export only already-retained trees for Studio's gallery. This cache never opens a
+    /// face or carries its settings; a bounded snapshot is refreshed at most once a second.
+    fn publish_studio_faces(&mut self) {
+        let now = Instant::now();
+        if !self.studio_active || self.studio_faces.is_some_and(|(at, _)| now.duration_since(at).as_secs() < 1) { return; }
+        let mut faces = serde_json::Map::new();
+        for entry in self.entries.values().filter(|e| e.model.kind == Widget::Plugin) {
+            let model = &entry.model;
+            if model.data.get("face").is_none_or(serde_json::Value::is_null) { continue; }
+            faces.entry(model.placed.widget.clone()).or_insert_with(|| json!({
+                "face": model.data["face"], "title": model.data["title"],
+                "icon": model.data["icon"], "status": model.data["status"],
+            }));
+        }
+        let Ok(bytes) = serde_json::to_vec(&faces) else { return; };
+        if bytes.len() > 1024 * 1024 { return; }
+        let stamp = crate::studio_pick::wire::revision(&faces);
+        let changed = self.studio_faces.is_none_or(|(_, old)| old != stamp);
+        self.studio_faces = Some((now, stamp));
+        if changed && let Ok(path) = mypaper_widgets::files::local("plugins/studio-faces.json")
+            && let Err(error) = mypaper_widgets::files::write_atomic(&path, &bytes)
+        {
+            self.studio_faces = None;
+            log::warn!("Studio retained plugin faces: {error:#}");
+        }
     }
 
     pub(super) fn plugin_action(&mut self, ui: &mut mypaper_ui::Ui, id: &str, hit: mypaper_ui::HitId) {

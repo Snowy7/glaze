@@ -177,6 +177,7 @@ pub struct Widgets {
     bars: BarsConfig,
     editing: bool,
     studio_active: bool,
+    studio_faces: Option<(Instant, u64)>,
     studio_lift: BTreeSet<String>,
     studio_layout: Option<Layout>,
     studio_skin: Option<look::Skin>,
@@ -296,6 +297,7 @@ impl Widgets {
         let skin = load_skin(&config);
         let mut widgets = Self {
             studio_active: false,
+            studio_faces: None,
             studio_lift: BTreeSet::new(),
             studio_layout: None,
             studio_skin: None,
