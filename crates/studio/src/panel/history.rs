@@ -13,6 +13,7 @@ use crate::docs::{DocId, Op, apply_op};
 const SETTINGS_IN_BARS: [&str; 2] = ["/performance", "/animation/reduceMotion"];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Desktop {
     config: Vec<(String, Option<Value>)>,
     bars: Value,
@@ -106,6 +107,7 @@ impl Desktop {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Entry {
     pub title: String,
     pub detail: String,
@@ -116,6 +118,7 @@ pub struct Entry {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct File {
     version: u8,
     entries: Vec<Entry>,
@@ -137,7 +140,7 @@ impl History {
     }
 }
 
-fn path(app: &App) -> Option<PathBuf> {
+pub(super) fn path(app: &App) -> Option<PathBuf> {
     (!app.fixture)
         .then(|| {
             app.docs
@@ -171,15 +174,24 @@ fn load(app: &App, history: &mut History) {
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
         Err(e) => {
-            history.error = Some(format!("Couldn't read History: {e}"));
+            log::warn!("history read: {e}");
+            history.error =
+                Some("Can't open studio-panel-history.json. Check its permissions.".into());
             return;
         }
     };
     match serde_json::from_slice::<File>(&bytes) {
         Ok(file) if file.version == 1 => history.entries = file.entries,
-        _ => {
-            history.error =
-                Some("History could not be read. Its file has been left unchanged.".into());
+        Ok(file) if file.version > 1 => history.error = Some(crate::docs::NEWER.into()),
+        Ok(_) => history.error = Some("Can't read studio-panel-history.json, line 1".into()),
+        Err(error) if error.to_string().contains("unknown field") => {
+            history.error = Some(crate::docs::NEWER.into())
+        }
+        Err(error) => {
+            history.error = Some(format!(
+                "Can't read studio-panel-history.json, line {}",
+                error.line().max(1)
+            ))
         }
     }
     let days = app
@@ -208,7 +220,10 @@ fn persist(app: &App, history: &mut History) {
         .and_then(|bytes| crate::docs::write_atomic(&path, &bytes))
     {
         Ok(()) => {}
-        Err(e) => history.error = Some(format!("History couldn't be saved: {e}")),
+        Err(error) => {
+            log::warn!("history save: {error}");
+            history.error = Some("Couldn't save".into());
+        }
     }
 }
 
@@ -468,6 +483,10 @@ pub fn record_edit(app: &mut App, label: &str, ops: &[Op], checkpoint: usize) {
     if app.panel.is_none() {
         return;
     }
+    if ops.iter().any(|op| op.doc == DocId::Plugins) {
+        app.panel.as_ref().unwrap().history.borrow_mut().last = Some(Desktop::read(app));
+        return;
+    }
     if ops.iter().all(|op| op.doc == DocId::Studio) {
         return;
     }
@@ -520,11 +539,30 @@ pub fn record_edit(app: &mut App, label: &str, ops: &[Op], checkpoint: usize) {
 pub fn clear(app: &App) {
     let Some(state) = &app.panel else { return };
     let mut history = state.history.borrow_mut();
+    load(app, &mut history);
+    if history.error.is_some() {
+        return;
+    }
     *history = History {
         loaded: true,
         ..Default::default()
     };
     persist(app, &mut history);
+}
+
+pub fn retry(app: &App) {
+    let Some(state) = &app.panel else {
+        return;
+    };
+    let mut history = state.history.borrow_mut();
+    if history.error.as_deref() == Some("Couldn't save") {
+        history.error = None;
+        persist(app, &mut history);
+    } else {
+        history.loaded = false;
+        history.error = None;
+        load(app, &mut history);
+    }
 }
 
 pub fn restore(app: &mut App) {

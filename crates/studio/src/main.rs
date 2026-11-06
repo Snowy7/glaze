@@ -121,6 +121,7 @@ impl Studio {
             anchors,
             overlay_from: built.overlay_from,
         };
+        surface.set_accessibility_semantics(built.semantics);
         if let Err(e) = surface.present(ui, (0, 0), size, built.list) {
             log::error!("drawing: {e:#}");
         }
@@ -226,7 +227,11 @@ impl Studio {
                 self.app.dirty = true;
                 continue;
             }
-            self.app.event(event);
+            let accessibility = if let mypaper_ui::Event::Invoke(hit) = event {
+                self.surface.take_accessibility_action(hit).map(|action| (hit, action))
+            } else { None };
+            if let Some((hit, action)) = accessibility { panel::accessibility(&mut self.app, hit, action); }
+            else { self.app.event(event); }
             // An event may have opened or closed the live field: attach it to the window.
             self.sync_field();
             self.open_picker();

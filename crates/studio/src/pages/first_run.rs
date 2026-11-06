@@ -34,6 +34,11 @@ pub(crate) fn panel_starter_tile(app: &App, b: &mut B, index: usize, rect: Rect)
     if let Some(starter) = STARTERS.get(index) { starter_tile(app, b, starter, rect, b.p.panel); }
 }
 
+/// Read-only starter data for the panel's software desktop specimens.
+pub(crate) fn panel_starter(index: usize) -> Option<(&'static str, &'static str, &'static [(&'static str, [u32; 2])])> {
+    STARTERS.get(index).map(|s| (s.wallpaper, s.preset, s.widgets))
+}
+
 pub fn view(app: &App, b: &mut B) {
     let p = *b.p;
     let Some(Overlay::FirstRun { step, starter, taskbar }) = app.overlay else { return };

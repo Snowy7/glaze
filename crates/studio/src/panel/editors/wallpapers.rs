@@ -290,11 +290,7 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
     let pic = Rect::new(c.x, c.y + b.px(8.0), c.w, c.w * 0.56);
     thumbnail(app, b, pic, i);
     c.y = pic.bottom + b.px(8.0);
-    if let Some(error) = &w.error {
-        group(b, c, "Can't load", |b, c| {
-            notice(b, c, error.lines().next().unwrap_or(error));
-        });
-    } else {
+    if w.error.is_none() {
         if !w.active {
             action_button(b, c, "Use this wallpaper", Action::UseWallpaper(i));
         }
@@ -379,8 +375,8 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                     "Edit the look it brings",
                     Action::Panel(Command::Scope(true)),
                 );
-            } else {
-                notice(b, c, "Apply this wallpaper to edit the look it brings.");
+            } else if w.brings_look {
+                notice(b, c, "Use this wallpaper to edit the look it brings.");
             }
         });
         if w.kind == Some(Kind::App) && w.editable() {

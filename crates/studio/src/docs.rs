@@ -1,12 +1,12 @@
 //! The files Studio edits, as JSON documents: `config.json`, `bars.json`, `widgets.json` and
-//! Studio's own `studio.json`. Every edit is a list of pointer operations applied to the file's
+//! Studio's own `studio.json`, integrations and connection preferences. Every edit is a list of pointer operations applied to the file's
 //! raw JSON (so keys Studio doesn't know survive), checked by the owning program's own parser,
 //! and written atomically. Edits are undoable; a slider drag is one step.
 //!
 //! Rules (plans/native/studio-redesign.md, 5.8 and 6):
 //! - a file that doesn't parse is never written; its pages show a banner and edit nothing until
 //!   the user chooses Start over, which asks first and keeps a timestamped `.bak`;
-//! - a layout saved by a newer mypaper isn't broken: it says "restart Studio to update" and
+//! - a file saved by a newer mypaper isn't broken: it says "Update Studio to edit this" and
 //!   offers nothing destructive (no Start over);
 //! - a file changed on disk since Studio read it is read again first, and the edit is applied to
 //!   the newer text, so an editor never overwrites a newer file.
@@ -30,16 +30,24 @@ pub enum ReadIssue {
 
 /// Unknown fields are a compatibility boundary, even when the file has no version number.
 fn read_issue(id: DocId, source: &str, error: &anyhow::Error) -> ReadIssue {
-    let future_version = serde_json::from_str::<Value>(source).ok()
+    let future_version = serde_json::from_str::<Value>(source)
+        .ok()
         .and_then(|raw| raw.get("version").and_then(Value::as_u64))
         .is_some_and(|version| match id {
             DocId::Widgets => version > u64::from(layout::VERSION),
             _ => version > 1,
         });
-    if future_version || error.chain().any(|cause| cause.to_string().contains("unknown field")) {
+    if future_version
+        || error.chain().any(|cause| {
+            let message = cause.to_string();
+            message.contains("unknown field") || message.contains("unknown variant")
+        })
+    {
         ReadIssue::Newer
     } else {
-        let line = error.chain().find_map(|cause| cause.downcast_ref::<serde_json::Error>())
+        let line = error
+            .chain()
+            .find_map(|cause| cause.downcast_ref::<serde_json::Error>())
             .map_or(1, |error| error.line().max(1));
         ReadIssue::Malformed { line }
     }
@@ -63,10 +71,18 @@ pub enum DocId {
     Studio,
     /// `integrations.json` (docs/integrations.md): which integrations are on, their endpoints.
     Integrations,
+    Plugins,
 }
 
 impl DocId {
-    pub const ALL: [DocId; 5] = [DocId::Config, DocId::Bars, DocId::Widgets, DocId::Studio, DocId::Integrations];
+    pub const ALL: [DocId; 6] = [
+        DocId::Config,
+        DocId::Bars,
+        DocId::Widgets,
+        DocId::Studio,
+        DocId::Integrations,
+        DocId::Plugins,
+    ];
 
     /// How a banner names the file's settings.
     pub fn label(self) -> &'static str {
@@ -76,13 +92,18 @@ impl DocId {
             DocId::Widgets => "Your widget settings",
             DocId::Studio => "Studio's settings",
             DocId::Integrations => "Your integration settings",
+            DocId::Plugins => "Your connection settings",
         }
     }
 
     pub fn filename(self) -> &'static str {
         match self {
-            Self::Config => "config.json", Self::Bars => "bars.json", Self::Widgets => "widgets.json",
-            Self::Studio => "studio.json", Self::Integrations => "integrations.json",
+            Self::Config => "config.json",
+            Self::Bars => "bars.json",
+            Self::Widgets => "widgets.json",
+            Self::Studio => "studio.json",
+            Self::Integrations => "integrations.json",
+            Self::Plugins => "plugin-manager.json",
         }
     }
 
@@ -96,6 +117,18 @@ impl DocId {
         let raw: Value = serde_json::from_str(text)?;
         if !raw.is_object() {
             bail!("the file isn't a JSON object");
+        }
+        let supported_version = if self == Self::Widgets {
+            u64::from(layout::VERSION)
+        } else {
+            1
+        };
+        if raw
+            .get("version")
+            .and_then(Value::as_u64)
+            .is_some_and(|v| v > supported_version)
+        {
+            bail!("{NEWER}");
         }
         let effective = match self {
             DocId::Config => serde_json::to_value(mypaper_config::Config::parse(text)?)?,
@@ -113,7 +146,19 @@ impl DocId {
                 raw.clone()
             }
             DocId::Studio => raw.clone(),
-            DocId::Integrations => serde_json::to_value(mypaper_integrations::config::Config::parse(text)?)?,
+            DocId::Plugins => {
+                for key in raw.as_object().expect("checked").keys() {
+                    if !matches!(key.as_str(), "disabled" | "uninstalled" | "settings") {
+                        bail!("unknown field `{key}`");
+                    }
+                }
+                serde_json::to_value(serde_json::from_str::<
+                    mypaper_widgets::plugin_manager::Preferences,
+                >(text)?)?
+            }
+            DocId::Integrations => {
+                serde_json::to_value(mypaper_integrations::config::Config::parse(text)?)?
+            }
         };
         Ok((raw, effective))
     }
@@ -151,7 +196,8 @@ impl Doc {
             Some(Err(error)) if error.kind() != std::io::ErrorKind::NotFound => {
                 let mut doc = Self::from_text(id, path, None);
                 doc.issue = Some(ReadIssue::Unavailable);
-                doc.error = Some("Can't open this file. Check its permissions and try again.".into());
+                doc.error =
+                    Some("Can't open this file. Check its permissions and try again.".into());
                 doc
             }
             text => Self::from_text(id, path, text.and_then(|result| result.ok())),
@@ -182,12 +228,19 @@ impl Doc {
                     let _ = mypaper_widgets::files::backup(path, &bytes);
                 }
                 let (raw, effective) = id.parse(id.empty()).expect("defaults parse");
-                let message = if newer { NEWER.to_owned() } else {
-                        let ReadIssue::Malformed { line } = issue else { unreachable!() };
-                        let name = path.as_deref().and_then(Path::file_name)
-                            .map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| id.filename().into());
-                        format!("Can't read {name}, line {line}")
+                let message = if newer {
+                    NEWER.to_owned()
+                } else {
+                    let ReadIssue::Malformed { line } = issue else {
+                        unreachable!()
                     };
+                    let name = path
+                        .as_deref()
+                        .and_then(Path::file_name)
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| id.filename().into());
+                    format!("Can't read {name}, line {line}")
+                };
                 Self {
                     path,
                     raw,
@@ -232,6 +285,7 @@ pub struct Docs {
     /// A drag in progress: the raw documents before it.
     live: Option<Vec<(DocId, Value)>>,
     pending: Option<(String, Vec<Op>)>,
+    failed_live: Option<String>,
     pub saved: Saved,
     /// Bumped on every change: previews cache on it.
     pub version: u64,
@@ -245,7 +299,8 @@ pub fn paths() -> Vec<Option<PathBuf>> {
         mypaper_bars::config::path().ok(),
         mypaper_widgets::files::layout().ok(),
         dir.as_ref().map(|d| d.join("studio.json")),
-        dir.map(|d| d.join("integrations.json")),
+        dir.as_ref().map(|d| d.join("integrations.json")),
+        dir.map(|d| d.join("plugin-manager.json")),
     ]
 }
 
@@ -264,7 +319,7 @@ impl Docs {
     pub fn fixture(texts: [&str; 4]) -> Self {
         let docs = DocId::ALL
             .iter()
-            .zip(texts.into_iter().chain(["{}"]))
+            .zip(texts.into_iter().chain(["{}", "{}"]))
             .map(|(id, text)| Doc::from_text(*id, None, Some(text.to_owned())))
             .collect();
         Self::with(docs)
@@ -277,6 +332,7 @@ impl Docs {
             redo: Vec::new(),
             live: None,
             pending: None,
+            failed_live: None,
             saved: Saved::Idle,
             version: 1,
         }
@@ -316,18 +372,26 @@ impl Docs {
         !self.redo.is_empty()
     }
 
-    pub(crate) fn undo_count(&self) -> usize { self.undo.len() }
+    pub(crate) fn undo_count(&self) -> usize {
+        self.undo.len()
+    }
 
     /// Consecutive picks retain the first before-value and latest after-value.
     pub(crate) fn coalesce_last_pick(&mut self, checkpoint: usize) -> bool {
-        if checkpoint == 0 || self.undo.len() != checkpoint + 1 { return false }
+        if checkpoint == 0 || self.undo.len() != checkpoint + 1 {
+            return false;
+        }
         let latest = self.undo.pop().expect("length checked");
         let previous = self.undo.last_mut().expect("checkpoint is nonzero");
         previous.label = latest.label;
         for (id, before, after) in latest.changes {
-            if let Some((_, _, final_value)) = previous.changes.iter_mut().find(|(doc, ..)| *doc == id) {
+            if let Some((_, _, final_value)) =
+                previous.changes.iter_mut().find(|(doc, ..)| *doc == id)
+            {
                 *final_value = after;
-            } else { previous.changes.push((id, before, after)); }
+            } else {
+                previous.changes.push((id, before, after));
+            }
         }
         true
     }
@@ -344,10 +408,15 @@ impl Docs {
     }
 
     pub fn retry(&mut self) -> Result<()> {
+        if let Some(label) = self.failed_live.clone() {
+            return self.commit_live(&label);
+        }
         if let Some((label, ops)) = self.pending.clone() {
             self.edit(&label, &ops)
         } else {
-            for id in DocId::ALL { self.reload(id); }
+            for id in DocId::ALL {
+                self.reload(id);
+            }
             Ok(())
         }
     }
@@ -413,13 +482,18 @@ impl Docs {
             return Ok(());
         };
         let mut changes = Vec::new();
-        for (id, old) in before {
-            let new = self.doc(id).raw.clone();
-            if old != new {
-                self.write(id, &new)?;
-                changes.push((id, old, new));
+        for (id, old) in &before {
+            let new = self.doc(*id).raw.clone();
+            if *old != new {
+                if let Err(error) = self.write(*id, &new) {
+                    self.live = Some(before);
+                    self.failed_live = Some(label.into());
+                    return Err(error);
+                }
+                changes.push((*id, old.clone(), new));
             }
         }
+        self.failed_live = None;
         if !changes.is_empty() {
             self.undo.push(Step {
                 label: label.to_owned(),
@@ -459,7 +533,9 @@ impl Docs {
     /// Writes `id`'s file again, byte for byte, so the programs watching it reload what it
     /// points at (an icon pack's folder changed). Nothing is written while it doesn't exist.
     pub fn touch(&self, id: DocId) -> Result<()> {
-        let Some(path) = &self.doc(id).path else { return Ok(()) };
+        let Some(path) = &self.doc(id).path else {
+            return Ok(());
+        };
         match std::fs::read(path) {
             Ok(bytes) => write_atomic(path, &bytes),
             Err(_) => Ok(()),
@@ -478,8 +554,10 @@ impl Docs {
             return false;
         }
         // Our own undo history no longer describes this file.
-        self.undo.retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
-        self.redo.retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
+        self.undo
+            .retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
+        self.redo
+            .retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
         let fresh = Doc::load(id, Some(path));
         let doc = &mut self.docs[id.index()];
         if fresh.error.is_some() {
@@ -505,10 +583,15 @@ impl Docs {
         confirm: impl FnOnce(Option<&Path>) -> bool,
     ) -> Result<StartedOver> {
         let path = self.doc(id).path.clone();
-        let on_disk = path.as_deref().and_then(|p| std::fs::read_to_string(p).ok());
+        let on_disk = path
+            .as_deref()
+            .and_then(|p| std::fs::read_to_string(p).ok());
         if self.doc(id).newer
-            || on_disk.as_deref().is_some_and(|text| id.parse(text).err()
-                .is_some_and(|error| read_issue(id, text, &error) == ReadIssue::Newer))
+            || on_disk.as_deref().is_some_and(|text| {
+                id.parse(text)
+                    .err()
+                    .is_some_and(|error| read_issue(id, text, &error) == ReadIssue::Newer)
+            })
         {
             bail!("{NEWER}");
         }
@@ -541,8 +624,10 @@ impl Docs {
         doc.issue = None;
         doc.newer = false;
         doc.seen = Some(defaults.to_owned());
-        self.undo.retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
-        self.redo.retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
+        self.undo
+            .retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
+        self.redo
+            .retain(|s| s.changes.iter().all(|(d, ..)| *d != id));
         self.version += 1;
         Ok(StartedOver::Done(backup))
     }
@@ -557,12 +642,18 @@ impl Docs {
         }
         for id in &ids {
             if let Some(e) = self.error(*id) {
-                bail!("{} can't be read, so Studio won't change it: {e}", id.label());
+                bail!(
+                    "{} can't be read, so Studio won't change it: {e}",
+                    id.label()
+                );
             }
             // Someone else wrote it since: start from their text.
             self.reload(*id);
             if let Some(e) = self.error(*id) {
-                bail!("{} can't be read, so Studio won't change it: {e}", id.label());
+                bail!(
+                    "{} can't be read, so Studio won't change it: {e}",
+                    id.label()
+                );
             }
         }
         let mut staged = Vec::new();
@@ -617,7 +708,11 @@ impl Docs {
                         let doc = &mut self.docs[id.index()];
                         doc.issue = Some(issue);
                         doc.newer = issue == ReadIssue::Newer;
-                        doc.error = Some(if doc.newer { NEWER.into() } else { format!("Can't read {}", id.filename()) });
+                        doc.error = Some(if doc.newer {
+                            NEWER.into()
+                        } else {
+                            format!("Can't read {}", id.filename())
+                        });
                         bail!("{}", doc.error.as_deref().unwrap());
                     }
                 }
@@ -658,7 +753,11 @@ fn timestamped(path: &Path) -> PathBuf {
     (0..)
         .map(|n| {
             let mut name = path.as_os_str().to_owned();
-            name.push(if n == 0 { format!(".{stamp}.bak") } else { format!(".{stamp}-{n}.bak") });
+            name.push(if n == 0 {
+                format!(".{stamp}.bak")
+            } else {
+                format!(".{stamp}-{n}.bak")
+            });
             PathBuf::from(name)
         })
         .find(|p| !p.exists())
@@ -778,18 +877,68 @@ mod tests {
     }
 
     #[test]
+    fn unreadable_paths_are_not_missing_and_a_failed_slider_can_retry() {
+        let root = folder("unreadable-and-drag");
+        let path = root.join("config.json");
+        std::fs::create_dir(&path).unwrap();
+        let mut docs = Docs::fixture(["{}", "{\"version\":1}", "{}", "{}"]);
+        docs.docs[0] = Doc::load(DocId::Config, Some(path.clone()));
+        assert_eq!(docs.doc(DocId::Config).issue, Some(ReadIssue::Unavailable));
+        assert!(
+            docs.start_over(DocId::Config, "{}", |_| panic!(
+                "must not reset an unreadable file"
+            ))
+            .is_err()
+        );
+        std::fs::remove_dir(&path).unwrap();
+        std::fs::write(&path, "{}").unwrap();
+        assert!(docs.reload(DocId::Config));
+        docs.live(&[op(
+            DocId::Config,
+            "/look/material/clarity",
+            Some(json!(0.7)),
+        )])
+        .unwrap();
+        std::fs::create_dir(root.join("config.json.tmp")).unwrap();
+        assert!(docs.commit_live("Clarity").is_err());
+        assert_eq!(docs.undo_count(), 0);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{}");
+        std::fs::remove_dir(root.join("config.json.tmp")).unwrap();
+        docs.retry().unwrap();
+        assert_eq!(docs.undo_count(), 1);
+        docs.undo().unwrap();
+        assert!(docs.doc(DocId::Config).raw.get("look").is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn every_document_rejects_a_future_version_including_studio_state() {
+        for id in DocId::ALL {
+            let doc = Doc::from_text(id, None, Some(r#"{"version":4294967295}"#.into()));
+            assert_eq!(doc.issue, Some(ReadIssue::Newer), "{id:?}");
+            assert_eq!(doc.error.as_deref(), Some(NEWER));
+        }
+    }
+
+    #[test]
     fn unknown_fields_are_newer_and_cannot_be_started_over() {
         let root = folder("unknown-fields");
-        for (id, source) in [(DocId::Config, "{\"future_setting\":true}"),
+        for (id, source) in [
+            (DocId::Config, "{\"future_setting\":true}"),
             (DocId::Bars, "{\"version\":1,\"future_setting\":true}"),
-            (DocId::Widgets, "{\"future_setting\":true}")] {
+            (DocId::Widgets, "{\"future_setting\":true}"),
+            (DocId::Plugins, "{\"future_setting\":true}"),
+        ] {
             let path = root.join(id.filename());
             std::fs::write(&path, source).unwrap();
             let mut docs = Docs::fixture(["{}", "{\"version\":1}", "{}", "{}"]);
             docs.docs[id.index()] = Doc::load(id, Some(path.clone()));
             assert!(docs.newer(id), "{id:?}");
             assert_eq!(docs.error(id), Some(NEWER));
-            assert!(docs.start_over(id, id.empty(), |_| panic!("must not offer reset")).is_err());
+            assert!(
+                docs.start_over(id, id.empty(), |_| panic!("must not offer reset"))
+                    .is_err()
+            );
             assert_eq!(std::fs::read_to_string(path).unwrap(), source);
         }
         std::fs::remove_dir_all(root).unwrap();
@@ -808,7 +957,10 @@ mod tests {
         docs.docs[0] = Doc::load(DocId::Config, Some(path.clone()));
         // A directory at the temporary filename deterministically denies the atomic write.
         std::fs::create_dir(root.join("config.json.tmp")).unwrap();
-        assert!(docs.edit("Pause", &[op(DocId::Config, "/paused", Some(json!(true)))]).is_err());
+        assert!(
+            docs.edit("Pause", &[op(DocId::Config, "/paused", Some(json!(true)))])
+                .is_err()
+        );
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "{}");
         std::fs::remove_dir(root.join("config.json.tmp")).unwrap();
         docs.retry().unwrap();
@@ -841,8 +993,11 @@ mod tests {
         assert!(docs.get(DocId::Bars, "/dock/size").is_some());
         // An invalid change is refused whole.
         assert!(
-            docs.edit("Bad", &[op(DocId::Config, "/pause_on_batery", Some(json!(true)))])
-                .is_err()
+            docs.edit(
+                "Bad",
+                &[op(DocId::Config, "/pause_on_batery", Some(json!(true)))]
+            )
+            .is_err()
         );
         assert_eq!(docs.undo().unwrap().as_deref(), Some("Height"));
         assert_eq!(docs.get(DocId::Bars, "/top/height"), Some(&json!(30)));
@@ -859,13 +1014,22 @@ mod tests {
                 .unwrap();
         }
         docs.commit_live("Clarity").unwrap();
-        assert_eq!(docs.get(DocId::Config, "/look/material/clarity"), Some(&json!(0.6)));
-        docs.edit("Reset", &[op(DocId::Config, "/look/material/clarity", None)])
-            .unwrap();
+        assert_eq!(
+            docs.get(DocId::Config, "/look/material/clarity"),
+            Some(&json!(0.6))
+        );
+        docs.edit(
+            "Reset",
+            &[op(DocId::Config, "/look/material/clarity", None)],
+        )
+        .unwrap();
         assert!(docs.doc(DocId::Config).raw.get("look").is_none(), "pruned");
         docs.undo().unwrap();
         docs.undo().unwrap();
-        assert!(docs.doc(DocId::Config).raw.get("look").is_none(), "before the drag");
+        assert!(
+            docs.doc(DocId::Config).raw.get("look").is_none(),
+            "before the drag"
+        );
     }
 
     #[test]
@@ -882,25 +1046,34 @@ mod tests {
 
     #[test]
     fn widget_drag_commit_refuses_and_backs_up_an_external_parse_failure() {
-        let root = std::env::temp_dir().join(format!("mypaper-studio-write-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("mypaper-studio-write-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("widgets.json");
         std::fs::write(&path, "{}").unwrap();
         let mut docs = Docs::fixture(["{}", "{\"version\":1}", "{}", "{}"]);
         docs.docs[DocId::Widgets.index()].path = Some(path.clone());
-        docs.live(&[op(DocId::Widgets, "/overlay", Some(json!(false)))]).unwrap();
+        docs.live(&[op(DocId::Widgets, "/overlay", Some(json!(false)))])
+            .unwrap();
         let malformed = b"{ invalid external edit\xff";
         std::fs::write(&path, malformed).unwrap();
         assert!(docs.commit_live("Overlay").is_err());
         assert_eq!(std::fs::read(&path).unwrap(), malformed);
-        assert_eq!(std::fs::read(root.join("widgets.json.bak")).unwrap(), malformed);
+        assert_eq!(
+            std::fs::read(root.join("widgets.json.bak")).unwrap(),
+            malformed
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 
     /// A fresh temp folder for one test.
     fn folder(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("mypaper-studio-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let temp = std::env::temp_dir().canonicalize().unwrap();
+        let root = temp.join(format!("mypaper-studio-{name}-{}", std::process::id()));
+        if root.exists() {
+            assert_eq!(root.canonicalize().unwrap().parent(), Some(temp.as_path()));
+            std::fs::remove_dir_all(&root).unwrap();
+        }
         std::fs::create_dir_all(&root).unwrap();
         root
     }
@@ -925,19 +1098,38 @@ mod tests {
         assert!(docs.newer(DocId::Widgets));
         let (text, buttons) = crate::ui::banner_for(&docs, DocId::Widgets).unwrap();
         assert_eq!(text, NEWER);
-        assert_eq!(buttons, vec![("Restart", Action::RestartStudio)], "Restart only: no Start over");
+        assert_eq!(
+            buttons,
+            vec![("Restart", Action::RestartStudio)],
+            "Restart only: no Start over"
+        );
         // Nothing can destroy it: Start over is refused without even asking, edits too.
         assert!(
-            docs.start_over(DocId::Widgets, "{}", |_| panic!("never offered")).is_err()
+            docs.start_over(DocId::Widgets, "{}", |_| panic!("never offered"))
+                .is_err()
         );
-        assert!(docs.edit("Overlay", &[op(DocId::Widgets, "/overlay", Some(json!(false)))]).is_err());
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), newer, "left exactly as it was");
+        assert!(
+            docs.edit(
+                "Overlay",
+                &[op(DocId::Widgets, "/overlay", Some(json!(false)))]
+            )
+            .is_err()
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            newer,
+            "left exactly as it was"
+        );
         assert_eq!(files_in(&root), 1, "no recovery copy: it isn't broken");
         // Loaded fresh (Studio started while the file was newer): the same.
         let docs = Docs::fixture(["{}", "{\"version\":1}", newer, "{}"]);
         assert!(docs.newer(DocId::Widgets));
         let (_, buttons) = crate::ui::banner_for(&docs, DocId::Widgets).unwrap();
-        assert!(buttons.iter().all(|(_, a)| !matches!(a, Action::StartOver(_))));
+        assert!(
+            buttons
+                .iter()
+                .all(|(_, a)| !matches!(a, Action::StartOver(_)))
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -963,13 +1155,29 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&path).unwrap(), corrupt);
         assert_eq!(files_in(&root), 1);
         // The question names the backup: widgets.json.<YYYYMMDD-HHMMSS>.bak, not written yet.
-        let name = asked.unwrap().file_name().unwrap().to_string_lossy().into_owned();
-        let stamp = name.strip_prefix("widgets.json.").and_then(|s| s.strip_suffix(".bak")).unwrap();
+        let name = asked
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let stamp = name
+            .strip_prefix("widgets.json.")
+            .and_then(|s| s.strip_suffix(".bak"))
+            .unwrap();
         assert!(stamp.len() == 15 && stamp.as_bytes()[8] == b'-', "{name}");
-        assert!(stamp.chars().filter(|c| *c != '-').all(|c| c.is_ascii_digit()), "{name}");
+        assert!(
+            stamp
+                .chars()
+                .filter(|c| *c != '-')
+                .all(|c| c.is_ascii_digit()),
+            "{name}"
+        );
         // Confirmed: the old bytes are kept first, then the defaults are written.
         let done = docs.start_over(DocId::Widgets, defaults, |_| true).unwrap();
-        let StartedOver::Done(Some(backup)) = done else { panic!("{done:?}") };
+        let StartedOver::Done(Some(backup)) = done else {
+            panic!("{done:?}")
+        };
         assert_eq!(std::fs::read_to_string(&backup).unwrap(), corrupt);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), defaults);
         assert!(docs.error(DocId::Widgets).is_none());

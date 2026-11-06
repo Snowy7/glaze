@@ -53,7 +53,7 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
     crate::panel::controls::displays(app, b, c);
     group(b, c, "", |b, c| {
         let ids: &[&str] = if bar == Bar::Top {
-            &["top_enabled", "top_edge", "top_height", "top_shape"]
+            &["top_enabled", "top_edge", "top_height"]
         } else {
             &[
                 "dock_enabled",
@@ -105,6 +105,7 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
                 .unwrap_or("monochrome");
             for &(id, label) in designs {
                 design_row(
+                    app,
                     b,
                     c,
                     id,
@@ -149,6 +150,18 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
         action_button(b, c, "Add a module", Action::AddModule(bar));
     });
     if more(app, b, c, "Layout, look, motion, displays") {
+        if bar == Bar::Top {
+            number(
+                app,
+                b,
+                c,
+                DocId::Bars,
+                "/top/look/radius",
+                "Corners",
+                (0.0, 64.0, 1.0),
+                8.0,
+            );
+        }
         let place = crate::settings::Place::Bars(Some(bar));
         let mut groups = Vec::new();
         for setting in crate::settings::SETTINGS
@@ -190,7 +203,11 @@ fn module_rows(app: &App, b: &mut B, c: &mut Col, bar: Bar, list: &'static str, 
             c,
             &crate::panel::SortList::Modules(bar, list),
             index,
-            name(id),
+            &if id == "|" {
+                "A gap".into()
+            } else {
+                format!("{} \u{b7} {}", name(id), click_label(app, id))
+            },
             id == "|",
             Some(crate::panel::icons::module(id)),
             Some(Action::SelectModule(Some(Slot { bar, list, index }))),
@@ -228,6 +245,26 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
             }
         ),
     );
+    group(b, c, "Place", |b, c| {
+        for (bar, zone, label) in [
+            (Bar::Top, "left", "Top bar \u{b7} Start"),
+            (Bar::Top, "center", "Top bar \u{b7} Middle"),
+            (Bar::Top, "right", "Top bar \u{b7} End"),
+            (Bar::Dock, "left", "Dock \u{b7} Start"),
+            (Bar::Dock, "right", "Dock \u{b7} End"),
+        ] {
+            row(
+                b,
+                c,
+                None,
+                label,
+                "",
+                "",
+                Some(slot.bar == bar && slot.list == zone),
+                Action::Panel(Command::MoveModuleTo(bar, zone)),
+            );
+        }
+    });
     let base = format!("/modules/{}", crate::docs::token(id));
     if id == "clock" {
         group(b, c, "Shows", |b, c| {
@@ -240,8 +277,8 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
             ("left", "Click"),
             ("middle", "Middle click"),
             ("right", "Right click"),
-            ("wheel_up", "Scroll up"),
-            ("wheel_down", "Scroll down"),
+            ("wheelUp", "Scroll up"),
+            ("wheelDown", "Scroll down"),
         ] {
             let path = format!("{base}/click/{trigger}");
             select(
@@ -249,7 +286,7 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
                 c,
                 label,
                 app.get(DocId::Bars, &path).cloned().unwrap_or(Value::Null),
-                Edit::new(DocId::Bars, path, label),
+                Edit::new(DocId::Bars, path.clone(), label),
                 [
                     ("", "Its own"),
                     ("none", "Nothing"),
@@ -279,6 +316,37 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
                     )
                 })
                 .collect(),
+            );
+            let current = app.get(DocId::Bars, &path);
+            let program = current
+                .and_then(|value| value.get("exec"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let draft = format!(
+                "/panel/draft/module-trigger/{}/{trigger}",
+                crate::docs::token(id)
+            );
+            if current.is_some_and(Value::is_object) || app.is_open(key(("panel-trigger", &path))) {
+                let id = FieldId::Text(DocId::Studio, draft.clone().into());
+                let value = app.texts.get(&id).map(String::as_str).unwrap_or(program);
+                field(app, b, c, id, "Program", "notepad.exe", value);
+                if !value.trim().is_empty() {
+                    action_button(
+                        b,
+                        c,
+                        &format!("Use for {label}"),
+                        Action::Set(
+                            Edit::new(DocId::Bars, path.clone(), label),
+                            json!({"exec":value,"args":[]}),
+                        ),
+                    );
+                }
+            }
+            action_button(
+                b,
+                c,
+                &format!("Run a program for {}", label.to_lowercase()),
+                Action::More(key(("panel-trigger", &path))),
             );
         }
     });
@@ -326,30 +394,69 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
     }
     if more(app, b, c, "Icon, colors and room") {
         group(b, c, "Look", |b, c| {
-            for (key, label) in [
-                ("icon", "Icon"),
-                ("style/color", "Text color"),
-                ("style/background", "Background"),
-                ("style/border/color", "Edge color"),
+            let path = format!("{base}/icon");
+            field(
+                app,
+                b,
+                c,
+                FieldId::Text(DocId::Bars, path.clone().into()),
+                "Icon",
+                "From the bar",
+                app.get(DocId::Bars, &path)
+                    .and_then(Value::as_str)
+                    .unwrap_or(""),
+            );
+            for (field, label) in [
+                ("color", "Text color"),
+                ("background", "Background"),
+                ("border/color", "Edge color"),
             ] {
-                let path = format!("{base}/{key}");
-                field(
+                let path = format!("{base}/style/{field}");
+                text(
+                    b,
+                    Rect::new(c.x, c.y, c.w, b.px(26.0)),
+                    label,
+                    13.0,
+                    400,
+                    b.p.ink1,
+                    Align::Start,
+                );
+                c.y += b.px(28.0);
+                crate::panel::colors::swatches(
                     app,
                     b,
                     c,
-                    FieldId::Text(DocId::Bars, path.clone().into()),
+                    &Edit::new(DocId::Bars, path.clone(), label),
+                    app.get(DocId::Bars, &path),
+                    false,
+                    false,
+                    &[
+                        [139, 158, 183],
+                        [127, 174, 142],
+                        [200, 141, 60],
+                        [230, 230, 230],
+                    ],
+                );
+            }
+            for (field, label, range, default) in [
+                ("padding", "Padding", (0.0, 32.0, 1.0), 8.0),
+                ("radius", "Corners", (0.0, 32.0, 1.0), 6.0),
+                ("size", "Text size", (8.0, 32.0, 1.0), 13.0),
+                ("weight", "Text weight", (100.0, 900.0, 100.0), 400.0),
+            ] {
+                number(
+                    app,
+                    b,
+                    c,
+                    DocId::Bars,
+                    &format!("{base}/style/{field}"),
                     label,
-                    "From the bar",
-                    app.get(DocId::Bars, &path)
-                        .and_then(Value::as_str)
-                        .unwrap_or(""),
+                    range,
+                    default,
                 );
             }
         });
     }
-    group(b, c, "Order", |b, c| {
-        module_rows(app, b, c, slot.bar, slot.list, list.unwrap());
-    });
 }
 
 pub fn add(app: &App, b: &mut B, c: &mut Col) {
@@ -444,11 +551,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
             "weather-line",
             "",
         );
-        let custom = app
-            .text(&FieldId::Text(DocId::Studio, "/new_custom".into()))
-            .trim()
-            .to_lowercase()
-            .replace(' ', "-");
+        let custom = module_id(app.text(&FieldId::Text(DocId::Studio, "/new_custom".into())));
         if !custom.is_empty() {
             row(
                 b,
@@ -704,4 +807,122 @@ fn pinned_apps(app: &App, b: &mut B, c: &mut Col, which: Pins) {
             );
         }
     });
+}
+
+/// Free names become schema-valid identifiers; punctuation and repeated separators collapse.
+fn module_id(name: &str) -> String {
+    if name.trim().is_empty() {
+        return String::new();
+    }
+    let mut id = name
+        .to_ascii_lowercase()
+        .split(|c: char| !c.is_ascii_lowercase() && !c.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    id.truncate(64);
+    let id = id.trim_matches('-');
+    if id.is_empty() {
+        "module".into()
+    } else {
+        id.into()
+    }
+}
+
+pub fn move_module(app: &mut App, bar: Bar, zone: &'static str) {
+    let Some(slot) = app.nav.module.clone() else {
+        return;
+    };
+    if slot.bar == bar && slot.list == zone {
+        return;
+    }
+    let source = format!("/{}/{}", slot.bar.key(), slot.list);
+    let destination = format!("/{}/{zone}", bar.key());
+    let mut from = app
+        .get(DocId::Bars, &source)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if slot.index >= from.len() {
+        return;
+    }
+    let module = from.remove(slot.index);
+    let mut to = app
+        .get(DocId::Bars, &destination)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let index = to.len();
+    to.push(module);
+    let version = app.docs.version;
+    app.apply(
+        "Move module",
+        vec![
+            crate::docs::Op {
+                doc: DocId::Bars,
+                path: source,
+                value: Some(json!(from)),
+            },
+            crate::docs::Op {
+                doc: DocId::Bars,
+                path: destination,
+                value: Some(json!(to)),
+            },
+        ],
+    );
+    if app.docs.version != version {
+        app.nav.module = Some(Slot {
+            bar,
+            list: zone,
+            index,
+        });
+        app.nav.bar = Some(bar);
+    }
+}
+
+fn click_label(app: &App, id: &str) -> String {
+    let own = app.get(
+        DocId::Bars,
+        &format!("/modules/{}/click/left", crate::docs::token(id)),
+    );
+    if own.is_some_and(Value::is_object) {
+        return "Click runs a program".into();
+    }
+    let action = own.and_then(Value::as_str).unwrap_or(match id {
+        "clock" => "calendar",
+        "volume" => "mixer",
+        "quick" => "quick-settings",
+        "start" => "start",
+        "media" => "media-toggle",
+        "network" => "network",
+        "notifications" => "notifications",
+        _ => "default",
+    });
+    let name = match action {
+        "calendar" => "Calendar",
+        "mixer" => "Volume mixer",
+        "quick-settings" => "Quick settings",
+        "start" => "Start menu",
+        "media-toggle" => "Play / pause",
+        "network" => "Network",
+        "notifications" => "Notifications",
+        "none" => "Nothing",
+        "default" => "Its own action",
+        other => other,
+    };
+    format!("Click: {name}")
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn free_module_names_produce_valid_bounded_ids() {
+        assert_eq!(super::module_id(" Weather & CPU! (2) "), "weather-cpu-2");
+        for name in ["!!!".to_owned(), "A".repeat(100)] {
+            assert!(mypaper_widgets::manifest::valid_id(&super::module_id(
+                &name
+            )));
+        }
+        assert!(super::module_id("   ").is_empty());
+    }
 }

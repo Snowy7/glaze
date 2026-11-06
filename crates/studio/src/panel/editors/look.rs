@@ -77,6 +77,15 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
             &choices,
             |b, i, pic| super::super::specimens::material(app, b, pic, STYLES[i].0),
         );
+        notice(
+            b,
+            c,
+            STYLES
+                .iter()
+                .find(|(style, _, _)| *style == current)
+                .unwrap()
+                .2,
+        );
     });
     group(b, c, "Material", |b, c| {
         for (id, uses) in ["clarity", "blur", "refraction", "highlight"]
@@ -147,6 +156,9 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                 setting(app, b, c, id, s.label, "");
             }
         });
+        group(b, c, "App icons", |b, c| {
+            crate::pages::look::icon_pack(app, b, c)
+        });
         group(b, c, "Shape", |b, c| {
             setting(app, b, c, "corners", "Corners", "");
             setting(app, b, c, "edge", "Edge line", "");
@@ -178,6 +190,15 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
 }
 
 pub fn windows(app: &App, b: &mut B, c: &mut Col) {
+    let reset = Rect::new(c.right() - b.px(28.0), c.y, b.px(28.0), b.px(28.0));
+    crate::panel::controls::icon_button(
+        b,
+        reset,
+        glyph::RESET,
+        "Reset to how Windows has it",
+        true,
+        Action::WindowsLook(0),
+    );
     title(b, c, "Windows", "Your Windows look");
     let layer = app
         .get(DocId::Config, "/look/windows")
@@ -254,19 +275,6 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
             false,
             &COLORS,
         );
-        row(
-            b,
-            c,
-            None,
-            "Keep Windows' accent",
-            "As is",
-            "",
-            Some(layer.get("accent").is_none_or(Value::is_null)),
-            Action::Set(
-                Edit::new(DocId::Studio, "/panel/windows/accent", "Windows accent"),
-                Value::Null,
-            ),
-        );
     });
     group(b, c, "Pointer", |b, c| {
         let current = layer.get("cursors").and_then(Value::as_str);
@@ -321,15 +329,6 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
                     false,
                     false,
                     &COLORS,
-                );
-                action_button(
-                    b,
-                    c,
-                    &format!("{label}: As is"),
-                    Action::Set(
-                        Edit::new(DocId::Studio, format!("/windows_null/{key}"), label),
-                        Value::Null,
-                    ),
                 );
             }
         });

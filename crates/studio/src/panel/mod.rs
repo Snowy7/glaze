@@ -8,12 +8,14 @@ mod first_run;
 mod history;
 mod icons;
 mod lists;
+mod measure;
 mod options;
 mod pages;
 mod peek;
 mod pickers;
 mod saving;
 mod specimens;
+pub use colors::swatches;
 pub use lists::List as SortList;
 pub use saving::{theme_failed, theme_saved};
 mod tokens;
@@ -159,6 +161,10 @@ pub enum Command {
     Restore,
     CancelRestore,
     ClearHistory,
+    RetryHistory,
+    Disconnect(String),
+    Connect(String),
+    MoveModuleTo(crate::actions::Bar, &'static str),
     Side(bool),
     PickAsset(String),
     PickModule(String),
@@ -166,7 +172,6 @@ pub enum Command {
     Display(usize),
     Peek,
     PickColor(crate::actions::Edit),
-    NoTint,
     SortRow(SortList, usize),
     SortHandle(SortList, usize),
     SortRemove(SortList, usize),
@@ -282,6 +287,9 @@ pub fn run(app: &mut App, command: Command) {
             state.history.borrow_mut().selected = None;
         }
         Command::Done => app.quit = true,
+        Command::Disconnect(id) => editors::disconnect(app, &id),
+        Command::Connect(id) => editors::connect(app, &id),
+        Command::MoveModuleTo(bar, zone) => editors::move_module(app, bar, zone),
         Command::Display(index) => {
             if index < app.monitors.len() {
                 app.nav.display = index;
@@ -293,21 +301,6 @@ pub fn run(app: &mut App, command: Command) {
         }
         Command::Peek => peek::start(app, None),
         Command::PickColor(edit) => colors::pick(app, &edit),
-        Command::NoTint => app.apply(
-            "No tint",
-            vec![
-                crate::docs::Op {
-                    doc: crate::docs::DocId::Config,
-                    path: "/look/material/tint".into(),
-                    value: None,
-                },
-                crate::docs::Op {
-                    doc: crate::docs::DocId::Config,
-                    path: "/look/material/clarity".into(),
-                    value: Some(serde_json::json!(1.0)),
-                },
-            ],
-        ),
         Command::SortRow(list, index) => {
             app.input.focus = Some(lists::row_key(&list, index));
             if let SortList::Widget(path) = &list {
@@ -327,23 +320,35 @@ pub fn run(app: &mut App, command: Command) {
         Command::ResetTheme(dir) => saving::reset_theme(app, &dir),
         Command::ShowThemeFolder(dir) => crate::system::open(&dir.to_string_lossy()),
         Command::RetryTheme => {
-            if let Some(action) = app.panel.as_ref().unwrap().theme_retry.clone() { app.run(action); }
+            if let Some(action) = app.panel.as_ref().unwrap().theme_retry.clone() {
+                app.run(action);
+            }
         }
         Command::ShowFolder(doc) => {
-            if let Some(folder) = app.docs.doc(doc).path.as_deref().and_then(std::path::Path::parent) {
+            if let Some(folder) = app
+                .docs
+                .doc(doc)
+                .path
+                .as_deref()
+                .and_then(std::path::Path::parent)
+            {
                 crate::system::open(&folder.to_string_lossy());
             }
         }
-        Command::RetryDoc(doc) => {
-            match app.docs.retry() {
-                Ok(()) => {
-                    app.panel.as_ref().unwrap().save_errors.borrow_mut().remove(&doc);
-                    app.retheme();
-                    app.library.set_active(crate::app::theme_name(&app.docs).as_deref());
-                }
-                Err(error) => save_failed(app, Some(doc), &format!("{error:#}")),
+        Command::RetryDoc(doc) => match app.docs.retry() {
+            Ok(()) => {
+                app.panel
+                    .as_ref()
+                    .unwrap()
+                    .save_errors
+                    .borrow_mut()
+                    .remove(&doc);
+                app.retheme();
+                app.library
+                    .set_active(crate::app::theme_name(&app.docs).as_deref());
             }
-        }
+            Err(error) => save_failed(app, Some(doc), &format!("{error:#}")),
+        },
         Command::PickWidget(id) => {
             let state = app.panel.as_mut().unwrap();
             state.add_widget = Some(id);
@@ -381,6 +386,7 @@ pub fn run(app: &mut App, command: Command) {
         Command::Restore => history::restore(app),
         Command::CancelRestore => app.panel.as_ref().unwrap().history.borrow_mut().selected = None,
         Command::ClearHistory => history::clear(app),
+        Command::RetryHistory => history::retry(app),
         Command::Side(left) => {
             app.set(
                 &crate::actions::Edit::new(crate::docs::DocId::Studio, "/panel_side", "Panel side"),
@@ -547,6 +553,7 @@ pub fn build(app: &App, text: &mut Text) -> Built {
     pages::toast(app, &mut b, window);
     Built {
         list: b.list,
+        semantics: b.semantics,
         targets: b.targets,
         scrolls: b.scrolls,
         chrome: vec![(header, Chrome::Caption)],
@@ -635,7 +642,8 @@ pub fn fit_height(app: &mut App, surface: &mypaper_ui::Surface, built: &Built) -
 pub fn before_action(app: &mut App, action: &Action) {
     history::observe(app);
     if let Action::Set(edit, _) | Action::Unset(edit) = action
-        && edit.path.starts_with("/theme:") {
+        && edit.path.starts_with("/theme:")
+    {
         app.panel.as_mut().unwrap().theme_retry = Some(action.clone());
     }
     if matches!(action, Action::Undo | Action::Redo) {
@@ -821,6 +829,15 @@ pub fn intercept_set(
     value: &serde_json::Value,
 ) -> bool {
     if app.panel.is_some()
+        && edit.doc == crate::docs::DocId::Studio
+        && edit.path.starts_with("/plugins/setting/")
+    {
+        app.docs.reload(crate::docs::DocId::Plugins);
+        if app.docs.error(crate::docs::DocId::Plugins).is_some() {
+            return true;
+        }
+    }
+    if app.panel.is_some()
         && edit.doc == crate::docs::DocId::Bars
         && edit.path.starts_with("/modules/")
         && edit.path.ends_with("/interval")
@@ -841,35 +858,6 @@ pub fn intercept_set(
             ),
             None => app.alert("Enter the interval as a number of seconds"),
         }
-        return true;
-    }
-    if app.panel.is_some()
-        && edit.doc == crate::docs::DocId::Config
-        && edit.path.as_ref() == "/look/material/tint"
-        && value.is_string()
-        && app
-            .get(crate::docs::DocId::Config, "/look/material/clarity")
-            .and_then(serde_json::Value::as_f64)
-            == Some(1.0)
-        && app
-            .get(crate::docs::DocId::Config, "/look/material/tint")
-            .is_none()
-    {
-        app.apply(
-            "Tint",
-            vec![
-                crate::docs::Op {
-                    doc: edit.doc,
-                    path: edit.path.to_string(),
-                    value: Some(value.clone()),
-                },
-                crate::docs::Op {
-                    doc: edit.doc,
-                    path: "/look/material/clarity".into(),
-                    value: Some(serde_json::json!(0.88)),
-                },
-            ],
-        );
         return true;
     }
     if app.panel.is_none() || edit.doc != crate::docs::DocId::Studio {
@@ -953,6 +941,24 @@ pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
     let FieldId::Text(doc, path) = id else {
         return None;
     };
+    if *doc == crate::docs::DocId::Studio
+        && let Some(rest) = path.strip_prefix("/panel/draft/module-trigger/")
+    {
+        if let Some(value) = app.texts.get(id) {
+            return Some(value.clone());
+        }
+        if let Some((module, trigger)) = rest.split_once('/') {
+            return Some(
+                app.get(
+                    crate::docs::DocId::Bars,
+                    &format!("/modules/{module}/click/{trigger}/exec"),
+                )
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .into(),
+            );
+        }
+    }
     let color = *doc == crate::docs::DocId::Config
         && matches!(
             path.as_ref(),
@@ -1106,4 +1112,106 @@ pub fn round_window(hwnd: windows::Win32::Foundation::HWND) {
             size_of_val(&preference) as u32,
         )
     };
+}
+
+/// After a preference edit or Undo, route only the changed connection states to the host.
+pub fn sync_connections(app: &mut App) {
+    use mypaper_widgets::plugin_manager::{Preferences, Request, send};
+    let Ok(next) = serde_json::from_value::<Preferences>(
+        app.docs.doc(crate::docs::DocId::Plugins).effective.clone(),
+    ) else {
+        return;
+    };
+    if !app.fixture {
+        for id in next
+            .disabled
+            .symmetric_difference(&app.plugins.preferences.disabled)
+        {
+            let request = if next.disabled.contains(id) {
+                Request::Disable(id.clone())
+            } else {
+                Request::Enable(id.clone())
+            };
+            if let Err(error) = send(&request) {
+                log::warn!("connection update: {error:#}");
+            }
+        }
+    }
+    app.plugins.preferences = next;
+}
+
+/// UIA uses the same validation, persistence and undo routes as pointer and keyboard input.
+pub fn accessibility(
+    app: &mut App,
+    hit: mypaper_ui::HitId,
+    action: mypaper_ui::AccessibilityAction,
+) {
+    use mypaper_ui::{AccessibilityAction as A, controls::Behavior};
+    let Some(target) = hit
+        .checked_sub(1)
+        .and_then(|id| app.frame.targets.get(id as usize))
+        .cloned()
+    else {
+        return;
+    };
+    match (&target.behavior, &target.action, action) {
+        (
+            Behavior::Slider {
+                min,
+                max,
+                step,
+                value,
+                ..
+            },
+            Action::Slider(edit),
+            action,
+        ) => {
+            let value = match action {
+                A::SetNumber(value) => value,
+                A::Increment => value + step,
+                A::Decrement => value - step,
+                _ => return,
+            };
+            if !value.is_finite() {
+                return;
+            }
+            let value = if *step > 0.0 {
+                ((value - min) / step).round() * step + min
+            } else {
+                value
+            };
+            let value = value.clamp(*min, *max);
+            let value = if value.fract() == 0.0 {
+                serde_json::json!(value as i64)
+            } else {
+                serde_json::json!(value)
+            };
+            app.set(edit, value);
+        }
+        (Behavior::Field, Action::Field(id), A::SetText(text)) => {
+            app.focus_field(id.clone());
+            if let Some(field) = &app.field
+                && field.field.set_text(&text).is_ok()
+            {
+                app.event(mypaper_ui::Event::TextChanged);
+                app.blur_field();
+            }
+        }
+        (_, _, A::Custom(direction)) if matches!(direction, 1 | 2) && app.panel.is_some() => {
+            app.input.focus = Some(target.key);
+            lists::keyboard(app, if direction == 1 { -1 } else { 1 });
+        }
+        _ => {}
+    }
+    app.dirty = true;
+}
+
+pub fn remember_theme_edit(app: &mut App, path: &str, value: Option<&serde_json::Value>) {
+    if let Some(state) = &mut app.panel {
+        let edit = crate::actions::Edit::new(crate::docs::DocId::Studio, path, "Wallpaper");
+        state.theme_retry = Some(value.map_or_else(
+            || Action::Unset(edit.clone()),
+            |value| Action::Set(edit.clone(), value.clone()),
+        ));
+    }
 }

@@ -2,13 +2,9 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use mypaper_ui::Rect;
 use serde_json::Value;
 
-use super::{
-    Command, Page,
-    controls::button,
-};
+use super::{Command, Page};
 use crate::{
     actions::Action,
     app::App,
@@ -39,27 +35,73 @@ pub fn banner(app: &App, b: &mut B, c: &mut Col, page: Page) {
         _ => None,
     }
     .and_then(|i| app.library.items.get(i));
-    for (dir, _error) in app.panel.as_ref().unwrap().theme_errors.borrow().iter() {
-        if !selected.is_some_and(|wallpaper| wallpaper.dir == *dir) { continue; }
-        let r = Rect::new(c.x, c.y, c.w, b.px(36.0));
-        b.icon(Rect::new(r.left, r.top + b.px(10.0), b.px(16.0), b.px(16.0)), mypaper_ui::icons::Icon::Warning, 14.0, b.p.ink2);
-        super::controls::text(b, Rect::new(r.left + b.px(22.0), r.top, c.w - b.px(190.0), r.height()), "Couldn't save", 11.0, 400, b.p.ink2, mypaper_ui::controls::Align::Start);
-        for (index, label, command) in [(0, "Retry", Command::RetryTheme), (1, "Show folder", Command::ShowThemeFolder(dir.clone()))] {
-            button(b, Rect::new(r.right - b.px(160.0) + b.px(index as f32 * 80.0), r.top + b.px(4.0), b.px(76.0), b.px(28.0)), label, None, false, true, Action::Panel(command));
+    if let Some(wallpaper) = selected
+        && let Some(error) = &wallpaper.error
+    {
+        let parsed = std::fs::read_to_string(wallpaper.dir.join(mypaper_theme::MANIFEST)).ok();
+        let parse_error = parsed.as_deref().and_then(|source| {
+            mypaper_theme::LoadedTheme::parse(wallpaper.dir.clone(), source).err()
+        });
+        let newer = (error.contains("unknown field") || error.contains("unknown variant"))
+            || error.contains("newer")
+            || parse_error.as_ref().is_some_and(|error| {
+                error.chain().any(|cause| {
+                    let message = cause.to_string();
+                    message.contains("unknown field") || message.contains("unknown variant")
+                })
+            });
+        let line = parse_error
+            .as_ref()
+            .and_then(|error| {
+                error
+                    .chain()
+                    .find_map(|cause| cause.downcast_ref::<serde_json::Error>())
+            })
+            .map_or(1, |error| error.line().max(1));
+        let message = if newer {
+            crate::docs::NEWER.into()
+        } else if parse_error.is_some() {
+            format!("Can't read theme.json, line {line}")
+        } else {
+            "Can't load this wallpaper. Check its source file.".into()
+        };
+        let mut actions = vec![(
+            "Show file",
+            Action::Panel(Command::ShowTheme(wallpaper.dir.clone())),
+        )];
+        if !newer && wallpaper.editable() && parse_error.is_some() {
+            actions.push((
+                "Start over",
+                Action::Panel(Command::ResetTheme(wallpaper.dir.clone())),
+            ));
         }
-        c.y = r.bottom;
+        super::controls::feedback(b, c, &message, actions);
+    }
+    for (dir, _) in app.panel.as_ref().unwrap().theme_errors.borrow().iter() {
+        if selected.is_some_and(|wallpaper| wallpaper.dir == *dir) {
+            super::controls::feedback(
+                b,
+                c,
+                "Couldn't save",
+                vec![
+                    ("Retry", Action::Panel(Command::RetryTheme)),
+                    (
+                        "Show folder",
+                        Action::Panel(Command::ShowThemeFolder(dir.clone())),
+                    ),
+                ],
+            );
+        }
     }
 }
 
 pub fn reset_theme(app: &mut App, dir: &Path) {
     if app.fixture
         || !app
-            .panel
-            .as_ref()
-            .unwrap()
-            .theme_errors
-            .borrow()
-            .contains_key(dir)
+            .library
+            .items
+            .iter()
+            .any(|wallpaper| wallpaper.dir == dir && wallpaper.error.is_some())
     {
         return;
     }
@@ -111,6 +153,15 @@ fn reset_file(dir: &Path, user_root: &Path) -> Result<PathBuf> {
     }
     let file = dir.join(mypaper_theme::MANIFEST);
     let bytes = std::fs::read(&file).context("reading theme.json")?;
+    if let Ok(source) = std::str::from_utf8(&bytes)
+        && let Err(error) = mypaper_theme::LoadedTheme::parse(dir.clone(), source)
+        && error.chain().any(|cause| {
+            let message = cause.to_string();
+            message.contains("unknown field") || message.contains("unknown variant")
+        })
+    {
+        bail!("{}", crate::docs::NEWER);
+    }
     let mut root: Value =
         serde_json::from_slice(&bytes).context("reading the wallpaper settings")?;
     let object = root

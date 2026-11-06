@@ -194,24 +194,57 @@ pub fn row(
     checked: bool,
     action: Action,
 ) {
-    let start = c.y;
     let image = plugin_image(app, id);
-    super::controls::row(
+    let h = super::controls::height(b, if caption.is_empty() { 40.0 } else { 72.0 });
+    let r = Rect::new(c.x, c.y, c.w, h);
+    let k = mypaper_ui::controls::key(("catalog-row", c.view, id));
+    if checked {
+        b.fill(r, b.px(8.0), b.p.selected);
+    } else {
+        b.wash(k, r, b.px(8.0));
+    }
+    let icon = Rect::new(r.left, r.top + b.px(10.0), b.px(28.0), b.px(28.0));
+    if let Some(image) = image {
+        crate::stage::image_round(b, icon, &image, 1.0, b.px(4.0));
+    } else {
+        b.icon(icon, fallback, 16.0, b.p.ink2);
+    }
+    super::controls::text(
         b,
-        c,
-        Some(fallback),
+        Rect::new(
+            r.left + b.px(40.0),
+            r.top + b.px(5.0),
+            r.width() - b.px(64.0),
+            b.px(24.0),
+        ),
         label,
-        "",
-        caption,
+        13.0,
+        500,
+        b.p.ink1,
+        mypaper_ui::controls::Align::Start,
+    );
+    let font = super::controls::font(b, 12.0, 400);
+    let lines = b.text.lines(caption, &font, r.width() - b.px(54.0), 2);
+    for (i, line) in lines.iter().enumerate() {
+        b.text_at(
+            r.left + b.px(40.0),
+            r.top + b.px(29.0 + i as f32 * 18.0),
+            line,
+            &font,
+            b.p.ink3,
+        );
+    }
+    b.hit_checked(
+        k,
+        r,
+        mypaper_ui::Role::RadioButton,
+        label,
         Some(checked),
         action,
+        mypaper_ui::controls::Behavior::Click,
     );
-    if let Some(image) = image {
-        let d = b.px(if caption.is_empty() { 18.0 } else { 28.0 });
-        let r = Rect::new(c.x, start + (c.y - start - d) / 2.0, d, d);
-        b.fill(r, b.px(5.0), b.p.panel);
-        crate::stage::image_round(b, r, &image, 1.0, b.px(4.0));
-    }
+    b.focus_ring(k, r, b.px(8.0));
+    c.y = r.bottom;
 }
 
 pub fn module(id: &str) -> Glyph {

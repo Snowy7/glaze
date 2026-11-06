@@ -1,15 +1,11 @@
-use super::{
-    Command,
-    controls::{button, text},
-    specimens,
-};
+use super::{Command, controls::text, specimens};
 use crate::{
     actions::{Action, Edit, FieldId},
     app::App,
     ui::{B, Col},
 };
-use mypaper_ui::controls::{Align, Behavior, key};
-use mypaper_ui::{Rect, Rgba, Role};
+use mypaper_ui::controls::{Align, key};
+use mypaper_ui::{Rect, Rgba};
 use serde_json::{Value, json};
 
 pub fn swatches(
@@ -19,170 +15,135 @@ pub fn swatches(
     edit: &Edit,
     current: Option<&Value>,
     auto: bool,
-    none: bool,
+    _none: bool,
     presets: &[[u8; 3]],
 ) {
-    let no_tint = none
-        && app
-            .get(crate::docs::DocId::Config, "/look/material/clarity")
-            .and_then(Value::as_f64)
-            == Some(1.0)
-        && app
-            .get(crate::docs::DocId::Config, "/look/material/tint")
-            .is_none();
-    let current = if no_tint {
-        ""
+    use mypaper_ui::color_row::{Choice, draw};
+    let current = current.and_then(Value::as_str).unwrap_or("");
+    let is_windows = edit.path.starts_with("/look/windows/");
+    let wallpaper = specimens::wallpaper_color(app);
+    let wallpaper_hex = wallpaper.map(|color| {
+        mypaper_config::Color([
+            (color.r * 255.0).round() as u8,
+            (color.g * 255.0).round() as u8,
+            (color.b * 255.0).round() as u8,
+        ])
+        .hex()
+    });
+    let linked = current == "auto"
+        || !auto
+            && wallpaper_hex
+                .as_deref()
+                .is_some_and(|hex| current.eq_ignore_ascii_case(hex));
+    let as_is = if is_windows {
+        let field = edit.path.rsplit('/').next().unwrap_or("");
+        Action::Set(
+            Edit::new(
+                crate::docs::DocId::Studio,
+                format!("/panel/windows/{field}"),
+                edit.label.clone(),
+            ),
+            Value::Null,
+        )
     } else {
-        current.and_then(Value::as_str).unwrap_or(
-            if auto && !edit.path.starts_with("/look/windows/") {
-                "auto"
+        Action::Unset(edit.clone())
+    };
+    let mut choices = vec![
+        Choice {
+            label: "As is".into(),
+            color: None,
+            selected: current.is_empty(),
+            action: as_is,
+        },
+        Choice {
+            label: "From wallpaper".into(),
+            color: wallpaper,
+            selected: linked,
+            action: if auto {
+                Action::Set(edit.clone(), json!("auto"))
+            } else {
+                wallpaper_hex
+                    .as_ref()
+                    .map_or(Action::None, |hex| Action::Set(edit.clone(), json!(hex)))
+            },
+        },
+    ];
+    choices.extend(presets.iter().map(|rgb| {
+        let hex = mypaper_config::Color(*rgb).hex();
+        Choice {
+            label: format!("{} {hex}", edit.label),
+            color: Some(Rgba::rgb8(*rgb, 1.0)),
+            selected: !linked && current.eq_ignore_ascii_case(&hex),
+            action: Action::Set(edit.clone(), json!(hex)),
+        }
+    }));
+    choices.push(Choice {
+        label: format!("Custom {}", edit.label),
+        color: mypaper_config::Color::parse(current).map(|color| Rgba::rgb8(color.0, 1.0)),
+        selected: !linked
+            && current.starts_with('#')
+            && !presets.iter().any(|rgb| {
+                mypaper_config::Color(*rgb)
+                    .hex()
+                    .eq_ignore_ascii_case(current)
+            }),
+        action: Action::More(key(("panel-color-picker", edit.doc, edit.path.as_ref()))),
+    });
+    draw(
+        b,
+        key(("panel-colors", edit.doc, edit.path.as_ref())),
+        Rect::new(c.x, c.y, c.w, b.px(34.0)),
+        &choices,
+    );
+    c.y += b.px(40.0);
+    if app.is_open(key(("panel-color-picker", edit.doc, edit.path.as_ref()))) {
+        let r = Rect::new(c.x, c.y, c.w, b.px(34.0));
+        b.fill(r.inflate(b.px(4.0)), b.px(7.0), b.p.fill);
+        text(
+            b,
+            Rect::new(r.left, r.top, b.px(50.0), r.height()),
+            "Hex",
+            12.0,
+            400,
+            b.p.ink2,
+            Align::Start,
+        );
+        let field = Rect::new(
+            r.left + b.px(50.0),
+            r.top,
+            r.width() - b.px(92.0),
+            r.height(),
+        );
+        crate::ui::text_field(
+            app,
+            b,
+            field,
+            FieldId::Text(edit.doc, edit.path.clone()),
+            None,
+            "#RRGGBB",
+            if current.starts_with('#') {
+                current
             } else {
                 ""
             },
-        )
-    };
-    if none {
-        let r = Rect::new(c.x, c.y + b.px(2.0), b.px(70.0), b.px(28.0));
-        button(
+            &format!("{} hex", edit.label),
+        );
+        b.stroke(field, b.px(6.0), b.px(1.0), b.p.edge);
+        super::controls::icon_button(
             b,
-            r,
-            if no_tint { "✓ None" } else { "None" },
-            None,
-            false,
+            Rect::new(r.right - b.px(34.0), r.top, b.px(34.0), r.height()),
+            mypaper_ui::icons::Icon::Palette.into(),
+            "Choose a color",
             true,
-            Action::Panel(Command::NoTint),
+            Action::Panel(Command::PickColor(edit.clone())),
         );
-        c.y = r.bottom + b.px(8.0);
+        c.y = r.bottom + b.px(10.0);
     }
-    let mut x = c.x;
-    let y = c.y;
-    let d = b.px(26.0);
-    if auto {
-        let r = Rect::new(x, y, b.px(142.0).min(c.w), b.px(30.0));
-        button(
-            b,
-            r,
-            "From wallpaper",
-            None,
-            false,
-            true,
-            Action::Set(edit.clone(), json!("auto")),
-        );
-        let chip = Rect::new(
-            r.left + b.px(5.0),
-            r.top + b.px(5.0),
-            b.px(20.0),
-            b.px(20.0),
-        );
-        b.fill(
-            chip,
-            b.px(5.0),
-            specimens::wallpaper_color(app).unwrap_or(b.p.fill),
-        );
-        for offset in [0.0, 5.0] {
-            b.stroke(
-                Rect::new(
-                    chip.left + b.px(4.0 + offset),
-                    chip.top + b.px(7.0),
-                    b.px(7.0),
-                    b.px(5.0),
-                ),
-                b.px(2.0),
-                b.px(1.0),
-                b.p.ink1,
-            );
-        }
-        if current == "auto" {
-            b.stroke(r, b.px(7.0), b.px(2.0), b.p.ink1);
-        }
-        // Automatic is always a labeled linked chip, distinct from every preset dot.
-        x = r.right + b.px(12.0);
-    }
-    for color in presets {
-        if x + d > c.right() {
-            x = c.x;
-            c.y += b.px(36.0);
-        }
-        let r = Rect::new(x, c.y, d, d);
-        let hex = mypaper_config::Color(*color).hex();
-        let color = Rgba::rgb8(*color, 1.0);
-        b.fill(r, d / 2.0, color);
-        b.stroke(r, d / 2.0, b.px(1.0), b.p.edge);
-        let on = current.eq_ignore_ascii_case(&hex);
-        if on {
-            b.icon(
-                r,
-                crate::theme::glyph::CHECK,
-                15.0,
-                if mypaper_ui::theme::luminance(color) > 0.4 {
-                    super::tokens::hex(0x111111)
-                } else {
-                    super::tokens::hex(0xffffff)
-                },
-            );
-        }
-        let k = key(("panel-color", &edit.path, &hex));
-        b.hit_checked(
-            k,
-            r,
-            Role::RadioButton,
-            &format!("{} {hex}", edit.label),
-            Some(on),
-            Action::Set(edit.clone(), json!(hex)),
-            Behavior::Click,
-        );
-        b.focus_ring(k, r, d / 2.0);
-        x += d + b.px(9.0);
-    }
-    c.y += b.px(38.0);
-    let r = Rect::new(c.x, c.y, c.w, b.px(32.0));
-    text(
-        b,
-        Rect::new(r.left, r.top, b.px(62.0), r.height()),
-        "Custom",
-        12.0,
-        400,
-        b.p.ink2,
-        Align::Start,
-    );
-    let field = Rect::new(
-        r.left + b.px(66.0),
-        r.top,
-        (r.width() - b.px(106.0)).max(1.0),
-        r.height(),
-    );
-    crate::ui::text_field(
-        app,
-        b,
-        field,
-        FieldId::Text(edit.doc, edit.path.clone()),
-        None,
-        "#RRGGBB",
-        if current.starts_with('#') {
-            current
-        } else {
-            ""
-        },
-        &format!("{} hex", edit.label),
-    );
-    b.stroke(field, b.px(6.0), b.px(1.0), b.p.edge);
-    let picker = Rect::new(r.right - b.px(32.0), r.top, b.px(32.0), b.px(32.0));
-    super::controls::icon_button(
-        b,
-        picker,
-        mypaper_ui::icons::Icon::Palette.into(),
-        &format!("Pick {} color", edit.label),
-        true,
-        Action::Panel(Command::PickColor(edit.clone())),
-    );
-    c.y = r.bottom + b.px(8.0);
 }
 
 pub fn pick(app: &mut App, edit: &Edit) {
     use windows::Win32::Foundation::COLORREF;
-    use windows::Win32::UI::Controls::Dialogs::{
-        CC_FULLOPEN, CC_RGBINIT, CHOOSECOLORW, ChooseColorW,
-    };
+    use windows::Win32::UI::Controls::Dialogs::{CC_FULLOPEN, CC_RGBINIT, CHOOSECOLORW};
     if app.fixture {
         return;
     }
@@ -200,8 +161,8 @@ pub fn pick(app: &mut App, edit: &Edit) {
         Flags: CC_FULLOPEN | CC_RGBINIT,
         ..Default::default()
     };
-    // SAFETY: native modal dialog with our own owner and a live 16-color buffer.
-    if unsafe { ChooseColorW(&mut picker) }.as_bool() {
+    // RGB movement previews the desktop; the existing set below saves only after OK.
+    if crate::panel::pick_client::choose_color(app, edit, &mut picker) {
         let color = picker.rgbResult.0;
         app.set(
             edit,

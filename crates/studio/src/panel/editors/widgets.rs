@@ -37,27 +37,6 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
             app.nav.display + 1
         ),
     );
-    let half = (c.w - b.px(8.0)) / 2.0;
-    for (n, label, icon, action) in [
-        (0, "Duplicate", glyph::COPY, Action::DuplicateWidget),
-        (1, "Remove", glyph::DELETE, Action::RemoveWidget),
-    ] {
-        button(
-            b,
-            Rect::new(
-                c.x + n as f32 * (half + b.px(8.0)),
-                c.y + b.px(6.0),
-                half,
-                b.px(30.0),
-            ),
-            label,
-            Some(icon),
-            false,
-            true,
-            action,
-        );
-    }
-    c.y += b.px(44.0);
     let index = layout
         .instances
         .iter()
@@ -90,28 +69,43 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
             }
         });
     }
-    group(b, c, "Size", |b, c| {
-        // Stacking keeps the labels and both stepper buttons legible at 360 DIPs.
-        for (label, value, minus, plus) in [
-            (
-                "Wide",
-                instance.size[0],
-                Action::ResizeWidget(-1, 0),
-                Action::ResizeWidget(1, 0),
-            ),
-            (
-                "Tall",
-                instance.size[1],
-                Action::ResizeWidget(0, -1),
-                Action::ResizeWidget(0, 1),
-            ),
-        ] {
-            let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(32.0));
-            legacy::stepper(b, r, label, value, minus, plus);
-            b.stroke(r, b.px(8.0), b.px(1.0), b.p.edge);
-            c.y += b.px(40.0);
-        }
-    });
+    let size = Rect::new(c.x, c.y + b.px(6.0), c.w, b.px(36.0));
+    text(
+        b,
+        Rect::new(size.left, size.top, b.px(130.0), size.height()),
+        &format!("Size   {} \u{00d7} {}", instance.size[0], instance.size[1]),
+        13.0,
+        400,
+        b.p.ink1,
+        Align::Start,
+    );
+    for (i, label, action) in [
+        (0, "Narrower", Action::ResizeWidget(-1, 0)),
+        (1, "Wider", Action::ResizeWidget(1, 0)),
+        (2, "Shorter", Action::ResizeWidget(0, -1)),
+        (3, "Taller", Action::ResizeWidget(0, 1)),
+    ] {
+        let r = Rect::new(
+            size.right - b.px(128.0) + b.px(i as f32 * 32.0),
+            size.top,
+            b.px(28.0),
+            b.px(28.0),
+        );
+        crate::panel::controls::icon_button(
+            b,
+            r,
+            if i % 2 == 0 {
+                mypaper_ui::icons::Icon::Remove.into()
+            } else {
+                glyph::ADD
+            },
+            label,
+            true,
+            action,
+        );
+    }
+    c.y = size.bottom + b.px(5.0);
+    notice(b, c, "Drag the corner brackets on the desktop to resize.");
     group(b, c, "Its look", |b, c| {
         let own = instance.appearance != Default::default();
         toggle(
@@ -138,6 +132,27 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
             },
         );
         if own {
+            let style_path = format!("{base}/appearance/style");
+            select(
+                b,
+                c,
+                "Style",
+                app.get(DocId::Widgets, &style_path)
+                    .cloned()
+                    .unwrap_or(json!("minimal")),
+                Edit::new(DocId::Widgets, style_path, "Widget style"),
+                [
+                    ("liquid", "Liquid"),
+                    ("minimal", "Minimal"),
+                    ("depth", "Depth"),
+                    ("neon", "Neon"),
+                    ("paper", "Paper"),
+                    ("aero", "Aero"),
+                ]
+                .into_iter()
+                .map(|(v, l)| (json!(v), l.into()))
+                .collect(),
+            );
             select(
                 b,
                 c,
@@ -155,6 +170,22 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
                     .map(|(v, l)| (json!(v), l.into()))
                     .collect(),
             );
+            for (name, label, range, fallback) in [
+                ("opacity", "Tint strength", (0.0, 1.0, 0.01), 0.46),
+                ("blur", "Blur", (0.0, 64.0, 1.0), 12.0),
+                ("radius", "Corners", (0.0, 48.0, 1.0), 22.0),
+            ] {
+                number(
+                    app,
+                    b,
+                    c,
+                    DocId::Widgets,
+                    &format!("{base}/appearance/{name}"),
+                    label,
+                    range,
+                    fallback,
+                );
+            }
             crate::panel::colors::swatches(
                 app,
                 b,
@@ -172,6 +203,27 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
             );
         }
     });
+    let half = (c.w - b.px(8.0)) / 2.0;
+    for (n, label, icon, action) in [
+        (0, "Duplicate", glyph::COPY, Action::DuplicateWidget),
+        (1, "Remove", glyph::DELETE, Action::RemoveWidget),
+    ] {
+        button(
+            b,
+            Rect::new(
+                c.x + n as f32 * (half + b.px(8.0)),
+                c.y + b.px(6.0),
+                half,
+                b.px(30.0),
+            ),
+            label,
+            Some(icon),
+            false,
+            true,
+            action,
+        );
+    }
+    c.y += b.px(44.0);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -232,7 +284,7 @@ fn manifest_control(
                 b,
                 c,
                 key(("panel-faces", name)),
-                2,
+                options.len(),
                 false,
                 &tiles,
                 |b, i, pic| face(app, b, instance, manifest, name, options[i].0, pic),
@@ -536,7 +588,7 @@ fn manifest_control(
 }
 
 /// Face tiles use the actual shell view with an isolated sample model; no services or writes.
-fn face(
+pub(super) fn face(
     app: &App,
     b: &mut B,
     instance: &Instance,
@@ -546,21 +598,50 @@ fn face(
     pic: Rect,
 ) {
     use mypaper_shell::preview::widgets::{Frame, Model, Stamp, tokens, view};
-    b.fill(pic, b.px(8.0), crate::panel::tokens::hex(0x293246));
-    if let Some(path) = app
-        .library
-        .active()
-        .and_then(|i| app.library.items[i].preview.as_ref())
-        && let Some(image) = app
-            .images
-            .borrow_mut()
-            .get(path, (pic.width() as u32, pic.height() as u32))
-    {
-        crate::stage::image_round(b, pic, &image, 0.65, b.px(8.0));
+    let standalone = setting.is_empty();
+    if !standalone {
+        b.fill(pic, b.px(8.0), crate::panel::tokens::hex(0x293246));
+        if let Some(path) = app
+            .library
+            .active()
+            .and_then(|i| app.library.items[i].preview.as_ref())
+            && let Some(image) = app
+                .images
+                .borrow_mut()
+                .get(path, (pic.width() as u32, pic.height() as u32))
+        {
+            crate::stage::image_round(b, pic, &image, 0.65, b.px(8.0));
+        }
     }
     let mut settings = instance.settings.clone();
-    settings.insert(setting.into(), json!(value));
-    let appearance = mypaper_widgets::look::json_of(&mypaper_widgets::look::defaults());
+    if !setting.is_empty() {
+        settings.insert(setting.into(), json!(value));
+    }
+    let user = serde_json::from_value(
+        app.docs
+            .doc(DocId::Widgets)
+            .raw
+            .get("appearance")
+            .cloned()
+            .unwrap_or(json!({})),
+    )
+    .unwrap_or_default();
+    let mut resolved_appearance = mypaper_widgets::look::resolve(
+        &instance.appearance,
+        &user,
+        &mypaper_widgets::look::defaults(),
+        mypaper_widgets::look::DEFAULT_TINT,
+    );
+    if !crate::panel::specimens::desktop_dark(app)
+        && instance.appearance.text.is_none()
+        && user.text.is_none()
+    {
+        resolved_appearance.text = Some(mypaper_theme::TextTone::Dark);
+        if instance.appearance.tint.is_none() && user.tint.is_none() {
+            resolved_appearance.tint = Some(mypaper_config::Color([242, 242, 247]));
+        }
+    }
+    let appearance = mypaper_widgets::look::json_of(&resolved_appearance);
     let placed = mypaper_widgets::layout::Placed {
         instance: "panel-face-preview".into(),
         widget: instance.widget.clone(),
@@ -599,7 +680,12 @@ fn face(
     }
     // Render at native scale before reducing. The shell's text fitting works in DIPs;
     // tiny fractional scales can otherwise turn the greeting into “Good…”.
-    let (width, height) = if instance.widget == "weather" && value == "compact" {
+    let (width, height) = if standalone {
+        (
+            360,
+            (360 * instance.size[1] / instance.size[0].max(1)).clamp(80, 360),
+        )
+    } else if instance.widget == "weather" && value == "compact" {
         (450, 100)
     } else {
         (360, 220)
@@ -608,8 +694,9 @@ fn face(
         model.placed.settings.insert("name".into(), json!("Ada"));
     }
     let cache_key = format!(
-        "face:{}:{setting}:{value}:{}:{}:{:p}",
+        "face:{}:{setting}:{value}:{width}:{height}:{}:{}:{}:{:p}",
         instance.widget,
+        serde_json::to_string(&appearance).unwrap_or_default(),
         serde_json::to_string(&model.placed.settings).unwrap_or_default(),
         app.library
             .active()
@@ -640,7 +727,12 @@ fn face(
             mypaper_ui::Op::Fill {
                 rect: Rect::new(0.0, 0.0, width as f32, height as f32),
                 radius: 22.0,
-                color: crate::panel::tokens::hex(0x344052).with_alpha(0.85),
+                color: resolved_appearance
+                    .tint
+                    .map_or(crate::panel::tokens::hex(0x344052), |color| {
+                        mypaper_ui::Rgba::rgb8(color.0, 1.0)
+                    })
+                    .with_alpha(resolved_appearance.opacity.unwrap_or(0.85)),
             },
         );
         let mut ui = mypaper_ui::Ui::new().ok()?;
@@ -653,7 +745,11 @@ fn face(
         Some(image)
     });
     if let Some(image) = image {
-        let inner = pic.inflate(-b.px(6.0));
+        let inner = if standalone {
+            pic
+        } else {
+            pic.inflate(-b.px(6.0))
+        };
         let factor = (inner.width() / width as f32).min(inner.height() / height as f32);
         let (w, h) = (width as f32 * factor, height as f32 * factor);
         crate::stage::image_round(

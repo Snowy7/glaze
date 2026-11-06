@@ -215,7 +215,7 @@ fn desktop(app: &App, b: &mut B, col: &mut Col) {
 }
 
 /// The icon packs: none (the style's), the bundled ones and your own folders.
-fn icon_pack(app: &App, b: &mut B, c: &mut Col) {
+pub(crate) fn icon_pack(app: &App, b: &mut B, c: &mut Col) {
     let current = app.get(DocId::Config, "/look/text/icon_pack").and_then(Value::as_str).map(str::to_owned);
     let mut options = vec![(Value::Null, "The style's icons".to_owned())];
     if let Ok(dir) = mypaper_config::dir() {

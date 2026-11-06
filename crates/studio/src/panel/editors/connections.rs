@@ -78,14 +78,18 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                         faces
                     }
                 };
-                row(
+                crate::panel::icons::row(
+                    app,
                     b,
                     c,
-                    Some(glyph::INTEGRATIONS),
+                    &format!("custom:{}", item.id),
+                    glyph::INTEGRATIONS,
                     &item.name,
-                    if reconnect { "Reconnect" } else { status },
-                    &detail,
-                    None,
+                    &format!(
+                        "{} \u{b7} {detail}",
+                        if reconnect { "Reconnect" } else { status }
+                    ),
+                    false,
                     Action::Panel(Command::Connection(legacy::LIST.len() + i)),
                 );
             }
@@ -123,16 +127,15 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
             } else {
                 "Disconnect"
             };
-            let path = if label == "Disconnect" {
-                "/plugins/disable"
-            } else {
-                "/plugins/enable"
-            };
             action_button(
                 b,
                 c,
                 label,
-                Action::Set(Edit::new(DocId::Studio, path, label), json!(plugin.id)),
+                if label == "Disconnect" {
+                    Action::Panel(Command::Disconnect(plugin.id.clone()))
+                } else {
+                    Action::Panel(Command::Connect(plugin.id.clone()))
+                },
             );
         });
         if !plugin.faces.is_empty() || !plugin.bars.is_empty() || !plugin.panels.is_empty() {
@@ -412,4 +415,78 @@ pub fn hide_connection_widget(app: &mut App, widget: &str) {
         &Edit::new(DocId::Widgets, "/instances", "Remove connection widget"),
         json!(layout.instances),
     );
+}
+
+pub fn connect(app: &mut App, id: &str) {
+    let mut disabled = app.plugins.preferences.disabled.clone();
+    disabled.remove(id);
+    app.apply(
+        "Connect",
+        vec![crate::docs::Op {
+            doc: DocId::Plugins,
+            path: "/disabled".into(),
+            value: Some(json!(disabled)),
+        }],
+    );
+}
+
+/// Disable a connection and remove its widget faces and bar modules in one reversible step.
+pub fn disconnect(app: &mut App, id: &str) {
+    use crate::docs::Op;
+    let mut disabled = app.plugins.preferences.disabled.clone();
+    disabled.insert(id.into());
+    let mut ops = vec![Op {
+        doc: DocId::Plugins,
+        path: "/disabled".into(),
+        value: Some(json!(disabled)),
+    }];
+    let prefix = format!("{id}--");
+    let widgets = app
+        .get(DocId::Widgets, "/instances")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let kept: Vec<_> = widgets
+        .iter()
+        .filter(|instance| {
+            !instance["widget"]
+                .as_str()
+                .is_some_and(|widget| widget.starts_with(&prefix))
+        })
+        .cloned()
+        .collect();
+    if kept != widgets {
+        ops.push(Op {
+            doc: DocId::Widgets,
+            path: "/instances".into(),
+            value: Some(json!(kept)),
+        });
+    }
+    for bar in ["top", "dock"] {
+        for zone in ["left", "center", "right"] {
+            let path = format!("/{bar}/{zone}");
+            let modules = app
+                .get(DocId::Bars, &path)
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let kept: Vec<_> = modules
+                .iter()
+                .filter(|module| {
+                    !module
+                        .as_str()
+                        .is_some_and(|module| module.starts_with(&format!("custom:{prefix}")))
+                })
+                .cloned()
+                .collect();
+            if kept != modules {
+                ops.push(Op {
+                    doc: DocId::Bars,
+                    path,
+                    value: Some(json!(kept)),
+                });
+            }
+        }
+    }
+    app.apply("Disconnect", ops);
 }

@@ -79,7 +79,7 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
             "Clear history",
             None,
             mypaper_ui::controls::ButtonKind::Ghost,
-            true,
+            app.panel.as_ref().unwrap().history.borrow().error.is_none(),
             Action::Panel(Command::ClearHistory),
         );
         c.y = r.bottom + b.px(6.0);
@@ -197,6 +197,21 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
         );
     });
     group(b, c, "Parts", |b, c| {
+        if let Some(memory) = crate::panel::measure::memory(app.fixture) {
+            row(
+                b,
+                c,
+                Some(glyph::APP),
+                "Studio",
+                &format!("{:.0} MB private", memory.private_mb),
+                &format!(
+                    "This window \u{b7} {:.0} MB working set \u{b7} software rendering",
+                    memory.working_mb
+                ),
+                None,
+                Action::None,
+            );
+        }
         for ((id, _), part) in crate::system::PARTS.iter().zip(app.system.parts) {
             let label = match *id {
                 "core" => "Core",
@@ -261,7 +276,12 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
             ("Start over: Widgets", DocId::Widgets),
             ("Start over: Look", DocId::Config),
         ] {
-            if !matches!(app.docs.doc(doc).issue, Some(crate::docs::ReadIssue::Malformed { .. })) { continue; }
+            if !matches!(
+                app.docs.doc(doc).issue,
+                Some(crate::docs::ReadIssue::Malformed { .. })
+            ) {
+                continue;
+            }
             row(
                 b,
                 c,
@@ -471,60 +491,64 @@ pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
             }
         }
     });
-    group(b, c, "Add", |b, c| {
-        let mut shown = Vec::new();
-        for item in default_items().into_iter() {
-            if shown.contains(&item) {
-                continue;
+    if crate::panel::controls::more(app, b, c, "Add item") {
+        group(b, c, "", |b, c| {
+            let mut shown = Vec::new();
+            for item in default_items().into_iter() {
+                if shown.contains(&item)
+                    || items.contains(&item) && item != Entry::Builtin(Builtin::Separator)
+                {
+                    continue;
+                }
+                shown.push(item.clone());
+                if let Entry::Builtin(builtin) = &item {
+                    let id = serde_json::to_value(builtin)
+                        .ok()
+                        .and_then(|v| v.as_str().map(str::to_owned))
+                        .unwrap();
+                    row(
+                        b,
+                        c,
+                        Some(glyph::ADD),
+                        &menu_name(&item),
+                        "",
+                        "",
+                        None,
+                        Action::MenuAdd(id),
+                    );
+                }
             }
-            shown.push(item.clone());
-            if let Entry::Builtin(builtin) = &item {
-                let id = serde_json::to_value(builtin)
-                    .ok()
-                    .and_then(|v| v.as_str().map(str::to_owned))
-                    .unwrap();
-                row(
-                    b,
-                    c,
-                    Some(glyph::ADD),
-                    &menu_name(&item),
-                    "",
-                    "",
-                    None,
-                    Action::MenuAdd(id),
-                );
-            }
-        }
-        field(
-            app,
-            b,
-            c,
-            FieldId::Text(DocId::Studio, "/menu_label".into()),
-            "Your own item's name",
-            "Notes",
-            "",
-        );
-        field(
-            app,
-            b,
-            c,
-            FieldId::Text(DocId::Studio, "/menu_command".into()),
-            "Program",
-            "notepad.exe",
-            "",
-        );
-        field(
-            app,
-            b,
-            c,
-            FieldId::Text(DocId::Studio, "/panel/draft/menu_args".into()),
-            "Arguments",
-            "\"D:\\My notes.txt\"",
-            "",
-        );
-        action_button(b, c, "Add your item", Action::Panel(Command::AddMenuItem));
-        action_button(b, c, "Reset to the default menu", Action::MenuReset);
-    });
+            field(
+                app,
+                b,
+                c,
+                FieldId::Text(DocId::Studio, "/menu_label".into()),
+                "Your own item's name",
+                "Notes",
+                "",
+            );
+            field(
+                app,
+                b,
+                c,
+                FieldId::Text(DocId::Studio, "/menu_command".into()),
+                "Program",
+                "notepad.exe",
+                "",
+            );
+            field(
+                app,
+                b,
+                c,
+                FieldId::Text(DocId::Studio, "/panel/draft/menu_args".into()),
+                "Arguments",
+                "\"D:\\My notes.txt\"",
+                "",
+            );
+            action_button(b, c, "Add your item", Action::Panel(Command::AddMenuItem));
+            action_button(b, c, "Reset to the default menu", Action::MenuReset);
+        });
+    }
     group(b, c, "Explorer", |b, c| {
         setting(app, b, c, "classic_menu", "Full Windows menus", "")
     });

@@ -1,4 +1,4 @@
-﻿//! Panel row anatomy on the existing kit's drawing, focus, accessibility and hit machinery.
+//! Panel row anatomy on the existing kit's drawing, focus, accessibility and hit machinery.
 
 use mypaper_ui::controls::{Align, Behavior, Font, Glyph, key};
 use mypaper_ui::{Point, Rect, Rgba, Role, TextStyle};
@@ -55,10 +55,30 @@ pub fn relevant_docs(page: super::Page) -> &'static [crate::docs::DocId] {
     use crate::docs::DocId;
     match page {
         Page::Widgets | Page::Widget | Page::AddWidget => &[DocId::Widgets],
-        Page::Bars | Page::Top | Page::Dock | Page::Module | Page::AddModule | Page::Panels | Page::BarPanel => &[DocId::Bars],
-        Page::Connections | Page::Connection => &[DocId::Integrations],
+        Page::Bars
+        | Page::Top
+        | Page::Dock
+        | Page::Module
+        | Page::AddModule
+        | Page::Panels
+        | Page::BarPanel => &[DocId::Bars],
+        Page::Connections | Page::Connection => &[
+            DocId::Integrations,
+            DocId::Plugins,
+            DocId::Bars,
+            DocId::Widgets,
+        ],
+        Page::History => &[DocId::Config, DocId::Bars, DocId::Widgets],
+        Page::FirstRun => &[DocId::Config, DocId::Bars, DocId::Widgets, DocId::Studio],
         Page::General => &[DocId::Studio, DocId::Config],
-        Page::Look | Page::Windows | Page::Performance | Page::DesktopMenu | Page::Wallpapers | Page::Wallpaper | Page::AddWallpaper => &[DocId::Config],
+        Page::Root
+        | Page::Look
+        | Page::Windows
+        | Page::Performance
+        | Page::DesktopMenu
+        | Page::Wallpapers
+        | Page::Wallpaper
+        | Page::AddWallpaper => &[DocId::Config],
         _ => &[],
     }
 }
@@ -70,7 +90,9 @@ pub fn save_banner(app: &App, b: &mut B, c: &mut Col, page: super::Page) {
         let state = app.panel.as_ref().unwrap();
         let issue = app.docs.doc(doc).issue;
         let write_failed = state.save_errors.borrow().contains_key(&doc);
-        if issue.is_none() && !write_failed { continue; }
+        if issue.is_none() && !write_failed {
+            continue;
+        }
         let message = app.docs.error(doc).unwrap_or("Couldn't save");
         let mut actions = vec![];
         match issue {
@@ -81,21 +103,55 @@ pub fn save_banner(app: &App, b: &mut B, c: &mut Col, page: super::Page) {
             }
             Some(ReadIssue::Unavailable) | None => {
                 actions.push(("Retry", Action::Panel(super::Command::RetryDoc(doc))));
-                actions.push(("Show folder", Action::Panel(super::Command::ShowFolder(doc))));
+                actions.push((
+                    "Show folder",
+                    Action::Panel(super::Command::ShowFolder(doc)),
+                ));
             }
         }
-        let h = b.px(36.0);
-        let mut right = c.right();
-        for (label, action) in actions.into_iter().rev() {
-            let width = b.measure(label, &font(b, 10.0, 400)).0 + b.px(12.0);
-            right -= width;
-            button(b, Rect::new(right, c.y + b.px(4.0), width, b.px(28.0)), label, None, false, true, action);
-            right -= b.px(4.0);
-        }
-        b.icon(Rect::new(c.x, c.y + b.px(9.0), b.px(16.0), b.px(16.0)), mypaper_ui::icons::Icon::Warning, 14.0, b.p.ink2);
-        text(b, Rect::new(c.x + b.px(21.0), c.y, (right - c.x - b.px(21.0)).max(1.0), h), message, 10.0, 400, b.p.ink2, Align::Start);
-        c.y += h;
+        feedback(b, c, message, actions);
     }
+}
+
+/// A compact alert sentence with correctly sized recovery actions.
+pub fn feedback(b: &mut B, c: &mut Col, message: &str, actions: Vec<(&str, Action)>) {
+    let mut right = c.right();
+    for (label, action) in actions.into_iter().rev() {
+        let width = b.measure(label, &font(b, 13.0, 500)).0 + b.px(16.0);
+        right -= width;
+        button(
+            b,
+            Rect::new(right, c.y + b.px(4.0), width, b.px(28.0)),
+            label,
+            None,
+            false,
+            true,
+            action,
+        );
+        right -= b.px(4.0);
+    }
+    b.icon(
+        Rect::new(c.x, c.y + b.px(9.0), b.px(16.0), b.px(16.0)),
+        mypaper_ui::icons::Icon::Warning,
+        14.0,
+        b.p.ink2,
+    );
+    let style = font(b, 11.0, 400);
+    let lines = b
+        .text
+        .lines(message, &style, (right - c.x - b.px(21.0)).max(1.0), 2);
+    let line = b.px(15.0) * b.t.text_scale;
+    let h = (lines.len() as f32 * line + b.px(8.0)).max(b.px(36.0));
+    for (i, label) in lines.iter().enumerate() {
+        b.text_at(
+            c.x + b.px(21.0),
+            c.y + (h - lines.len() as f32 * line) / 2.0 + i as f32 * line,
+            label,
+            &style,
+            b.p.ink2,
+        );
+    }
+    c.y += h;
 }
 
 pub fn title(b: &mut B, c: &mut Col, title: &str, subtitle: &str) {
@@ -534,6 +590,8 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
             };
         }
         Kind::Choice { options, .. } => {
+            let mut options: Vec<_> = options.iter().collect();
+            options.sort_by_key(|(_, label)| *label != "As is");
             // Keep three values on one line at 480; stack within the plate at laptop widths
             // or increased Windows text size rather than truncating any of the choices.
             let style = font(b, 12.0, 500);
@@ -732,9 +790,16 @@ pub fn search(app: &App, b: &mut B, c: &mut Col) {
         r,
         Role::TextInput,
         "Search everything",
-        Action::Field(id),
+        Action::Field(id.clone()),
         Behavior::Field,
     );
+    let value = app
+        .field
+        .as_ref()
+        .filter(|field| field.id == id)
+        .and_then(|field| field.field.text().ok())
+        .unwrap_or_else(|| app.text(&id).to_owned());
+    b.semantics(k, mypaper_ui::Semantics::Text(value.into()));
     b.focus_ring(k, r, b.px(7.0));
     c.y += r.height();
 }

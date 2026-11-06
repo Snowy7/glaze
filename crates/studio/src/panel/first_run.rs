@@ -40,7 +40,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                     2,
                     false,
                     &choices,
-                    |b, i, r| crate::pages::first_run::panel_starter_tile(app, b, i, r),
+                    |b, i, r| super::editors::starter_preview(app, b, i, r),
                 );
                 notice(
                     b,

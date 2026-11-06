@@ -1150,6 +1150,7 @@ impl App {
 
     /// What follows an edit: Studio's own look, the wallpapers' active state.
     fn after_edit(&mut self, docs: &[DocId]) {
+        if docs.contains(&DocId::Plugins) { crate::panel::sync_connections(self); }
         if docs.contains(&DocId::Studio) {
             self.retheme();
         }

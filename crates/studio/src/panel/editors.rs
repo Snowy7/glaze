@@ -1,7 +1,7 @@
 mod bars;
 mod connections;
-pub use bars::insert_module;
-pub use connections::{connection_module, hide_connection_widget};
+pub use bars::{insert_module, move_module};
+pub use connections::{connect, connection_module, disconnect, hide_connection_widget};
 mod look;
 mod settings;
 pub use settings::add_menu_item;
@@ -55,14 +55,14 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
 }
 
 /// Position is relative to the display's actual grid, including the widget's size.
-pub fn position(app: &App, layout: &Layout, instance: &Instance) -> &'static str {
+pub fn position(app: &App, layout: &Layout, instance: &Instance) -> String {
     let Some(monitor) = app.display() else {
-        return "on this display";
+        return "on this display".into();
     };
     let grid = crate::stage::grid_for(layout, monitor);
     let x = (instance.cell[0] as f32 + instance.size[0] as f32 / 2.0) / grid.cols.max(1) as f32;
     let y = (instance.cell[1] as f32 + instance.size[1] as f32 / 2.0) / grid.rows.max(1) as f32;
-    match (
+    let area = match (
         (x * 3.0).floor().min(2.0) as u8,
         (y * 3.0).floor().min(2.0) as u8,
     ) {
@@ -75,100 +75,100 @@ pub fn position(app: &App, layout: &Layout, instance: &Instance) -> &'static str
         (0, _) => "bottom left",
         (1, _) => "bottom",
         _ => "bottom right",
-    }
+    };
+    format!(
+        "{area}, column {}, row {}",
+        instance.cell[0] + 1,
+        instance.cell[1] + 1
+    )
 }
 
-/// Miniature bar geometry from v16's sil(), drawn with the kit's rounded rectangles.
-pub fn design_row(b: &mut B, c: &mut Col, id: &str, name: &str, on: bool, action: Action) {
-    let start = c.y;
-    let mut label = Col {
-        x: c.x + b.px(76.0),
-        y: c.y,
-        w: c.w - b.px(76.0),
-        view: c.view,
-    };
-    row(b, &mut label, None, name, "", "", Some(on), action.clone());
-    let r = Rect::new(c.x, start + b.px(4.0), b.px(64.0), b.px(32.0));
-    b.fill(r, b.px(6.0), b.p.fill);
-    let parts: Vec<(f32, f32, f32, f32, f32)> = match id {
-        "macos" => vec![(4., 5., 56., 3., 1.), (20., 21., 24., 6., 3.)],
-        "islands" => vec![
-            (4., 4., 14., 6., 3.),
-            (25., 4., 14., 6., 3.),
-            (46., 4., 14., 6., 3.),
-            (20., 21., 24., 6., 3.),
-        ],
-        "windows11" => vec![
-            (0., 24., 64., 8., 0.),
-            (23., 26., 3., 3., 1.),
-            (28., 26., 3., 3., 1.),
-            (33., 26., 3., 3., 1.),
-            (38., 26., 3., 3., 1.),
-        ],
-        "windows10" => vec![
-            (0., 24., 64., 8., 0.),
-            (3., 26., 3., 3., 0.),
-            (10., 26., 13., 3., 0.),
-            (27., 26., 3., 3., 0.),
-            (33., 26., 3., 3., 0.),
-        ],
-        "edge" => vec![(0., 0., 64., 5., 0.), (0., 25., 64., 7., 0.)],
-        "fluent" => vec![(0., 0., 64., 6., 0.), (13., 22., 38., 7., 2.)],
-        "minimal" => vec![
-            (3., 4., 58., 2., 0.),
-            (24., 25., 3., 3., 0.),
-            (30., 25., 3., 3., 0.),
-            (36., 25., 3., 3., 0.),
-        ],
-        "neon" => vec![(5., 4., 54., 5., 2.), (17., 22., 30., 6., 3.)],
-        "chromeos" => vec![(4., 21., 56., 7., 4.)],
-        "floating" | "pill" | "capsule" => vec![(10., 4., 44., 6., 3.), (20., 21., 24., 6., 3.)],
-        _ => vec![
-            (0., 0., 64., 5., 1.),
-            (22., 22., 5., 5., 1.),
-            (30., 22., 5., 5., 1.),
-            (38., 22., 5., 5., 1.),
-        ],
-    };
-    let only = match &action {
-        Action::Set(edit, _) if edit.path.as_ref() == "/top/design" => {
-            Some(crate::actions::Bar::Top)
+/// The full tile is selected; its thumbnail uses the shell's offscreen bar views.
+pub fn design_row(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    id: &str,
+    name: &str,
+    on: bool,
+    action: Action,
+) {
+    let r = Rect::new(c.x, c.y + b.px(3.0), c.w, b.px(80.0));
+    let k = key(("design", c.view, id));
+    if on {
+        b.fill(r, b.px(8.0), b.p.fill);
+        b.stroke(r, b.px(8.0), b.px(1.0), b.p.ink2);
+    } else {
+        b.wash(k, r, b.px(8.0));
+    }
+    let pic = Rect::new(
+        r.left + b.px(6.0),
+        r.top + b.px(6.0),
+        b.px(130.0),
+        r.height() - b.px(12.0),
+    );
+    crate::panel::specimens::backdrop(app, b, pic);
+    let (raw, only) = match &action {
+        Action::Set(edit, value) => {
+            let mut raw = app.docs.doc(DocId::Bars).raw.clone();
+            crate::docs::apply_op(
+                &mut raw,
+                &crate::docs::Op {
+                    doc: DocId::Bars,
+                    path: edit.path.to_string(),
+                    value: Some(value.clone()),
+                },
+            );
+            (
+                raw,
+                Some(if edit.path.starts_with("/top") {
+                    crate::actions::Bar::Top
+                } else {
+                    crate::actions::Bar::Dock
+                }),
+            )
         }
-        Action::Set(edit, _) if edit.path.as_ref() == "/dock/design" => {
-            Some(crate::actions::Bar::Dock)
-        }
-        _ => None,
+        _ => (serde_json::json!({"version":1,"preset":id}), None),
     };
-    for (part, (x, y, w, h, radius)) in parts.into_iter().enumerate() {
-        if only == Some(crate::actions::Bar::Top) && y > 16.0
-            || only == Some(crate::actions::Bar::Dock) && y < 16.0
-        {
-            continue;
-        }
-        let y = if only.is_some() {
-            if y < 16.0 { y + 10.0 } else { y - 10.0 }
-        } else {
-            y
-        };
-        b.fill(
-            Rect::new(r.left + b.px(x), r.top + b.px(y), b.px(w), b.px(h)),
-            b.px(radius),
-            if id.starts_with("windows") && part > 0 {
-                b.p.panel
-            } else {
-                b.p.ink2
-            },
+    crate::panel::specimens::bars(app, b, pic, &raw, only);
+    text(
+        b,
+        Rect::new(
+            pic.right + b.px(12.0),
+            r.top,
+            r.right - pic.right - b.px(36.0),
+            r.height(),
+        ),
+        name,
+        13.0,
+        500,
+        b.p.ink1,
+        Align::Start,
+    );
+    if on {
+        b.icon(
+            Rect::new(
+                r.right - b.px(26.0),
+                r.top + b.px(28.0),
+                b.px(20.0),
+                b.px(20.0),
+            ),
+            glyph::CHECK,
+            15.0,
+            b.p.ink1,
         );
     }
-    b.hit(
-        key(("design", c.view, id)),
+    b.hit_checked(
+        k,
         r,
         Role::RadioButton,
         name,
+        Some(on),
         action,
         Behavior::Click,
     );
-    c.y = label.y;
+    b.focus_ring(k, r, b.px(8.0));
+    c.y = r.bottom + b.px(3.0);
 }
 
 pub fn field(
@@ -202,8 +202,9 @@ pub fn select(
     label: &str,
     value: Value,
     edit: Edit,
-    options: Vec<(Value, String)>,
+    mut options: Vec<(Value, String)>,
 ) {
+    options.sort_by_key(|(_, label)| label != "As is");
     let shown = options
         .iter()
         .find(|(v, _)| v == &value)
@@ -354,6 +355,34 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
         ),
         _ => return,
     };
+    if state.page == Page::AddWallpaper {
+        let widths = [
+            70.0,
+            70.0,
+            (r.width() / b.s - 32.0 - 16.0 - 140.0).max(100.0),
+        ];
+        let mut x = b.px(16.0);
+        for ((label, action, primary), width) in [
+            ("Cancel", open(Page::Wallpapers), false),
+            ("Add", Action::AddCommit(false), false),
+            ("Add and use", Action::AddCommit(true), true),
+        ]
+        .into_iter()
+        .zip(widths)
+        {
+            button(
+                b,
+                Rect::new(x, r.top + b.px(16.0), b.px(width), b.px(32.0)),
+                label,
+                None,
+                primary,
+                label == "Cancel" || enabled,
+                action,
+            );
+            x += b.px(width + 8.0);
+        }
+        return;
+    }
     let gap = b.px(8.0);
     let width = (r.width() - b.px(32.0) - gap) / 2.0;
     button(
@@ -390,7 +419,14 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
     );
     let history = app.panel.as_ref().unwrap().history.borrow();
     if let Some(error) = &history.error {
-        notice(b, c, error);
+        let mut actions = vec![];
+        if let Some(path) = crate::panel::history::path(app) {
+            actions.push(("Show file", Action::Reveal(path)));
+        }
+        if error != crate::docs::NEWER {
+            actions.push(("Retry", Action::Panel(Command::RetryHistory)));
+        }
+        crate::panel::controls::feedback(b, c, error, actions);
     }
     group(b, c, "Desktop changes", |b, c| {
         for (i, entry) in history.entries.iter().enumerate().rev() {
@@ -435,43 +471,7 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
             {
                 crate::stage::image_round(b, r, &image, 1.0, b.px(8.0));
             }
-            let ink = crate::panel::tokens::hex(0xffffff);
-            if entry
-                .desktop
-                .bars()
-                .pointer("/top/enabled")
-                .and_then(Value::as_bool)
-                .unwrap_or(true)
-            {
-                b.fill(
-                    Rect::new(
-                        r.left + b.px(4.0),
-                        r.top + b.px(4.0),
-                        r.width() - b.px(8.0),
-                        b.px(5.0),
-                    ),
-                    b.px(2.0),
-                    ink.with_alpha(0.75),
-                );
-            }
-            if entry
-                .desktop
-                .bars()
-                .pointer("/dock/enabled")
-                .and_then(Value::as_bool)
-                .unwrap_or(true)
-            {
-                b.fill(
-                    Rect::new(
-                        r.left + r.width() * 0.35,
-                        r.bottom - b.px(14.0),
-                        r.width() * 0.3,
-                        b.px(8.0),
-                    ),
-                    b.px(4.0),
-                    ink.with_alpha(0.75),
-                );
-            }
+            crate::panel::specimens::desktop_bars(app, b, r, entry.desktop.bars());
             let count = entry
                 .desktop
                 .widgets()
@@ -484,7 +484,7 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
             {
                 let grid = crate::stage::grid_for(&layout, monitor);
                 let scale = r.width() / (monitor.rect.width as f32 / (monitor.dpi as f32 / 96.0));
-                for instance in crate::pages::widgets::here(app, &layout) {
+                for mut instance in crate::pages::widgets::here(app, &layout) {
                     let at = grid.rect(instance.cell, instance.size);
                     let frame = Rect::new(
                         r.left + at.x as f32 * scale,
@@ -492,8 +492,12 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
                         at.width as f32 * scale,
                         at.height as f32 * scale,
                     );
-                    b.fill(frame, b.px(3.0), ink.with_alpha(0.18));
-                    b.stroke(frame, b.px(3.0), b.px(1.0), ink.with_alpha(0.8));
+                    instance.appearance = instance
+                        .appearance
+                        .over(&layout.appearance.over(&mypaper_widgets::look::defaults()));
+                    if let Some(widget) = app.registry.get(&instance.widget) {
+                        widgets::face(app, b, &instance, &widget.manifest, "", "", frame);
+                    }
                 }
             }
             c.y = r.bottom + b.px(10.0);
@@ -702,5 +706,86 @@ fn section_page(section: crate::actions::Section) -> Page {
         crate::actions::Section::Keyboard => Page::Keyboard,
         crate::actions::Section::Troubleshoot => Page::Troubleshoot,
         crate::actions::Section::About => Page::About,
+    }
+}
+
+/// A numeric editor using the same slider drag semantics as the table-driven settings.
+pub fn number(
+    app: &App,
+    b: &mut B,
+    c: &mut Col,
+    doc: DocId,
+    path: &str,
+    label: &str,
+    range: (f64, f64, f64),
+    fallback: f64,
+) {
+    let value = app
+        .get(doc, path)
+        .and_then(Value::as_f64)
+        .unwrap_or(fallback);
+    let h = height(b, 38.0);
+    text(
+        b,
+        Rect::new(c.x, c.y, b.px(92.0), h),
+        label,
+        12.0,
+        400,
+        b.p.ink1,
+        Align::Start,
+    );
+    b.slider(
+        key(("panel-number", doc, path)),
+        Rect::new(c.x + b.px(96.0), c.y, c.w - b.px(96.0), h),
+        value,
+        range,
+        &format!("{value:.2}"),
+        b.px(42.0),
+        label,
+        Action::Slider(Edit::new(doc, path, label)),
+    );
+    c.y += h;
+}
+
+pub fn starter_preview(app: &App, b: &mut B, index: usize, rect: Rect) {
+    let Some((wallpaper, preset, items)) = crate::pages::first_run::panel_starter(index) else {
+        return;
+    };
+    b.fill(rect, b.px(6.0), b.p.fill);
+    if let Some(path) = app
+        .library
+        .items
+        .iter()
+        .find(|item| item.id == wallpaper)
+        .and_then(|item| item.preview.as_ref())
+        && let Some(image) = app.images.borrow_mut().get(path, (384, 256))
+    {
+        crate::stage::image_round(b, rect, &image, 1.0, b.px(6.0));
+    }
+    let mut bars = serde_json::json!({"version":1,"preset":preset});
+    if matches!(preset, "macos" | "islands") {
+        bars["dock"] = serde_json::json!({"enabled":true});
+    }
+    crate::panel::specimens::desktop_bars(app, b, rect, &bars);
+    for (i, (id, size)) in items.iter().enumerate() {
+        let Some(widget) = app.registry.get(id) else {
+            continue;
+        };
+        let instance = Instance {
+            instance: format!("starter-{id}"),
+            widget: (*id).into(),
+            monitor: String::new(),
+            cell: [20, i as u32 * 2],
+            size: *size,
+            settings: Default::default(),
+            appearance: Default::default(),
+        };
+        let frame = Rect::new(
+            rect.left + rect.width() * 0.61,
+            rect.top + rect.height() * (0.16 + i as f32 * 0.3),
+            rect.width() * 0.32,
+            rect.height() * 0.27,
+        );
+        widgets::face(app, b, &instance, &widget.manifest, "", "", frame);
     }
 }

@@ -25,15 +25,17 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         done_width,
         b.px(28.0),
     );
-    if page != Page::FirstRun { button(
-        b,
-        done,
-        "Done",
-        None,
-        true,
-        true,
-        Action::Panel(Command::Done),
-    ); }
+    if page != Page::FirstRun {
+        button(
+            b,
+            done,
+            "Done",
+            None,
+            true,
+            true,
+            Action::Panel(Command::Done),
+        );
+    }
     let mut x = done.left - b.px(6.0);
     let editing = app.system.running();
     let compact = r.width() <= b.px(360.0) || b.t.text_scale > 1.0;
@@ -65,9 +67,13 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         );
     }
     if editing {
-        let status = if !app.panel.as_ref().unwrap().save_errors.borrow().is_empty()
+        let read_only = super::controls::relevant_docs(page)
+            .iter()
+            .any(|id| app.docs.error(*id).is_some());
+        let status = if read_only {
+            "Read only"
+        } else if !app.panel.as_ref().unwrap().save_errors.borrow().is_empty()
             || !app.panel.as_ref().unwrap().theme_errors.borrow().is_empty()
-            
         {
             "Couldn't save"
         } else if app.drag.is_some() {
@@ -78,6 +84,18 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
                 _ => "Saved",
             }
         };
+        let announcement = super::controls::relevant_docs(page)
+            .iter()
+            .find_map(|id| app.docs.error(*id))
+            .unwrap_or(status);
+        b.announce(
+            announcement,
+            if app.drag.is_some() {
+                0
+            } else {
+                app.docs.version
+            },
+        );
         let style = ui::font(b, 10.0, 400);
         let width = b.measure(status, &style).0 + b.px(8.0);
         x -= width;
@@ -208,6 +226,12 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
     // The caption yields to the fixed icon actions on a 360-DIP panel.
     let style = ui::font(b, 12.0, 400);
     let caption = if editing { "" } else { "Off" };
+    if !editing {
+        b.announce(
+            "mypaper is off. Changes apply when it starts.",
+            app.docs.version,
+        );
+    }
     if x - caption_x >= b.measure(caption, &style).0 {
         text(
             b,
@@ -470,12 +494,25 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             None,
             open(Page::Windows),
         );
-        let connections = crate::pages::integrations::LIST
+        let connected = crate::pages::integrations::LIST
             .iter()
-            .filter(|i| crate::pages::integrations::enabled(app, i))
-            .map(|i| i.name)
-            .collect::<Vec<_>>()
-            .join(", ");
+            .filter(|item| crate::pages::integrations::enabled(app, item))
+            .count()
+            + app
+                .plugins
+                .installed
+                .iter()
+                .filter(|plugin| {
+                    !app.plugins.preferences.disabled.contains(&plugin.id)
+                        && app
+                            .plugins
+                            .snapshot
+                            .plugins
+                            .get(&plugin.id)
+                            .is_some_and(|state| state.status != "Unloaded")
+                })
+                .count();
+        let connections = format!("{connected} connected");
         row(
             b,
             c,
@@ -590,7 +627,7 @@ fn bars(app: &App, b: &mut B, c: &mut Col) {
         .unwrap_or("monochrome");
     group(b, c, "Design", |b, c| {
         for &(id, name) in &crate::pages::bars::PRESETS {
-            super::editors::design_row(b, c, id, name, current == id, Action::Preset(id));
+            super::editors::design_row(app, b, c, id, name, current == id, Action::Preset(id));
         }
     });
     group(b, c, "", |b, c| {

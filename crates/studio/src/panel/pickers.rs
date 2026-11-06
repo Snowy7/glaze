@@ -167,12 +167,46 @@ pub fn zones(app: &App, b: &mut B, c: &mut Col, target: ZoneTarget, caption: &st
     let id = query_field(&target);
     let query = app.text(&id).trim().to_lowercase();
     field(app, b, c, id, caption, "Search a city or country", "");
+    if query.is_empty() && !matches!(target, ZoneTarget::Calendar) {
+        return;
+    }
+    let existing: Vec<String> = match &target {
+        ZoneTarget::Calendar => app
+            .get(DocId::Bars, "/calendar/zones")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|v| v["zone"].as_str().map(str::to_owned))
+            .collect(),
+        ZoneTarget::AddRecord(path) => {
+            let layout = crate::pages::widgets::layout(app);
+            path.split('/')
+                .nth(2)
+                .and_then(|s| s.parse::<usize>().ok())
+                .and_then(|i| layout.instances.get(i))
+                .and_then(|instance| {
+                    app.registry
+                        .get(&instance.widget)
+                        .map(|w| w.manifest.resolve_settings(&instance.settings))
+                })
+                .and_then(|values| values.get("zones").cloned())
+                .and_then(|v| v.as_array().cloned())
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|v| v["tz"].as_str().map(str::to_owned))
+                .collect()
+        }
+        _ => vec![],
+    };
     let mut count = 0;
-    for (i, (city, country, _)) in CITIES
+    for (i, (city, country, zone)) in CITIES
         .iter()
         .enumerate()
-        .filter(|(_, (city, country, _))| {
+        .filter(|(_, (city, country, zone))| {
             format!("{city} {country}").to_lowercase().contains(&query)
+                && (matches!(target, ZoneTarget::Calendar)
+                    || !existing.iter().any(|old| old == zone))
         })
         .take(if query.is_empty() { 4 } else { 8 })
     {
@@ -182,9 +216,19 @@ pub fn zones(app: &App, b: &mut B, c: &mut Col, target: ZoneTarget, caption: &st
             Some(crate::theme::glyph::CLOCK),
             city,
             "",
-            country,
-            Some(false),
-            Action::Panel(Command::PickZone(target.clone(), i)),
+            if existing.iter().any(|old| old == zone) {
+                "Added"
+            } else if matches!(target, ZoneTarget::Calendar) {
+                "Suggested"
+            } else {
+                country
+            },
+            Some(existing.iter().any(|old| old == zone)),
+            if existing.iter().any(|old| old == zone) {
+                Action::None
+            } else {
+                Action::Panel(Command::PickZone(target.clone(), i))
+            },
         );
         count += 1;
     }
@@ -208,6 +252,12 @@ pub fn choose_zone(app: &mut App, target: &ZoneTarget, city: usize) {
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default();
+            if zones
+                .iter()
+                .any(|value| value["zone"].as_str() == Some(zone))
+            {
+                return;
+            }
             if zones.len() >= 4 {
                 app.alert("The calendar can show four cities");
                 return;
@@ -241,6 +291,12 @@ pub fn choose_zone(app: &mut App, target: &ZoneTarget, city: usize) {
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default();
+            if cities
+                .iter()
+                .any(|value| value["tz"].as_str() == Some(zone))
+            {
+                return;
+            }
             if cities.len() >= 8 {
                 app.alert("The clock can show eight cities");
                 return;
