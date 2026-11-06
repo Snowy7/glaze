@@ -20,43 +20,66 @@ fn plugin_status<'a>(app: &'a App, id: &str) -> &'a str {
         })
 }
 
-pub fn summary(app: &App) -> String {
-    let connected = legacy::LIST
+pub fn visible_plugin(plugin: &mypaper_widgets::manifest::PluginManifest) -> bool {
+    !["hello", "hello-ts", "demo", "experimental"].contains(&plugin.id.as_str())
+        && !plugin
+            .name
+            .to_ascii_lowercase()
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|word| matches!(word, "demo" | "experimental"))
+}
+
+/// The list and Home count share membership, including hidden and replaced sources.
+fn members(app: &App, group: &str) -> Vec<usize> {
+    let replaces_weather =
+        app.plugins.installed.iter().any(|plugin| {
+            matches!(plugin.id.as_str(), "weather" | "rss") && visible_plugin(plugin)
+        });
+    legacy::LIST
         .iter()
-        .filter(|item| legacy::enabled(app, item))
-        .count()
-        + app
-            .plugins
-            .installed
-            .iter()
-            .filter(|plugin| plugin_status(app, &plugin.id) != "Available")
-            .count();
+        .enumerate()
+        .filter(|(_, item)| !(item.name == "Weather and RSS" && replaces_weather))
+        .filter(|(_, item)| {
+            if legacy::enabled(app, item) {
+                group == "Connected"
+            } else {
+                group == "Built in"
+            }
+        })
+        .map(|(index, _)| index)
+        .chain(
+            app.plugins
+                .installed
+                .iter()
+                .enumerate()
+                .filter(|(_, plugin)| visible_plugin(plugin))
+                .filter(|(_, plugin)| {
+                    if plugin_status(app, &plugin.id) == "Available" {
+                        group == "Available"
+                    } else {
+                        group == "Connected"
+                    }
+                })
+                .map(|(index, _)| legacy::LIST.len() + index),
+        )
+        .collect()
+}
+
+pub fn summary(app: &App) -> String {
+    let connected = members(app, "Connected").len();
     format!("{connected} connected")
 }
 
 pub fn list(app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "Connections", "Your apps and built-in data sources");
     for name in ["Connected", "Built in", "Available"] {
-        let plugins: Vec<_> = app
-            .plugins
-            .installed
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| {
-                let state = plugin_status(app, &p.id);
-                match name {
-                    "Connected" => state != "Available",
-                    "Available" => state == "Available",
-                    _ => false,
-                }
-            })
-            .collect();
-        if plugins.is_empty() && name != "Built in" {
+        let members = members(app, name);
+        if members.is_empty() {
             continue;
         }
         group(b, c, name, |b, c| {
-            if name == "Built in" {
-                for (i, item) in legacy::LIST.iter().enumerate() {
+            for index in members {
+                if let Some(item) = legacy::LIST.get(index) {
                     let on = legacy::enabled(app, item);
                     row(
                         b,
@@ -66,11 +89,11 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                         if on { "On" } else { "Off" },
                         item.adds,
                         None,
-                        Action::Panel(Command::Connection(i)),
+                        Action::Panel(Command::Connection(index)),
                     );
+                    continue;
                 }
-            }
-            for (i, item) in plugins {
+                let item = &app.plugins.installed[index - legacy::LIST.len()];
                 let status = plugin_status(app, &item.id);
                 let detail = {
                     let faces = item
@@ -99,7 +122,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                     status,
                     &detail,
                     None,
-                    Action::Panel(Command::Connection(legacy::LIST.len() + i)),
+                    Action::Panel(Command::Connection(index)),
                 );
                 if let Some(image) =
                     crate::panel::icons::plugin_image(app, &format!("custom:{}", item.id))
@@ -167,7 +190,10 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                         b,
                         c,
                         &face.name,
-                        &format!("Widget · Display {}", app.nav.display + 1),
+                        &format!(
+                            "Widget · {}",
+                            crate::panel::controls::display_name(app, app.nav.display)
+                        ),
                         shown,
                         if shown {
                             Action::Panel(Command::HideConnectionWidget(id))
@@ -198,96 +224,97 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                 }
             });
         }
-        group(b, c, "Options", |b, c| {
-            if plugin.settings.is_empty() {
-                notice(b, c, "This connection has no options.");
-            }
-            for schema in &plugin.settings {
-                let Some(name) = schema["key"].as_str() else {
-                    continue;
-                };
-                let label = schema["label"].as_str().unwrap_or(name);
-                let path = format!(
-                    "/plugins/setting/{}/{}",
-                    plugin.id,
-                    crate::docs::token(name)
-                );
-                let value = app
-                    .plugins
-                    .preferences
-                    .settings
-                    .get(&plugin.id)
-                    .and_then(|v| v.get(name))
-                    .cloned()
-                    .unwrap_or_else(|| schema["default"].clone());
-                let edit = Edit::new(DocId::Studio, path.clone(), label);
-                match schema["type"].as_str() {
-                    Some("boolean") => {
-                        let on = value.as_bool().unwrap_or(false);
-                        toggle(b, c, label, "", on, Action::Toggle(edit, on));
-                    }
-                    Some("number" | "slider") => {
-                        let value = value.as_f64().unwrap_or(0.0);
-                        crate::panel::material::row(
-                            b,
-                            c,
-                            label,
-                            value,
-                            (
-                                schema["min"].as_f64().unwrap_or(0.0),
-                                schema["max"].as_f64().unwrap_or(100.0),
-                                schema["step"].as_f64().unwrap_or(1.0),
-                            ),
-                            &crate::panel::controls::unit(
+        if !plugin.settings.is_empty() {
+            group(b, c, "Options", |b, c| {
+                for schema in &plugin.settings {
+                    let Some(name) = schema["key"].as_str() else {
+                        continue;
+                    };
+                    let label = schema["label"].as_str().unwrap_or(name);
+                    let path = format!(
+                        "/plugins/setting/{}/{}",
+                        plugin.id,
+                        crate::docs::token(name)
+                    );
+                    let value = app
+                        .plugins
+                        .preferences
+                        .settings
+                        .get(&plugin.id)
+                        .and_then(|v| v.get(name))
+                        .cloned()
+                        .unwrap_or_else(|| schema["default"].clone());
+                    let edit = Edit::new(DocId::Studio, path.clone(), label);
+                    match schema["type"].as_str() {
+                        Some("boolean") => {
+                            let on = value.as_bool().unwrap_or(false);
+                            toggle(b, c, label, "", on, Action::Toggle(edit, on));
+                        }
+                        Some("number" | "slider") => {
+                            let value = value.as_f64().unwrap_or(0.0);
+                            crate::panel::material::row(
+                                b,
+                                c,
+                                label,
                                 value,
-                                schema["unit"].as_str().unwrap_or(""),
-                            ),
-                            edit,
-                        );
-                    }
-                    Some("select") => {
-                        let options = schema["options"]
-                            .as_array()
-                            .into_iter()
-                            .flatten()
-                            .map(|o| {
-                                let value = o.get("value").unwrap_or(o).clone();
-                                let label = o
-                                    .get("label")
-                                    .and_then(Value::as_str)
-                                    .or_else(|| value.as_str())
-                                    .unwrap_or("Option")
-                                    .to_owned();
-                                (value, label)
-                            })
-                            .collect();
-                        select(b, c, label, value, edit, options);
-                    }
-                    _ => {
-                        let text = value.as_str().map(str::to_owned).unwrap_or_else(|| {
-                            if value.is_null() {
-                                String::new()
-                            } else {
-                                value.to_string()
-                            }
-                        });
-                        field(
-                            app,
-                            b,
-                            c,
-                            FieldId::Text(DocId::Studio, path.into()),
-                            label,
-                            "",
-                            &text,
-                        );
+                                (
+                                    schema["min"].as_f64().unwrap_or(0.0),
+                                    schema["max"].as_f64().unwrap_or(100.0),
+                                    schema["step"].as_f64().unwrap_or(1.0),
+                                ),
+                                &crate::panel::controls::unit(
+                                    value,
+                                    schema["unit"].as_str().unwrap_or(""),
+                                ),
+                                edit,
+                            );
+                        }
+                        Some("select") => {
+                            let options = schema["options"]
+                                .as_array()
+                                .into_iter()
+                                .flatten()
+                                .map(|o| {
+                                    let value = o.get("value").unwrap_or(o).clone();
+                                    let label = o
+                                        .get("label")
+                                        .and_then(Value::as_str)
+                                        .or_else(|| value.as_str())
+                                        .unwrap_or("Option")
+                                        .to_owned();
+                                    (value, label)
+                                })
+                                .collect();
+                            select(b, c, label, value, edit, options);
+                        }
+                        _ => {
+                            let text = value.as_str().map(str::to_owned).unwrap_or_else(|| {
+                                if value.is_null() {
+                                    String::new()
+                                } else {
+                                    value.to_string()
+                                }
+                            });
+                            field(
+                                app,
+                                b,
+                                c,
+                                FieldId::Text(DocId::Studio, path.into()),
+                                label,
+                                "",
+                                &text,
+                            );
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
         group(b, c, "Access and privacy", |b, c| {
+            c.y += b.px(8.0);
             for line in crate::pages::plugins::permissions(plugin) {
                 notice(b, c, &line);
             }
+            c.y += b.px(8.0);
         });
         if !disabled && !needs_attention && status != "Available" {
             group(b, c, "", |b, c| {
@@ -385,7 +412,11 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
             action_button(b, c, "Their widgets", open(Page::Widgets));
         }
     });
-    group(b, c, "Privacy", |b, c| notice(b, c, item.privacy));
+    group(b, c, "Privacy", |b, c| {
+        c.y += b.px(8.0);
+        notice(b, c, item.privacy);
+        c.y += b.px(8.0);
+    });
 }
 
 fn module_shown(app: &App, id: &str, bar: crate::actions::Bar) -> bool {
@@ -529,6 +560,27 @@ pub fn disconnect(app: &mut App, id: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn home_count_matches_connected_rows_and_sources_are_never_duplicated() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        app.panel = Some(crate::panel::State::default());
+        app.panel.as_mut().unwrap().page = Page::Connections;
+        crate::pages::plugins::fixture(&mut app.plugins);
+        let count = members(&app, "Connected").len();
+        assert_eq!(summary(&app), format!("{count} connected"));
+        let built = crate::panel::build(&app, &mut ui.text);
+        assert!(!built.list.hits.iter().any(
+            |hit| hit.label.starts_with("Hello ") || hit.label.starts_with("Weather and RSS ")
+        ));
+        let connected = members(&app, "Connected");
+        assert!(connected.contains(&0)); // Windows media is enabled by default.
+        assert!(connected.contains(&legacy::LIST.len())); // Live T3 plugin.
+        app.plugins.preferences.disabled.insert("t3".into());
+        assert_eq!(members(&app, "Connected").len(), count - 1);
+        assert!(members(&app, "Available").contains(&legacy::LIST.len()));
+    }
 
     #[test]
     fn disconnect_removes_modules_from_base_and_all_overrides_as_one_undo_step() {

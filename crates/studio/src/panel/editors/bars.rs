@@ -301,7 +301,10 @@ pub fn overview(app: &App, b: &mut B, c: &mut Col) {
         b,
         c,
         "Bars",
-        &format!("Top bar and dock · Display {}", app.nav.display + 1),
+        &format!(
+            "Top bar and dock · {}",
+            crate::panel::controls::display_name(app, app.nav.display)
+        ),
     );
     crate::panel::controls::displays(app, b, c);
     group(b, c, "", |b, c| {
@@ -383,13 +386,20 @@ fn display_differences(app: &App, b: &mut B, c: &mut Col) {
     changed.sort();
     changed.dedup();
     if changed.is_empty() {
-        notice(b, c, "Same as Display 1");
+        notice(
+            b,
+            c,
+            &format!("Same as {}", crate::panel::controls::display_name(app, 0)),
+        );
     } else {
         notice(b, c, &format!("Different here: {}", changed.join(", ")));
         action_button(
             b,
             c,
-            "Use the same as Display 1",
+            &format!(
+                "Use the same as {}",
+                crate::panel::controls::display_name(app, 0)
+            ),
             Action::Panel(Command::SameBars),
         );
     }
@@ -538,7 +548,10 @@ pub fn same_bars(app: &mut App) {
         baseline["overrides"] = Value::Object(overrides);
     }
     app.apply(
-        "Use the same as Display 1",
+        &format!(
+            "Use the same as {}",
+            crate::panel::controls::display_name(app, 0)
+        ),
         vec![crate::docs::Op {
             doc: DocId::Bars,
             path: String::new(),
@@ -571,6 +584,23 @@ pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
     }
     if edit.doc != DocId::Studio {
         return false;
+    }
+    if let Some(which) = edit.path.strip_prefix("/panel/pins/") {
+        let which = if which == "dock" {
+            Pins::Dock
+        } else {
+            Pins::Start
+        };
+        if value.as_bool() == Some(true) {
+            app.run(Action::PinsOwn(which));
+        } else {
+            app.run(Action::Unset(Edit::new(
+                DocId::Bars,
+                which.path(),
+                "Follow pins",
+            )));
+        }
+        return true;
     }
     if let Some(module) = edit.path.strip_prefix("/panel/module-args/") {
         match crate::library::split_args(value.as_str().unwrap_or("")) {
@@ -680,13 +710,13 @@ pub fn designs(app: &App, b: &mut B, c: &mut Col) {
         c,
         if bar.is_some() { "Design" } else { "Preset" },
         &format!(
-            "{} · Display {}",
+            "{} · {}",
             match bar {
                 Some(Bar::Top) => "Top bar",
                 Some(Bar::Dock) => "Dock",
                 None => "Top bar and dock",
             },
-            app.nav.display + 1
+            crate::panel::controls::display_name(app, app.nav.display)
         ),
     );
     let designs: &[(&str, &str)] = match bar {
@@ -754,9 +784,9 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
         c,
         page.title(),
         &format!(
-            "{} · Display {}",
+            "{} · {}",
             design_name(app, Some(bar)),
-            app.nav.display + 1
+            crate::panel::controls::display_name(app, app.nav.display)
         ),
     );
     crate::panel::controls::displays(app, b, c);
@@ -934,16 +964,18 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
 fn module_rows(app: &App, b: &mut B, c: &mut Col, bar: Bar, list: &'static str, modules: &[Value]) {
     for (index, module) in modules.iter().enumerate() {
         let id = module.as_str().unwrap_or("Custom module");
-        let pic = crate::panel::lists::row(
+        let action = click_label(app, id, bar);
+        let pic = crate::panel::lists::row_detail(
             app,
             b,
             c,
             &crate::panel::SortList::Modules(bar, list),
             index,
-            &if id == "|" {
-                "Gap".into()
+            name(id),
+            if id == "|" || action == default_click(app, id, bar) {
+                ""
             } else {
-                format!("{} · {}", name(id), click_label(app, id, bar))
+                &action
             },
             id == "|",
             Some(crate::panel::icons::module(id)),
@@ -1276,30 +1308,42 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                 .filter_map(Value::as_str)
         })
         .collect();
-    group(b, c, "Built in", |b, c| {
-        for (id, name) in MODULES {
-            if present.contains(&id) {
-                continue;
+    let builtins: Vec<_> = MODULES
+        .into_iter()
+        .filter(|(id, _)| !present.contains(id))
+        .collect();
+    if builtins.is_empty() {
+        notice(b, c, "Every built-in module is already on this bar");
+    } else {
+        group(b, c, "Built in", |b, c| {
+            for (id, name) in builtins {
+                row(
+                    b,
+                    c,
+                    Some(crate::panel::icons::module(id)),
+                    name,
+                    "",
+                    "",
+                    Some(selected == Some(id)),
+                    Action::Panel(Command::PickModule(id.into())),
+                );
             }
-            row(
-                b,
-                c,
-                Some(crate::panel::icons::module(id)),
-                name,
-                "",
-                "",
-                Some(selected == Some(id)),
-                Action::Panel(Command::PickModule(id.into())),
-            );
-        }
-    });
-    group(b, c, "Your apps", |b, c| {
-        for plugin in &app.plugins.installed {
-            for module in &plugin.bars {
+        });
+    }
+    let from_apps: Vec<_> = app
+        .plugins
+        .installed
+        .iter()
+        .filter(|plugin| super::connections::visible_plugin(plugin))
+        .flat_map(|plugin| plugin.bars.iter().map(move |module| (plugin, module)))
+        .filter(|(plugin, module)| {
+            !present.contains(&format!("custom:{}--{}", plugin.id, module.id).as_str())
+        })
+        .collect();
+    if !from_apps.is_empty() {
+        group(b, c, "Your apps", |b, c| {
+            for (plugin, module) in from_apps {
                 let id = format!("custom:{}--{}", plugin.id, module.id);
-                if present.contains(&id.as_str()) {
-                    continue;
-                }
                 crate::panel::icons::row(
                     app,
                     b,
@@ -1312,44 +1356,86 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     Action::Panel(Command::PickModule(id.clone())),
                 );
             }
-        }
-    });
-    group(b, c, "", |b, c| {
+        });
+    }
+    group(b, c, "Spacing", |b, c| {
+        let top = c.y;
         row(
             b,
             c,
-            Some(mypaper_ui::controls::Glyph::Icon(
-                mypaper_ui::icons::Icon::Grip,
-            )),
+            Some(mypaper_ui::controls::Glyph::Font(' ')),
             "Gap",
             "",
             "",
             Some(selected == Some("|")),
             Action::Panel(Command::PickModule("|".into())),
         );
-        field(
-            app,
+        crate::panel::controls::spacing_glyph(
+            b,
+            Rect::new(
+                c.x,
+                top + (height(b, 40.0) - b.px(18.0)) / 2.0,
+                b.px(18.0),
+                b.px(18.0),
+            ),
+        );
+    });
+    group(b, c, "Your own", |b, c| {
+        row(
             b,
             c,
-            FieldId::Text(DocId::Studio, "/new_custom".into()),
-            "Your own module's name",
-            "weather-line",
+            Some(mypaper_ui::icons::Icon::Terminal.into()),
+            "Your own program",
             "",
+            "Shows the program's output",
+            Some(selected == Some("custom:")),
+            Action::Panel(Command::PickModule("custom:".into())),
         );
-        let custom = module_id(app.text(&FieldId::Text(DocId::Studio, "/new_custom".into())));
-        if !custom.is_empty() {
-            row(
-                b,
-                c,
-                Some(glyph::APP),
-                "Your own program",
-                "",
-                &custom,
-                Some(selected == Some(format!("custom:{custom}").as_str())),
-                Action::Panel(Command::PickModule(format!("custom:{custom}"))),
-            );
+        if selected == Some("custom:") {
+            for (id, label, placeholder) in [
+                ("name", "Name", "Weather line"),
+                ("program", "Program", "C:\\tools\\weather.exe"),
+                ("args", "Arguments (optional)", "--compact"),
+            ] {
+                field(
+                    app,
+                    b,
+                    c,
+                    FieldId::Text(
+                        DocId::Studio,
+                        format!("/panel/draft/add-module/{id}").into(),
+                    ),
+                    label,
+                    placeholder,
+                    "",
+                );
+            }
         }
     });
+}
+
+/// Draft fields become existing bars.json module options in the same edit as insertion.
+fn custom_draft(app: &App) -> Option<(String, Value)> {
+    let draft = |name| {
+        app.text(&FieldId::Text(
+            DocId::Studio,
+            format!("/panel/draft/add-module/{name}").into(),
+        ))
+    };
+    let id = module_id(draft("name"));
+    let program = draft("program").trim();
+    if id.is_empty() || program.is_empty() {
+        return None;
+    }
+    let args = crate::library::split_args(draft("args")).ok()?;
+    let id = format!("custom:{id}");
+    if resolved(app)
+        .get("modules")
+        .is_some_and(|modules| modules.get(&id).is_some())
+    {
+        return None;
+    }
+    Some((id, json!({"command":program,"args":args})))
 }
 
 pub fn insert_module(app: &mut App) {
@@ -1362,22 +1448,43 @@ pub fn insert_module(app: &mut App) {
     if let Some(id) = app.panel.as_ref().unwrap().add_module.clone()
         && can_insert_module(app, &id)
     {
+        let custom = (id == "custom:").then(|| custom_draft(app)).flatten();
+        let id = custom.as_ref().map_or(id, |(id, _)| id.clone());
         let path = format!("/{}/{list}", bar.key());
         let mut items = bar_value(app, &path)
             .and_then(|v| v.as_array().cloned())
             .unwrap_or_default();
+        let index = items.len();
         items.push(json!(id));
         let before = app.docs.version;
-        app.set(
-            &Edit::new(DocId::Bars, bar_path(app, &path), "Add module"),
-            json!(items),
-        );
+        let mut ops = vec![crate::docs::Op {
+            doc: DocId::Bars,
+            path: bar_path(app, &path),
+            value: Some(json!(items)),
+        }];
+        if let Some((id, options)) = &custom {
+            ops.push(crate::docs::Op {
+                doc: DocId::Bars,
+                path: bar_path(app, &format!("/modules/{}", crate::docs::token(id))),
+                value: Some(options.clone()),
+            });
+        }
+        app.apply("Add module", ops);
         if app.docs.version == before {
             return;
         }
         app.overlay = None;
         app.toast_undo("Added a module");
-        app.panel.as_mut().unwrap().page = if bar == Bar::Top {
+        app.panel.as_mut().unwrap().page = if custom.is_some() {
+            app.nav.module = Some(Slot { bar, list, index });
+            for name in ["name", "program", "args"] {
+                app.texts.remove(&FieldId::Text(
+                    DocId::Studio,
+                    format!("/panel/draft/add-module/{name}").into(),
+                ));
+            }
+            Page::Module
+        } else if bar == Bar::Top {
             Page::Top
         } else {
             Page::Dock
@@ -1386,6 +1493,15 @@ pub fn insert_module(app: &mut App) {
 }
 
 pub fn can_insert_module(app: &App, id: &str) -> bool {
+    let custom = if id == "custom:" {
+        custom_draft(app)
+    } else {
+        None
+    };
+    if id == "custom:" && custom.is_none() {
+        return false;
+    }
+    let id = custom.as_ref().map_or(id, |(id, _)| id.as_str());
     let bar = app.nav.bar.unwrap_or(Bar::Top);
     let document = resolved(app);
     !id.is_empty()
@@ -1524,17 +1640,24 @@ fn pinned_apps(app: &App, b: &mut B, c: &mut Col, which: Pins) {
         } else {
             "Dock's pins"
         };
-        if own {
-            action_button(
-                b,
-                c,
-                &format!("Follow {follows}"),
-                Action::Unset(Edit::new(DocId::Bars, which.path(), "Follow pins")),
-            );
-        } else {
-            notice(b, c, &format!("Following {follows}"));
-            action_button(b, c, "Start your own", Action::PinsOwn(which));
-        }
+        segments(
+            b,
+            c,
+            "Use",
+            json!(own),
+            Edit::new(
+                DocId::Studio,
+                format!(
+                    "/panel/pins/{}",
+                    if which == Pins::Dock { "dock" } else { "start" }
+                ),
+                "Pinned apps",
+            ),
+            vec![
+                (json!(true), "Your pins".into()),
+                (json!(false), follows.into()),
+            ],
+        );
         let pins = app
             .get(
                 DocId::Bars,
@@ -1645,29 +1768,7 @@ fn click_label(app: &App, id: &str, bar: Bar) -> String {
     {
         return format!("Open {target}");
     }
-    let grouped = document
-        .pointer(&format!("/{}/look/family", bar.key()))
-        .and_then(Value::as_str)
-        == Some("fluent");
-    let default = match id {
-        "start" => "Start menu",
-        "search" => "Search",
-        "clock" | "notifications" => "Notifications",
-        "quick" => "Quick settings",
-        "network" | "volume" | "battery" if grouped => "Quick settings",
-        "network" => "Wi-Fi",
-        "volume" => "Volume mixer",
-        "battery" => "Battery settings",
-        "power" => "Power menu",
-        "language" => "Keyboard language",
-        "stats" => "Task Manager",
-        "media" => "Play / pause",
-        "workspaces" => "Switch desktop",
-        "tray" => "Tray icon's action",
-        "app" => "No action",
-        _ if id.starts_with("custom:") => "Connection action",
-        _ => "No action",
-    };
+    let default = default_click(app, id, bar);
     let name = match own.and_then(Value::as_str).unwrap_or("default") {
         "default" => default,
         "calendar" => "Calendar",
@@ -1697,6 +1798,33 @@ fn click_label(app: &App, id: &str, bar: Bar) -> String {
         other => other,
     };
     name.into()
+}
+
+fn default_click(app: &App, id: &str, bar: Bar) -> &'static str {
+    let document = resolved(app);
+    let grouped = document
+        .pointer(&format!("/{}/look/family", bar.key()))
+        .and_then(Value::as_str)
+        == Some("fluent");
+    match id {
+        "start" => "Start menu",
+        "search" => "Search",
+        "clock" | "notifications" => "Notifications",
+        "quick" => "Quick settings",
+        "network" | "volume" | "battery" if grouped => "Quick settings",
+        "network" => "Wi-Fi",
+        "volume" => "Volume mixer",
+        "battery" => "Battery settings",
+        "power" => "Power menu",
+        "language" => "Keyboard language",
+        "stats" => "Task Manager",
+        "media" => "Play / pause",
+        "workspaces" => "Switch desktop",
+        "tray" => "Tray icon's action",
+        "app" => "No action",
+        _ if id.starts_with("custom:") => "Connection action",
+        _ => "No action",
+    }
 }
 
 #[cfg(test)]
@@ -1816,5 +1944,156 @@ mod tests {
             )));
         }
         assert!(super::module_id("   ").is_empty());
+    }
+
+    #[test]
+    fn custom_module_creation_saves_program_and_arguments_in_one_display_edit_and_opens_it() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = fixture(&ui, json!({"top":{"left":[],"center":[],"right":[]}}));
+        app.nav.bar = Some(Bar::Top);
+        app.nav.display = 1;
+        app.panel.as_mut().unwrap().add_module = Some("custom:".into());
+        assert!(!can_insert_module(&app, "custom:"));
+        for (key, value) in [
+            ("name", "Weather line"),
+            ("program", "C:\\tools\\weather.exe"),
+            ("args", "--city \"New York\""),
+        ] {
+            app.texts.insert(
+                FieldId::Text(
+                    DocId::Studio,
+                    format!("/panel/draft/add-module/{key}").into(),
+                ),
+                value.into(),
+            );
+        }
+        assert!(can_insert_module(&app, "custom:"));
+        let before = app.docs.doc(DocId::Bars).raw.clone();
+        insert_module(&mut app);
+        assert_eq!(app.docs.undo_count(), 1);
+        assert_eq!(app.panel.as_ref().unwrap().page, Page::Module);
+        assert_eq!(
+            app.nav.module,
+            Some(Slot {
+                bar: Bar::Top,
+                list: "right",
+                index: 0
+            })
+        );
+        assert_eq!(
+            app.get(
+                DocId::Bars,
+                "/overrides/DISPLAY2/modules/custom:weather-line/command"
+            ),
+            Some(&json!("C:\\tools\\weather.exe"))
+        );
+        assert_eq!(
+            app.get(
+                DocId::Bars,
+                "/overrides/DISPLAY2/modules/custom:weather-line/args"
+            ),
+            Some(&json!(["--city", "New York"]))
+        );
+        mypaper_bars::BarsConfig::parse(&app.docs.doc(DocId::Bars).raw.to_string()).unwrap();
+        app.run(Action::Undo);
+        assert_eq!(app.docs.doc(DocId::Bars).raw, before);
+    }
+
+    #[test]
+    fn full_module_catalog_has_an_explanation_instead_of_empty_groups() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let modules: Vec<_> = MODULES.iter().map(|(id, _)| *id).collect();
+        let mut app = fixture(&ui, json!({"top":{"left":modules,"center":[],"right":[]}}));
+        app.size = (480, 760);
+        app.nav.bar = Some(Bar::Top);
+        app.panel.as_mut().unwrap().page = Page::AddModule;
+        let built = crate::panel::build(&app, &mut ui.text);
+        let labels: Vec<_> = built
+            .list
+            .ops
+            .iter()
+            .filter_map(|op| {
+                if let mypaper_ui::Op::Text { text, .. } = op {
+                    Some(text.as_ref())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(labels.contains(&"Every built-in module is already on this bar"));
+        assert!(!labels.contains(&"Built in"));
+        assert!(!labels.contains(&"Your apps"));
+        assert!(
+            built
+                .targets
+                .iter()
+                .any(|target| target.action == Action::Panel(Command::PickModule("|".into())))
+        );
+        app.panel.as_mut().unwrap().add_module = Some("|".into());
+        insert_module(&mut app);
+        assert_eq!(bar_value(&app, "/top/right"), Some(json!(["|"])));
+    }
+
+    #[test]
+    fn render_complete_module_catalog_and_custom_flow() {
+        let out = std::env::var_os("MYPAPER_STUDIO_PANEL_SHOTS")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| r"C:\mypaper-targets\studio-panel\shots".into())
+            .join("states");
+        std::fs::create_dir_all(&out).unwrap();
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        for dark in [true, false] {
+            for (width, text_scale) in [(480, 1.0), (360, 1.5)] {
+                for custom in [false, true] {
+                    let modules: Vec<_> = MODULES.iter().map(|(id, _)| *id).collect();
+                    let mut app =
+                        fixture(&ui, json!({"top":{"left":modules,"center":[],"right":[]}}));
+                    app.size = (
+                        width,
+                        if custom && text_scale > 1.0 {
+                            1100
+                        } else {
+                            760
+                        },
+                    );
+                    app.theme.ty.text_scale = text_scale;
+                    app.theme.palette = if dark {
+                        mypaper_ui::controls::Palette::dark()
+                    } else {
+                        mypaper_ui::controls::Palette::light()
+                    };
+                    app.nav.bar = Some(Bar::Top);
+                    app.panel.as_mut().unwrap().page = Page::AddModule;
+                    if custom {
+                        app.panel.as_mut().unwrap().add_module = Some("custom:".into());
+                        for (id, value) in [
+                            ("name", "Weather line"),
+                            ("program", r"C:\tools\weather.exe"),
+                            ("args", "--compact"),
+                        ] {
+                            app.texts.insert(
+                                FieldId::Text(
+                                    DocId::Studio,
+                                    format!("/panel/draft/add-module/{id}").into(),
+                                ),
+                                value.into(),
+                            );
+                        }
+                    }
+                    let built = crate::panel::build(&app, &mut ui.text);
+                    let image =
+                        mypaper_ui::render(&mut ui, &built.list, width, app.size.1).unwrap();
+                    mypaper_ui::golden::write(
+                        &image,
+                        &out.join(format!(
+                            "add-module-{}-{width}-{}.png",
+                            if custom { "custom" } else { "full" },
+                            if dark { "dark" } else { "light" }
+                        )),
+                    )
+                    .unwrap();
+                }
+            }
+        }
     }
 }
