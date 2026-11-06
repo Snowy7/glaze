@@ -102,12 +102,17 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                     crate::stage::image_round(b, pic, &image, 1.0, b.px(7.0));
                 }
                 if reconnect {
-                    action_button(
-                        b,
-                        c,
+                    let r = Rect::new(c.x, c.y + b.px(6.0), c.w, height(b, 30.0));
+                    b.button(
+                        key(("panel-reconnect", &item.id)),
+                        r,
                         "Reconnect",
+                        None,
+                        mypaper_ui::controls::ButtonKind::Secondary,
+                        true,
                         Action::Panel(Command::Connect(item.id.clone())),
                     );
+                    c.y = r.bottom + b.px(8.0);
                 }
             }
         });

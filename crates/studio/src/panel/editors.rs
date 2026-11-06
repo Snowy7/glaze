@@ -419,7 +419,7 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
                 b,
                 c,
                 &format!(
-                    "{} bars · {count} widgets",
+                    "{} bars · {count} widgets across all displays",
                     crate::pages::bars::PRESETS
                         .iter()
                         .find(
