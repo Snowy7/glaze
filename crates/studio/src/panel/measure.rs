@@ -5,6 +5,23 @@ pub struct Memory {
     pub private_mb: f64,
 }
 
+/// A page owns its decoded thumbnails, preview artwork, icon descriptions and shaped text.
+/// Keep the image worker connected while dropping its ready pixels, so the next page stays async.
+pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
+    if app.fixture {
+        return;
+    }
+    let mut images = app.images.borrow_mut();
+    images.set_budget(64 << 10);
+    images.set_budget(5 << 20);
+    drop(images);
+    *app.stage.borrow_mut() = Default::default();
+    if let Ok(ui) = mypaper_ui::Ui::new() {
+        *text = ui.text;
+        text.set_capacity(96);
+    }
+}
+
 pub fn memory(fixture: bool) -> Option<Memory> {
     if fixture {
         return Some(Memory {
