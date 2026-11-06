@@ -232,13 +232,23 @@ fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
         .read()
         .expect("index rules")
         .clone();
-    let scanned = if parallel {
+    let mut streamed = parallel;
+    let mut scanned = if parallel {
         let cache = state.read().expect("index state").cache.clone();
         scan::scan_cached(root, Fetch::Basic, &cache, &rules, &quiet)?
     } else {
-        scan::subtree(root, Fetch::Basic, &rules, &quiet)?
+        match scan::subtree(root, Fetch::Basic, &rules, &quiet) {
+            Ok(scan) => scan,
+            Err(error) if error.is::<scan::LargeSubtree>() => {
+                streamed = true;
+                let cache = state.read().expect("index state").cache.clone();
+                event(&cache, format_args!("stream subtree {}", root.display()));
+                scan::scan_cached(root, Fetch::Basic, &cache, &rules, &quiet)?
+            }
+            Err(error) => return Err(error),
+        }
     };
-    if parallel {
+    if streamed {
         event(
             &state.read().expect("index state").cache,
             format_args!(
@@ -250,17 +260,31 @@ fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
             ),
         );
     }
-    if parallel {
+    if streamed {
         let snapshot = state
             .read()
             .expect("index state")
             .cache
             .join("snapshot.bin");
-        state
-            .read()
-            .expect("index state")
-            .store
-            .save_replacing_volume(&snapshot, &scanned.store, root)?;
+        if parallel {
+            state
+                .read()
+                .expect("index state")
+                .store
+                .save_replacing_volume(&snapshot, &scanned.store, root)?;
+        } else {
+            let mut record = scanned.store.record(1);
+            record.modified = scan::metadata(root).map_or(0, |entry| entry.modified);
+            scanned.store.set(1, record);
+            if !state
+                .read()
+                .expect("index state")
+                .store
+                .save_replacing_subtree(&snapshot, &mut scanned.store, root)?
+            {
+                return Ok(());
+            }
+        }
         // The scan is now durable. Close its views before touching the new full snapshot,
         // and release old query pages to avoid retaining both generations in resident RAM.
         drop(scanned);
@@ -711,6 +735,119 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
 
 pub fn cli(args: Vec<String>) -> Result<()> {
     match args.first().map(String::as_str) {
+        Some("--bench-replay") => {
+            let snapshot = PathBuf::from(
+                args.get(1)
+                    .context("--bench-replay SNAPSHOT ROOT SCRATCH_PARENT")?,
+            );
+            let root = PathBuf::from(
+                args.get(2)
+                    .context("--bench-replay SNAPSHOT ROOT SCRATCH_PARENT")?,
+            );
+            let parent = PathBuf::from(
+                args.get(3)
+                    .context("--bench-replay SNAPSHOT ROOT SCRATCH_PARENT")?,
+            );
+            std::fs::create_dir_all(&parent)?;
+            let cache = parent.join(format!(
+                "replay-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_millis()
+            ));
+            std::fs::create_dir(&cache)?;
+            let mut store = Store::open(&snapshot)?;
+            anyhow::ensure!(
+                store.find(&root.to_string_lossy()).is_some(),
+                "replay root absent from snapshot"
+            );
+            let offline = hide_missing_roots(&mut store, &scan::volumes());
+            let config = mypaper_config::Config::load()?;
+            let state = RwLock::new(State {
+                store,
+                offline,
+                scanning: false,
+                cache: cache.clone(),
+                activity: None,
+                rules: Arc::new(RwLock::new(Rules::new(
+                    &config.index,
+                    snapshot.parent().context("snapshot parent")?,
+                )?)),
+                quiet: Arc::new(crate::quiet::Quiet::default()),
+            });
+            let _background = Background::enter();
+            let at = Instant::now();
+            reconcile(&state, &root, false)?;
+            let seconds = at.elapsed().as_secs_f64();
+            let sizes = state
+                .read()
+                .expect("index state")
+                .store
+                .sizes(&root.to_string_lossy(), 1);
+            anyhow::ensure!(
+                !sizes.is_empty(),
+                "replay removed the requested root; check its path/metadata"
+            );
+            let mut memory =
+                windows::Win32::System::ProcessStatus::PROCESS_MEMORY_COUNTERS_EX::default();
+            memory.cb = size_of_val(&memory) as u32;
+            // SAFETY: queries this benchmark process into correctly sized memory counters.
+            unsafe {
+                windows::Win32::System::ProcessStatus::GetProcessMemoryInfo(
+                    windows::Win32::System::Threading::GetCurrentProcess(),
+                    (&mut memory
+                        as *mut windows::Win32::System::ProcessStatus::PROCESS_MEMORY_COUNTERS_EX)
+                        .cast(),
+                    size_of_val(&memory) as u32,
+                )?;
+            }
+            println!(
+                "{}",
+                serde_json::json!({"root":root,"seconds":seconds,"sizes":sizes,"peak_working_set_bytes":memory.PeakWorkingSetSize,"peak_private_bytes":memory.PeakPagefileUsage,"private_bytes":memory.PrivateUsage,"live_service_modified":false})
+            );
+            drop(state);
+            std::fs::remove_dir_all(cache)?;
+            Ok(())
+        }
+        Some("--bench-offline-query") => {
+            let path = PathBuf::from(args.get(1).context("--bench-offline-query SNAPSHOT ROOT")?);
+            let root = PathBuf::from(args.get(2).context("--bench-offline-query SNAPSHOT ROOT")?);
+            let mut store = Store::open(&path)?;
+            anyhow::ensure!(
+                store.roots().contains(&root),
+                "benchmark root is absent from snapshot"
+            );
+            store.mark_offline(&root);
+            let mut samples = Vec::new();
+            let mut forms = serde_json::Map::new();
+            for query in BENCH_QUERIES {
+                let mut times = Vec::new();
+                for _ in 0..20 {
+                    let at = Instant::now();
+                    let hits = query::search(&store, query, 50);
+                    anyhow::ensure!(
+                        hits.iter()
+                            .all(|hit| !Path::new(&hit.path).starts_with(&root)),
+                        "offline hit escaped filtering"
+                    );
+                    std::hint::black_box(hits);
+                    times.push(at.elapsed().as_secs_f64() * 1000.0);
+                }
+                times.sort_by(f64::total_cmp);
+                forms.insert(
+                    query.into(),
+                    serde_json::json!({"p50_ms":times[10],"p95_ms":times[19]}),
+                );
+                samples.extend(times);
+            }
+            samples.sort_by(f64::total_cmp);
+            println!(
+                "{}",
+                serde_json::json!({"offline_root":root,"entries":store.len()-1,"queries":samples.len(),"p50_ms":samples[samples.len()/2],"p95_ms":samples[samples.len()*95/100],"max_ms":samples.last(),"by_query":forms})
+            );
+            Ok(())
+        }
         Some("--query" | "--sizes" | "--status") => {
             let request = match args[0].as_str() {
                 "--query" => Request::Search {
@@ -1000,6 +1137,165 @@ fn benchmark(count: usize) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Fixture(PathBuf);
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn large_live_subtree_streams_a_generation_instead_of_a_large_overlay() {
+        let root = std::env::var_os("CARGO_TARGET_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .join("fixtures")
+            .join(format!("mypaper-large-replay-{}", std::process::id()));
+        let _fixture = Fixture(root.clone());
+        let scratch = root.join("project");
+        let cache = root.join("cache");
+        std::fs::create_dir_all(&scratch).unwrap();
+        let rules = Arc::new(RwLock::new(
+            Rules::new(
+                &mypaper_config::IndexConfig {
+                    include: vec![format!("{}/**", root.to_string_lossy().replace('\\', "/"))],
+                    ..Default::default()
+                },
+                &cache,
+            )
+            .unwrap(),
+        ));
+        let quiet = Arc::new(crate::quiet::Quiet::default());
+        let scanned = scan::subtree(&root, Fetch::Basic, &rules.read().unwrap(), &quiet).unwrap();
+        let state = RwLock::new(State {
+            store: scanned.store,
+            offline: BTreeSet::new(),
+            scanning: false,
+            cache: cache.clone(),
+            activity: None,
+            rules,
+            quiet,
+        });
+        for i in 0..26_000 {
+            std::fs::write(scratch.join(format!("{i}.txt")), b"123").unwrap();
+        }
+        reconcile(&state, &scratch, false).unwrap();
+        let state = state.read().unwrap();
+        assert!(cache.join("snapshot.bin").exists());
+        assert_eq!(state.store.overlay_len(), 0);
+        let sizes = state.store.sizes(&scratch.to_string_lossy(), 1);
+        assert_eq!(sizes[0].files, 26_000);
+        assert_eq!(sizes[0].size, 78_000);
+        assert!(!sizes[0].size_unknown);
+        assert_eq!(query::search(&state.store, "file:25999.txt", 1).len(), 1);
+    }
+
+    #[test]
+    fn paused_native_burst_replays_one_subtree_and_preserves_queryable_sizes() {
+        let root = std::env::var_os("CARGO_TARGET_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .join("fixtures")
+            .join(format!("mypaper-paused-replay-{}", std::process::id()));
+        let _fixture = Fixture(root.clone());
+        let project = root.join("project");
+        let scratch = project.join("scratch");
+        std::fs::create_dir_all(&scratch).unwrap();
+        let rules = Arc::new(RwLock::new(
+            Rules::new(
+                &mypaper_config::IndexConfig {
+                    include: vec![format!("{}/**", root.to_string_lossy().replace('\\', "/"))],
+                    ..Default::default()
+                },
+                &root.join("cache"),
+            )
+            .unwrap(),
+        ));
+        let quiet = Arc::new(crate::quiet::Quiet::default());
+        let scanned = scan::subtree(&root, Fetch::Basic, &rules.read().unwrap(), &quiet).unwrap();
+        let state = RwLock::new(State {
+            store: scanned.store,
+            offline: BTreeSet::new(),
+            scanning: false,
+            cache: root.join("cache"),
+            activity: None,
+            rules: rules.clone(),
+            quiet: quiet.clone(),
+        });
+        assert!(
+            state
+                .read()
+                .unwrap()
+                .store
+                .find(&scratch.to_string_lossy())
+                .is_some(),
+            "fixture directory must be indexed before pause"
+        );
+        quiet.set_paused_for_test(true);
+        let (tx, rx) = mpsc::sync_channel(256);
+        let watch = watch::start(root.clone(), tx, rules, quiet.clone()).unwrap();
+        let started = Instant::now();
+        let files = 20_000u32;
+        let suffix = format!("{}-resume.txt", "x".repeat(100));
+        for i in 0..files {
+            std::fs::write(scratch.join(format!("{i:06}-{suffix}")), [0; 128]).unwrap();
+        }
+        let burst_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let mut directories = BTreeSet::new();
+        let first = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        drop(watch);
+        for change in std::iter::once(first).chain(rx.try_iter()) {
+            match change {
+                Change::Directories {
+                    root: watched,
+                    paths,
+                } => {
+                    assert_eq!(watched, root);
+                    directories.extend(paths);
+                }
+                other => panic!("unexpected paused notification: {other:?}"),
+            }
+        }
+        // Directory last-write notifications may dirty its parent as well as the files'
+        // direct parent. Both remain below the watched volume; replay ancestors only once.
+        assert!(!directories.is_empty());
+        assert!(directories.iter().all(|path| path.starts_with(&project)));
+        assert!(quiet.paused());
+        let sizes = state
+            .read()
+            .unwrap()
+            .store
+            .sizes(&scratch.to_string_lossy(), 1);
+        assert_eq!(sizes[0].files, 0, "pause cannot mutate the store");
+        assert_eq!(sizes[0].size, 0);
+        quiet.set_paused_for_test(false);
+        let resumed = Instant::now();
+        let mut replayed = BTreeSet::new();
+        for directory in &directories {
+            if !directory
+                .ancestors()
+                .any(|parent| replayed.contains(parent))
+            {
+                reconcile(&state, directory, false).unwrap();
+                replayed.insert(directory.clone());
+            }
+        }
+        let replay_ms = resumed.elapsed().as_secs_f64() * 1000.0;
+        let state = state.read().unwrap();
+        let sizes = state.store.sizes(&scratch.to_string_lossy(), 1);
+        assert_eq!(sizes[0].files, files);
+        assert_eq!(sizes[0].size, u64::from(files) * 128);
+        assert!(!sizes[0].size_unknown);
+        assert_eq!(
+            query::search(&state.store, &format!("000000-{suffix}"), 50).len(),
+            1
+        );
+        println!(
+            "{}",
+            serde_json::json!({"fixture":"offline-real-native-watch", "files":files, "bytes":u64::from(files)*128, "burst_ms":burst_ms, "replay_ms":replay_ms, "dirty_directories":directories.len(), "subtree_replays":replayed.len(), "root_reconciliations":0, "paused_sizes_files":0, "resumed_sizes_files":sizes[0].files, "resumed_sizes_bytes":sizes[0].size})
+        );
+    }
 
     #[test]
     fn cached_roots_absent_at_startup_stay_hidden_across_a_racing_scan_swap() {

@@ -198,6 +198,15 @@ pub struct Scanned {
     pub denied: usize,
 }
 
+#[derive(Debug)]
+pub(crate) struct LargeSubtree;
+impl std::fmt::Display for LargeSubtree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("subtree requires bounded scan scratch")
+    }
+}
+impl std::error::Error for LargeSubtree {}
+
 /// Live-created subtrees are usually a few entries. Enumerate on the already-background
 /// service thread instead of starting four OS threads for every build/cache directory.
 pub(crate) fn subtree(
@@ -269,6 +278,9 @@ pub(crate) fn subtree(
                         },
                         entry.modified,
                     );
+                    if store.len() > 25_000 || store.scan_bytes() > 8 * 1024 * 1024 {
+                        return Err(LargeSubtree.into());
+                    }
                     if entry.attributes & DIRECTORY != 0 && decision != Decision::Excluded {
                         pending.push((child, path, child_condition));
                     }

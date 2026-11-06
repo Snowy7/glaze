@@ -122,6 +122,7 @@ impl PathCache {
 #[derive(Default)]
 pub struct Store {
     offline: HashSet<u32>,
+    visibility: std::sync::Mutex<HashMap<u32, bool>>,
     quiet: Option<std::sync::Arc<crate::quiet::Quiet>>,
     column: Option<crate::names::Column>,
     column_start: usize,
@@ -168,6 +169,7 @@ impl Store {
         };
         Ok(Self {
             offline: self.offline.clone(),
+            visibility: std::sync::Mutex::new(HashMap::new()),
             quiet: self.quiet.clone(),
             column: None,
             column_start: self.column_start,
@@ -511,6 +513,12 @@ impl Store {
             return;
         }
         let old = self.record(id);
+        if old.parent != record.parent {
+            self.visibility
+                .get_mut()
+                .expect("volume visibility")
+                .clear();
+        }
         if (old.name, old.name_len, old.parent) != (record.name, record.name_len, record.parent) {
             self.path_cache.get_mut().expect("path cache").clear();
         }
@@ -663,6 +671,10 @@ impl Store {
         (offset, len, folded)
     }
 
+    pub(crate) fn scan_bytes(&self) -> usize {
+        self.records.capacity() * size_of::<Record>() + self.names.capacity()
+    }
+
     /// Inserts a child. Bulk scanning rolls sizes up once; live changes use upsert().
     pub fn insert(
         &mut self,
@@ -788,7 +800,12 @@ impl Store {
             if record.parent == 0 {
                 record.attributes |= OFFLINE;
                 self.set(id, record);
-                self.offline.insert(id);
+                if self.offline.insert(id) {
+                    self.visibility
+                        .get_mut()
+                        .expect("volume visibility")
+                        .clear();
+                }
             }
         }
     }
@@ -827,17 +844,36 @@ impl Store {
         if self.offline.is_empty() {
             return true;
         }
+        let mut visibility = self.visibility.lock().expect("volume visibility");
+        if let Some(online) = visibility.get(&id) {
+            return *online;
+        }
+        let original = id;
+        let mut online = true;
         while id != 0 && id != NONE {
+            if let Some(cached) = visibility.get(&id) {
+                online = *cached;
+                break;
+            }
             if self.offline.contains(&id) {
-                return false;
+                online = false;
+                break;
             }
             id = self.record(id).parent;
         }
-        true
+        if visibility.len() >= 8192 {
+            visibility.clear();
+        }
+        visibility.insert(original, online);
+        online
     }
 
     fn load_offline_roots(&mut self) {
         self.offline.clear();
+        self.visibility
+            .get_mut()
+            .expect("volume visibility")
+            .clear();
         let mut id = self.record(0).first;
         while id != NONE {
             let record = self.record(id);
@@ -1112,10 +1148,45 @@ impl Store {
         let mut streamed = self.fork()?;
         streamed.quiet = source.quiet.clone();
         streamed.windows = Some(crate::residency::Windows::default());
-        streamed.save_snapshot(path, Some((source, excluded)))
+        streamed.save_snapshot(path, Some((source, excluded, 0)))
     }
 
-    fn save_snapshot(&self, path: &Path, replacement: Option<(&Store, Option<u32>)>) -> Result<()> {
+    /// Large in-tree replays use the same bounded stream as volume replacement. Only the
+    /// scanned subtree is enumerated; siblings/other volumes are copied from their snapshot.
+    pub(crate) fn save_replacing_subtree(
+        &self,
+        path: &Path,
+        source: &mut Store,
+        root: &Path,
+    ) -> Result<bool> {
+        let old = self.find(&root.to_string_lossy());
+        let Some(parent) = old.map(|id| self.record(id).parent).or_else(|| {
+            root.parent()
+                .and_then(|path| self.find(&path.to_string_lossy()))
+        }) else {
+            return Ok(false);
+        };
+        if parent != 0 {
+            let name = root
+                .file_name()
+                .context("subtree basename")?
+                .to_string_lossy();
+            let mut record = source.record(1);
+            (record.name, record.name_len, record.fold_len) = source.intern(&name);
+            source.set(1, record);
+        }
+        let mut streamed = self.fork()?;
+        streamed.quiet = source.quiet.clone();
+        streamed.windows = Some(crate::residency::Windows::default());
+        streamed.save_snapshot(path, Some((source, old, parent)))?;
+        Ok(true)
+    }
+
+    fn save_snapshot(
+        &self,
+        path: &Path,
+        replacement: Option<(&Store, Option<u32>, u32)>,
+    ) -> Result<()> {
         let temporary = path.with_extension("tmp");
         let file = std::fs::OpenOptions::new()
             .write(true)
@@ -1134,7 +1205,7 @@ impl Store {
         for (id, r) in self.range(0, self.len()) {
             if r.live()
                 && r.attributes & OFFLINE == 0
-                && replacement.is_none_or(|(_, excluded)| excluded != Some(id))
+                && replacement.is_none_or(|(_, excluded, _)| excluded != Some(id))
                 && (id == 0 || ids[r.parent as usize] != NONE)
             {
                 ids[id as usize] = count;
@@ -1143,7 +1214,7 @@ impl Store {
             }
         }
         let kept = count;
-        if let Some((source, _)) = replacement {
+        if let Some((source, _, _)) = replacement {
             count = count
                 .checked_add(source.len() as u32 - 1)
                 .context("too many records")?;
@@ -1166,10 +1237,49 @@ impl Store {
             if at == NONE { NONE } else { ids[at as usize] }
         };
         let mut name = 0;
+        let mut ancestors = BTreeMap::new();
+        if let Some((source, old, mut parent)) = replacement {
+            let previous = old.map(|id| self.record(id)).unwrap_or_default();
+            let fresh = source.record(1);
+            let mut replaced_child = old;
+            let mut unknown = fresh.attributes & SIZE_UNKNOWN != 0;
+            while parent != NONE {
+                let mut record = self.record(parent);
+                record.size = (i128::from(record.size) - i128::from(previous.size)
+                    + i128::from(fresh.size))
+                .clamp(0, i128::from(u64::MAX)) as u64;
+                record.files = (i64::from(record.files) - i64::from(previous.files)
+                    + i64::from(fresh.files))
+                .clamp(0, i64::from(u32::MAX)) as u32;
+                unknown |= record.attributes & EXCLUDED != 0;
+                let mut child = record.first;
+                while child != NONE {
+                    let sibling = self.record(child);
+                    if Some(child) != replaced_child
+                        && sibling.live()
+                        && sibling.attributes & OFFLINE == 0
+                    {
+                        unknown |= sibling.attributes & SIZE_UNKNOWN != 0;
+                    }
+                    child = sibling.next;
+                }
+                if unknown {
+                    record.attributes |= SIZE_UNKNOWN;
+                } else {
+                    record.attributes &= !SIZE_UNKNOWN;
+                }
+                ancestors.insert(parent, record);
+                replaced_child = Some(parent);
+                parent = record.parent;
+            }
+        }
         for (id, mut record) in self
             .range(0, self.len())
             .filter(|(id, _)| ids[*id as usize] != NONE)
         {
+            if let Some(updated) = ancestors.get(&id) {
+                record = *updated;
+            }
             record.name = name;
             name += u32::from(record.name_len) + u32::from(record.fold_len);
             record.parent = if record.parent == NONE {
@@ -1179,29 +1289,20 @@ impl Store {
             };
             record.first = skip_dead(record.first);
             record.next = skip_dead(record.next);
-            if id == 0
-                && let Some((source, excluded)) = replacement
+            if let Some((_, _, parent)) = replacement
+                && id == parent
             {
-                let previous = excluded.map(|id| self.record(id)).unwrap_or_default();
-                record.size = record
-                    .size
-                    .saturating_sub(previous.size)
-                    .saturating_add(source.record(0).size);
-                record.files = record
-                    .files
-                    .saturating_sub(previous.files)
-                    .saturating_add(source.record(0).files);
                 record.first = kept;
             }
             out.write_all(bytemuck::bytes_of(&record))?;
         }
-        if let Some((source, _)) = replacement {
+        if let Some((source, _, parent)) = replacement {
             let offset = kept - 1;
             for (id, mut record) in source.range(1, source.len()) {
                 record.name = name;
                 name += u32::from(record.name_len) + u32::from(record.fold_len);
                 record.parent = if record.parent == 0 {
-                    0
+                    ids[parent as usize]
                 } else {
                     record.parent + offset
                 };
@@ -1209,7 +1310,7 @@ impl Store {
                     record.first += offset;
                 }
                 record.next = if id == 1 {
-                    skip_dead(self.record(0).first)
+                    skip_dead(self.record(parent).first)
                 } else if record.next == NONE {
                     NONE
                 } else {
@@ -1227,7 +1328,7 @@ impl Store {
                 record.name_len as usize + record.fold_len as usize,
             ))?;
         }
-        if let Some((source, _)) = replacement {
+        if let Some((source, _, _)) = replacement {
             for (_, record) in source.range(1, source.len()) {
                 out.write_all(source.bytes(
                     record.name as usize,
@@ -1254,13 +1355,13 @@ impl Store {
                 self.folded(record),
             )?;
         }
-        if let Some((source, _)) = replacement {
+        if let Some((source, _, parent)) = replacement {
             for (id, record) in source.range(1, source.len()) {
                 column.push(
                     &mut out,
                     id + kept - 1,
                     if record.parent == 0 {
-                        0
+                        ids[parent as usize]
                     } else {
                         record.parent + kept - 1
                     },
@@ -1439,6 +1540,80 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streamed_subtree_replacement_preserves_siblings_ancestors_and_unknown_sizes() {
+        let base =
+            std::env::temp_dir().join(format!("mypaper-stream-subtree-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        let path = base.join("snapshot.bin");
+        let mut store = Store::new();
+        let c = store.insert(0, "C:", DIRECTORY, 0, 0);
+        let d = store.insert(0, "D:", DIRECTORY, 0, 0);
+        let parent = store.insert(c, "parent", DIRECTORY, 0, 0);
+        let old = store.insert(parent, "tree", DIRECTORY, 0, 0);
+        store.insert(old, "stale", EXCLUDED | SIZE_UNKNOWN | DIRECTORY, 0, 0);
+        store.insert(old, "old.txt", 128, 3, 0);
+        store.insert(parent, "sibling.txt", 128, 5, 0);
+        store.insert(d, "other.txt", 128, 7, 0);
+        store.roll_up();
+        store.save(&path).unwrap();
+        let mapped = Store::open(&path).unwrap();
+        let mut fresh = Store::new();
+        let root = fresh.insert(0, r"C:\parent\tree", DIRECTORY, 0, 42);
+        fresh.insert(root, "new.txt", 128, 11, 0);
+        fresh.roll_up();
+        assert!(
+            mapped
+                .save_replacing_subtree(&path, &mut fresh, Path::new(r"C:\parent\tree"))
+                .unwrap()
+        );
+        let first = Store::open(&path).unwrap();
+        assert_eq!(first.sizes(r"C:\", 1)[0].size, 16);
+        assert!(!first.sizes(r"C:\", 1)[0].size_unknown);
+        assert_eq!(first.sizes(r"C:\parent", 1)[0].files, 2);
+        assert_eq!(first.sizes(r"D:\", 1)[0].size, 7);
+        assert_eq!(first.sizes(r"C:\parent\tree", 1)[0].modified, 42);
+        assert_eq!(
+            crate::query::search(&first, "new.txt", 10)[0].path,
+            r"C:\parent\tree\new.txt"
+        );
+        assert!(first.find(r"C:\parent\tree\old.txt").is_none());
+        assert!(
+            mapped.find(r"C:\parent\tree\old.txt").is_some(),
+            "old readers retain their immutable snapshot"
+        );
+        let unknown = fresh.insert(root, "unknown", DIRECTORY | EXCLUDED | SIZE_UNKNOWN, 0, 0);
+        fresh.roll_up();
+        first
+            .save_replacing_subtree(&path, &mut fresh, Path::new(r"C:\parent\tree"))
+            .unwrap();
+        let second = Store::open(&path).unwrap();
+        assert!(second.sizes(r"C:\", 1)[0].size_unknown);
+        fresh.remove(unknown);
+        second
+            .save_replacing_subtree(&path, &mut fresh, Path::new(r"C:\parent\new-tree"))
+            .unwrap();
+        let third = Store::open(&path).unwrap();
+        assert_eq!(third.sizes(r"C:\parent", 1)[0].size, 27);
+        assert_eq!(third.sizes(r"C:\parent", 1)[0].files, 3);
+        assert!(
+            third.sizes(r"C:\", 1)[0].size_unknown,
+            "unknown sibling must survive a new subtree import"
+        );
+        assert!(
+            !third
+                .save_replacing_subtree(
+                    &base.join("orphan.bin"),
+                    &mut fresh,
+                    Path::new(r"C:\absent\orphan")
+                )
+                .unwrap()
+        );
+        assert!(!base.join("orphan.bin").exists());
+        drop((mapped, first, second, third));
+        std::fs::remove_dir_all(base).unwrap();
+    }
 
     #[test]
     fn offline_root_hides_cached_search_and_sizes_and_drops_from_next_generation() {

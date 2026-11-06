@@ -118,6 +118,8 @@ fn shard(
     let mut last_parent = crate::store::NONE;
     let mut parent_path = String::new();
     let mut missing_filters = Vec::new();
+    let mut visibility_parent = crate::store::NONE;
+    let mut parent_online = true;
     let filter = crate::names::Filter::new(&query.terms, &query.extensions, query.directory);
     let path_masks: Vec<_> = query
         .paths
@@ -159,9 +161,6 @@ fn shard(
             if base && store.overridden(id) {
                 return;
             }
-            if !store.online(id) {
-                return;
-            }
             let candidate = (score, modified, std::cmp::Reverse(id));
             if top.len() == limit
                 && top
@@ -169,6 +168,21 @@ fn shard(
                     .is_some_and(|worst: &std::cmp::Reverse<Candidate>| candidate <= worst.0)
             {
                 return;
+            }
+            // Only candidates that can enter top-k need ancestry reads. Adjacent siblings
+            // share their volume status, including when an offline volume is retained.
+            if parent == 0 {
+                if !store.online(id) {
+                    return;
+                }
+            } else {
+                if visibility_parent != parent {
+                    visibility_parent = parent;
+                    parent_online = store.online(parent);
+                }
+                if !parent_online {
+                    return;
+                }
             }
             if !query.paths.is_empty() {
                 if !store.path_possible(parent, name, &path_masks) {
