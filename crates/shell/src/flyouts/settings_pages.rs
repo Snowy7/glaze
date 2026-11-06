@@ -20,7 +20,14 @@ pub const PAGES: &[(&str, &str, &[&str])] = &[
     (
         "Graphics",
         "display-advancedgraphics",
-        &["gpu", "graphics preference", "hags", "hardware accelerated gpu scheduling", "mpo", "windowed game optimizations"],
+        &[
+            "gpu",
+            "graphics preference",
+            "hags",
+            "hardware accelerated gpu scheduling",
+            "mpo",
+            "windowed game optimizations",
+        ],
     ),
     (
         "Sound",
@@ -217,7 +224,12 @@ pub const PAGES: &[(&str, &str, &[&str])] = &[
     (
         "Captures",
         "gaming-gamedvr",
-        &["background capture", "game dvr", "record what happened", "recording"],
+        &[
+            "background capture",
+            "game dvr",
+            "record what happened",
+            "recording",
+        ],
     ),
     (
         "Text size",

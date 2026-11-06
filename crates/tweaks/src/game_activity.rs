@@ -24,6 +24,9 @@ use windows::Win32::System::Threading::{
     PROCESS_SYNCHRONIZE, ReleaseMutex, WaitForSingleObject,
 };
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
+use windows::Win32::UI::HiDpi::{
+    DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
+};
 use windows::Win32::UI::Shell::{
     QUNS_BUSY, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN, SHQueryUserNotificationState,
 };
@@ -354,6 +357,8 @@ fn refresh() {
 fn sample() -> Activity {
     // SAFETY: query APIs only, all out buffers valid locals.
     unsafe {
+        // Core also hosts legacy windows; scope physical-coordinate queries to this sample.
+        let previous_dpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         let foreground = GetForegroundWindow();
         let mut pid = 0;
         GetWindowThreadProcessId(foreground, Some(&mut pid));
@@ -388,11 +393,15 @@ fn sample() -> Activity {
                     monitor.rcMonitor.bottom,
                 ],
             );
-        classify(
+        let activity = classify(
             SHQueryUserNotificationState().ok().map(|s| s.0),
             fullscreen,
             pid,
-        )
+        );
+        if !previous_dpi.is_invalid() {
+            SetThreadDpiAwarenessContext(previous_dpi);
+        }
+        activity
     }
 }
 

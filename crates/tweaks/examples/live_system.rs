@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     let lock =
         std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock");
     ensure!(
-        lock.is_dir(),
+        lock.exists(),
         "caller must hold the desktop lock before running live_system"
     );
     let config: SystemConfig = match std::env::args().nth(3) {

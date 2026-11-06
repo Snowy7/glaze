@@ -115,12 +115,19 @@ fn test_window() -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("--read") {
+        println!(
+            "{}",
+            serde_json::to_string(&game_activity::read().map(|(snapshot, _)| snapshot))?
+        );
+        return Ok(());
+    }
     if std::env::args().nth(1).as_deref() == Some("--window") {
         return test_window();
     }
     ensure!(
         std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock")
-            .is_dir(),
+            .exists(),
         "caller must hold desktop lock"
     );
     // SAFETY: this process owns its DPI context; no windows have been created yet.

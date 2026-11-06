@@ -45,12 +45,24 @@ mod tests {
     fn system_is_opt_in_checked_and_round_trips() {
         let empty = Config::parse("{}").unwrap();
         assert!(empty.system.is_empty());
-        assert!(!serde_json::to_string(&empty).unwrap().contains("\"system\""));
+        assert!(
+            !serde_json::to_string(&empty)
+                .unwrap()
+                .contains("\"system\"")
+        );
         let config = Config::parse(r#"{"system":{"game_mode":false,"show_hidden":true,"power_mode":"efficiency","game_activity":true}}"#).unwrap();
-        assert_eq!(Config::parse(&serde_json::to_string(&config).unwrap()).unwrap(), config);
+        assert_eq!(
+            Config::parse(&serde_json::to_string(&config).unwrap()).unwrap(),
+            config
+        );
         assert!(Config::parse(r#"{"system":{"game_mdoe":true}}"#).is_err());
         assert!(Config::parse(r#"{"system":{"power_mode":"ultimate"}}"#).is_err());
         assert!(Config::parse(r#"{"system":{"background_capture":false}}"#).is_err());
-        assert!(Config::parse(r#"{"system":{"show_hidden":null}}"#).unwrap().system.is_empty());
+        assert!(
+            Config::parse(r#"{"system":{"show_hidden":null}}"#)
+                .unwrap()
+                .system
+                .is_empty()
+        );
     }
 }
