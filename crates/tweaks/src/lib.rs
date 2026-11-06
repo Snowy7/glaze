@@ -59,6 +59,20 @@ const BROADCAST_TIMEOUT_MS: u32 = 500;
 /// few milliseconds after we change one, and the restore waits that out.
 const SETTLE: Duration = Duration::from_millis(100);
 
+/// The app scheme before any active mypaper override, for another process resolving auto
+/// tokens. Reading the same journal as core avoids a config-event race with mode restoration.
+pub fn unmanaged_system_prefers_dark() -> bool {
+    let original = palette::local_dir().ok().and_then(|dir| {
+        Undo::new(Registry, dir.join("undo.json"), SETTLE)
+            .original(plan::PERSONALIZE_KEY, plan::APPS_THEME)
+            .ok()
+            .flatten()
+    });
+    original.map_or_else(system_prefers_dark, |value| {
+        value == Some(undo::Value::Dword(0))
+    })
+}
+
 /// A style and the palette its `"auto"` colors were resolved with.
 #[derive(PartialEq)]
 struct Applied {
