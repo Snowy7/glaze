@@ -207,14 +207,16 @@ impl Lab {
         encoder
     }
 
-    /// Submits one timed frame, waits for it and returns [wallpaper, restore, glass] in ms, and
-    /// the glass renderer's passes (label, ms) once [`Lab::profile`] is on.
+    /// Submits one timed frame, waits for it and returns [wallpaper, restore, glass] in GPU ms,
+    /// the CPU ms of recording and submitting it (nothing in that waits for the GPU), and the
+    /// glass renderer's passes (label, ms) once [`Lab::profile`] is on.
     fn timed(
         &mut self,
         clock: Duration,
         frame: u32,
         wallpaper: bool,
-    ) -> ([f64; 3], Vec<(&'static str, f64)>) {
+    ) -> ([f64; 3], f64, Vec<(&'static str, f64)>) {
+        let started = std::time::Instant::now();
         let mut encoder = self.encode(clock, frame, wallpaper);
         encoder.resolve_query_set(&self.queries, 0..4, &self.resolve, 0);
         encoder.copy_buffer_to_buffer(&self.resolve, 0, &self.read, 0, 32);
@@ -231,6 +233,7 @@ impl Lab {
             })
             .unwrap_or_default();
         self.gpu.queue.submit([encoder.finish()]);
+        let cpu = started.elapsed().as_secs_f64() * 1e3;
         let ticks = |bytes: &[u8]| -> Vec<u64> {
             bytes
                 .as_chunks::<8>()
@@ -247,7 +250,7 @@ impl Lab {
             let s = self.map(&self.pass_read, ticks);
             labels.iter().enumerate().map(|(i, l)| (*l, ms(&s, i, i + 1))).collect()
         };
-        ([ms(&stamps, 0, 1), ms(&stamps, 1, 2), ms(&stamps, 2, 3)], passes)
+        ([ms(&stamps, 0, 1), ms(&stamps, 1, 2), ms(&stamps, 2, 3)], cpu, passes)
     }
 
     /// Times the glass renderer's passes from the next frame on.
@@ -392,29 +395,31 @@ fn lab() {
 
     // Wallpaper frames at 30 fps from 5 s, then glass-only frames with the dock moving.
     lab.profile();
-    let mut wallpaper = [vec![], vec![], vec![], vec![]];
+    let mut wallpaper = [vec![], vec![], vec![], vec![], vec![]];
     let mut wallpaper_passes = Passes::default();
     for f in 0..frames {
         let clock = Duration::from_secs_f64(5.0 + f64::from(f) / 30.0);
-        let (ms, passes) = lab.timed(clock, f, true);
+        let (ms, cpu, passes) = lab.timed(clock, f, true);
         for (k, v) in ms.iter().enumerate() {
             wallpaper[k].push(*v);
         }
         wallpaper[3].push(ms.iter().sum());
+        wallpaper[4].push(cpu);
         wallpaper_passes.add(&passes);
     }
-    let mut glass = [vec![], vec![], vec![]];
+    let mut glass = [vec![], vec![], vec![], vec![]];
     let mut glass_passes = Passes::default();
     for f in 0..frames {
         lab.glass
             .set_plates(fixture(160.0 * (f as f32 * 0.05).sin()));
-        let (ms, passes) = lab.timed(Duration::from_secs(5), f, false);
+        let (ms, cpu, passes) = lab.timed(Duration::from_secs(5), f, false);
         glass[0].push(ms[1]);
         glass[1].push(ms[2]);
         glass[2].push(ms[1] + ms[2]);
+        glass[3].push(cpu);
         glass_passes.add(&passes);
     }
-    let names = ["wallpaper", "restore", "glass", "frame"];
+    let names = ["wallpaper", "restore", "glass", "frame", "cpu"];
     let mut report = Vec::new();
     for (name, values) in names.iter().zip(&mut wallpaper) {
         report.push((format!("wallpaper-frame {name}"), spread(values)));
@@ -422,7 +427,7 @@ fn lab() {
     for (name, values) in &mut wallpaper_passes.0 {
         report.push((format!("wallpaper-frame | {name}"), spread(values)));
     }
-    for (name, values) in ["restore", "glass", "frame"].iter().zip(&mut glass) {
+    for (name, values) in ["restore", "glass", "frame", "cpu"].iter().zip(&mut glass) {
         report.push((format!("glass-only {name}"), spread(values)));
     }
     for (name, values) in &mut glass_passes.0 {
