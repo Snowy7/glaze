@@ -285,6 +285,7 @@ pub struct Plugins {
     job: Option<Job>,
     waker: Waker,
     held: bool,
+    game_active: bool,
     next_generation: u64,
     helper: Option<Helper>,
     /// When to start the helper again after it died with faces placed, and the next delay.
@@ -417,6 +418,7 @@ impl Plugins {
             job: None,
             waker,
             held: false,
+            game_active: false,
             next_generation: 0,
             helper: None,
             helper_retry: None,
@@ -567,6 +569,9 @@ impl Plugins {
                 }
             }
         })?;
+        if self.game_active {
+            let _ = frames.send(wire::HostMsg::GameActivity(true));
+        }
         if self.held {
             let _ = frames.send(wire::HostMsg::Held(true));
         }
@@ -1243,6 +1248,15 @@ impl Plugins {
             .filter(|p| matches!(p.state, State::Ready))
         {
             process.write(note.clone());
+        }
+    }
+
+    /// Relay core's background pause independently of desktop visibility and user pause.
+    pub fn set_game_activity(&mut self, active: bool) {
+        if self.game_active == active { return; }
+        self.game_active = active;
+        if let Some(helper) = &self.helper {
+            let _ = helper.frames.send(wire::HostMsg::GameActivity(active));
         }
     }
 
