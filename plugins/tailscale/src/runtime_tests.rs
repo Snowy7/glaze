@@ -84,7 +84,12 @@ fn tailscale_pipe_http_provides_identity_without_impersonation_privileges() {
     struct Server(HANDLE);
     // SAFETY: the server handle is exclusively transferred to its worker.
     unsafe impl Send for Server {}
-    impl Drop for Server { fn drop(&mut self) { unsafe { let _ = CloseHandle(self.0); } } }
+    impl Drop for Server {
+        fn drop(&mut self) {
+            // SAFETY: this fixture owns the server handle and closes it once after its I/O ends.
+            unsafe { let _ = CloseHandle(self.0); }
+        }
+    }
     let name = format!("mypaper-tailscale-auth-{}", std::process::id());
     // SAFETY: creates an owned local pipe; all buffers below live through synchronous calls.
     let server = Server(unsafe { CreateNamedPipeW(&windows::core::HSTRING::from(format!(r"\\.\pipe\{name}")), PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, 4096, 4096, 0, None) });

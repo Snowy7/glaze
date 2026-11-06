@@ -809,6 +809,7 @@ impl<W: Write> Host<W> {
         timer.into_iter().chain(self.moves_due).chain(plugins.flatten()).min()
     }
 
+    #[cfg(test)]
     pub fn loaded(&self) -> usize {
         self.plugins.values().filter(|p| p.instance.is_some()).count()
     }

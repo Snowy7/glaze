@@ -184,6 +184,7 @@ struct WsHandle {
 // SAFETY: WinHTTP handles may be used from any thread; one receive and one send may be in flight
 // at once, which is exactly the reader/writer split here. `close` runs once.
 unsafe impl Send for WsHandle {}
+// SAFETY: concurrent send/receive is supported; atomic `closed` serializes closing the handle.
 unsafe impl Sync for WsHandle {}
 impl WsHandle {
     fn close(&self) {
@@ -380,6 +381,7 @@ fn write_socket(ws: &WsHandle, shared: &Shared) {
 struct Event(HANDLE);
 // SAFETY: an event handle is a kernel object usable from any thread.
 unsafe impl Send for Event {}
+// SAFETY: event operations are thread-safe, and this owner closes the handle only on drop.
 unsafe impl Sync for Event {}
 impl Event {
     fn new() -> Result<Self, String> {
@@ -482,9 +484,8 @@ fn run_pipe(shared: &Shared, id: u64, name: &str, post: &dyn Fn(PipeEvent) -> bo
         }
         drop(queue);
         let handles = [read_done.0, write_done.0, wake.0];
-        let count = if writing.is_some() { 3 } else { 3 };
-        // SAFETY: as above.
-        let woke = unsafe { WaitForMultipleObjects(&handles[..count], false, INFINITE) };
+        // SAFETY: all three owned event handles remain live for this blocking wait.
+        let woke = unsafe { WaitForMultipleObjects(&handles, false, INFINITE) };
         if woke.0 == WAIT_OBJECT_0.0 && reading {
             let mut n = 0u32;
             // SAFETY: the read on `read_ov` completed (its event is set).
@@ -494,6 +495,7 @@ fn run_pipe(shared: &Shared, id: u64, name: &str, post: &dyn Fn(PipeEvent) -> bo
                 Err(_) => break Ok(()), // the server closed its end
             }
             reading = false;
+            // SAFETY: this owned event's completed read has been consumed before rearming it.
             let _ = unsafe { ResetEvent(read_done.0) };
             shared.lock().undelivered += 1;
             if !post(PipeEvent::Data((id, buffer[..n as usize].to_vec()))) {
@@ -503,6 +505,7 @@ fn run_pipe(shared: &Shared, id: u64, name: &str, post: &dyn Fn(PipeEvent) -> bo
             let mut n = 0u32;
             // SAFETY: the write on `write_ov` completed (its event is set).
             let written = unsafe { GetOverlappedResult(pipe.0, &write_ov, &mut n, false) };
+            // SAFETY: this owned event's completed write has been consumed before rearming it.
             let _ = unsafe { ResetEvent(write_done.0) };
             writing = None;
             if written.is_err() {
