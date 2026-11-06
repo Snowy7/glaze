@@ -56,28 +56,30 @@ pub fn row<A: Clone>(b: &mut Builder<'_, A>, row: Row<'_, A>) -> Rect {
     } else {
         handle.right + b.px(6.0)
     };
+    let style = b.font(Font::Body);
+    let label_width = if separator {
+        b.measure(label, &style)
+            .0
+            .min((trash.left - left - b.px(34.0)).max(0.0))
+    } else {
+        (trash.left - left - b.px(6.0)).max(0.0)
+    };
+    b.text_in(
+        Rect::new(left, r.top, label_width, r.height()),
+        label,
+        &style,
+        b.p.ink1,
+        Align::Start,
+    );
     if separator {
         b.hline(
-            left,
-            trash.left - b.px(8.0),
+            left + label_width + b.px(10.0),
+            (left + label_width + b.px(42.0)).min(trash.left - b.px(8.0)),
             r.top + r.height() / 2.0,
             b.p.ink3,
         );
-    } else {
-        let style = b.font(Font::Body);
-        b.text_in(
-            Rect::new(
-                left,
-                r.top,
-                (trash.left - left - b.px(6.0)).max(0.0),
-                r.height(),
-            ),
-            label,
-            &style,
-            b.p.ink1,
-            Align::Start,
-        );
     }
+    b.hline(r.left, r.right, r.bottom - 1.0, b.p.line);
     b.hit(
         id,
         Rect::new(handle.right, r.top, trash.left - handle.right, r.height()),
