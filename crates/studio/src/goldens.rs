@@ -250,6 +250,7 @@ fn render_window_pages() {
                     (Page::Root, "home"),
                     (Page::Wallpapers, "wallpapers"),
                     (Page::Look, "look"),
+                    (Page::Windows, "windows"),
                     (Page::Bars, "bars"),
                     (Page::Widget, "widget"),
                     (Page::Settings, "settings"),
@@ -303,6 +304,127 @@ fn render_window_pages() {
             }
         }
     }
+}
+
+/// Actual card-size pictures in both desktop schemes, without the surrounding inspector.
+#[test]
+fn render_material_signatures() {
+    use crate::panel::{controls, specimens};
+    use mypaper_config::look::Style;
+    use mypaper_ui::{
+        Rect,
+        controls::{Align, Builder},
+    };
+    let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-window\shots"));
+    let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
+    let mut ui = Ui::new().unwrap();
+    for dark in [true, false] {
+        let mut app = window_app(dark, &ui, (1280, 800));
+        app.run(Action::Set(
+            crate::actions::Edit::new(crate::docs::DocId::Config, "/look/appearance", "Appearance"),
+            serde_json::json!(if dark { "dark" } else { "light" }),
+        ));
+        let mut b = Builder::new(
+            &mut ui.text,
+            &app.theme.palette,
+            &app.theme.ty,
+            1.0,
+            &app.input,
+        );
+        b.fill(Rect::new(0.0, 0.0, 750.0, 280.0), 0.0, b.p.bg);
+        for (row, names) in [
+            &["Liquid", "One UI", "Solid", "Fluent", "Mono"][..],
+            &["As is", "Match mypaper", "Glass", "Sharp"][..],
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for (index, name) in names.iter().enumerate() {
+                let card = Rect::new(
+                    10.0 + index as f32 * 150.0,
+                    10.0 + row as f32 * 140.0,
+                    130.0,
+                    120.0,
+                );
+                controls::card(&mut b, card, false);
+                controls::card_picture(
+                    &mut b,
+                    card,
+                    Rect::new(card.left, card.top, 130.0, 82.0),
+                    |b, rect| {
+                        if row == 0 {
+                            specimens::material(&app, b, rect, Style::ALL[index]);
+                        } else {
+                            specimens::window(&app, b, rect, index);
+                        }
+                    },
+                );
+                let ink = b.p.ink1;
+                controls::text(
+                    &mut b,
+                    Rect::new(card.left + 8.0, card.top + 86.0, 114.0, 28.0),
+                    name,
+                    12.0,
+                    500,
+                    ink,
+                    Align::Start,
+                );
+            }
+        }
+        let list = b.list;
+        let image = render(&mut ui, &list, 750, 280).unwrap();
+        let file = format!(
+            "material-signatures-{}.png",
+            if dark { "dark" } else { "light" }
+        );
+        golden::write(&image, &out.join(&file)).unwrap();
+        golden::check(&image, &baseline.join(&file)).unwrap();
+    }
+}
+
+#[test]
+fn look_preview_segments_switch_pages_without_editing_documents() {
+    use crate::panel::{Command, Page};
+    use mypaper_ui::controls::key;
+    let mut ui = Ui::new().unwrap();
+    let mut app = window_app(true, &ui, (1280, 800));
+    let before = crate::docs::DocId::ALL.map(|id| app.docs.doc(id).raw.clone());
+    for (page, selected, destination) in [
+        (Page::Look, 0usize, Page::Windows),
+        (Page::Windows, 1usize, Page::Look),
+    ] {
+        app.run(Action::Panel(Command::Open(page)));
+        let built = crate::view::build(&app, &mut ui);
+        let group = key("look-stage-scope");
+        let selected_key = key((group, selected));
+        let selected_id = built
+            .targets
+            .iter()
+            .position(|target| target.key == selected_key)
+            .unwrap() as u32
+            + 1;
+        assert!(
+            built
+                .list
+                .hits
+                .iter()
+                .any(|hit| hit.id == selected_id && hit.checked == Some(true))
+        );
+        let target = built
+            .targets
+            .iter()
+            .find(|target| target.key == key((group, 1 - selected)))
+            .unwrap();
+        app.run(target.action.clone());
+        assert_eq!(crate::panel::current_page(&app), destination);
+    }
+    assert_eq!(
+        before,
+        crate::docs::DocId::ALL.map(|id| app.docs.doc(id).raw.clone())
+    );
+    assert!(!app.docs.can_undo());
 }
 
 #[test]
@@ -468,7 +590,6 @@ fn render_window_interaction_states() {
         for (page, name, size, actual) in [
             (Page::Widget, "widget-100", (1280, 800), true),
             (Page::Module, "module-100", (1280, 800), true),
-            (Page::Windows, "windows", (1280, 800), false),
             (Page::General, "large-text", (1280, 800), false),
             (Page::DesktopMenu, "desktop-menu", (1280, 800), false),
             (Page::AddWidget, "add-widget-rail", (960, 640), false),
