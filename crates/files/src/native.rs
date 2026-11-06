@@ -7,6 +7,7 @@ thread_local! {
     static INPUT: RefCell<VecDeque<Input>> = const { RefCell::new(VecDeque::new()) };
     static FIELD: Cell<bool> = const { Cell::new(false) };
     static CONTEXT: RefCell<Option<IContextMenu3>> = const { RefCell::new(None) };
+    static GEOMETRY_HOOK: RefCell<Option<Box<dyn FnMut()>>> = const { RefCell::new(None) };
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -22,6 +23,7 @@ impl Modifiers {
 pub enum Input { Character(char), Back(bool), Key(u16, Modifiers) }
 pub fn next() -> Option<Input> { INPUT.with_borrow_mut(VecDeque::pop_front) }
 pub fn field(active: bool) { FIELD.set(active); }
+pub fn set_geometry_hook(hook: Option<Box<dyn FnMut()>>) { GEOMETRY_HOOK.with_borrow_mut(|slot| *slot = hook); }
 
 pub fn origin(hwnd: HWND) -> (i32, i32) {
     let mut point = POINT::default();
@@ -35,6 +37,12 @@ pub fn install(hwnd: HWND) -> Result<()> {
 }
 
 unsafe extern "system" fn subclass(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM, _: usize, _: usize) -> LRESULT {
+    if matches!(msg, WM_WINDOWPOSCHANGED | WM_SHOWWINDOW | WM_SIZE) {
+        // Windows' modal move/resize loop does not return to main. A guarded render hook keeps
+        // this app's alpha canvas and engine glass in the same place during that loop.
+        let hook = GEOMETRY_HOOK.with_borrow_mut(Option::take);
+        if let Some(mut hook) = hook { hook(); GEOMETRY_HOOK.with_borrow_mut(|slot| *slot = Some(hook)); }
+    }
     if matches!(msg, WM_INITMENUPOPUP | WM_DRAWITEM | WM_MEASUREITEM | WM_MENUCHAR) {
         let result = CONTEXT.with_borrow(|menu| menu.as_ref().map(|menu| {
             let mut result = LRESULT(0);

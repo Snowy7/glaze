@@ -24,15 +24,16 @@ fn field(f: &mut Frame<'_>, well: Rect, value: &TextField, placeholder: &str, ac
 
 pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     let (width, height) = app.surface.client_size();
-    if width == 0 || height == 0 { return Ok(()); }
+    if width == 0 || height == 0 { app.prepare_backdrop(Rect::default()); return Ok(()); }
+    let bounds = Rect::new(0.0, 0.0, width as f32, height as f32);
+    let glass = app.prepare_backdrop(bounds);
     let s = app.surface.scale();
     let now = Instant::now();
     let px = |value: f32| (value * s).round();
     let theme = &app.theme;
     let color = theme.color;
     let mut f = Frame::new(&mut ui.text, theme, s, &app.interaction);
-    let bounds = Rect::new(0.0, 0.0, width as f32, height as f32);
-    f.surface(bounds, false);
+    f.surface(bounds, glass);
     let (title, rest) = bounds.take_top(px(46.0), 0.0);
     let (navigation, rest) = rest.take_top(px(58.0), 0.0);
     let (status, body) = rest.take_bottom(px(32.0), 0.0);
@@ -258,7 +259,8 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     app.geometry = Geometry { viewport: content, address: address_inner, search: search_inner, edit,
         columns: boundaries, rows, crumbs, row: row_height, grid_columns: columns };
     let list = f.list;
-    app.surface.present(ui, app.surface.origin(), (width, height), list)?;
+    if glass { app.layered.present(&mut app.surface, ui, list)?; }
+    else { app.surface.present(ui, app.surface.origin(), (width, height), list)?; }
     app.request_images();
     Ok(())
 }

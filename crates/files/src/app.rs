@@ -57,7 +57,11 @@ pub struct Geometry {
 }
 
 pub struct App {
+    pub layered: mypaper_ui::layered_app::LayeredApp,
     pub surface: Surface,
+    pub backdrop: std::rc::Rc<crate::backdrop::Client>,
+    pub glass_active: bool,
+    first_frame: bool,
     pub theme: Theme,
     pub scheme_override: Option<Scheme>,
     pub interaction: Interaction,
@@ -107,6 +111,8 @@ impl App {
     pub fn new(path: String, scheme_override: Option<Scheme>) -> Result<Self> {
         let surface = Surface::new(Kind::App { min: (900, 560) }, "mypaper Files", Role::Window)?;
         native::install(surface.hwnd())?;
+        let layered = mypaper_ui::layered_app::LayeredApp::new(&surface)?;
+        let backdrop = crate::backdrop::Client::install();
         let theme = crate::look::load(scheme_override);
         let s = surface.scale();
         surface.set_background(theme.color.surface);
@@ -118,7 +124,8 @@ impl App {
         let preferences = Preferences::load();
         let mut app = Self {
             scroll: Scroll::new(&theme.motion), sidebar_scroll: Scroll::new(&theme.motion),
-            surface, theme, scheme_override, interaction: Interaction::default(), location: None,
+            surface, layered, backdrop, glass_active: false, first_frame: true,
+            theme, scheme_override, interaction: Interaction::default(), location: None,
             loading: true, elapsed_ms: 0, status: String::new(), error: None, busy: false,
             entries: Arc::default(), shown: Arc::default(), history: History::default(), selection: Selection::default(), sort: Sort::default(),
             preferences, sidebar: Vec::new(), field: Field::None, address, search, editor, query_text: String::new(), indexed: false,
@@ -145,6 +152,29 @@ impl App {
         sidebar.push(("This PC".into(), "shell:MyComputerFolder".into(), Icon::Window));
         for path in shell::drives() { sidebar.push((format!("Local disk ({})", path.trim_end_matches('\\')), path, Icon::Layers)); }
         self.sidebar = sidebar;
+    }
+
+    pub fn prepare_backdrop(&mut self, bounds: Rect) -> bool {
+        use mypaper_ui::glass::{Backdrop, Shape};
+        let hwnd = self.surface.hwnd();
+        let material = self.theme.glass.filter(|_| !unsafe { IsIconic(hwnd) }.as_bool()
+            && (self.first_frame || self.surface.is_visible()) && !bounds.is_empty() && self.backdrop.available());
+        let enabled = if let Some(mut material) = material {
+            let origin = native::origin(hwnd);
+            let shape = Shape { x: origin.0, y: origin.1, width: bounds.width() as i32, height: bounds.height() as i32 };
+            let radius = (self.theme.radius.surface * self.surface.scale()).round();
+            material.blur *= self.surface.scale();
+            if self.backdrop.contains(hwnd) {
+                self.backdrop.place(hwnd, shape, radius); self.backdrop.material(hwnd, &material); true
+            } else { self.backdrop.open(hwnd, shape, radius, &material) }
+        } else { self.backdrop.close(hwnd); false };
+        if self.glass_active != enabled {
+            self.layered.set_enabled(enabled);
+            self.glass_active = enabled;
+            if !enabled { self.surface.release(); }
+        }
+        self.first_frame = false;
+        enabled
     }
 
     pub fn navigate(&mut self, path: String, record: bool) -> Result<()> {
@@ -389,6 +419,7 @@ impl App {
         let hit = |app: &Self, at: Point| app.surface.shown().hit_at(at).map(|h| h.id);
         match event {
             Event::Close => self.closing = true,
+            Event::Activated => { self.backdrop.restack(self.surface.hwnd()); }
             Event::SettingChanged | Event::DpiChanged(_) => self.reload_look()?,
             Event::Key(key) => self.key(ui, key, native::Modifiers::read())?,
             Event::TextSubmit => self.submit()?,
@@ -564,5 +595,12 @@ impl App {
         let b = self.sidebar_scroll.tick(Instant::now());
         let next = match (a.1, b.1) { (Some(a), Some(b)) => Some(a.min(b)), (a, b) => a.or(b) };
         (a.0 || b.0, next.map(|at| at.saturating_duration_since(Instant::now())))
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        use mypaper_ui::glass::Backdrop;
+        self.backdrop.close(self.surface.hwnd());
     }
 }

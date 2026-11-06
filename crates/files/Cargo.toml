@@ -17,6 +17,8 @@ mypaper-theme.workspace = true
 mypaper-bars.workspace = true
 mypaper-index.workspace = true
 mypaper-tweaks.workspace = true
+mypaper-desktop.workspace = true
+bytemuck.workspace = true
 windows-core = "0.62"
 
 [dependencies.windows]

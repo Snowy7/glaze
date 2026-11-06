@@ -111,3 +111,24 @@ unsafe extern "system" fn paint(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM, _: u
     }
     unsafe { DefSubclassProc(hwnd, msg, w, l) }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn alpha_canvas_preserves_native_client_geometry_and_can_return_to_opaque() {
+        let mut ui = Ui::new().unwrap();
+        let mut surface = Surface::new(crate::Kind::App { min: (100, 100) }, "Alpha canvas test", crate::Role::Window).unwrap();
+        let original = surface.client_size();
+        let list = DisplayList { ops: vec![Op::Fill { rect: Rect::new(0.0, 0.0, original.0 as f32, original.1 as f32), radius: 8.0, color: Rgba::new(0.1, 0.2, 0.3, 0.5) }], ..Default::default() };
+        let mut alpha = LayeredApp::new(&surface).unwrap();
+        alpha.set_enabled(true);
+        assert!(alpha.present(&mut surface, &mut ui, list.clone()).unwrap());
+        assert_eq!(surface.client_size(), original);
+        assert!(!alpha.present(&mut surface, &mut ui, list.clone()).unwrap());
+        alpha.set_enabled(false);
+        surface.release();
+        surface.present(&mut ui, (0, 0), original, list).unwrap();
+        assert_eq!(surface.client_size(), original);
+    }
+}

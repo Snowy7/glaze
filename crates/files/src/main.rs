@@ -8,6 +8,7 @@ mod native;
 mod look;
 mod app;
 mod view;
+mod backdrop;
 
 fn main() -> std::process::ExitCode {
     env_logger::init();
@@ -49,39 +50,51 @@ fn run() -> anyhow::Result<()> {
     }
     view::draw(&mut app, &mut ui)?;
     app.surface.show_active(false);
+    let state = std::rc::Rc::new(std::cell::RefCell::new((app, ui)));
+    let weak = std::rc::Rc::downgrade(&state);
+    native::set_geometry_hook(Some(Box::new(move || {
+        if let Some(state) = weak.upgrade() && let Ok(mut state) = state.try_borrow_mut() {
+            let (app, ui) = &mut *state;
+            if let Err(error) = view::draw(app, ui) { log::warn!("Files resize: {error:#}"); }
+        }
+    })));
     let mut message = MSG::default();
-    while !app.closing {
+    while !state.borrow().0.closing {
         let mut redraw = false;
         unsafe {
             while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
-                if message.message == WM_QUIT { app.closing = true; break; }
-                if message.message == reload { app.reload_look()?; redraw = true; }
+                if message.message == WM_QUIT { state.borrow_mut().0.closing = true; break; }
+                if message.message == reload { state.borrow_mut().0.reload_look()?; redraw = true; }
                 let _ = TranslateMessage(&message);
                 DispatchMessageW(&message);
             }
         }
+        let mut borrowed = state.borrow_mut();
+        let (app, ui) = &mut *borrowed;
         while let Some((id, event)) = next_event() {
-            match app.event(&mut ui, id, event) { Ok(changed) => redraw |= changed, Err(error) => { app.error = Some(format!("{error:#}")); redraw = true; } }
+            match app.event(ui, id, event) { Ok(changed) => redraw |= changed, Err(error) => { app.error = Some(format!("{error:#}")); redraw = true; } }
         }
         while let Some(input) = native::next() {
             let result = match input {
                 native::Input::Character(character) => { app.type_select(character); Ok(()) }
                 native::Input::Back(forward) => if let Some(path) = app.history.go(forward) { app.navigate(path, false) } else { Ok(()) },
-                native::Input::Key(key, modifiers) => app.key(&mut ui, key, modifiers),
+                native::Input::Key(key, modifiers) => app.key(ui, key, modifiers),
             };
             if let Err(error) = result { app.error = Some(format!("{error:#}")); }
             redraw = true;
         }
         redraw |= app.replies()?;
         let (moving, next) = app.tick(); redraw |= moving;
-        if redraw && !app.closing { view::draw(&mut app, &mut ui)?; }
+        if redraw && !app.closing { view::draw(app, ui)?; }
         if app.closing { break; }
         // No timer or periodic wake while idle. Scroll animation alone requests finite waits.
         let timeout = next.map_or(u32::MAX, |d| d.as_millis().clamp(1, u32::MAX as u128) as u32);
+        drop(borrowed);
         unsafe { MsgWaitForMultipleObjectsEx(None, timeout, QS_ALLINPUT, MWMO_INPUTAVAILABLE); }
     }
     transfer::flush();
-    drop(watches); drop(app); drop(ui);
+    native::set_geometry_hook(None);
+    drop(watches); drop(state);
     unsafe { OleUninitialize(); }
     Ok(())
 }
