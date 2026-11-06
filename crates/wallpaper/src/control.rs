@@ -38,9 +38,17 @@ fn actions(old: &Config, new: &Config) -> Vec<Action> {
     if old.theme != new.theme {
         actions.push(Action::SwitchTheme(new.theme.clone()));
     }
-    if (old.paused, old.pause_on_battery, old.pause_on_fullscreen)
-        != (new.paused, new.pause_on_battery, new.pause_on_fullscreen)
-    {
+    if (
+        old.paused,
+        old.pause_on_battery,
+        old.pause_on_fullscreen,
+        old.engine.during_games,
+    ) != (
+        new.paused,
+        new.pause_on_battery,
+        new.pause_on_fullscreen,
+        new.engine.during_games,
+    ) {
         actions.push(Action::UpdateHold);
     }
     if old.static_snapshot != new.static_snapshot {

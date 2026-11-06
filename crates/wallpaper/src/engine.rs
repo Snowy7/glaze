@@ -24,7 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use crate::backdrop::{Backdrop, Draw};
 use crate::glass_pass::GlassPass;
 use crate::gpu::{Gpu, KeptFrame, Opening, Screen};
-use crate::hold::{Fact, HoldReasons, Holds};
+use crate::hold::{Fact, HoldReasons, Holds, Reason};
 use crate::palette;
 use crate::snapshot::{Snapshot, Target};
 use crate::sources::{self, Frame, Redraw, Source, Visibility};
@@ -95,6 +95,8 @@ pub struct Engine {
     source_released: bool,
     /// When the last resume began, until its first frame is presented (logged).
     resuming: Option<Instant>,
+    /// Core's game signal, followed while `engine.during_games` is `pause` (desktop mode).
+    game: crate::game::GameSignal,
 }
 
 impl Engine {
@@ -169,6 +171,7 @@ impl Engine {
             released: false,
             source_released: false,
             resuming: None,
+            game: crate::game::GameSignal::default(),
         })
     }
 
@@ -223,6 +226,7 @@ impl Engine {
     pub fn glass_handles(&self) -> Vec<windows::Win32::Foundation::HANDLE> {
         let mut handles = self.glass.wait_handles();
         handles.extend(self.preview.handle());
+        handles.extend(self.game.handle());
         handles
     }
 
@@ -248,6 +252,8 @@ impl Engine {
     pub fn apply_config(&mut self, config: &Config) {
         self.apply_renderer_config(&config.engine);
         self.holds.apply(config);
+        self.game
+            .set_enabled(self.monitors.is_some() && self.holds.wants_game());
         self.refresh_fullscreen();
         self.sync_hold();
     }
@@ -289,6 +295,12 @@ impl Engine {
         let fullscreen =
             self.monitors.is_some() && self.holds.wants_fullscreen() && fullscreen_app_in_front();
         self.holds.set_fullscreen(fullscreen);
+    }
+
+    /// Follows core's game signal into the holds (cheap unless it changed).
+    fn refresh_game(&mut self) {
+        let game = self.game.refresh();
+        self.holds.set_game(game);
     }
 
     /// Combines every hold reason into [`hold`](Self::hold), logging changes.
@@ -335,6 +347,8 @@ impl Engine {
             return Flow::Exit(EXIT_RESTART);
         }
         let now = Instant::now();
+        self.refresh_game();
+        self.sync_hold();
         if let Some(timing) = &mut self.timing {
             timing.collect(&self.gpu);
         }
@@ -434,13 +448,14 @@ impl Engine {
         Flow::Wait(self.deadline(frame_deadline))
     }
 
-    /// Releases the drawing once every screen has been covered for [`RELEASE_AFTER`], and
-    /// resumes it as soon as one is not.
+    /// Releases the drawing once every screen has been covered, or a game held the wallpaper,
+    /// for [`RELEASE_AFTER`], and resumes it as soon as neither is true.
     fn follow_cover(&mut self, now: Instant) {
         if self.monitors.is_none() {
             return;
         }
-        if self.screens.iter().any(|s| !s.paused) {
+        let game = self.reasons.contains(Reason::Game);
+        if !game && self.screens.iter().any(|s| !s.paused) {
             self.covered_since = None;
             if self.released {
                 self.resume();
@@ -491,8 +506,8 @@ impl Engine {
             let _ = self.gpu.device.poll(wgpu::PollType::wait_indefinitely());
         }
         log::info!(
-            "every screen covered for {RELEASE_AFTER:?}: drawing released in {:.1?} \
-             (source too: {}), private {before:.0} -> {:.0} MiB",
+            "every screen covered or a game held for {RELEASE_AFTER:?}: drawing released in \
+             {:.1?} (source too: {}), private {before:.0} -> {:.0} MiB",
             started.elapsed(),
             self.source_released,
             crate::trim::private_mib()

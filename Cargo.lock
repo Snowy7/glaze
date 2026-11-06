@@ -2026,6 +2026,7 @@ dependencies = [
  "log",
  "mypaper-config",
  "mypaper-desktop",
+ "mypaper-fswatch",
  "mypaper-glass-ipc",
  "mypaper-theme",
  "mypaper-tweaks",

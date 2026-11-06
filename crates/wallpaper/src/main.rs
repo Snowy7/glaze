@@ -19,6 +19,7 @@
 mod backdrop;
 mod control;
 mod engine;
+mod game;
 mod glass_pass;
 mod material;
 mod gpu;
