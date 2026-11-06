@@ -11,15 +11,36 @@ pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
     if app.fixture {
         return;
     }
+    app.panel.as_ref().unwrap().reclaim_heap.set(true);
     let mut images = app.images.borrow_mut();
     images.set_budget(64 << 10);
     images.set_budget(5 << 20);
     drop(images);
     *app.stage.borrow_mut() = Default::default();
-    if let Ok(ui) = mypaper_ui::Ui::new() {
-        *text = ui.text;
-        text.set_capacity(96);
+    text.clear_cache();
+}
+
+/// Ask the allocator to decommit freed pages, once per navigation rather than on hover.
+pub fn reclaim(app: &crate::app::App) {
+    if !app.panel.as_ref().is_some_and(|state| state.reclaim_heap.replace(false)) {
+        return;
     }
+    #[repr(C)]
+    struct HeapOptimizeResourcesInformation {
+        version: u32,
+        flags: u32,
+    }
+    let information = HeapOptimizeResourcesInformation { version: 1, flags: 0 };
+    // SAFETY: a versioned input buffer for the documented current-process heap operation.
+    // Null selects this process's heaps; this releases unused committed pages, not live data.
+    let _ = unsafe {
+        windows::Win32::System::Memory::HeapSetInformation(
+            None,
+            windows::Win32::System::Memory::HeapOptimizeResources,
+            Some((&raw const information).cast()),
+            size_of::<HeapOptimizeResourcesInformation>(),
+        )
+    };
 }
 
 pub fn memory(fixture: bool) -> Option<Memory> {

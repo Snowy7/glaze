@@ -126,6 +126,7 @@ impl Studio {
             log::error!("drawing: {e:#}");
         }
         app.dirty = false;
+        if app.panel.is_some() { panel::after_present(app); }
         // A design tile asked for thumbnails this frame: build them in the next one.
         if app.panel.is_none() && app.stage.borrow().designs.pending(app.docs.version) {
             app.dirty = true;

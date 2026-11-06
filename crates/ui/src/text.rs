@@ -109,6 +109,13 @@ pub struct Text {
 const MAX_LAYOUTS: usize = 64;
 
 impl Text {
+    /// Release a page's layouts and formats while keeping this thread's DirectWrite factory.
+    pub fn clear_cache(&mut self) {
+        self.layouts.clear();
+        self.formats.clear();
+        self.clock = 0;
+    }
+
     pub(crate) fn new() -> Result<Self> {
         // SAFETY: a documented factory call.
         let factory: IDWriteFactory =

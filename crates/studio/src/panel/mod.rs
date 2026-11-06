@@ -133,6 +133,7 @@ impl Page {
 
 #[derive(Debug, Default)]
 pub struct State {
+    reclaim_heap: std::cell::Cell<bool>,
     pub page: Page,
     pub add_widget: Option<String>,
     pub category: Option<String>,
@@ -151,6 +152,11 @@ pub struct State {
     pub theme_errors: std::cell::RefCell<std::collections::HashMap<std::path::PathBuf, String>>,
     reset_version: std::cell::Cell<Option<(crate::docs::DocId, u64)>>,
     auto_left: std::cell::Cell<Option<bool>>,
+}
+
+/// Release temporary page allocations after the previous display list has been replaced.
+pub fn after_present(app: &App) {
+    measure::reclaim(app);
 }
 
 #[derive(Debug, Clone, PartialEq)]
