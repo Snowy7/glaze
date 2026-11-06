@@ -10,11 +10,15 @@
 //! 3. sleeps on two handles: the helper process and a change notification on the rules folder.
 //!
 //! Each added element is matched against the rules on its own UI thread and styled there, with
-//! the value it had before recorded. A removed element gets its values back first (it may come
-//! back), a rules change re-styles every element on its own thread, and when the helper exits
-//! for any reason (flag off, quit, panic hotkey, crash) every recorded value is put back and the
-//! session ends: no thread, hook or timer of ours is left in the app. The DLL itself stays
+//! the value it had before recorded. Each UI thread's theme-brush overrides ([`resources`]) are
+//! applied when its first element appears. A removed element gets its values back first (it may
+//! come back), a rules change re-styles every thread and element, and when the helper exits for
+//! any reason (flag off, quit, panic hotkey, crash) every recorded value and brush is put back and
+//! the session ends: no thread, hook or timer of ours is left in the app. The DLL itself stays
 //! mapped (a TAP can't unload safely).
+//!
+//! XAML Diagnostics' handles don't keep objects alive (see [`Original`]): anything kept is held
+//! by a strong reference and re-resolved to a fresh handle before use.
 //!
 //! Nothing here may panic: release builds abort on panic, which would take the app down with
 //! us. Every COM failure is logged and skipped.
