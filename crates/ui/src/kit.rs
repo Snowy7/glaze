@@ -483,6 +483,17 @@ impl<'a> Frame<'a> {
         self.hit(id, r, Role::Button, label, true, None);
     }
 
+    /// A quiet toolbar icon: no resting outline or fill, a rounded wash on hover.
+    pub fn quiet_icon_button(&mut self, id: HitId, rect: Rect, icon: Icon, label: &str, enabled: bool, selected: bool) {
+        let radius = self.px(6.0);
+        let c = self.theme.color;
+        if selected { self.fill(rect, radius, c.accent_wash); }
+        self.wash(id, rect, radius, enabled);
+        self.icon(rect, icon, 17.0, if !enabled { c.quaternary } else if selected { c.accent } else { c.secondary });
+        self.focus_ring(id, rect, radius);
+        self.hit(id, rect, Role::Button, label, enabled, selected.then_some(true));
+    }
+
     /// An on/off switch with its right edge at `right`, centred on `center_y`. Its rect.
     pub fn switch(
         &mut self,
