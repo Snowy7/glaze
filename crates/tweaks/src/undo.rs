@@ -13,6 +13,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Value {
+    /// Exact registry type and bytes, including unusual string encodings/terminators.
+    /// The system-preferences journal uses this; existing styling retains its typed values.
+    Raw {
+        kind: u32,
+        bytes: Vec<u8>,
+    },
     Dword(u32),
     Binary(Vec<u8>),
     /// `REG_SZ`.
@@ -51,6 +57,9 @@ struct Entry {
     name: String,
     /// `None`: the value did not exist.
     original: Option<Value>,
+    /// Last value we intended to write, for ownership-aware persistent experiments.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    written: Option<Value>,
     /// The topmost key that did not exist and was created for this value.
     /// Restoring removes it again (and the keys below it, if empty).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -106,6 +115,18 @@ impl<S: Store> Undo<S> {
             .is_some_and(|journal| journal.has(key, name))
     }
 
+    /// The journal's original, distinguishing an absent entry from a value that was absent.
+    /// Used when resolving an automatic scheme so our own forced mode cannot feed back.
+    pub fn original(&self, key: &str, name: &str) -> Result<Option<Option<Value>>> {
+        Ok(self.load()?.and_then(|journal| {
+            journal
+                .entries
+                .into_iter()
+                .find(|e| e.key == key && e.name == name)
+                .map(|e| e.original)
+        }))
+    }
+
     /// Did the journal record any value under this key?
     pub fn journaled_key(&self, key: &str) -> bool {
         self.load()
@@ -127,8 +148,18 @@ impl<S: Store> Undo<S> {
                     key: w.key.into(),
                     name: w.name.into(),
                     original: self.store.read(w.key, w.name)?,
+                    written: Some(w.value.clone()),
                     created: self.store.first_missing(w.key)?,
                 });
+                grown = true;
+            }
+            if let Some(entry) = journal
+                .entries
+                .iter_mut()
+                .find(|e| e.key == w.key && e.name == w.name)
+                && entry.written.as_ref() != Some(&w.value)
+            {
+                entry.written = Some(w.value.clone());
                 grown = true;
             }
         }
@@ -169,6 +200,24 @@ impl<S: Store> Undo<S> {
                 if !self.put_back_all(&journal)? {
                     break;
                 }
+            }
+        }
+        std::fs::remove_file(&self.path).context("deleting the undo journal")?;
+        Ok(changed)
+    }
+
+    /// Restore a persistent experiment only where the value is still ours. A later change by
+    /// the user or another app wins. Old journals without ownership data are left untouched.
+    /// Failed restores retain the journal; retries also accept values already restored.
+    pub fn restore_if_unchanged(&mut self) -> Result<bool> {
+        let Some(journal) = self.load()? else {
+            return Ok(false);
+        };
+        let mut changed = false;
+        for entry in journal.entries.iter().rev() {
+            let current = self.store.read(&entry.key, &entry.name)?;
+            if entry.written.is_some() && (current == entry.written || current == entry.original) {
+                changed |= self.put_back(entry)?;
             }
         }
         std::fs::remove_file(&self.path).context("deleting the undo journal")?;
@@ -381,6 +430,12 @@ pub(crate) mod tests {
             .unwrap();
         assert!(changed && undo.pending());
         assert_eq!(
+            undo.original("K", "existing").unwrap(),
+            Some(Some(Value::Dword(1)))
+        );
+        assert_eq!(undo.original("K", "fresh").unwrap(), Some(None));
+        assert_eq!(undo.original("K", "unmanaged").unwrap(), None);
+        assert_eq!(
             undo.store.read("K", "existing").unwrap(),
             Some(Value::Dword(2))
         );
@@ -392,6 +447,7 @@ pub(crate) mod tests {
         );
         assert_eq!(undo.store.read("K", "fresh").unwrap(), None);
         assert!(!undo.pending());
+        assert_eq!(undo.original("K", "existing").unwrap(), None);
     }
 
     #[test]

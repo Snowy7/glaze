@@ -50,9 +50,60 @@ pub fn liquid(m: &Material, scale: f32) -> (lr::Material, lr::Appearance) {
     (material, appearance)
 }
 
+/// The finer knobs (`mypaper_glass_ipc::Style`, or an overlay's) applied to `material`, resolved
+/// once whenever a plate's style changes: the backdrop's brightness and saturation, and the kit's
+/// rim light (sheen) and rim shade (depth) at `2 * value` times their own, so 0.5 is the kit's.
+/// Unset sheen and depth keep what the highlight made of them.
+pub fn styled(
+    mut material: lr::Material,
+    brightness: f32,
+    saturation: f32,
+    sheen: Option<f32>,
+    depth: Option<f32>,
+) -> lr::Material {
+    let regular = lr::Material::regular();
+    material.brightness = brightness.clamp(0.0, 2.0);
+    material.saturation = saturation.clamp(0.0, 3.0);
+    if let Some(sheen) = sheen {
+        material.rim = regular.rim * 2.0 * sheen.clamp(0.0, 1.0);
+    }
+    if let Some(depth) = depth {
+        material.rim_shade = regular.rim_shade * 2.0 * depth.clamp(0.0, 1.0);
+    }
+    material
+}
+
+/// A surface's corners as liquid-rust draws them: quarter circles (`smoothing` 0, exactly as
+/// before), or Figma-smoothed continuous corners (0.6 is iOS's squircle).
+pub fn shape(radius: f32, smoothing: f32) -> lr::Shape {
+    let radius = radius.max(0.0);
+    if smoothing > 0.0 {
+        lr::Shape::Smooth {
+            radius,
+            smoothing: smoothing.min(1.0),
+        }
+    } else {
+        lr::Shape::Circular(radius)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_default_style_changes_nothing_and_each_knob_drives_one_thing() {
+        let (base, _) = liquid(&Material::default(), 1.5);
+        let ipc = mypaper_glass_ipc::Style::default();
+        assert_eq!(styled(base, ipc.brightness, ipc.saturation, ipc.sheen, ipc.depth), base);
+        assert_eq!(shape(12.0, ipc.smoothing), lr::Shape::Circular(12.0));
+        let regular = lr::Material::regular();
+        let m = styled(base, 0.8, 0.0, Some(0.5), Some(1.0));
+        assert_eq!((m.brightness, m.saturation), (0.8, 0.0));
+        assert_eq!((m.rim, m.rim_shade), (regular.rim, regular.rim_shade * 2.0), "0.5 is the kit's");
+        assert_eq!((m.frost, m.specular, m.refraction), (base.frost, base.specular, base.refraction));
+        assert_eq!(shape(12.0, 0.6), lr::Shape::Smooth { radius: 12.0, smoothing: 0.6 });
+    }
 
     #[test]
     fn controls_drive_the_kits_knobs() {

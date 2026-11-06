@@ -220,6 +220,7 @@ own I/O always; system topics after `events.subscribe`.
 | case | when |
 |---|---|
 | `open(face-open)`, `resize(face-open)`, `close(instance)` | a face, bar module or panel was placed, resized or removed |
+| `options(face-open)` | the instance's [options](#face-options) changed; `settings` holds all of them |
 | `action(action)` | a click on a node's `action`, a submitted field's text, a chosen select value |
 | `command(id)` | a `commands`/`menu` contribution was invoked |
 | `timer(id)` | a timer fired. Timers are **coalesced**: the host rounds deadlines to a 250 ms grid and wakes once for all due timers, and `every` under 1 s is refused |
@@ -241,7 +242,7 @@ vocabulary SDK v1 already draws:
 animates its child's appearance and changes with the kit's spring, and `canvas(list<draw>)`.
 Added 2026-11-06 (cases at the end): `meter` (a big value, label and note on one line over one
 clean bar, an optional faint pace tick) and `item` (a whole-row target: title, quiet detail, a
-status pill, `nested` under the row above). A kind the WIT lacks never reaches the shell: the
+status pill, `nested` under the row above), then `scroll` (see [Scroll](#scroll)). A kind the WIT lacks never reaches the shell: the
 guest SDK lowers it to `spacer`, so a new SDK `View` needs its `node-kind` case too.
 
 Colors are `tone`: a theme **role** (`label`, `secondary`, `tertiary`, `accent`, `warning`,
@@ -253,6 +254,34 @@ shell applies DPI. A face describes only its body. The shell adds the integratio
 it changed. `mypaper_plugin_api::diff` returns the changed node ranges (a node whose kind or
 payload changed replaces its subtree, and unchanged siblings are kept). The shell repaints only
 the widgets whose face changed.
+
+### Scroll
+
+`scroll { id, on-reach-end }` (SDK `View::Scroll { id, child, on_reach_end }`, `View::scroll(id,
+child)`) wraps one child, a `list` or `stack`, in a clipped viewport that takes the free height,
+like a `list`. Everything outside it (the chrome's header, a `text` above it in the same stack)
+stays fixed.
+
+```rust
+View::stack([
+    View::text("3 running", Role::Headline),          // fixed
+    View::scroll("running", View::List { children: rows, gap: Some(2.0) }),
+])
+```
+
+- **The shell scrolls it, not the plugin.** The wheel over a plugin widget goes to the pane
+  under the pointer (`views/plugin/scroll.rs`) and moves it with the kit's `Scroll`: a precision
+  touchpad's deltas at once, wheel notches gliding on the theme's spring, an overlay scrollbar
+  that shows while scrolling and fades. Plugins never get scroll events, so scrolling costs them
+  nothing and never counts against their budget.
+- **The position is kept** per widget instance and `id`, across every view update, so keep the
+  `id` stable (`running`, not one derived from the content). A face that stops showing a scroll
+  forgets its position.
+- **Rows stay clickable.** Every row keeps its action; hits are cut to the viewport, and rows
+  scrolled out have none. Only the viewport repaints while it scrolls.
+- **`on-reach-end`** is sent as a plain `action` (no value) when a scroll heads to the end, once;
+  it is sent again only after the content has grown (load more, then reach the new end).
+- An older shell that doesn't know `scroll` draws nothing there (the view is `unknown`).
 
 ### Styling
 
@@ -295,6 +324,48 @@ flyouts (built-in and plugin panels) take the `panel` surface's glass, radius, t
 tokens under the user's fields, plus its `label`, `accent` and `surface`/`background` colours,
 read again when the next flyout opens. Unknown names are ignored. The `widget` surface is
 accepted but not applied yet (see Status).
+
+## Face options
+
+A face can declare **options**: per-instance values the user changes from the widget itself.
+They are the widget settings schema (docs/widgets.md) of the `<plugin>--<face>` widget, declared
+on the face:
+
+```json
+"faces": [{ "id": "running", "name": "Running now", "size": { "default": [8, 5] },
+  "options": [
+    { "type": "boolean", "key": "show-subagents", "label": "Show subagents", "default": true },
+    { "type": "number", "key": "max-items", "label": "Max items", "min": 3, "max": 50, "step": 1, "default": 20 },
+    { "type": "select", "key": "sort", "label": "Sort", "options": ["recent", "name"], "default": "recent" },
+    { "type": "string", "key": "filter", "label": "Filter", "default": "" }
+  ] }]
+```
+
+- **Types**: toggles (`boolean`), choices (`select`), numbers (`number`, optional `min`, `max`,
+  `step`) and text (`string`), each with a `key`, a `label` and a `default`. The registry turns
+  them into the widget's `settings` (`crates/widgets/src/registry.rs`), so they are validated
+  like any widget setting (`Setting`, `deny_unknown_fields`).
+- **Stored per instance** in that instance's `settings` in `widgets.json`. The file format and
+  its version don't change, so an older running Studio or shell reads the file as before (it
+  ignores keys it has no schema for). Option keys follow the setting key rules; widget and
+  instance ids stay `[a-z0-9-]`.
+- **Delivered** in `face-open.settings` on `open`/`resize`, every option present: the helper
+  fills each missing one with its `default` (`Manifest::with_defaults`). When only the options
+  change, the shell sends `HostMsg::Options` and the plugin gets **`event::options(face-open)`**
+  with all of them, live: the face stays open at its size, and a plugin just redraws it.
+- **Edited from the widget**: right-click a plugin widget, choose **Options…**, and a kit menu
+  built from the schema opens on the widget (`crates/shell/src/widgets/plugin_options.rs`):
+  toggles are check rows, choices radio rows, numbers a few presets between `min` and `max`.
+  Text options are edited in Studio. A choice is checked against the schema, saved to
+  `widgets.json` and sent at once.
+- **The same options show in Studio › Widgets** for that instance, as the widget's settings
+  form.
+- Plugin-level settings (`settings`, Studio › Plugins) are separate and unchanged: they apply to
+  every face of the plugin.
+
+The T3 plugin's Running now has Show subagents, Show finished until read and Max items; Needs
+you has Show subagents and Max items. `plugins/hello`'s demo face has a text `greeting` shown
+in its footer, which the helper tests use to check live delivery.
 
 ## Permissions
 
@@ -389,7 +460,7 @@ it stops when the last plugin unloads. Frames are `[u32 len][postcard(HostMsg|He
   placed instance is a resize), `Close`, `Action { instance, action, value }`,
   `Command { plugin, dir, id }` (`dir` is the folder, so a command loads a plugin nothing has
   opened; only declared `menu`/`commands` ids are delivered), `Held(bool)`, `Stats`, `Shutdown`,
-  `System(SystemEvent)`, `Remove`.
+  `System(SystemEvent)`, `Remove`, `Options { instance, settings }` (only the options changed; delivered as `event::options`).
 - helper → shell: `View { instance, face, changed }` (the kit tree as JSON inside the frame,
   changed faces only; `changed` counts replaced subtrees), `Status { plugin, Live | Restarting |
   Stopped | Unloaded }`, `Style { plugin, surface, patch? }`, `Stats { plugin, memory, cpu_us,

@@ -61,6 +61,58 @@ pacing, so it is excluded from idle CPU samples. `--window <sample.json>` on the
 selects the exact CPU window and excludes startup/teardown publications. The async slots may omit a
 sample if all are still mapping, and no timestamp work runs when telemetry is disabled.
 
+### Live engine hillclimb (6 November 2026)
+
+On the user's live desktop, not the fixture: rain-city at 30 fps and 0.65 scale on the RTX
+(`engine.gpu: auto`), DISPLAY1 covered by a maximized window (paused), DISPLAY2 visible with a
+bar and dock, Studio open. CPU is % of one core (`measure.ps1`, 30 s, or per-thread counters).
+Other agents built and deployed throughout, so whole-process CPU swung by +-1 point between
+identical runs; wins below are interleaved A/B or counted in wakes and milliseconds.
+
+**What was wrong.** At 02:40 the engine used 27.1% of a core, 8x the fixture. Its main thread was
+answering Studio's glass preview 6,100-6,700 times a second: previews were served only from the
+first screen's kept frame, that screen was covered (never drawn), so every answer was "no frame",
+and Studio asks again as soon as it is refused. Each round trip opened, mapped and unmapped
+Studio's 10 MiB section. Studio itself spun at ~100% of a core.
+
+| Commit | Change | Before | After |
+|---|---|---:|---:|
+| `bac945a` | Previews draw from any screen's drawn frame; a repeat of a refused request waits for a frame | 25.99, 25.94% | **3.33, 4.38, 2.92%** (Studio 100% -> 0) |
+| `7270919` | Shader inputs as immediate data (`var<immediate>`, root constants); an unchanged blit uploads nothing | 0.293-0.302 ms CPU per frame (lab, RTX) | **0.261-0.262 ms**, frames bit-identical |
+| `2efc0ee` | The engine's WinEvent hooks run on their own thread, in 50 ms batches (`crates/desktop/src/cover.rs`) | main thread 1,196 wakes/s, +0.8-1.6 points while the mouse moves | **96 wakes/s**, no measurable cost |
+| `6d11015` | Preview glass forks the desktop's compiled renderer | 7.0, 9.1 ms per preview (median) | **5.3, 2.7 ms** |
+| `0bd9a57` | No D3D12 debug names (`DISCARD_HAL_LABELS`; wgpu named a command list per pass, every frame) | glass-only 0.229-0.298 ms CPU per frame (lab) | **0.221-0.230 ms** |
+
+After them, rain on one visible screen is 1.9-2.9% of a core (the `measure.ps1` and A/B runs
+above) and the main thread's frame is wgpu and the driver: present 32%, command encoding 31%
+(half of it NVIDIA's command-list reset), submit 16%, liquid-rust 3%. That is one encoder, one
+submit and one present per frame, the minimum for this design. GPU: 0.2 ms per frame on the RTX
+(frame lab). Plates are published 0.15 times a second while the desktop is idle.
+
+**What stays open, and the trade-offs.**
+- *Covered screens: 0.31% of a core, not 0.* With every screen covered the engine draws nothing,
+  but three NVIDIA driver threads still wake about 65 times a second each while the D3D12 device
+  exists (197 wakes/s in all). Reaching 0 (and ~10 MB instead of ~170 MB) means releasing the
+  device after some seconds fully covered and hiding our windows, so Windows shows the theme's
+  static snapshot; the cost is that rain would resume a few hundred ms after a screen is
+  uncovered, with the still showing meanwhile. That is a behaviour change for the user to decide.
+- *Still image.* Not measured live (it would switch the user's theme). It draws nothing; what
+  remains is the covered case's driver wakes plus window events, now batched off the frame loop.
+- *Memory: 169 MB private steady on the RTX.* A wgpu device here is 92-112 MiB of it (a bare D3D12
+  device alone is 57 MiB). wgpu creates a D3D12 device on all five adapters DXGI lists (the RTX
+  three times, the AMD iGPU, WARP) before choosing; exposing only the screens' adapter saves
+  about 13 MiB (lab, two runs each), which needs a patched wgpu-hal (`Adapter::expose` is
+  private): not done. After a shader misses NVIDIA's disk cache (a new theme, or a new build), the
+  driver keeps a compile pool of ~60 threads and about +40 MB until the engine restarts (seen
+  as 205-212 MB / 80 threads; the same build later started at 169 MB / 24 threads).
+- *Studio (not engine code).* It asks again right after a refusal, and waits forever on an
+  engine that restarted mid-request (its done event never comes); the engine now copes with
+  both, but Studio should stop re-asking an unchanged refused request and time out a request.
+
+Tools (`C:\mypaper-targets\engine-perf\tools`): per-thread CPU and wakes, the preview request
+rate and round trip, plate publication rate, cursor-motion and covered-screen probes, and an
+engine A/B swapper (`swap-engine.ps1`) that puts another exe live and restarts only the engine.
+
 ### Engine hillclimb (5 November 2026)
 
 Same machine, fixture and harness as the N0.3 measurements below (two visible 2560 x 1440

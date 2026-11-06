@@ -49,4 +49,8 @@ impl Source for ImageSource {
     fn shared(&self) -> bool {
         true
     }
+
+    fn releasable(&self) -> bool {
+        true
+    }
 }

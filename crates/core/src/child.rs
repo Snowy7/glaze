@@ -1,6 +1,7 @@
 //! One supervised child process: spawn, restart policy and its wait handle.
 
 use std::os::windows::io::AsRawHandle;
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
@@ -45,6 +46,8 @@ impl Supervised {
     pub fn start(&mut self) -> Result<()> {
         let child = Command::new(&self.exe)
             .args(&self.args)
+            // Optional console-based services must not allocate a visible console at boot.
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
             .spawn()
             .with_context(|| format!("starting the {}", self.name))?;
         self.child = Some(child);

@@ -67,8 +67,14 @@ fn topmost_overlay(ex: u32, style: u32) -> bool {
 pub struct ZOrder(Vec<AppWindow>);
 
 impl ZOrder {
-    pub fn read() -> Self {
-        let mut windows = Vec::new();
+    /// The normal app windows from the front, until each of `monitors` has its frontmost one
+    /// (all that [`hides`](Self::hides) looks at): a busy desktop has hundreds of hidden
+    /// top-level windows behind them.
+    pub fn read(monitors: &[Rect]) -> Self {
+        let mut windows: Vec<AppWindow> = Vec::new();
+        if monitors.is_empty() {
+            return Self(windows);
+        }
         let mut seen = HashSet::new();
         // SAFETY: read-only queries. Track visited handles because windows can be reordered or
         // destroyed during traversal; never loop indefinitely if the desktop changes under us.
@@ -81,6 +87,12 @@ impl ZOrder {
                 next = GetWindow(hwnd, GW_HWNDNEXT).ok();
                 if let Some(window) = AppWindow::read(hwnd) {
                     windows.push(window);
+                    if monitors
+                        .iter()
+                        .all(|m| windows.iter().any(|w| w.monitor == *m))
+                    {
+                        break;
+                    }
                 }
             }
         }
@@ -108,10 +120,24 @@ impl AppWindow {
     fn read(hwnd: HWND) -> Option<Self> {
         // SAFETY: read-only queries; a destroyed HWND simply fails the snapshot.
         unsafe {
+            // The cheap in-process checks first: most top-level windows are hidden, and the
+            // class name and DWM's cloak state (a call into DWM) are asked only of the rest.
+            let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+            let facts = Facts {
+                maximized: IsZoomed(hwnd).as_bool(),
+                minimized: IsIconic(hwnd).as_bool(),
+                visible: IsWindowVisible(hwnd).as_bool(),
+                tool: ex & (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0) != 0,
+                owned: GetWindow(hwnd, GW_OWNER).is_ok_and(|owner| !owner.is_invalid()),
+                overlay: topmost_overlay(ex, GetWindowLongPtrW(hwnd, GWL_STYLE) as u32),
+                ..Facts::default()
+            };
+            if !normal_app(facts) {
+                return None;
+            }
             let mut pid = 0;
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
             let class = mypaper_bars::apps::class_name(hwnd);
-            let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
             let mut cloaked = 0u32;
             let _ = DwmGetWindowAttribute(
                 hwnd,
@@ -120,15 +146,10 @@ impl AppWindow {
                 size_of_val(&cloaked) as u32,
             );
             let facts = Facts {
-                maximized: IsZoomed(hwnd).as_bool(),
-                minimized: IsIconic(hwnd).as_bool(),
-                visible: IsWindowVisible(hwnd).as_bool(),
-                tool: ex & (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0) != 0,
-                owned: GetWindow(hwnd, GW_OWNER).is_ok_and(|owner| !owner.is_invalid()),
                 cloaked: cloaked != 0,
                 ours: pid == std::process::id() || class.starts_with("mypaper."),
                 system_ui: system_ui(&class),
-                overlay: topmost_overlay(ex, GetWindowLongPtrW(hwnd, GWL_STYLE) as u32),
+                ..facts
             };
             if !normal_app(facts) {
                 return None;

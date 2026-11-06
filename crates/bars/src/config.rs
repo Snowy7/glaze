@@ -144,6 +144,12 @@ pub enum Performance {
     Off,
 }
 
+impl Performance {
+    pub fn active(self, on_battery: bool) -> bool {
+        self == Self::On || (self == Self::Auto && on_battery)
+    }
+}
+
 // --- Top bar -----------------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -748,9 +754,15 @@ impl<'de> Deserialize<'de> for ModuleRef {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         use serde::de::{Error, IntoDeserializer};
         let text = String::deserialize(deserializer)?;
-        if text == "obs" { return Ok(Self::Custom("obs--status".into())); }
-        if text == "tailscale" { return Ok(Self::Custom("tailscale--status".into())); }
-        if text == "t3" { return Ok(Self::Custom("t3--status".into())); }
+        if text == "obs" {
+            return Ok(Self::Custom("obs--status".into()));
+        }
+        if text == "tailscale" {
+            return Ok(Self::Custom("tailscale--status".into()));
+        }
+        if text == "t3" {
+            return Ok(Self::Custom("t3--status".into()));
+        }
         if text == "|" {
             return Ok(Self::Break);
         }
@@ -764,7 +776,9 @@ impl<'de> Deserialize<'de> for ModuleRef {
             };
         }
         // Ignore the retired native Docker bar entry when reading an older configuration.
-        if text == "docker" { return Ok(Self::Break); }
+        if text == "docker" {
+            return Ok(Self::Break);
+        }
         let module: Result<Module, D::Error> =
             Module::deserialize(text.as_str().into_deserializer());
         module.map(Self::Builtin)

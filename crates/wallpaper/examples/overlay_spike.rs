@@ -40,6 +40,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 #[path = "../src/material.rs"]
+#[allow(dead_code)]
 mod material;
 #[path = "../src/overlay/mod.rs"]
 #[allow(dead_code)]

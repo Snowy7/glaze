@@ -1,11 +1,17 @@
-//! One shell-owned WinEvent source. Subscribers run on its UI thread; other threads forward
-//! notifications to their own queues. Location hooks follow only Explorer and the foreground app.
+//! One shell-owned WinEvent source. Its hooks live on a thread of their own (`win-events`) that
+//! takes events in batches: location hooks follow Explorer and the foreground app, and Windows
+//! counts every cursor move over that app as one of their events (about 300 a second from a
+//! moving mouse), so on the shell's UI thread they woke it that often for nothing. Subscribers
+//! run on the hook thread and record what they need; one that recorded something calls
+//! [`notify`], and the thread that installed the source then gets one `WM_NULL` per batch.
 use std::sync::{
     Arc, Mutex, OnceLock,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering},
 };
+use std::time::Duration;
 use windows::Win32::{
-    Foundation::HWND,
+    Foundation::{HWND, LPARAM, WPARAM},
+    System::Threading::{GetCurrentThreadId, INFINITE},
     UI::{
         Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent},
         WindowsAndMessaging::*,
@@ -27,10 +33,27 @@ fn listeners() -> &'static Mutex<Listeners> {
 static NEXT: AtomicU64 = AtomicU64::new(1);
 static SCOPES_DIRTY: AtomicBool = AtomicBool::new(true);
 static DELIVERED: AtomicU64 = AtomicU64::new(0);
+static HOOKS: AtomicUsize = AtomicUsize::new(0);
+/// A subscriber recorded something during the current batch.
+static NOTIFIED: AtomicBool = AtomicBool::new(false);
+/// The thread that installed the source (0: none), woken after a batch that [`notify`]d.
+static CONSUMER: AtomicU32 = AtomicU32::new(0);
+
+/// How long the hook thread lets events gather after taking a batch: at most this much later
+/// the consumer hears of a window change, and a moving mouse wakes the hook thread at most
+/// 1 s / `BATCH` times a second.
+const BATCH: Duration = Duration::from_millis(25);
+
+/// Subscribers call this when an event changed something the installing thread must act on
+/// (it is woken once, after the batch).
+pub fn notify() {
+    NOTIFIED.store(true, Ordering::Relaxed);
+}
 
 /// Dropping a subscription removes it without touching another thread's native hooks.
 pub struct Subscription(u64);
 impl Subscription {
+    /// `callback` runs on the hook thread, once per whole-window event.
     pub fn new(callback: impl Fn(Event) + Send + Sync + 'static) -> Self {
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
         let mut listeners = listeners().lock().unwrap();
@@ -45,43 +68,101 @@ impl Drop for Subscription {
     }
 }
 
-/// Install once on the shell UI thread, pump that thread and refresh after dispatching messages.
+/// Install once, on the thread that should hear about changes (it must pump messages: it gets
+/// `WM_NULL` after a batch in which a subscriber called [`notify`]). Unhooks on drop.
 pub struct WinEvents {
-    hooks: Vec<HWINEVENTHOOK>,
-    locations: Vec<HWINEVENTHOOK>,
-    processes: Vec<u32>,
+    thread: Option<std::thread::JoinHandle<()>>,
+    thread_id: u32,
 }
 impl WinEvents {
     /// Active native hooks, callbacks delivered and current subscribers (live diagnostics).
     pub fn counts(&self) -> (usize, u64, usize) {
         (
-            self.hooks.len() + self.locations.len(),
+            HOOKS.load(Ordering::Relaxed),
             DELIVERED.load(Ordering::Relaxed),
             listeners().lock().unwrap().len(),
         )
     }
     pub fn install() -> Self {
-        let hooks = [
-            (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
-            (EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND),
-            (EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE),
-            (EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE),
-            (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
-        ]
-        .into_iter()
-        .filter_map(|(first, last)| hook(first, last, 0))
-        .collect();
-        let mut source = Self {
-            hooks,
-            locations: Vec::new(),
-            processes: Vec::new(),
-        };
+        // SAFETY: a read of the calling thread's id.
+        CONSUMER.store(unsafe { GetCurrentThreadId() }, Ordering::Relaxed);
         SCOPES_DIRTY.store(true, Ordering::Relaxed);
-        source.refresh();
-        source
+        let (started, thread_id) = std::sync::mpsc::channel();
+        let thread = std::thread::Builder::new()
+            .name("win-events".into())
+            .stack_size(256 * 1024)
+            .spawn(move || hook_thread(&started))
+            .inspect_err(|e| log::warn!("window events unavailable: {e}"))
+            .ok();
+        Self {
+            thread_id: thread.as_ref().and_then(|_| thread_id.recv().ok()).unwrap_or(0),
+            thread,
+        }
     }
+}
+impl Drop for WinEvents {
+    fn drop(&mut self) {
+        if let Some(thread) = self.thread.take() {
+            // SAFETY: the hook thread's queue exists (made before it sent its id).
+            let _ = unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) };
+            let _ = thread.join();
+        }
+        CONSUMER.store(0, Ordering::Relaxed);
+    }
+}
 
-    pub fn refresh(&mut self) {
+/// The hook thread: hooks, sends its id once its queue exists, then takes events in batches
+/// (re-scoping the location hooks when the foreground changed) until `WM_QUIT`, and unhooks.
+fn hook_thread(started: &std::sync::mpsc::Sender<u32>) {
+    let mut hooks: Vec<HWINEVENTHOOK> = [
+        (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
+        (EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND),
+        (EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE),
+        (EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE),
+        (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
+    ]
+    .into_iter()
+    .filter_map(|(first, last)| hook(first, last, 0))
+    .collect();
+    let mut scopes = Scopes::default();
+    scopes.refresh();
+    HOOKS.store(hooks.len() + scopes.locations.len(), Ordering::Relaxed);
+    let mut msg = MSG::default();
+    // SAFETY: messages of this thread's own queue; WM_QUIT ends the loop before unhooking.
+    unsafe {
+        let _ = PeekMessageW(&mut msg, None, 0, 0, PM_NOREMOVE);
+        let _ = started.send(GetCurrentThreadId());
+        'run: loop {
+            MsgWaitForMultipleObjectsEx(None, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                if msg.message == WM_QUIT {
+                    break 'run;
+                }
+                DispatchMessageW(&msg);
+            }
+            scopes.refresh();
+            HOOKS.store(hooks.len() + scopes.locations.len(), Ordering::Relaxed);
+            if NOTIFIED.swap(false, Ordering::Relaxed) {
+                let consumer = CONSUMER.load(Ordering::Relaxed);
+                if consumer != 0 {
+                    let _ = PostThreadMessageW(consumer, WM_NULL, WPARAM(0), LPARAM(0));
+                }
+            }
+            std::thread::sleep(BATCH);
+        }
+    }
+    unhook(&mut hooks);
+    unhook(&mut scopes.locations);
+}
+
+/// The location hooks, scoped to the foreground app's and Explorer's processes.
+#[derive(Default)]
+struct Scopes {
+    locations: Vec<HWINEVENTHOOK>,
+    processes: Vec<u32>,
+}
+impl Scopes {
+    fn refresh(&mut self) {
         if !SCOPES_DIRTY.swap(false, Ordering::Relaxed) {
             return;
         }
@@ -113,14 +194,8 @@ impl WinEvents {
         }
     }
 }
-impl Drop for WinEvents {
-    fn drop(&mut self) {
-        unhook(&mut self.hooks);
-        unhook(&mut self.locations);
-    }
-}
 fn hook(first: u32, last: u32, pid: u32) -> Option<HWINEVENTHOOK> {
-    // SAFETY: static callback; hooks are owned and dropped on the installing UI thread.
+    // SAFETY: static callback; hooks are owned and dropped on the hook thread.
     let hook = unsafe {
         SetWinEventHook(
             first,

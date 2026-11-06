@@ -52,6 +52,29 @@ control the user set (`config.json` › `look.material`, or the family's `look.b
 engine (times its scale). A bar's `look.transparent` drops its plate altogether (the macOS top bar's
 default); a material or style change restyles bars in place, never new windows or appbars.
 
+### Finer knobs on the wire (6 November 2026)
+
+Beyond the five controls, each glass takes a style, neutral by default (draws exactly as before).
+Plates: `mypaper_glass_ipc::Style`, sent with `Writer::publish_styled(&plates, &styles)` (one per
+plate, or empty for all defaults). Overlays: `request::Style` in `Request::Style { client, style }`,
+sent after each `Open` (a new overlay starts at `Style::DEFAULT`).
+
+| Field | Range, default | What the engine draws |
+|---|---|---|
+| `brightness` | 0..=2, 1 | multiplies what's behind the glass (refracted and frosted), before tone mapping |
+| `saturation` | 0..=3, 1 | saturation of what's behind (0 grey) |
+| `smoothing` | 0..=1, 0 | corner smoothing: 0 quarter circles, 0.6 iOS's continuous squircle (`Shape::Smooth`); the surface must draw the same corners |
+| `sheen` | 0..=1, unset | the kit's rim light inside the lit (top) edge, 0.5 = the kit's; unset (`None`, or negative on the overlay wire) follows `highlight` |
+| `depth` | 0..=1, unset | the kit's broad rim shade under the lit edge, 0.5 = the kit's; unset follows `highlight` |
+| `fade_ms` (overlays only) | 0..=2000, 300 | how long the glass fades in when it first shows; 0 shows it at once (reduced motion) |
+
+Plate blur (`Material::blur`, physical px) now takes up to 256 px (64 DIP at 400 %); frost still
+tops out at 64 pt. Styles resolve into the glass's material and shape only when a plate (or
+overlay) changes, never per frame; brightness and saturation are one multiply-add in the glass
+shader, skipped when both are 1. Plate styles travel in a second section stamped with the
+snapshot's sequence, and only a `Style` request is longer than the old overlay wire, so a shell
+or engine on either side of the change keeps working with defaults.
+
 Glass follows the scheme, never the content (`adapt_to_content` off): our labels follow the
 surface's colours. Plates move exactly as published (`Scene::place`, since the shell owns motion);
 liquid-rust's springs materialize glass in and out and fade material changes.
@@ -64,6 +87,9 @@ liquid-rust's springs materialize glass in and out and fade material changes.
   wallpaper it hasn't blurred (`KeptFrame::drawn`), and only over the texels each group reads.
   It draws over the restored swapchain image through sRGB views. Nothing runs while the
   wallpaper and plates hold still.
+- **Studio's previews**: `preview.rs` draws each request from the first drawn kept frame of any
+  screen, with a fork of the plates' renderer (`GlassPass::fork`: its compiled pipelines, its own
+  pyramid), so an answer compiles nothing.
 - **Overlays** (flyouts and menus over app windows): `overlay/glass.rs` copies the WGC crop into
   an sRGB texture, draws the glass over a transparent clear (premultiplied for
   DirectComposition) and copies it out. The window grows by `Material::outset` (shadow or

@@ -158,6 +158,9 @@ fn component_faces() -> Vec<(String, WidgetManifest)> {
                 "description": format!("From the {} plugin", plugin.name),
                 "category": "Plugins",
                 "size": { "default": size.default, "min": size.min.unwrap_or(size.default), "max": size.max },
+                // The face's options are the widget's settings: Studio's form and the widget's
+                // Options… menu edit them per instance (docs/plugins.md, "Face options").
+                "settings": face.options,
             });
             match serde_json::from_value::<WidgetManifest>(manifest) {
                 Ok(manifest) => out.push((id, manifest)),
@@ -170,6 +173,46 @@ fn component_faces() -> Vec<(String, WidgetManifest)> {
 
 #[cfg(test)]
 mod tests {
+    /// A face's `options` become its widget's settings: they parse as the settings schema, fill
+    /// their defaults, refuse bad values and persist in the instance's `settings`.
+    #[test]
+    fn face_options_parse_default_and_persist_as_widget_settings() {
+        use crate::layout::Layout;
+        use serde_json::{Map, json};
+        let t3: serde_json::Value = serde_json::from_str(include_str!("../../../plugins/t3/plugin.json")).unwrap();
+        let running = t3["faces"].as_array().unwrap().iter().find(|f| f["id"] == "running").unwrap();
+        // The same JSON `component_faces` builds.
+        let manifest: crate::manifest::WidgetManifest = serde_json::from_value(json!({
+            "id": "t3--running", "name": "T3 · Running now", "description": "From the T3 plugin", "category": "Plugins",
+            "size": { "default": [8, 5], "min": [4, 3], "max": [12, 10] }, "settings": running["options"],
+        }))
+        .unwrap();
+        let keys: Vec<&str> = manifest.settings.iter().map(|s| s.key()).collect();
+        assert_eq!(keys, ["show-subagents", "show-finished", "max-items"]);
+        let saved = Map::from_iter([("show-subagents".to_owned(), json!(false)), ("variant".to_owned(), json!("running"))]);
+        let resolved = manifest.resolve_settings(&saved);
+        assert_eq!(resolved["show-subagents"], json!(false), "a saved value wins");
+        assert_eq!(resolved["show-finished"], json!(true), "a missing one is its default");
+        assert_eq!(resolved["max-items"].as_f64(), Some(20.0));
+        assert!(manifest.check_settings(Map::from_iter([("show-subagents".to_owned(), json!("yes"))])).is_err());
+        assert!(manifest.check_settings(Map::from_iter([("nope".to_owned(), json!(1))])).is_err());
+        // Stored in the instance's settings, beside what was there.
+        let dir = std::env::temp_dir().join(format!("mypaper-face-options-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("widgets.json");
+        let mut layout = Layout::starter(r"\\.\DISPLAY1", 40, 20, &[("t3--running", [8, 5])]);
+        let id = layout.instances[0].instance.clone();
+        assert!(crate::manifest::valid_id(&id), "{id}");
+        layout.instances[0].settings = saved.clone();
+        let checked = manifest.check_settings(Map::from_iter([("max-items".to_owned(), json!(8))])).unwrap();
+        layout.set_settings(&id, checked).unwrap();
+        layout.save(&path).unwrap();
+        let back = Layout::load(&path).unwrap();
+        assert_eq!(back.instances[0].settings["max-items"].as_f64(), Some(8.0));
+        assert_eq!(back.instances[0].settings["variant"], json!("running"), "other keys are kept");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn every_size_from_min_to_max_is_allowed_one_cell_at_a_time() {
         for installed in super::builtins().widgets.values() {

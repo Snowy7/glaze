@@ -116,8 +116,16 @@ impl Styling {
     }
 
     fn use_theme(&mut self, loaded: LoadedTheme) {
-        let style = self.look.windows_style(loaded.theme.windows.as_ref());
-        self.theme = Some((loaded.dir, style));
+        let palette = palette::read()
+            .filter(|snapshot| snapshot.is_for(&loaded.dir))
+            .map(|snapshot| snapshot.palette);
+        let resolved = mypaper_theme::windows::resolve(
+            &self.look,
+            Some(&loaded.theme),
+            palette,
+            self.tweaks.unmanaged_dark_mode(),
+        );
+        self.theme = Some((loaded.dir, resolved.windows));
         self.apply();
     }
 

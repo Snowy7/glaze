@@ -129,6 +129,99 @@ is the theme's or Windows'. `look.glyphs: fluent` draws module icons from Segoe 
   tooltips with the app's name. The taskbar style keeps Windows' washes.
 - **Menus** the bars open (dock, tray) and the desktop menu use the bar theme's `theme.tokens()`.
 
+The appearance layer is resolved when configuration changes: `surface: none` removes the bar's
+body, `solid` draws the tint at `opacity`, and `glass` uses the style's engine material. An explicit
+`look.background` or `look.transparent` wins over that surface choice. `appearance.font` supplies
+the font under `look.font`; `appearance.scale` multiplies monitor DPI for content, geometry and
+reservations. Radius, text tone, accent and blur reach bars and popup themes; popup fonts and
+content scale also follow them. `shadow: false` removes bare-bar text shadows and menu shadows.
+An explicit solid background draws its own colour without a glass plate. Borders apply to drawn
+surfaces; glass keeps the engine's single edge.
+
+Every `system-accent-light-1..3` and `system-accent-dark-1..3` colour token uses its actual Windows
+palette entry (separate from a theme's `accent`). `wallpaper` backgrounds keep the wallpaper plate
+even when a window overlaps the bar; `blur` backgrounds always use the live overlay. Their legacy
+brightness and saturation controls still need renderer support. Glass `style: none` disables the
+material, `frosted` removes lensing, and `intensity` scales refraction, highlight and frost. Theme
+`bars.glass` is a partial layer under the bar's glass controls; removing fields restores defaults.
+
+### Native state and motion controls (2026-11-06)
+
+Appearance values override design defaults; explicit shared, per-bar and monitor `look` values
+still win. Font, scale, radius, tone and glass resets therefore work with a preset selected too.
+`look.items` resolves rest, hover and active fill, text colour, scale, border and radius. Hover and
+active inherit rest fields. Flat surfaces also consume per-state `look.border` and `look.shadow`;
+glass draws neither of those UI decorations. Built-in `var(--fill-1..3)`, `var(--edge)` and
+`var(--t0..3)` use the native scheme's palette, and named colour choices are cached on reload.
+
+Motion resolves structural defaults (`animation`, `bar`, `top`/`dock`), then the named leaf at each
+level, in that order. A disabled ancestor wins. `reduceMotion: never` overrides Windows' animation
+preference; performance `on`, or `auto` while on battery, still disables motion and glass. The same
+policy, duration and curve reach flyouts and menus. Hover/press transitions, dock magnification,
+launch bounce and attention have separate resolved leaves; show/hide does not take `open` timing.
+Named springs fit an explicitly configured duration; a physical `{mass, stiffness, damping}`
+spring uses its natural bounded settling time. Every transition ends at the exact final value.
+
+Flyout and menu `open` styles support fade, slide (without glass), pop, scale, morph and none.
+Pop/scale/morph keep a bitmap only during opening, transform its hit regions and engine glass
+body together, then restore the original display list and free the bitmap. Bar show/hide consumes
+slide/fade/pop/scale/morph/none separately from popup opening; pointer coordinates follow the
+same inverse transform as the pixels. Glass popup slides retain the stationary fade to avoid
+repeated overlay capture flashes. That engine fade still ignores reduced motion and configured
+timing. Continuous squircle corners, backdrop brightness/saturation, glass depth/sheen and
+Windows-wide one-switch styling remain open. The IPC validator also still caps physical blur at
+32 px, so accepted larger values (including high-DPI projections) cannot reach the renderer.
+
+Flyout kit controls and menu rows now consume the hover/press leaves too. Their sampled washes
+keep state only for entered controls, remove resting entries, and stop the frame source when
+settled. `mypaper_ui::interact::motion::InteractionMotion`, `Frame::with_motion` and the menu's
+optional interaction timings add this behavior without changing existing kit callers. Configured
+flat-surface shadows reserve a bounded outset, including for cropped islands and docks; their
+screen anchors remain unchanged.
+
+### Night verification (2026-11-06)
+
+The release workspace build passed, followed by normal deployment. Focused library tests passed:
+bars 116 (one ignored), shell 140 (ten ignored), UI 60, config 20, theme 15, and widget layering 7.
+Clippy for the shell/UI/bars libraries passed with existing warnings. Resolver tests cover preset
+versus explicit appearance, monitor precedence, independent Windows accent shades, theme-glass
+resets, state inheritance, motion policy and curves. Reveal geometry also checks inverse pointer
+mapping; the real-window bar test covers multiple dock plates without island windows.
+
+Verified: DPI-aware captures on both 2560x1440 screens show solid/light Georgia text at 1.1x,
+frosted/dark glass and the flat performance-mode surface. Guarded input opened the native launcher
+with scale and the dock's commands menu with morph; opening and settled captures were inspected.
+No menu action was invoked. Other bar reveal styles have source/math coverage, not a separate
+live capture. Artifacts and the reproduction scripts are in `%TEMP%\mypaper-tools\bars-parity`:
+`solid-light-0-top.png`, `frosted-dark-1-dock.png`, `performance-0-top.png`,
+`launcher-scale-{opening,settled}.png`, and `menu-morph-{opening,settled}.png`.
+
+Each configuration experiment restored the user's original `bars.json` bytes. Its SHA-256 is
+`88032FB713BEDDF3D3B8386859655E7A0E2C05DCBDB2F8E9718C5607C0C61BA0`.
+The user's Studio window stayed open. Engine-owned crates were not edited.
+
+The prescribed 30-second live sampler produced the following shell results (CPU is percent of
+one core, not the whole 16-core machine):
+
+| State / artifact in `%TEMP%\mypaper-tools` | CPU % one core | Private MB |
+|---|---:|---:|
+| Before work, `measure-bars-before.json` | 0.42 | 34 |
+| After variants and launcher/menu interaction, `measure-bars-after.json` | 0.31 | 37 |
+| Restarted, settled default config, `measure-bars-after-settled.json` | 1.98 | 34 |
+
+The default-state memory increase is zero, but the exercised process exceeded the +1 MB
+allowance by retaining 3 MB above the cold baseline. These samples do **not** close the memory
+gate after interaction or establish ~0 idle CPU. Other live work changed window/service activity
+during this run, so the higher CPU sample is not attributed to this patch. A diagnostic minute
+reported 356 bar ticker wakes, 187 ms in bar paint and 96 ms in bar services; the frame source was
+not continuously busy, but a controlled quiescent comparison remains needed. The immediate
+startup sample (2.24%, 33 MB) is retained separately as `measure-bars-after-startup.json` and is
+not called idle. No performance improvement is claimed from these unlike desktop states.
+
+Studio follow-ups are recorded in `plans/night/2026-11-06.md`: expose the now-consumed appearance
+and state controls, separate motion leaves and show/open styles, and inheritance resets. Renderer
+knobs and the separate Windows-wide style synchronization remain explicitly pending.
+
 CSS, gradient/image **surface fills**, noise, glow, neon and shaped corners are ignored with one
 warning per process. Image app icons are retained. There is no CSS renderer or DWM blur fallback.
 
@@ -489,9 +582,9 @@ loop belongs to the binary, while its views now belong to the library.
 | Custom command arguments | typed argv in the custom provider, without shell re-parsing |
 | Taskbar button length, including titled buttons | explicit length wins over the 168 DIP default |
 | Root animation enabled/duration/curve and dock magnify timing | bar motion resolver |
-| Bar-wide border/shadow and item rest/hover/active styling | still partial, C10 |
-| Appearing style, hover/press, bounce/attention durations and popup opening timing | still partial, C14/C15; the menus-opening leaf currently drives bar slide |
-| Appearance font/content scale/shadow and dedicated OneUI/Fluent rendering | still partial, C06/C25 |
+| Bar-wide border/shadow and item rest/hover/active styling | consumed; C10 remains for saturation and continuous corners |
+| Appearing style, hover/press, bounce/attention durations and popup opening timing | consumed; C14 remains for the engine glass fade/slide path, C15 closed |
+| Appearance font/content scale/shadow and dedicated OneUI/Fluent rendering | consumed; C06 remains for physical blur range, C25 for Windows-wide token sync |
 
 The focused shared-preview test checks module weight/color/size, the width-only edge and a titled
 212 DIP taskbar button through `preview::bars`, rather than a duplicate Studio renderer. C06, C10

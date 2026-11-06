@@ -67,7 +67,9 @@ fn run() -> Result<()> {
     startup::ready("shell", "prepared_ms");
     let _com = Com::init();
     let mut ui = Ui::new()?;
-    let mut win_events = mypaper_desktop::win_events::WinEvents::install();
+    // Window events arrive on a thread of their own; a batch that changed something posts
+    // WM_NULL here (a posted message, so it runs the loop's work at once).
+    let win_events = mypaper_desktop::win_events::WinEvents::install();
     startup::ready("shell", "factories_ms");
     overlay_client::install();
     let bars = bars::Bars::new(&mut ui, bars_start)?;
@@ -141,6 +143,7 @@ fn run() -> Result<()> {
             )
         };
         let mut at = Instant::now();
+        wakes.resume();
         if parent.is_some() && woke == WAIT_OBJECT_0 {
             log::info!("the process that started the shell exited; stopping");
             break;
@@ -194,17 +197,18 @@ fn run() -> Result<()> {
                 DispatchMessageW(&msg);
             }
         }
-        win_events.refresh();
         at = wakes.spent("pump", at);
         let sent_only = cause.is_none();
         wakes.wake(cause.unwrap_or(Cause::Sent));
         if wakes.report(|| {
             let bars: Vec<_> = bars::Bars::take_tick_costs()
                 .iter()
-                .map(|(part, d)| format!("{part} {:.1}", d.as_secs_f64() * 1e3))
+                .map(|(part, d, cycles)| {
+                    format!("{part} {:.1}/{:.1}", d.as_secs_f64() * 1e3, *cycles as f64 / 1e6)
+                })
                 .collect();
             format!(
-                "bars.tick ms: {}; bar stats (samples, changes, sample_us, all bar repaints) since start: {:?}; WinEvents (hooks, callbacks, subscribers): {:?}; widgets since start: {:?}",
+                "bars.tick ms/Mcycles: {}; bar stats (samples, changes, sample_us, all bar repaints) since start: {:?}; WinEvents (hooks, callbacks, subscribers): {:?}; widgets since start: {:?}",
                 bars.join(", "),
                 shell.bars.stats_counts(),
                 win_events.counts(),
@@ -241,20 +245,48 @@ fn run() -> Result<()> {
             startup::ready("shell", "widgets_ready_ms");
         }
     }
-    drop(shell);
+    // Core gives the shell three seconds to restore the taskbar and exit: each part's teardown
+    // is timed, in the order the fields used to drop.
+    log::info!("stopping");
+    let mut at = Instant::now();
+    let mut stopped = Vec::new();
+    let mut part = |name: &'static str, at: &mut Instant| {
+        let now = Instant::now();
+        stopped.push(format!("{name} {} ms", (now - *at).as_millis()));
+        *at = now;
+    };
+    let Shell {
+        bars,
+        menu,
+        widgets,
+        flyouts,
+        ..
+    } = shell;
+    drop(bars);
+    part("bars", &mut at);
+    drop(menu);
+    part("menu", &mut at);
+    drop(widgets);
+    part("widgets", &mut at);
+    drop(flyouts);
+    part("flyouts", &mut at);
+    // Every lease is gone with them: the providers' workers are joined now, while they run.
+    integrations::shutdown();
+    part("integrations", &mut at);
+    drop(win_events);
+    part("window events", &mut at);
     if let Some(parent) = parent {
         // SAFETY: our own handle, closed once.
         let _ = unsafe { CloseHandle(parent) };
     }
-    log::info!("stopped");
+    log::info!("stopped ({})", stopped.join(", "));
     Ok(())
 }
 
-/// How long the loop's work may wait after a wake that only ran sent messages and WinEvent
-/// callbacks. The bars' and widgets' location hooks follow the app under the pointer, so every
-/// cursor move calls back (about 125 a second while the mouse moves); what those callbacks set
-/// is debounced 50 ms further on anyway. Posted messages (input), handles and deadlines still run
-/// the work at once.
+/// How long the loop's work may wait after a wake that only ran sent messages (other processes'
+/// messages to the shell's windows). Window events no longer arrive here (see
+/// `mypaper_desktop::win_events`). Posted messages (input), handles and deadlines still run the
+/// work at once.
 const COALESCE: std::time::Duration = std::time::Duration::from_millis(25);
 
 /// How often the widgets poll while the only input is the pointer over the bars or the dock.

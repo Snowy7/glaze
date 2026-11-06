@@ -1,5 +1,15 @@
 # Removes this user's package registration only. The exes and development signing key remain.
+param([string]$AppDirectory = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'target\release'))
 . "$PSScriptRoot\common.ps1"
+# Restore opt-in folder associations before removing identity or an installed app directory.
+# The Files CLI also switches its config flag off, so a later core launch cannot re-enable it.
+$files = Join-Path $AppDirectory 'mypaper-files.exe'
+if (Test-Path -LiteralPath $files) {
+    $restore = Start-Process -FilePath $files -ArgumentList '--restore-routing' -Wait -PassThru -WindowStyle Hidden
+    if ($restore.ExitCode -ne 0) { throw 'Folder routing could not be restored; package registration was left intact.' }
+} elseif (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'mypaper\undo-folders.json')) {
+    throw 'Restore folder routing with mypaper-files --restore-routing before unregistering this installation.'
+}
 $installed = Get-AppxPackage -Name (Get-PackageManifest).Package.Identity.Name
 if ($installed) {
     Assert-MypaperStopped

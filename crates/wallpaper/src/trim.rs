@@ -53,6 +53,21 @@ impl Trimmer {
     }
 }
 
+/// This process's private (committed) bytes in MiB: what releasing memory really gives back.
+pub fn private_mib() -> f64 {
+    use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX};
+    let mut counters = PROCESS_MEMORY_COUNTERS_EX::default();
+    // SAFETY: our own process; the struct's size goes with it.
+    let _ = unsafe {
+        GetProcessMemoryInfo(
+            GetCurrentProcess(),
+            (&raw mut counters).cast(),
+            size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32,
+        )
+    };
+    counters.PrivateUsage as f64 / 1_048_576.0
+}
+
 /// Moves this process's pages out of its working set.
 fn trim() {
     // SAFETY: `usize::MAX` for both limits asks Windows to trim our own

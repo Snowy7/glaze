@@ -1,0 +1,2 @@
+START {"publisher_pid":88596,"publisher_started":134383988786565128,"activity":{"pause_background":false,"reason":"idle","foreground_pid":64528}}
+PASS event-driven publisher lifecycle and cleanup

@@ -135,6 +135,10 @@ pub struct Material {
     pub tint: Option<Color>,
     /// Localised dimming of the backdrop, `0..=1` (Apple: 0.35 for Clear over bright media).
     pub dim: f32,
+    /// mypaper: brightness of what's behind, a multiplier before tone mapping (1: as is).
+    pub brightness: f32,
+    /// mypaper: saturation of what's behind (1: as is, 0: grey), with brightness.
+    pub saturation: f32,
 }
 
 impl Material {
@@ -157,6 +161,8 @@ impl Material {
             adaptive: true,
             tint: None,
             dim: 0.0,
+            brightness: 1.0,
+            saturation: 1.0,
         }
     }
 
@@ -181,6 +187,8 @@ impl Material {
             adaptive: false,
             tint: None,
             dim: 0.0,
+            brightness: 1.0,
+            saturation: 1.0,
         }
     }
 
@@ -223,6 +231,8 @@ impl Material {
             adaptive: false,
             tint: None,
             dim: 0.0,
+            brightness: 1.0,
+            saturation: 1.0,
         }
     }
 
@@ -277,6 +287,8 @@ impl Material {
             adaptive: if t < 0.5 { self.adaptive } else { to.adaptive },
             tint,
             dim: f(self.dim, to.dim),
+            brightness: f(self.brightness, to.brightness),
+            saturation: f(self.saturation, to.saturation),
         }
     }
 }

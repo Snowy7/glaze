@@ -789,7 +789,10 @@ fn scheduled_ticks_stop_when_hidden_and_minute_clock_never_ticks_faster() {
     let now = now();
     let mut clock = fixture("clock", temp("scheduling"));
     clock.schedule(now, instant);
-    assert_eq!(clock.next, Some(instant + Duration::from_secs(60)));
+    assert_eq!(
+        clock.next,
+        Some(instant + Duration::from_secs(60) + time::CLOCK_SLACK)
+    );
     clock.visible = false;
     clock.schedule(now, instant);
     assert_eq!(clock.next, None);
@@ -806,7 +809,7 @@ fn scheduled_ticks_stop_when_hidden_and_minute_clock_never_ticks_faster() {
     media.schedule(now, instant);
     assert_eq!(
         media.next,
-        Some(instant + Duration::from_secs(1)),
+        Some(instant + Duration::from_secs(1) + time::CLOCK_SLACK),
         "visible elapsed/progress interpolates without polling SMTC"
     );
     media.data["duration"] = Value::Null;

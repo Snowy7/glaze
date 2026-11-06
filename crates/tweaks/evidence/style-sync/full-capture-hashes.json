@@ -1,0 +1,139 @@
+﻿[
+    {
+        "value":  [
+                      {
+                          "file":  "auto-ApplicationFrameHost.png",
+                          "sha256":  "C9A19DB08DF9103759E3C7B6D774E453E469CC3B8B6DE8F6E7963F76A7A86F52"
+                      },
+                      {
+                          "file":  "auto-desktop.png",
+                          "sha256":  "0E44A5FFEBC1AEF26CF641F692BDA014F3FC8A2D8E49F50391CA48813FDCE252"
+                      },
+                      {
+                          "file":  "auto-explorer.png",
+                          "sha256":  "018D44633B869B1FF0F0A69CD8F6EC1F300A8A5D7699F5B6126226EB66103CEC"
+                      },
+                      {
+                          "file":  "explicit-ApplicationFrameHost.png",
+                          "sha256":  "A4DA81C8AEEF84B862FA5992099C875AAB2F225612166464C7A1C5D134E1A815"
+                      },
+                      {
+                          "file":  "explicit-desktop.png",
+                          "sha256":  "24C499403950D158A80EB65B4115C7A1B61F618D7179F64163A8D2BAB7C16C34"
+                      },
+                      {
+                          "file":  "explicit-explorer.png",
+                          "sha256":  "8BB09544BC50D4B26E328D645BEC272122B2743C9EB6F7C10DFCC4C281A39ED0"
+                      },
+                      {
+                          "file":  "fluent-dark-ApplicationFrameHost.png",
+                          "sha256":  "663F5003956D453587F41C3F76346A27FDB8A056F50ACD8D76F81F34320EB3D6"
+                      },
+                      {
+                          "file":  "fluent-dark-desktop.png",
+                          "sha256":  "18CEFC9B0E62BB0C5A556D1B79A857DE68D36A1A81AF59231E6457C5B9A7BE49"
+                      },
+                      {
+                          "file":  "fluent-dark-explorer.png",
+                          "sha256":  "745C3EE28FA4340E49C2F10B2DD4C83E8942BC8D246C042652F016D9CC405A7B"
+                      },
+                      {
+                          "file":  "liquid-dark-ApplicationFrameHost.png",
+                          "sha256":  "CBA1EBC00D7AF71347C88788A5A49404D4A85EAF3B9FA19D0F413B6E10D8908E"
+                      },
+                      {
+                          "file":  "liquid-dark-desktop.png",
+                          "sha256":  "56EB632E3042A2E87D3204E2BBD30BA1032E5E1FAC829E5DADA9F3A9648AE6AD"
+                      },
+                      {
+                          "file":  "liquid-dark-explorer.png",
+                          "sha256":  "825F2E693E81D0DFAFFB86D3F337B8F89E91EB87EB09F10BDFC530A06E8B8853"
+                      },
+                      {
+                          "file":  "liquid-light-ApplicationFrameHost.png",
+                          "sha256":  "2301269E0154CA6D913EB3552C20279EAEBB07D8DD7C4054AFFB8DE1D33B444D"
+                      },
+                      {
+                          "file":  "liquid-light-desktop.png",
+                          "sha256":  "E3E25E4266BBA5BB67B342D1EC9B15EFF38581918DE4BD05A3C4F6FD331D22C1"
+                      },
+                      {
+                          "file":  "liquid-light-explorer.png",
+                          "sha256":  "49DE66E3A88DCF48AC595BA788B80E2FE22E6525A4EC0E422C69A165C46B116F"
+                      },
+                      {
+                          "file":  "mono-dark-ApplicationFrameHost.png",
+                          "sha256":  "B3A3C621C63F703D216C6907F3F936C846A5F59BD7D774BD7A7181A64F5B1F3A"
+                      },
+                      {
+                          "file":  "mono-dark-desktop.png",
+                          "sha256":  "F54D3074620EAC289B61809A1DE7141603794AD4F5E75EDF41ADFD28F5C59A81"
+                      },
+                      {
+                          "file":  "mono-dark-explorer.png",
+                          "sha256":  "EACB25DF153DF84CD9B50D86F34643D88D7FE32895BEB8D97BFD75E74252B357"
+                      },
+                      {
+                          "file":  "oneui-dark-ApplicationFrameHost.png",
+                          "sha256":  "CBA1EBC00D7AF71347C88788A5A49404D4A85EAF3B9FA19D0F413B6E10D8908E"
+                      },
+                      {
+                          "file":  "oneui-dark-desktop.png",
+                          "sha256":  "E02997C8A331DE659403CA71182211A6EB3C4C8339ABF3BD32CD2699F9AD0DCE"
+                      },
+                      {
+                          "file":  "oneui-dark-explorer.png",
+                          "sha256":  "A0EABD9C70E4D3530192A4108FCBAE5B8871E299EDB02E9BDB654BE39F00CA00"
+                      },
+                      {
+                          "file":  "palette-ApplicationFrameHost.png",
+                          "sha256":  "32996D38B5E49CF95177399D898339BE00C2AE79ED96C8732B0E3C357EA0E2A4"
+                      },
+                      {
+                          "file":  "palette-desktop.png",
+                          "sha256":  "7928A7E5EDE2AE740DAE97768DC0F65BB8D48365A4D2FFE26D51723126B988C3"
+                      },
+                      {
+                          "file":  "palette-explorer.png",
+                          "sha256":  "78F69255E0D8D8F75EBF32EF91813C3BD25CFC3331BDDBD4874DAE4C3D61F26B"
+                      },
+                      {
+                          "file":  "release-ApplicationFrameHost.png",
+                          "sha256":  "63D2BFA8C4D951D24A7F9ED8385624BB55EBECDA990671211F142C653BEAF904"
+                      },
+                      {
+                          "file":  "release-desktop.png",
+                          "sha256":  "F44AB410786C044A70261EB1547F900C2C9FE97B8892483FF8973AF80F885533"
+                      },
+                      {
+                          "file":  "release-explorer.png",
+                          "sha256":  "2A0944B2CF663A220EFD3274FE76C24D8C5D66A5D79B1AA5F746FAB77EEBD0E8"
+                      },
+                      {
+                          "file":  "solid-dark-ApplicationFrameHost.png",
+                          "sha256":  "BDED834546EEE2690B430ECB87704DC0FAC5D843E41018CD68D52C8DD9CEBC39"
+                      },
+                      {
+                          "file":  "solid-dark-desktop.png",
+                          "sha256":  "C12E8F8FD14070DBE850486529879F0801EA31AF73C26CD654B5565A900E6D12"
+                      },
+                      {
+                          "file":  "solid-dark-explorer.png",
+                          "sha256":  "2E89251F05B0DB88C84BD68BDEA23BECF06007F04B5D54ADC39E36C10764B3A1"
+                      }
+                  ],
+        "Count":  30
+    },
+    {
+        "file":  "auto-ApplicationFrameHost.png",
+        "sha256":  "74532F15D6DBC81EEDCDD39B0A46061C08593654D798FC95966C050B8A8E14C3"
+    },
+    {
+        "file":  "auto-desktop.png",
+        "sha256":  "446D1D5C1E2892F606C5ABAE571F5B4C402E11E91F005E52CF273D8C8A46D4BB"
+    },
+    {
+        "file":  "auto-explorer.png",
+        "sha256":  "9456A8E6F7C69F30EA2438C79D09D9363AE03ACD6FC88CDC50410351275D5B40"
+    }
+]

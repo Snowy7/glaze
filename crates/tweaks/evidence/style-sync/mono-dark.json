@@ -1,0 +1,196 @@
+﻿{
+  "accent": "#f2f2f2",
+  "appearance": "dark",
+  "colour_readback": "DWM documents border/caption/text colours as set-only; inspect the captured pixels.",
+  "dominant": "#424b7f",
+  "expected_window_attributes": {
+    "backdrop": 1,
+    "border": 15921906,
+    "caption": 1446932,
+    "corners": 1,
+    "dark": 1,
+    "text": 16777215
+  },
+  "matching_windows": 2,
+  "registry": [
+    {
+      "key": "Software\\Microsoft\\Windows\\DWM",
+      "name": "AccentColor",
+      "value": {
+        "raw": {
+          "bytes": [
+            242,
+            242,
+            242,
+            255
+          ],
+          "kind": 4
+        }
+      }
+    },
+    {
+      "key": "Software\\Microsoft\\Windows\\DWM",
+      "name": "ColorizationColor",
+      "value": {
+        "raw": {
+          "bytes": [
+            242,
+            242,
+            242,
+            196
+          ],
+          "kind": 4
+        }
+      }
+    },
+    {
+      "key": "Software\\Microsoft\\Windows\\DWM",
+      "name": "ColorPrevalence",
+      "value": {
+        "raw": {
+          "bytes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "kind": 4
+        }
+      }
+    },
+    {
+      "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent",
+      "name": "AccentColorMenu",
+      "value": {
+        "raw": {
+          "bytes": [
+            242,
+            242,
+            242,
+            255
+          ],
+          "kind": 4
+        }
+      }
+    },
+    {
+      "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent",
+      "name": "AccentPalette",
+      "value": {
+        "raw": {
+          "bytes": [
+            251,
+            251,
+            251,
+            0,
+            247,
+            247,
+            247,
+            0,
+            244,
+            244,
+            244,
+            0,
+            242,
+            242,
+            242,
+            0,
+            218,
+            218,
+            218,
+            0,
+            167,
+            167,
+            167,
+            0,
+            116,
+            116,
+            116,
+            0,
+            247,
+            99,
+            12,
+            0
+          ],
+          "kind": 3
+        }
+      }
+    },
+    {
+      "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+      "name": "AppsUseLightTheme",
+      "value": {
+        "raw": {
+          "bytes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "kind": 4
+        }
+      }
+    },
+    {
+      "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+      "name": "SystemUsesLightTheme",
+      "value": {
+        "raw": {
+          "bytes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "kind": 4
+        }
+      }
+    },
+    {
+      "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+      "name": "ColorPrevalence",
+      "value": {
+        "raw": {
+          "bytes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "kind": 4
+        }
+      }
+    }
+  ],
+  "registry_mismatches": [],
+  "style": "mono",
+  "windows": [
+    {
+      "backdrop": 1,
+      "class": "CabinetWClass",
+      "corners": 1,
+      "dark": 1,
+      "hwnd": 1378782,
+      "title": "Windows - File Explorer"
+    },
+    {
+      "backdrop": 1,
+      "class": "ApplicationFrameWindow",
+      "corners": 1,
+      "dark": 1,
+      "hwnd": 112856170,
+      "title": "Settings"
+    }
+  ],
+  "windows_style": {
+    "accent": "#f2f2f2",
+    "accent_on_taskbar": false,
+    "accent_on_title_bars": false,
+    "backdrop": "none",
+    "border": "#f2f2f2",
+    "caption": "#141416",
+    "caption_text": "#ffffff",
+    "corners": "square",
+    "dark_mode": true
+  }
+}

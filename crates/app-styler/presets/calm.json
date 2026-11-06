@@ -1,0 +1,25 @@
+{
+  "settings": {
+    "rules": {
+      "ButtonEntityItem > Button#ContainerButton": { "BorderThickness": "0", "CornerRadius": "6" },
+      "SettingsExpander ExpanderToggleButton#ContainerButton": { "BorderThickness": "0", "CornerRadius": "6" },
+      "TextBox#CommandSearchTextBox": { "BorderThickness": "0", "CornerRadius": "6" },
+      "Rectangle#SelectionIndicator": { "Fill": "{ThemeResource TextFillColorSecondaryBrush}" }
+    },
+    "resources": {
+      "ControlFillColorDefaultBrush": "light-dark(#99FFFFFF, #0CFFFFFF)",
+      "ControlFillColorSecondaryBrush": "light-dark(#CCFFFFFF, #14FFFFFF)",
+      "ControlFillColorTertiaryBrush": "light-dark(#66FFFFFF, #08FFFFFF)",
+      "AccentFillColorDefaultBrush": "light-dark(#FF4A4A4A, #FFD4D4D4)",
+      "AccentFillColorSecondaryBrush": "light-dark(#E64A4A4A, #E6D4D4D4)",
+      "AccentFillColorTertiaryBrush": "light-dark(#CC4A4A4A, #CCD4D4D4)"
+    }
+  },
+  "explorer": {
+    "rules": {
+      "CommandBarControl_Wave1 > Grid": { "BorderThickness": "0" },
+      "AddressBarControl > Grid#PART_LayoutRoot": { "CornerRadius": "6" },
+      "AutoSuggestBox#FileExplorerSearchBox TextBox#TextBox": { "BorderThickness": "0", "CornerRadius": "6" }
+    }
+  }
+}

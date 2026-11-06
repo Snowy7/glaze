@@ -1,10 +1,13 @@
 //! Counts the shell loop's wake-ups by cause and logs them once a minute, on a wake (it never
 //! adds one). Quiet unless the loop's work ran more than 240 times a second on average (a stuck
-//! ticker, say); `MYPAPER_WAKES=1` logs every minute. Counting is a few integer bumps per wake.
+//! ticker, say); `MYPAPER_WAKES=1`, or a file `%LOCALAPPDATA%\mypaper\wakes.on` (looked for once
+//! a minute, so it survives restarts and can be switched live), logs every minute. Counting is a
+//! few integer bumps per wake.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+use mypaper_shell::cycles::{self, thread as thread_cycles};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, MSG, WM_TIMER};
 
@@ -33,13 +36,25 @@ pub struct Wakes {
     causes: HashMap<Cause, u32>,
     /// Posted messages by (message, window, timer id).
     messages: HashMap<(u32, isize, usize), u32>,
-    /// Time spent in each part of the loop's work.
+    /// Time spent in each part of the loop's work (wall clock: a part may block, e.g. on the
+    /// engine's glass placement).
     spent: HashMap<&'static str, Duration>,
+    /// The UI thread's CPU cycles in each part, while reporting is on.
+    cycles: HashMap<&'static str, u64>,
+    /// The thread's cycle count at the last [`resume`](Self::resume) or [`spent`](Self::spent).
+    mark: u64,
+    /// The thread's cycle count when the period began (its total includes the waits).
+    period_cycles: u64,
     always: bool,
+    /// Reporting every period (`always` or the file switch, as of the last period).
+    on: bool,
 }
 
 impl Wakes {
     pub fn new() -> Self {
+        let always = std::env::var_os("MYPAPER_WAKES").is_some();
+        let on = always || switched_on();
+        cycles::set_counting(on);
         Self {
             since: Instant::now(),
             wakes: 0,
@@ -47,7 +62,18 @@ impl Wakes {
             causes: HashMap::new(),
             messages: HashMap::new(),
             spent: HashMap::new(),
-            always: std::env::var_os("MYPAPER_WAKES").is_some(),
+            cycles: HashMap::new(),
+            mark: 0,
+            period_cycles: if on { thread_cycles() } else { 0 },
+            always,
+            on,
+        }
+    }
+
+    /// Starts counting cycles for the next part (after the loop's wait).
+    pub fn resume(&mut self) {
+        if self.on {
+            self.mark = thread_cycles();
         }
     }
 
@@ -55,6 +81,11 @@ impl Wakes {
     pub fn spent(&mut self, part: &'static str, start: Instant) -> Instant {
         let now = Instant::now();
         *self.spent.entry(part).or_default() += now - start;
+        if self.on {
+            let cycles = thread_cycles();
+            *self.cycles.entry(part).or_default() += cycles.saturating_sub(self.mark);
+            self.mark = cycles;
+        }
         now
     }
 
@@ -82,7 +113,10 @@ impl Wakes {
         if elapsed < PERIOD {
             return false;
         }
-        if self.always || self.worked as f32 > AUTO_REPORT_RATE * elapsed.as_secs_f32() {
+        let was_on = self.on;
+        self.on = self.always || switched_on();
+        cycles::set_counting(self.on);
+        if self.on || self.worked as f32 > AUTO_REPORT_RATE * elapsed.as_secs_f32() {
             let mut causes: Vec<_> = self
                 .causes
                 .iter()
@@ -117,8 +151,25 @@ impl Wakes {
                 .iter()
                 .map(|(part, d)| format!("{part} {:.1} ms", d.as_secs_f64() * 1e3))
                 .collect();
+            // CPU per part in millions of cycles (about 4 per ms here); the thread's total
+            // includes the waits and what runs between the parts.
+            let cpu = if was_on {
+                let mut cycles: Vec<_> = self.cycles.iter().collect();
+                cycles.sort_unstable_by(|a, b| b.1.cmp(a.1));
+                let parts: Vec<_> = cycles
+                    .iter()
+                    .map(|(part, c)| format!("{part} {:.1}", **c as f64 / 1e6))
+                    .collect();
+                format!(
+                    "; cpu Mcycles: thread {:.1}, {}",
+                    thread_cycles().saturating_sub(self.period_cycles) as f64 / 1e6,
+                    parts.join(", ")
+                )
+            } else {
+                String::new()
+            };
             log::info!(
-                "wakes in {:.0} s: {}, {} ran the work ({}); work: {}; {}",
+                "wakes in {:.0} s: {}, {} ran the work ({}); work: {}{cpu}; {}",
                 elapsed.as_secs_f32(),
                 self.wakes,
                 self.worked,
@@ -133,8 +184,19 @@ impl Wakes {
         self.causes.clear();
         self.messages.clear();
         self.spent.clear();
+        self.cycles.clear();
+        if self.on {
+            self.period_cycles = thread_cycles();
+            self.mark = self.period_cycles;
+        }
         true
     }
+}
+
+/// Whether `%LOCALAPPDATA%\mypaper\wakes.on` exists.
+fn switched_on() -> bool {
+    std::env::var_os("LOCALAPPDATA")
+        .is_some_and(|dir| std::path::Path::new(&dir).join("mypaper").join("wakes.on").exists())
 }
 
 /// A window's class, `thread` for thread messages, `?` once it is gone.

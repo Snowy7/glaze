@@ -13,6 +13,12 @@
 //!
 //! While Studio is closed nothing is mapped and the request event never fires: the engine pays
 //! one idle handle in its wait. Textures and buffers live only while a request is answered.
+//!
+//! Any screen's drawn frame answers (the first screen's when it has one): a covered screen has
+//! none until it's uncovered. With no frame at all the engine answers `status` 1 once; the same
+//! request asked again waits for a frame instead of another refusal. Studio asks again as soon as
+//! it's refused, so refusing at once kept both processes spinning (6,700 round trips a second,
+//! 2026-11-06).
 
 use anyhow::{Context, Result, bail};
 use bytemuck::{Pod, Zeroable};
@@ -28,6 +34,7 @@ use windows::Win32::System::Threading::{
 };
 use windows::core::w;
 
+use crate::glass_pass::GlassPass;
 use crate::gpu::Gpu;
 
 const MAGIC: u32 = 0x5650_504d; // "MPPV"
@@ -41,7 +48,7 @@ const PIXELS: usize = 4096;
 /// A plate in preview pixels, with the glass material (clarity, blur, refraction, highlight,
 /// and a straight-alpha tint).
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 pub struct Plate {
     pub rect: [f32; 4],
     pub radius: f32,
@@ -75,9 +82,21 @@ pub struct Header {
 
 const _: () = assert!(size_of::<Header>() <= PIXELS);
 
+/// What a request asks for, to tell a repeat from a change.
+#[derive(Debug, Clone, PartialEq)]
+struct Asked {
+    size: (u32, u32),
+    screen: u32,
+    plates: Vec<Plate>,
+}
+
 /// The engine's end: the request event and, while answering, the GPU objects.
 pub struct Preview {
     event: Option<HANDLE>,
+    /// The last request answered "no frame".
+    refused: Option<Asked>,
+    /// That request came again unchanged and waits, unanswered, for a frame to draw it from.
+    parked: bool,
 }
 
 impl Preview {
@@ -87,7 +106,11 @@ impl Preview {
             unsafe { CreateEventW(None, true, false, w!("Local\\mypaper.preview.request")) }
                 .inspect_err(|e| log::warn!("Studio previews unavailable: {e}"))
                 .ok();
-        Self { event }
+        Self {
+            event,
+            refused: None,
+            parked: false,
+        }
     }
 
     /// Wait on this with the engine's other handles.
@@ -95,19 +118,26 @@ impl Preview {
         self.event
     }
 
-    /// Answers a pending request from the screen's kept wallpaper frame (`None`: a source
-    /// that draws itself, or no frame yet).
-    pub fn serve(&mut self, gpu: &Gpu, kept: Option<&wgpu::Texture>) {
+    /// Answers a new request, or the parked one once there's a frame, from `kept`: a drawn
+    /// wallpaper frame (`None`: a source that draws itself, or nothing drawn yet). The glass is
+    /// the desktop's own (`pass` lends its compiled pipelines).
+    pub fn serve(&mut self, gpu: &Gpu, kept: Option<&wgpu::Texture>, pass: &mut GlassPass) {
         let Some(event) = self.event else { return };
         // SAFETY: our own event; a zero-timeout poll and a reset.
-        unsafe {
-            if WaitForSingleObject(event, 0) != WAIT_OBJECT_0 {
-                return;
+        let asked = unsafe {
+            let set = WaitForSingleObject(event, 0) == WAIT_OBJECT_0;
+            if set {
+                let _ = ResetEvent(event);
             }
-            let _ = ResetEvent(event);
+            set
+        };
+        if !asked && !(self.parked && kept.is_some()) {
+            return;
         }
-        if let Err(e) = answer(gpu, kept) {
-            log::warn!("Studio preview: {e:#}");
+        self.parked = false;
+        match answer(gpu, kept, &mut self.refused, pass) {
+            Ok(parked) => self.parked = parked,
+            Err(e) => log::warn!("Studio preview: {e:#}"),
         }
     }
 }
@@ -121,14 +151,21 @@ impl Drop for Preview {
     }
 }
 
-fn answer(gpu: &Gpu, kept: Option<&wgpu::Texture>) -> Result<()> {
+/// Answers the request in Studio's section, or returns `true` without answering when it repeats
+/// the request last answered "no frame" (`refused`) and there's still no frame.
+fn answer(
+    gpu: &Gpu,
+    kept: Option<&wgpu::Texture>,
+    refused: &mut Option<Asked>,
+    pass: &mut GlassPass,
+) -> Result<bool> {
     // SAFETY: Studio's section, mapped whole and unmapped below; the header is checked before
     // the pixel range (inside the mapping Studio sized for MAX_SIZE) is written.
     unsafe {
         let mapping = OpenFileMappingW(FILE_MAP_ALL_ACCESS.0, false, w!("Local\\mypaper.preview"))
             .context("no preview section")?;
         let view = MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, 0);
-        let result = (|| -> Result<()> {
+        let result = (|| -> Result<bool> {
             anyhow::ensure!(!view.Value.is_null(), "mapping the preview section");
             let header = &mut *(view.Value as *mut Header);
             if header.magic != MAGIC || header.version != VERSION {
@@ -144,17 +181,30 @@ fn answer(gpu: &Gpu, kept: Option<&wgpu::Texture>) -> Result<()> {
                         (view.Value as *mut u8).add(PIXELS),
                         w as usize * h as usize * 4,
                     );
-                    draw(gpu, kept, (w, h), &header.plates[..count], pixels)?;
+                    draw(gpu, kept, (w, h), &header.plates[..count], pixels, pass)?;
+                    *refused = None;
                     0
                 } else {
+                    let asked = Asked {
+                        size: (w, h),
+                        screen: header.screen,
+                        plates: header.plates[..count].to_vec(),
+                    };
+                    if refused.as_ref() == Some(&asked) {
+                        return Ok(true);
+                    }
+                    *refused = Some(asked);
                     1
                 };
             std::sync::atomic::fence(std::sync::atomic::Ordering::Release);
             header.done = header.request;
-            Ok(())
+            Ok(false)
         })();
         let _ = UnmapViewOfFile(MEMORY_MAPPED_VIEW_ADDRESS { Value: view.Value });
         let _ = CloseHandle(mapping);
+        if matches!(result, Ok(true)) {
+            return result;
+        }
         if let Ok(done) = OpenEventW(EVENT_MODIFY_STATE, false, w!("Local\\mypaper.preview.done")) {
             let _ = SetEvent(done);
             let _ = CloseHandle(done);
@@ -170,6 +220,7 @@ fn draw(
     size: (u32, u32),
     plates: &[Plate],
     out: &mut [u8],
+    desktop: &mut GlassPass,
 ) -> Result<()> {
     let device = &gpu.device;
     let target = gpu.texture(
@@ -196,7 +247,7 @@ fn draw(
         quad.draw(&gpu.blit, &mut pass);
     }
     if !plates.is_empty() {
-        glass(gpu, kept, size, plates, &target, &mut encoder);
+        glass(gpu, kept, size, plates, &target, &mut encoder, desktop.fork(gpu));
     }
     let row = (size.0 * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
     let readback = device.create_buffer(&wgpu::BufferDescriptor {
@@ -247,7 +298,8 @@ fn draw(
 }
 
 /// The desktop's glass (liquid-rust, as `glass_pass` draws it) over the preview target, at one
-/// pixel per point: Studio sends the plates in preview pixels.
+/// pixel per point, with `renderer` (a fork of the desktop's): Studio sends the plates in
+/// preview pixels.
 fn glass(
     gpu: &Gpu,
     kept: &wgpu::Texture,
@@ -255,6 +307,7 @@ fn glass(
     plates: &[Plate],
     target: &wgpu::Texture,
     encoder: &mut wgpu::CommandEncoder,
+    mut renderer: lr::Renderer,
 ) {
     let mut scene = lr::Scene::new();
     scene.physics = false;
@@ -282,7 +335,7 @@ fn glass(
             ..Default::default()
         })
     };
-    lr::Renderer::new(&gpu.device, srgb).render(
+    renderer.render(
         &gpu.device,
         &gpu.queue,
         encoder,

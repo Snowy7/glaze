@@ -1,26 +1,43 @@
 //! Coverage follows app lifecycle and foreground/Explorer movement, rather than every animated
 //! child HWND on the desktop. Destroyed handles are classified from the last live top-level set.
 use std::{
-    cell::RefCell,
     collections::HashSet,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 use windows::Win32::{
     Foundation::{HWND, LPARAM},
     UI::{Accessibility::HWINEVENTHOOK, WindowsAndMessaging::*},
 };
 
-use mypaper_desktop::win_events::Subscription;
+use mypaper_desktop::win_events::{self, Subscription};
 
 static CHANGED: AtomicBool = AtomicBool::new(true);
-thread_local! {static TOP:RefCell<HashSet<isize>>=RefCell::new(HashSet::new());}
+/// The visible app windows (filled on install, kept by the events on the WinEvent thread).
+static TOP: Mutex<Option<HashSet<isize>>> = Mutex::new(None);
+
+/// Runs `f` on the known top-level windows.
+fn with_top<R>(f: impl FnOnce(&mut HashSet<isize>) -> R) -> R {
+    f(TOP
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get_or_insert_with(HashSet::new))
+}
+
+/// Records a change and wakes the shell loop after the event batch.
+fn mark_changed() {
+    CHANGED.store(true, Ordering::Relaxed);
+    win_events::notify();
+}
 
 pub struct WindowEvents {
     _subscription: Subscription,
 }
 impl WindowEvents {
     pub fn install() -> Self {
-        TOP.with_borrow_mut(HashSet::clear);
+        with_top(HashSet::clear);
         // SAFETY: synchronous enumeration records only HWND identities; no window is changed.
         unsafe {
             let _ = EnumWindows(Some(remember), LPARAM(0));
@@ -31,7 +48,7 @@ impl WindowEvents {
                 if event.event == EVENT_OBJECT_NAMECHANGE {
                     return;
                 }
-                // SAFETY: the shared source calls us on the shell UI thread with whole windows.
+                // SAFETY: the shared source calls us with whole windows; `changed` only reads them.
                 unsafe {
                     changed(
                         HWINEVENTHOOK::default(),
@@ -63,7 +80,7 @@ fn eligible(hwnd: HWND) -> bool {
 }
 unsafe extern "system" fn remember(hwnd: HWND, _: LPARAM) -> windows::core::BOOL {
     if eligible(hwnd) {
-        TOP.with_borrow_mut(|top| top.insert(hwnd.0 as isize));
+        with_top(|top| top.insert(hwnd.0 as isize));
     }
     true.into()
 }
@@ -79,14 +96,11 @@ unsafe extern "system" fn changed(
     if object != OBJID_WINDOW.0 || child != CHILDID_SELF as i32 {
         return;
     }
-    if event == EVENT_SYSTEM_FOREGROUND {
-        CHANGED.store(true, Ordering::Relaxed);
-    }
     let relevant = if event == EVENT_OBJECT_DESTROY {
-        TOP.with_borrow_mut(|top| top.remove(&(hwnd.0 as isize)))
+        with_top(|top| top.remove(&(hwnd.0 as isize)))
     } else {
         let visible = eligible(hwnd);
-        TOP.with_borrow_mut(|top| {
+        with_top(|top| {
             let known = top.remove(&(hwnd.0 as isize));
             if visible {
                 top.insert(hwnd.0 as isize);
@@ -94,8 +108,8 @@ unsafe extern "system" fn changed(
             visible || known
         })
     };
-    if relevant {
-        CHANGED.store(true, Ordering::Relaxed);
+    if relevant || event == EVENT_SYSTEM_FOREGROUND {
+        mark_changed();
     }
 }
 
@@ -137,9 +151,7 @@ mod tests {
                 None,
             )
             .unwrap();
-            TOP.with_borrow_mut(|top| {
-                top.clear();
-            });
+            with_top(HashSet::clear);
             CHANGED.store(false, Ordering::Relaxed);
             changed(
                 HWINEVENTHOOK::default(),

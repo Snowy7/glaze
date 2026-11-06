@@ -9,6 +9,7 @@ use mypaper_ui::{HitId, Point, Rect, Rgba, icons::Icon, theme::TextRole};
 
 pub mod animated;
 pub mod canvas;
+pub mod scroll;
 
 /// Hit ids of a face's actions: `ACTION + n` for the nth action in tree order.
 pub const ACTION: HitId = 800_000;
@@ -48,7 +49,8 @@ fn collect(view: &View, out: &mut Vec<Hit>) {
         View::Stack { children, .. } | View::List { children, .. } | View::Row { children, .. } | View::Grid { children, .. } => {
             children.iter().for_each(|c| collect(c, out))
         }
-        View::Card { child, .. } | View::Animated { child, .. } | View::Scroll { child, .. } => collect(child, out),
+        View::Card { child, .. } | View::Animated { child, .. } => collect(child, out),
+        View::Scroll { child, .. } => collect(child, out),
         View::Button { action, .. } | View::IconButton { action, .. } => out.push(Hit::Action(action.clone())),
         View::Field { action, .. } => out.push(Hit::Field(action.clone())),
         View::Select { action, options, selected, .. } => out.push(Hit::Select { action: action.clone(), options: options.clone(), selected: selected.clone() }),
@@ -290,7 +292,9 @@ fn height(f: &mut Frame<'_>, view: &View, width: f32) -> f32 {
             (Some(_), false) => f.line(TextRole::Headline) + f.line(TextRole::Footnote) + f.px(12.0),
             (None, false) => f.line(TextRole::Headline) + f.px(12.0),
         },
-        View::Animated { child, .. } | View::Scroll { child, .. } => self::height(f, child, width),
+        View::Animated { child, .. } => self::height(f, child, width),
+        // Takes the free height, like a list; its content scrolls inside.
+        View::Scroll { .. } => f.px(80.0),
         View::Spacer | View::Unknown => 0.0,
     }
 }
@@ -302,9 +306,6 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
         id
     };
     match view {
-        // Until this renderer has local scroll state, use the child's bounded layout. Keep
-        // action traversal identical to the SDK tree, including children of a scroll view.
-        View::Scroll { child, .. } => node(f, rect, child, next),
         View::Stack { children, gap } | View::List { children, gap } => {
             let gap = f.px(gap.unwrap_or(8.0));
             let fixed: f32 = children.iter().filter(|c| !flexible(c)).map(|c| height(f, c, rect.width())).sum();
@@ -612,6 +613,7 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             };
             f.hit(id, rect, mypaper_ui::Role::Button, &name, true, None);
         }
+        View::Scroll { id, child, on_reach_end } => scroll::draw(f, rect, id, child, on_reach_end.as_ref(), next),
         View::Spacer | View::Unknown => {}
     }
 }

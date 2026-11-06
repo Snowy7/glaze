@@ -16,7 +16,8 @@ use crate::gpu::Gpu;
 /// theme file exactly (WGSL declarations are order-independent).
 const PRELUDE: &str = include_str!("../prelude.wgsl");
 
-/// Mirrors `struct Paper` in prelude.wgsl.
+/// Mirrors `struct Paper` in prelude.wgsl: the draw's immediate data (`var<immediate>`), set
+/// with the draw instead of uploaded into a buffer each frame.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
 struct Uniforms {
@@ -26,6 +27,9 @@ struct Uniforms {
     frame: u32,
     _pad: [f32; 2],
 }
+
+/// Bytes of immediate data a wallpaper pipeline takes (the device's limit, `gpu::open_device`).
+pub const PAPER_SIZE: u32 = size_of::<Uniforms>() as u32;
 
 pub struct ShaderSource {
     pipeline: wgpu::RenderPipeline,
@@ -44,7 +48,6 @@ pub struct ShaderSource {
 struct ScreenState {
     /// The render size `bind_group`'s baked layers were drawn at.
     size: (u32, u32),
-    uniforms: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
 }
 
@@ -61,16 +64,7 @@ impl ShaderSource {
         let path = theme.asset(&config.source);
         let code = std::fs::read_to_string(&path)
             .with_context(|| format!("reading {}", path.display()))?;
-        let mut entries = vec![wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        }];
+        let mut entries = Vec::new();
         let texture_entry = |binding, filterable| wgpu::BindGroupLayoutEntry {
             binding,
             visibility: wgpu::ShaderStages::FRAGMENT,
@@ -186,16 +180,12 @@ impl ShaderSource {
         })
     }
 
-    /// The paper bind group entries for `uniforms`: the uniforms, then every loaded image.
-    fn entries<'a>(&'a self, uniforms: &'a wgpu::Buffer) -> Vec<wgpu::BindGroupEntry<'a>> {
-        let mut entries = vec![wgpu::BindGroupEntry {
-            binding: 0,
-            resource: uniforms.as_entire_binding(),
-        }];
-        for (binding, view) in &self.images {
-            entries.extend(image_entries(*binding, view, &self.sampler));
-        }
-        entries
+    /// The paper bind group entries: every loaded image (the inputs are immediate data).
+    fn entries(&self) -> Vec<wgpu::BindGroupEntry<'_>> {
+        self.images
+            .iter()
+            .flat_map(|(binding, view)| image_entries(*binding, view, &self.sampler))
+            .collect()
     }
 
     /// The baked layers at `size`, drawn into `encoder` the first time that size is seen.
@@ -209,22 +199,14 @@ impl ShaderSource {
             return &self.bakes.sizes[at].1;
         }
         // The layers see the frame's resolution at time 0, and no cursor.
-        let uniforms = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("paper bake"),
-            size: size_of::<Uniforms>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
         let paper = Uniforms {
             resolution: [size.0 as f32, size.1 as f32],
             ..Default::default()
         };
-        gpu.queue
-            .write_buffer(&uniforms, 0, bytemuck::bytes_of(&paper));
         let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("paper bake"),
             layout: &self.bakes.layout,
-            entries: &self.entries(&uniforms),
+            entries: &self.entries(),
         });
         let mut views = Vec::new();
         for (_, pipeline) in &self.bakes.layers {
@@ -238,6 +220,7 @@ impl ShaderSource {
             let view = texture.create_view(&Default::default());
             let mut pass = begin(encoder, &view, wgpu::LoadOp::Clear(wgpu::Color::BLACK));
             pass.set_pipeline(pipeline);
+            pass.set_immediates(0, bytemuck::bytes_of(&paper));
             pass.set_bind_group(0, &bind_group, &[]);
             pass.draw(0..3, 0..1);
             drop(pass);
@@ -247,8 +230,7 @@ impl ShaderSource {
         &self.bakes.sizes.last().expect("just pushed").1
     }
 
-    /// The screen's uniforms and bind group, rebuilt when its render size (and so its baked
-    /// layers) changes.
+    /// The screen's bind group, rebuilt when its render size (and so its baked layers) changes.
     fn state(&mut self, gpu: &Gpu, screen: usize, size: (u32, u32), baked: &[wgpu::TextureView]) {
         if self.screens.len() <= screen {
             self.screens.resize_with(screen + 1, || None);
@@ -259,13 +241,7 @@ impl ShaderSource {
         {
             return;
         }
-        let uniforms = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("paper"),
-            size: size_of::<Uniforms>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let mut entries = self.entries(&uniforms);
+        let mut entries = self.entries();
         for ((binding, _), view) in self.bakes.layers.iter().zip(baked) {
             entries.extend(image_entries(*binding, view, &self.sampler));
         }
@@ -274,11 +250,7 @@ impl ShaderSource {
             layout: &self.layout,
             entries: &entries,
         });
-        self.screens[screen] = Some(ScreenState {
-            size,
-            uniforms,
-            bind_group,
-        });
+        self.screens[screen] = Some(ScreenState { size, bind_group });
     }
 }
 
@@ -317,8 +289,6 @@ impl Source for ShaderSource {
             frame: frame.frame,
             _pad: [0.0; 2],
         };
-        gpu.queue
-            .write_buffer(&state.uniforms, 0, bytemuck::bytes_of(&uniforms));
 
         let mut pass = begin(
             frame.encoder,
@@ -326,6 +296,7 @@ impl Source for ShaderSource {
             wgpu::LoadOp::Clear(wgpu::Color::BLACK),
         );
         pass.set_pipeline(&self.pipeline);
+        pass.set_immediates(0, bytemuck::bytes_of(&uniforms));
         pass.set_bind_group(0, &state.bind_group, &[]);
         pass.draw(0..3, 0..1);
     }
@@ -343,6 +314,10 @@ impl Source for ShaderSource {
 
     fn shared(&self) -> bool {
         self.shared
+    }
+
+    fn releasable(&self) -> bool {
+        true
     }
 }
 
@@ -576,7 +551,7 @@ fn compile<'a>(
                         .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                             label: Some("paper"),
                             bind_group_layouts: &[Some(layout)],
-                            immediate_size: 0,
+                            immediate_size: PAPER_SIZE,
                         });
                 gpu.device
                     .create_render_pipeline(&wgpu::RenderPipelineDescriptor {

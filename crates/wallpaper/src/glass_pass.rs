@@ -15,7 +15,7 @@ use std::time::Instant;
 use anyhow::Result;
 use liquid_rust as lr;
 use mypaper_desktop::{Rect, monitor_infos};
-use mypaper_glass_ipc::{Plate, Reader};
+use mypaper_glass_ipc::{Plate, Reader, Style};
 use windows::Win32::Foundation::HANDLE;
 
 use crate::gpu::{Gpu, KeptFrame};
@@ -30,8 +30,8 @@ struct Screen {
     scale: f32,
     scene: lr::Scene,
     ids: HashMap<u64, lr::GlassId>,
-    /// This screen's plates as last applied.
-    plates: Vec<Plate>,
+    /// This screen's plates and their styles as last applied.
+    plates: Vec<(Plate, Style)>,
     /// The kept frame its glass was last drawn from (`None` while it has no glass).
     source: Option<wgpu::Texture>,
     dirty: bool,
@@ -84,19 +84,27 @@ impl Screen {
     }
 
     /// Syncs the scene to this screen's plates: new ones materialize, gone ones dematerialize,
-    /// the rest move instantly and fade to a new material.
-    fn apply(&mut self, plates: Vec<Plate>) {
+    /// the rest move instantly and fade to a new material. Materials and shapes are resolved
+    /// here, only when something changed, never per frame.
+    fn apply(&mut self, plates: Vec<(Plate, Style)>) {
         if plates == self.plates {
             return;
         }
         let s = self.scale;
         let (ox, oy) = (self.monitor.x as f32, self.monitor.y as f32);
-        for p in &plates {
+        for (p, style) in &plates {
             let [x, y, w, h] = p.rect;
             let frame = lr::Rect::new((x - ox) / s, (y - oy) / s, w / s, h / s);
-            // Quarter circles: exactly the surface's own rounded rectangle.
-            let shape = lr::Shape::Circular(p.radius.max(0.0) / s);
+            // Exactly the surface's own corners: quarter circles unless the style smooths them.
+            let shape = crate::material::shape(p.radius / s, style.smoothing);
             let (material, appearance) = crate::material::liquid(&p.material, s);
+            let material = crate::material::styled(
+                material,
+                style.brightness,
+                style.saturation,
+                style.sheen,
+                style.depth,
+            );
             match self.ids.get(&p.id) {
                 Some(&id) => {
                     self.scene.place(id, frame);
@@ -111,7 +119,7 @@ impl Screen {
             }
         }
         self.ids.retain(|plate, id| {
-            let kept = plates.iter().any(|p| p.id == *plate);
+            let kept = plates.iter().any(|(p, _)| p.id == *plate);
             if !kept {
                 self.scene.remove(*id);
             }
@@ -154,17 +162,24 @@ impl GlassPass {
             Ok(Some(snapshot)) => {
                 self.sequence = snapshot.sequence;
                 self.published_qpc = snapshot.published_qpc;
-                self.set_plates(snapshot.plates);
+                let styles = snapshot.styles.into_iter().chain(std::iter::repeat(Style::default()));
+                self.set_styled(snapshot.plates.into_iter().zip(styles).collect());
             }
             Ok(None) => {}
             Err(e) => log::error!("glass IPC: {e:#}"),
         }
     }
 
+    /// Plates at the default style (the frame lab's fixtures).
+    #[cfg(test)]
     pub(crate) fn set_plates(&mut self, plates: Vec<Plate>) {
+        self.set_styled(plates.into_iter().map(|p| (p, Style::default())).collect());
+    }
+
+    fn set_styled(&mut self, plates: Vec<(Plate, Style)>) {
         for screen in &mut self.screens {
             // Only this monitor's plates: identical publications cause zero drawing.
-            let mine = plates.iter().filter(|p| overlaps(p, &screen.monitor)).copied().collect();
+            let mine = plates.iter().filter(|(p, _)| overlaps(p, &screen.monitor)).copied().collect();
             screen.apply(mine);
         }
     }
@@ -174,9 +189,20 @@ impl GlassPass {
         self.screens.get_mut(index).is_some_and(|s| std::mem::take(&mut s.dirty) || s.animating)
     }
 
-    /// Whether a spring runs on any screen (the engine then keeps drawing frames).
-    pub fn animating(&self) -> bool {
-        self.screens.iter().any(|s| s.animating)
+    /// A renderer of its own (buffers, blur pyramid) on the pipelines every plate's renderer
+    /// shares, compiled on first use: Studio's previews draw with one. Compiling them again
+    /// took 3-4 ms of every preview answer; a fork takes 0.02 ms (RTX, 2026-11-06).
+    pub fn fork(&mut self, gpu: &Gpu) -> lr::Renderer {
+        let srgb = gpu.format.add_srgb_suffix();
+        self.template
+            .get_or_insert_with(|| lr::Renderer::new(&gpu.device, srgb))
+            .fork(&gpu.device)
+    }
+
+    /// Whether a spring runs on screen `index` (the engine then keeps drawing it). Springs only
+    /// advance as the screen is drawn, so a covered screen's spring waits, mid-flight, for it.
+    pub fn animating(&self, index: usize) -> bool {
+        self.screens.get(index).is_some_and(|s| s.animating)
     }
 
     /// Draws screen `index`'s glass into the swapchain image `target` (which already holds the

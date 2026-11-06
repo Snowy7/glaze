@@ -183,10 +183,14 @@ impl OverlayWindow {
         capture.present(glass, &self.surface)
     }
 
-    /// Fades the window in over [`FADE`], an ease-out run by DirectComposition (no frames of
-    /// ours). Takes effect at the next commit.
-    pub fn fade_in(&self, dcomp: &IDCompositionDesktopDevice) -> Result<()> {
-        let t = FADE.as_secs_f32();
+    /// Fades the window in over `fade` (the shell's, [`FADE`] by default), an ease-out run by
+    /// DirectComposition (no frames of ours); no fade shows it at once (reduced motion). Takes
+    /// effect at the next commit.
+    pub fn fade_in(&self, dcomp: &IDCompositionDesktopDevice, fade: Duration) -> Result<()> {
+        if fade.is_zero() {
+            return self.settle();
+        }
+        let t = fade.as_secs_f32();
         // SAFETY: DirectComposition calls on live objects.
         unsafe {
             let fade: IDCompositionAnimation = dcomp.CreateAnimation()?;

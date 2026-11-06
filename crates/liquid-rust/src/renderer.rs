@@ -308,7 +308,12 @@ fn material_gpu(resolved: &crate::material::Resolved, presence: f32, press: f32,
         // mypaper: the scheme rides in the unused slot (1 light, 0 dark), per glass.
         shadow: [m.shadow.offset_y * s, m.shadow.blur * 0.5 * s, m.shadow.opacity * p, if dark { 0.0 } else { 1.0 }],
         light_a: tone_a(m.light_tone),
-        light_b: tone_b(m.light_tone),
+        // mypaper: the backdrop's brightness and saturation ride in its unused slots, ramping
+        // from 1 (as is) with presence like every other effect.
+        light_b: {
+            let [darken_to, darken, ..] = tone_b(m.light_tone);
+            [darken_to, darken, 1.0 + (m.brightness - 1.0) * p, 1.0 + (m.saturation - 1.0) * p]
+        },
         dark_a: tone_a(m.dark_tone),
         dark_b: tone_b(m.dark_tone),
         tint,
@@ -1060,6 +1065,16 @@ mod tests {
     use crate::{Glass, Rect};
 
     const ALL_LAYERS: Layers = (Bound::Unbounded, Bound::Unbounded);
+
+    #[test]
+    fn backdrop_brightness_and_saturation_ramp_in_with_presence() {
+        let material = crate::Material { brightness: 0.5, saturation: 2.0, ..crate::Material::regular() };
+        let resolved = crate::material::Resolved { material, adapt: 0.0, contrast: 0.0 };
+        assert_eq!(material_gpu(&resolved, 1.0, 0.0, 1.0, true).light_b[2..], [0.5, 2.0]);
+        assert_eq!(material_gpu(&resolved, 0.5, 0.0, 1.0, true).light_b[2..], [0.75, 1.5]);
+        // Absent glass leaves the backdrop exactly as is (the shader then skips the step).
+        assert_eq!(material_gpu(&resolved, 0.0, 0.0, 1.0, true).light_b[2..], [1.0, 1.0]);
+    }
 
     fn groups_for_gap(gap: f32) -> usize {
         let mut scene = Scene::new();

@@ -3,12 +3,13 @@ mod bar;
 pub(crate) mod icons;
 pub(crate) mod look;
 mod maximized;
-mod motion;
+pub(crate) mod motion;
 pub mod plugin_modules;
 pub mod plugin_style;
 mod preview;
 pub(crate) mod services;
 mod sprites;
+mod styling;
 #[cfg(test)]
 mod tests;
 mod tray_menu;
@@ -90,6 +91,7 @@ pub struct Bars {
     watches: Vec<notify::RecommendedWatcher>,
     theme_watch: Option<notify::RecommendedWatcher>,
     appearance: Appearance,
+    theme_glass: Option<mypaper_theme::Liquid>,
     system: providers::accent::System,
     published: BTreeMap<String, Vec<glass::Plate>>,
     config_due: Option<Instant>,
@@ -165,6 +167,7 @@ impl Bars {
             watches: vec![],
             theme_watch: None,
             appearance: Appearance::default(),
+            theme_glass: None,
             system: providers::accent::read(),
             published: BTreeMap::new(),
             config_due: None,
@@ -277,8 +280,9 @@ impl Bars {
             services::wait_ms(at.saturating_duration_since(Instant::now()))
         })
     }
-    /// Time spent in each part of [`tick`](Self::tick) since the last call (diagnostics).
-    pub fn take_tick_costs() -> Vec<(&'static str, Duration)> {
+    /// Time (and CPU cycles, while counted) spent in each part of [`tick`](Self::tick) since the
+    /// last call (diagnostics).
+    pub fn take_tick_costs() -> Vec<(&'static str, Duration, u64)> {
         TICK_COSTS.with_borrow_mut(std::mem::take)
     }
     /// Cumulative stats samples, displayed changes, sampler microseconds and all bar repaints.
@@ -350,16 +354,13 @@ impl Bars {
                 }
             }
             events::SETTINGS => {
-                self.system = providers::accent::read();
-                for b in &mut self.bars {
-                    let appearance = b.config.appearance.over(&self.appearance);
-                    let look = if b.kind == BarKind::Top {
-                        &b.config.top.look
-                    } else {
-                        &b.config.dock.look
-                    };
-                    b.tokens = look::Tokens::resolve(look, &appearance, &self.system);
-                    b.dirty = true;
+                // Every setting any app changes is announced like this (a tweak tool or
+                // Settings can send dozens a second); the shell follows only these values.
+                let system = providers::accent::read();
+                if system != self.system {
+                    self.system = system;
+                    self.config_changed();
+                    crate::inbox::post(crate::inbox::WM_CONFIG, 0);
                 }
             }
             events::TIME => self.services.clock_due = Some(now),
@@ -403,7 +404,8 @@ impl Bars {
             Some(Fact::DisplayOff) => self.display_off = lparam != 0,
             Some(Fact::SessionLocked) => self.locked = lparam != 0,
             Some(Fact::OnBattery) if self.config.performance == config::Performance::Auto => {
-                self.config_changed()
+                self.config_changed();
+                crate::inbox::post(crate::inbox::WM_CONFIG, 0);
             }
             _ => {}
         }
@@ -412,7 +414,7 @@ impl Bars {
 
     /// All drawing is gated by data changes or active animation. The ticker cancels at rest.
     pub fn tick(&mut self, ui: &mut Ui) {
-        let mut at = Instant::now();
+        let mut at = tick_start();
         if let Some(menu) = &mut self.tray_menu {
             menu.process(ui);
         }
@@ -426,6 +428,9 @@ impl Bars {
         at = tick_spent("services", at);
         if changes.config || changes.theme {
             self.config_changed();
+            if load_config().is_ok() {
+                crate::inbox::post(crate::inbox::WM_CONFIG, 0);
+            }
         }
         // A plugin patched or reset a bar's style: restyle in place like a settings change.
         if plugin_style::take_changed() {
@@ -492,19 +497,18 @@ impl Bars {
             self.schedule_reservations();
         }
         at = tick_spent("due", at);
-        if changes.data {
+        if changes.apps {
             self.update_items();
-            self.dirty();
         }
-        if changes.stats {
+        if !changes.topics.is_empty() {
             for bar in &mut self.bars {
-                if bar.topics().contains(&providers::actions::Topic::Stats) {
+                if !bar.topics().is_disjoint(&changes.topics) {
                     bar.dirty = true;
                 }
             }
         }
         at = tick_spent("items", at);
-        if changes.data || changes.moved || changes.windows {
+        if changes.apps || changes.moved || changes.windows {
             let windows: Vec<_> = self
                 .services
                 .apps
@@ -567,12 +571,19 @@ impl Bars {
         if maximized_event {
             // One follow-up snapshot also covers focus/maximize arriving before the shared
             // source has attached its location hook to the newly foreground process.
-            self.maximized_due.get_or_insert(now + Duration::from_millis(150));
+            self.maximized_due
+                .get_or_insert(now + Duration::from_millis(150));
         }
         if maximized_event || maximized_settled {
             // Focus and monitor changes invalidate every monitor's independent z-order decision.
             // Fullscreen visibility is handled separately below.
-            let windows = maximized::ZOrder::read();
+            let monitors: Vec<_> = self
+                .bars
+                .iter()
+                .filter(|b| b.hide_when_maximized())
+                .map(|b| b.monitor.rect)
+                .collect();
+            let windows = maximized::ZOrder::read(&monitors);
             for b in &mut self.bars {
                 let hide = b.hide_when_maximized() && windows.hides(b.monitor.rect);
                 b.maximized.observe(hide, now);
@@ -624,10 +635,16 @@ impl Bars {
         let Some(b) = self.bars.get(index).filter(|b| !b.hidden) else {
             return;
         };
-        let Some((i, app)) = b.frame.targets.iter().enumerate().find_map(|(i, t)| match t {
-            Target::Dock(app) if app.key == key => Some((i, app.clone())),
-            _ => None,
-        }) else {
+        let Some((i, app)) = b
+            .frame
+            .targets
+            .iter()
+            .enumerate()
+            .find_map(|(i, t)| match t {
+                Target::Dock(app) if app.key == key => Some((i, app.clone())),
+                _ => None,
+            })
+        else {
             return;
         };
         let Some(hit) = b.frame.list.hits.iter().find(|h| h.id == i as u32 + 1) else {
@@ -637,7 +654,13 @@ impl Bars {
         let anchor = hit.rect.offset(origin.0 as f32, origin.1 as f32);
         let (tokens, scale, vertical) = (b.tokens.clone(), b.scale(), !b.horizontal());
         let ink = tokens.theme.color.label;
-        let icon = view::app_icon(ui, &mut self.images, &app, ink, (16.0 * scale).round() as u32);
+        let icon = view::app_icon(
+            ui,
+            &mut self.images,
+            &app,
+            ink,
+            (16.0 * scale).round() as u32,
+        );
         let shown = if let Some(preview) = &mut self.preview {
             preview.switch(ui, app, anchor, icon)
         } else {
@@ -705,7 +728,8 @@ impl Bars {
                 // The kit's tooltip, placed in screen px (below the item, or above it when
                 // there is no room), then cut out with its shadow as the popup.
                 let input = mypaper_ui::Interaction::default();
-                let mut f = mypaper_ui::Frame::new(&mut ui.text, &b.tokens.theme, b.scale(), &input);
+                let mut f =
+                    mypaper_ui::Frame::new(&mut ui.text, &b.tokens.theme, b.scale(), &input);
                 let body = f.tooltip(anchor, &label, bounds);
                 let list = f.list;
                 let reach = list
@@ -982,10 +1006,8 @@ impl Bars {
         let Some(index) = self.bars.iter().position(|b| b.owns(id)) else {
             return;
         };
-        let offset = self.bars[index].input_offset(id);
         let map = |mut p: mypaper_ui::Pointer| {
-            p.at.x += offset.x;
-            p.at.y += offset.y;
+            p.at = self.bars[index].input_point(id, p.at);
             p
         };
         let event = match *event {
@@ -1319,8 +1341,14 @@ impl Bars {
                     ModuleRef::Builtin(module) => module,
                     ModuleRef::Custom(id) => {
                         match plugin_modules::panel_of(&id).filter(|_| input == Trigger::Left) {
-                            Some(panel) => flyouts::open(flyouts::Kind::Plugin(plugin_modules::panel_number(&panel)), anchor, &monitor),
-                            None => { plugin_modules::click(&id); }
+                            Some(panel) => flyouts::open(
+                                flyouts::Kind::Plugin(plugin_modules::panel_number(&panel)),
+                                anchor,
+                                &monitor,
+                            ),
+                            None => {
+                                plugin_modules::click(&id);
+                            }
                         }
                         return;
                     }
@@ -1568,13 +1596,69 @@ impl Bars {
             self.menu = Menu::new("Dock commands").ok();
         }
         if let Some(menu) = &mut self.menu {
-            let _ = menu.open(
-                ui,
-                entries,
-                point,
-                screen_at(point.0, point.1),
-                tokens,
+            let dock = self.bars.iter().find(|b| {
+                b.kind == BarKind::Dock
+                    && b.monitor.rect.x <= point.0
+                    && point.0 < b.monitor.rect.x + b.monitor.rect.width
+                    && b.monitor.rect.y <= point.1
+                    && point.1 < b.monitor.rect.y + b.monitor.rect.height
+            });
+            let config = dock.map_or(&self.config, |b| &b.config);
+            let animation = &config.dock.animation;
+            let timing = motion::resolve(
+                animation,
+                true,
+                motion::Leaf::Open,
+                self.system.animations,
+                config.performance.active(mypaper_desktop::on_battery()),
             );
+            let mut bar_look = config.dock.look.clone();
+            let appearance = config.appearance.over(&self.appearance);
+            look::appearance_layer(config, "dock", &mut bar_look, &appearance);
+            look::popup_font(config, "dock", &mut bar_look);
+            look::glass_layer(config, "dock", &mut bar_look, self.theme_glass);
+            let knobs = Config::load()
+                .map(|c| crate::glass::knobs(&c.look, crate::glass::Family::Menus))
+                .unwrap_or_default();
+            let mut popup = crate::flyouts::look::Look::resolve_with(
+                &bar_look,
+                &appearance,
+                &self.system,
+                &knobs,
+            )
+            .menu_tokens();
+            if config.performance.active(mypaper_desktop::on_battery()) {
+                popup.glass = None;
+            }
+            let performance = config.performance.active(mypaper_desktop::on_battery());
+            menu.set_interaction_timings(
+                motion::resolve(
+                    animation,
+                    true,
+                    motion::Leaf::Hover,
+                    self.system.animations,
+                    performance,
+                ),
+                motion::resolve(
+                    animation,
+                    true,
+                    motion::Leaf::Press,
+                    self.system.animations,
+                    performance,
+                ),
+            );
+            menu.set_presentation(
+                popup,
+                mypaper_ui::menu::MenuMotion {
+                    timing,
+                    style: motion::reveal(motion::presentation(
+                        animation,
+                        true,
+                        motion::Leaf::Open,
+                    )),
+                },
+            );
+            let _ = menu.open(ui, entries, point, screen_at(point.0, point.1), tokens);
         }
     }
     fn command(&mut self, command: Command) {
@@ -1713,14 +1797,23 @@ impl Bars {
                         || (config.performance == config::Performance::Auto
                             && mypaper_desktop::on_battery());
                     let mut look = look.clone();
-                    let colors = plugin_style::patch_look(surface, bar_key, self.config.raw(), &mut look, &mut appearance);
+                    look::appearance_layer(&config, bar_key, &mut look, &appearance);
+                    look::glass_layer(&config, bar_key, &mut look, self.theme_glass);
+                    let colors = plugin_style::patch_look(
+                        surface,
+                        bar_key,
+                        self.config.raw(),
+                        &mut look,
+                        &mut appearance,
+                    );
                     let mut tokens = look::Tokens::resolve(&look, &appearance, &self.system);
                     plugin_style::colors(&colors, self.config.raw(), &mut tokens.theme.color);
+                    tokens.cache_config(&look, &config);
                     // No glass on battery saver: the theme's own surface draws instead.
                     if performance {
                         tokens.material = None;
                     }
-                    let animate = self.system.animations && !performance;
+                    let animate = self.system.animations;
                     wanted.push((kind, config.clone(), monitor.clone(), tokens, animate));
                 }
             }
@@ -1728,10 +1821,13 @@ impl Bars {
         // Keep each bar whose geometry stays; drop the others before any new one reserves.
         let kept: Vec<Option<Bar>> = wanted
             .iter()
-            .map(|(kind, config, monitor, ..)| {
+            .map(|(kind, config, monitor, tokens, ..)| {
                 let geometry = Bar::geometry(*kind, config, monitor);
                 old.iter()
-                    .position(|b| Bar::geometry(b.kind, &b.config, &b.monitor) == geometry)
+                    .position(|b| {
+                        Bar::geometry(b.kind, &b.config, &b.monitor) == geometry
+                            && b.tokens.scale == tokens.scale
+                    })
                     .map(|i| old.swap_remove(i))
             })
             .collect();
@@ -1830,12 +1926,16 @@ impl Bars {
             .filter(|b| b.shows_content())
             .map(|b| &b.config)
             .collect();
+        // Every second only for a clock on screen whose format shows the seconds (a preset's
+        // `HH:mm` with `seconds` on would redraw the same text every second).
         let seconds = self.bars.iter().any(|b| {
-            if b.kind == BarKind::Top {
-                b.config.top.clock.seconds
-            } else {
-                b.config.dock.clock.seconds
-            }
+            b.shows_content()
+                && b.topics().contains(&providers::actions::Topic::Clock)
+                && providers::clock::shows_seconds(if b.kind == BarKind::Top {
+                    &b.config.top.clock
+                } else {
+                    &b.config.dock.clock
+                })
         });
         let tray = self
             .bars
@@ -1896,6 +1996,11 @@ impl Bars {
                 .map_or_else(Default::default, |t| t.dir.clone()),
         );
         self.appearance = look::theme_appearance(loaded.as_ref());
+        self.theme_glass = loaded
+            .as_ref()
+            .and_then(|t| t.theme.bars.as_ref())
+            .and_then(|s| s.glass);
+        self.theme_watch = None;
         if let Some(t) = &loaded
             && let Ok(text) = std::fs::read_to_string(t.dir.join("theme.json"))
             && let Ok(value) = serde_json::from_str(&text)
@@ -2031,14 +2136,33 @@ fn builtin_flyout(action: BuiltinAction) -> Option<flyouts::Kind> {
 }
 
 thread_local! {
-    static TICK_COSTS: std::cell::RefCell<Vec<(&'static str, Duration)>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// Wall time and (while the wake report counts them) CPU cycles per part of `tick`.
+    static TICK_COSTS: std::cell::RefCell<Vec<(&'static str, Duration, u64)>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// The thread's cycles at the end of the last part.
+    static TICK_MARK: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
-/// Adds the time since `start` to `part`; returns now.
+/// Starts timing a `tick`; returns now.
+fn tick_start() -> Instant {
+    if crate::cycles::counting() {
+        TICK_MARK.set(crate::cycles::thread());
+    }
+    Instant::now()
+}
+/// Adds the time since `start` (and the cycles since the last part) to `part`; returns now.
 fn tick_spent(part: &'static str, start: Instant) -> Instant {
     let now = Instant::now();
+    let cycles = if crate::cycles::counting() {
+        let cycles = crate::cycles::thread();
+        cycles.saturating_sub(TICK_MARK.replace(cycles))
+    } else {
+        0
+    };
     TICK_COSTS.with_borrow_mut(|costs| match costs.iter_mut().find(|c| c.0 == part) {
-        Some(c) => c.1 += now - start,
-        None => costs.push((part, now - start)),
+        Some(c) => {
+            c.1 += now - start;
+            c.2 += cycles;
+        }
+        None => costs.push((part, now - start, cycles)),
     });
     now
 }

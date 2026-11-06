@@ -14,8 +14,9 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CW_USEDEFAULT, CreateWindowExW, DefWindowProcW, DestroyWindow, GWLP_USERDATA, GetClientRect,
     GetWindowLongPtrW, IDC_ARROW, IsIconic, LoadCursorW, MWMO_INPUTAVAILABLE,
-    MsgWaitForMultipleObjectsEx, PostQuitMessage, QS_ALLINPUT, RegisterClassExW, SetWindowLongPtrW,
-    WM_APP, WM_DESTROY, WM_ERASEBKGND, WNDCLASSEXW, WS_CHILD, WS_EX_NOACTIVATE,
+    MsgWaitForMultipleObjectsEx, PostQuitMessage, QS_ALLINPUT, RegisterClassExW, SW_HIDE,
+    SW_SHOWNA, SetWindowLongPtrW, ShowWindow, WM_APP, WM_DESTROY, WM_ERASEBKGND, WNDCLASSEXW,
+    WS_CHILD, WS_EX_NOACTIVATE,
     WS_OVERLAPPEDWINDOW, WS_VISIBLE,
 };
 use windows::core::{HSTRING, PCWSTR, w};
@@ -135,6 +136,14 @@ impl Window {
     pub fn minimized(&self) -> bool {
         // SAFETY: read-only query.
         unsafe { IsIconic(self.0) }.as_bool()
+    }
+
+    /// Shows or hides the window without activating it. Hidden, the desktop shows what is under
+    /// it: Windows' own wallpaper (the theme's still, see `snapshot`).
+    pub fn show(&self, visible: bool) {
+        let how = if visible { SW_SHOWNA } else { SW_HIDE };
+        // SAFETY: our own window, on its thread.
+        let _ = unsafe { ShowWindow(self.0, how) };
     }
 }
 

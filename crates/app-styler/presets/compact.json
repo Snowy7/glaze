@@ -1,0 +1,19 @@
+{
+  "settings": {
+    "rules": {
+      "ButtonEntityItem > Button#ContainerButton": { "MinHeight": "44", "Padding": "12,2,12,2" },
+      "SettingsExpander ExpanderToggleButton#ContainerButton": { "MinHeight": "44", "Padding": "12,2,12,2" },
+      "NavigationViewItemPresenter": { "MinHeight": "30" },
+      "SettingsNavigationViewItem TextBlock": { "FontSize": "13" }
+    }
+  },
+  "explorer": {
+    "rules": {
+      "CommandBar#FileExplorerCommandBar AppBarButton": { "Height": "28", "Margin": "2,0,2,0" },
+      "CommandBar#NavigationCommands AppBarButton": { "Height": "28", "Margin": "4,6,4,0" },
+      "AddressBarControl > Grid#PART_LayoutRoot": { "Height": "28" },
+      "AutoSuggestBox#FileExplorerSearchBox TextBox#TextBox": { "MinHeight": "28", "Padding": "8,3,6,3" },
+      "BreadcrumbBarItemControl TextBlock": { "FontSize": "13" }
+    }
+  }
+}

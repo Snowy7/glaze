@@ -14,6 +14,7 @@
 use anyhow::{Result, bail};
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::apps::AppsStyle;
 use crate::windows::{Backdrop, Color, Corners, Paint, WindowsStyle};
 
 /// The five native styles. Liquid is the default.
@@ -189,6 +190,10 @@ pub struct WindowsLayer {
     pub corners: Option<Option<Corners>>,
     #[serde(deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub backdrop: Option<Option<Backdrop>>,
+    #[serde(deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub accent_on_taskbar: Option<Option<bool>>,
+    #[serde(deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub accent_on_title_bars: Option<Option<bool>>,
     /// Light or dark apps (and Windows' own surfaces).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub apps: Option<Apps>,
@@ -217,6 +222,8 @@ impl WindowsLayer {
             caption_text: style.caption_text.map(Some),
             corners: style.corners.map(Some),
             backdrop: style.backdrop.map(Some),
+            accent_on_taskbar: style.accent_on_taskbar.map(Some),
+            accent_on_title_bars: style.accent_on_title_bars.map(Some),
             apps: style
                 .dark_mode
                 .map(|dark| if dark { Apps::Dark } else { Apps::Light }),
@@ -250,6 +257,9 @@ pub struct Look {
     pub menus: Option<FamilyLook>,
     #[serde(skip_serializing_if = "WindowsLayer::is_empty")]
     pub windows: WindowsLayer,
+    /// The app styler's rules over the wallpaper's `apps` (experimental; see `crate::apps`).
+    #[serde(skip_serializing_if = "AppsStyle::is_empty")]
+    pub apps: AppsStyle,
 }
 
 fn is_default<T: Default + PartialEq>(value: &T) -> bool {
@@ -313,6 +323,8 @@ impl Look {
             corners: pick(&w.corners, base.corners),
             backdrop: pick(&w.backdrop, base.backdrop),
             dark_mode,
+            accent_on_taskbar: pick(&w.accent_on_taskbar, base.accent_on_taskbar),
+            accent_on_title_bars: pick(&w.accent_on_title_bars, base.accent_on_title_bars),
             cursors: match &w.cursors {
                 Some(value) => value.clone(),
                 None => base.cursors,
@@ -378,5 +390,34 @@ mod tests {
         let bad: Look = serde_json::from_str(r#"{ "material": { "clarity": 2 } }"#).unwrap();
         assert!(bad.validate().is_err());
         assert!(serde_json::from_str::<Look>(r#"{ "style": "neon" }"#).is_err());
+    }
+
+    #[test]
+    fn accent_visibility_has_independent_absent_null_and_boolean_layers() {
+        let theme = WindowsStyle {
+            accent_on_taskbar: Some(true),
+            accent_on_title_bars: Some(true),
+            ..Default::default()
+        };
+        let look: Look = serde_json::from_str(
+            r#"{"windows":{"accent_on_taskbar":null,"accent_on_title_bars":false}}"#,
+        )
+        .unwrap();
+        let resolved = look.windows_style(Some(&theme)).unwrap();
+        assert_eq!(resolved.accent_on_taskbar, None);
+        assert_eq!(resolved.accent_on_title_bars, Some(false));
+        assert_eq!(
+            Look::default().windows_style(Some(&theme)),
+            Some(theme.clone())
+        );
+        assert_eq!(
+            WindowsLayer::adopt(&theme).accent_on_taskbar,
+            Some(Some(true))
+        );
+        assert_eq!(
+            serde_json::from_str::<Look>(&serde_json::to_string(&look).unwrap()).unwrap(),
+            look
+        );
+        assert!(serde_json::from_str::<Look>(r#"{"windows":{"accent_on_taskbar":1}}"#).is_err());
     }
 }

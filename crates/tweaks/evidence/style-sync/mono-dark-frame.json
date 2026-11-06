@@ -1,0 +1,9 @@
+﻿{
+    "screenshot":  "mono-dark-frame.png",
+    "caption_pixels_matching":  9185,
+    "expected_rgb":  [
+                         20,
+                         20,
+                         22
+                     ]
+}

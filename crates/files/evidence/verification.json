@@ -1,0 +1,30 @@
+﻿{
+    "new_folder":  true,
+    "native_directory_notifications":  true,
+    "rename":  true,
+    "shell_clipboard_format":  true,
+    "copy_paste":  true,
+    "cut_paste":  true,
+    "recycle":  true,
+    "shell_namespace":  true,
+    "large_folder_log":  [
+                             "[2026-11-06T02:14:30Z INFO  mypaper_files::app] folder: 5 entries in 22 ms",
+                             "[2026-11-06T02:14:32Z INFO  mypaper_files::app] folder: 6 entries in 1 ms",
+                             "[2026-11-06T02:14:32Z INFO  mypaper_files::app] folder: 7 entries in 1 ms",
+                             "[2026-11-06T02:14:32Z INFO  mypaper_files::app] folder: 7 entries in 1 ms",
+                             "[2026-11-06T02:14:32Z INFO  mypaper_files::app] folder: 7 entries in 1 ms",
+                             "[2026-11-06T02:14:34Z INFO  mypaper_files::app] folder: 0 entries in 1 ms",
+                             "[2026-11-06T02:14:34Z INFO  mypaper_files::app] folder: 1 entries in 1 ms",
+                             "[2026-11-06T02:14:36Z INFO  mypaper_files::app] folder: 0 entries in 1 ms",
+                             "[2026-11-06T02:14:37Z INFO  mypaper_files::app] folder: 1 entries in 1 ms",
+                             "[2026-11-06T02:14:37Z INFO  mypaper_files::app] folder: 0 entries in 1 ms",
+                             "[2026-11-06T02:14:38Z INFO  mypaper_files::app] folder: 3 entries in 44 ms",
+                             "[2026-11-06T02:14:39Z INFO  mypaper_files::app] folder first page: 128 entries in 259 ms",
+                             "[2026-11-06T02:14:39Z INFO  mypaper_files::app] folder: 100000 entries in 326 ms"
+                         ],
+    "visible_entries":  17,
+    "end_key_reaches_last_entry":  true,
+    "idle_process":  30692,
+    "idle_private_mb":  31.64,
+    "gpu_counters":  "0 (30s official sample)"
+}

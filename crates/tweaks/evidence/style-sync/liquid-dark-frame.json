@@ -1,0 +1,9 @@
+﻿{
+    "screenshot":  "liquid-dark-frame.png",
+    "caption_pixels_matching":  9178,
+    "expected_rgb":  [
+                         28,
+                         28,
+                         30
+                     ]
+}

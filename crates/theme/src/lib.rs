@@ -13,6 +13,8 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
+pub mod windows;
+
 pub const MANIFEST: &str = "theme.json";
 
 /// Used when no theme is given on the command line.
@@ -106,6 +108,10 @@ pub struct Theme {
     /// How the top bar and dock look while this theme is active (docs/bars.md).
     #[serde(default)]
     pub bars: Option<Skin>,
+    /// How the app styler restyles the XAML inside File Explorer and Settings while this theme
+    /// is active (experimental; docs/windows-styling.md, "App styler"). `look.apps` layers over it.
+    #[serde(default)]
+    pub apps: Option<mypaper_config::AppsStyle>,
 }
 
 /// A theme's look for a family of mypaper UI (widgets, bars): appearance

@@ -613,6 +613,14 @@ impl Surface {
         )
     }
 
+    /// The optional alpha app canvas keeps native caption hit-testing in client pixels.
+    pub(crate) fn record_layered_app_size(&self, size: (u32, u32)) {
+        self.app().size.set(size);
+        // The alpha canvas owns the pixels now. A later opaque present must allocate for the
+        // current client size, including a resize that happened while this canvas was active.
+        *self.app().canvas.borrow_mut() = None;
+    }
+
     /// Device pixels per design pixel (the window's DPI / 96).
     pub fn scale(&self) -> f32 {
         scale_of(self.hwnd())

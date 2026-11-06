@@ -6,7 +6,7 @@
 //! comparisons and atomic loads per key.
 //!
 //! Only a lone press and release replaces Start, and only Win+N and Win+A (with nothing else
-//! held) replace the action center. Every other key passes through untouched (Win+E, Win+Shift+S
+//! held) replace the action center. Opt-in Win+E opens Files. Every other key passes through (Win+Shift+S
 //! and the rest work as ever).
 //! - The release of a lone press is replayed as the unassigned key `vkE8`, then the release, and
 //!   swallowed only once the replay is in. Explorer sees a Windows key combination, so Start
@@ -59,6 +59,8 @@ pub enum Target {
     Notifications,
     /// Win+A.
     Quick,
+    /// Win+E, only while the Files experiment is enabled.
+    Files,
 }
 
 impl Target {
@@ -68,6 +70,7 @@ impl Target {
             Self::Launcher => "launcher",
             Self::Notifications => "notifications",
             Self::Quick => "quick",
+            Self::Files => "files",
         }
     }
 
@@ -121,6 +124,11 @@ impl Machine {
     /// loop back here. Everyone else's input counts, injected or not (on-screen keyboards,
     /// remote desktop, key remappers).
     pub fn on_key(&mut self, vk: u16, down: bool, ours: bool) -> Action {
+        self.on_key_with_files(vk, down, ours, false)
+    }
+
+    /// The optional Files route shares the installed hook and its cancellation semantics.
+    pub fn on_key_with_files(&mut self, vk: u16, down: bool, ours: bool, files: bool) -> Action {
         if ours {
             return Action::Pass;
         }
@@ -137,7 +145,7 @@ impl Machine {
                 let panel = if self.combo {
                     None
                 } else {
-                    Target::of_letter(vk)
+                    Target::of_letter(vk).or_else(|| (files && vk == 0x45).then_some(Target::Files))
                 };
                 self.combo = true;
                 match panel {
@@ -191,6 +199,7 @@ impl Machine {
 // What the hook reads per key, kept current by the main loop (the hook must never wait on it).
 /// A lone press opens the launcher right now: false while no bar can show it.
 static ENABLED: AtomicBool = AtomicBool::new(false);
+static FILES: AtomicBool = AtomicBool::new(false);
 /// A fullscreen app is in front: Start keeps the key.
 static FULLSCREEN: AtomicBool = AtomicBool::new(false);
 /// Bumped when the session locks or unlocks, and while the hook is disabled.
@@ -260,6 +269,13 @@ impl WinKey {
         FULLSCREEN.store(on, Ordering::Relaxed);
     }
 
+    /// Updated by config reload, never by doing I/O inside the keyboard callback.
+    pub fn set_files_enabled(on: bool) {
+        if FILES.swap(on, Ordering::Relaxed) != on {
+            Self::reset();
+        }
+    }
+
     /// The hook starts over with the next key (the session locked or unlocked).
     pub fn reset() {
         EPOCH.fetch_add(1, Ordering::Relaxed);
@@ -298,7 +314,7 @@ unsafe extern "system" fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> L
             if !ENABLED.load(Ordering::Relaxed) {
                 return Action::Pass;
             }
-            hook.0.on_key(key.vkCode as u16, down, ours)
+            hook.0.on_key_with_files(key.vkCode as u16, down, ours, FILES.load(Ordering::Relaxed))
         });
         if action != Action::Pass || is_win(key.vkCode as u16) {
             log::debug!(
@@ -409,6 +425,24 @@ mod tests {
     const E: u16 = 0x45;
     const SHIFT: u16 = 0x10;
     const OPEN: Action = Action::Open(Target::Launcher);
+
+    #[test]
+    fn files_is_opt_in_and_cancellable() {
+        let mut machine = Machine::default();
+        assert_eq!(machine.on_key_with_files(LWIN, true, false, true), Action::Pass);
+        assert_eq!(machine.on_key_with_files(E, true, false, true), Action::Panel(Target::Files));
+        assert_eq!(machine.on_key_with_files(E, true, false, true), Action::Swallow);
+        assert_eq!(machine.on_key_with_files(E, false, false, true), Action::Swallow);
+        assert_eq!(machine.on_key_with_files(LWIN, false, false, true), Action::Open(Target::Files));
+        machine.on_key_with_files(LWIN, true, false, true);
+        machine.on_key_with_files(E, true, false, true);
+        machine.cancel_swallow();
+        assert_eq!(machine.on_key_with_files(E, false, false, true), Action::Pass);
+        assert_eq!(machine.on_key_with_files(LWIN, false, false, true), Action::Pass);
+        for (vk, down) in [(LWIN, true), (E, true), (E, false), (LWIN, false)] {
+            assert_eq!(machine.on_key_with_files(vk, down, false, false), Action::Pass);
+        }
+    }
 
     fn run(events: &[(u16, bool, bool)]) -> Vec<Action> {
         let mut machine = Machine::default();

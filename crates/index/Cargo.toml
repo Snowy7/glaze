@@ -1,0 +1,33 @@
+[package]
+name = "mypaper-index"
+description = "Opt-in native file name index and incremental folder sizes."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+bytemuck.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+memchr = "2"
+memmap2 = "0.9"
+rayon = "1"
+
+[dependencies.windows]
+workspace = true
+features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
+  "Win32_System_IO",
+  "Win32_System_Ioctl",
+  "Win32_System_Memory",
+  "Win32_System_Pipes",
+  "Win32_System_ProcessStatus",
+  "Win32_System_Threading",
+]
+
+[lints]
+workspace = true

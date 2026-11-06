@@ -1,0 +1,21 @@
+﻿{
+    "at":  "2026-11-06T04:53:30",
+    "label":  "files-10k-idle",
+    "duration_seconds":  30,
+    "cpu_unit":  "percent of one logical core",
+    "files":  [
+                  {
+                      "part":  "mypaper-files",
+                      "pid":  75476,
+                      "cpu_core_pct":  0,
+                      "gpu3d_pct":  0,
+                      "gpu_copy_pct":  0,
+                      "gpu_video_pct":  0,
+                      "gpu_mem_mb":  0,
+                      "private_mb":  27,
+                      "ws_mb":  59
+                  }
+              ],
+    "closed_process_count":  0,
+    "sample_source":  "C:\\Users\\you\\AppData\\Local\\Temp\\mypaper-tools\\measure-files-10k-idle.json"
+}

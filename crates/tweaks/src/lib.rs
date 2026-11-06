@@ -26,10 +26,15 @@ pub mod color;
 pub mod cursor_art;
 pub mod cursors;
 pub mod dwm;
+pub mod folder_routing;
+pub mod game_activity;
 pub mod palette;
 pub mod plan;
 pub mod registry;
+pub mod system;
 pub mod undo;
+
+pub use plan::system_prefers_dark;
 
 use std::path::Path;
 use std::time::Duration;
@@ -53,6 +58,20 @@ const BROADCAST_TIMEOUT_MS: u32 = 500;
 /// Pause between restore passes: Windows rewrites related accent values a
 /// few milliseconds after we change one, and the restore waits that out.
 const SETTLE: Duration = Duration::from_millis(100);
+
+/// The app scheme before any active mypaper override, for another process resolving auto
+/// tokens. Reading the same journal as core avoids a config-event race with mode restoration.
+pub fn unmanaged_system_prefers_dark() -> bool {
+    let original = palette::local_dir().ok().and_then(|dir| {
+        Undo::new(Registry, dir.join("undo.json"), SETTLE)
+            .original(plan::PERSONALIZE_KEY, plan::APPS_THEME)
+            .ok()
+            .flatten()
+    });
+    original.map_or_else(system_prefers_dark, |value| {
+        value == Some(undo::Value::Dword(0))
+    })
+}
 
 /// A style and the palette its `"auto"` colors were resolved with.
 #[derive(PartialEq)]
@@ -89,6 +108,18 @@ impl Tweaks {
             dwm::reset_all(forced_dark.then(plan::system_prefers_dark));
         }
         Ok(tweaks)
+    }
+
+    /// Windows' own app scheme before our override. Automatic styling must not inherit a
+    /// previous forced mode when switching from light/dark back to auto.
+    pub fn unmanaged_dark_mode(&self) -> bool {
+        match self
+            .system
+            .original(plan::PERSONALIZE_KEY, plan::APPS_THEME)
+        {
+            Ok(Some(value)) => value == Some(undo::Value::Dword(0)),
+            _ => system_prefers_dark(),
+        }
     }
 
     /// Applies `style`. `palette` resolves `"auto"` colors; without one,

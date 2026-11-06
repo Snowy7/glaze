@@ -87,11 +87,23 @@ pub fn system_writes(style: &WindowsStyle, palette: Option<&Palette>) -> Vec<Wri
             });
         }
     }
+    for (key, enabled) in [
+        (PERSONALIZE_KEY, style.accent_on_taskbar),
+        (DWM_KEY, style.accent_on_title_bars),
+    ] {
+        if let Some(enabled) = enabled {
+            writes.push(Write {
+                key,
+                name: "ColorPrevalence",
+                value: Value::Dword(u32::from(enabled)),
+            });
+        }
+    }
     writes
 }
 
 /// Does the user currently have apps set to the dark theme?
-pub(crate) fn system_prefers_dark() -> bool {
+pub fn system_prefers_dark() -> bool {
     use crate::registry::Registry;
     use crate::undo::Store;
     matches!(
@@ -145,6 +157,89 @@ mod tests {
             let names: Vec<_> = writes.iter().map(|w| w.name).collect();
             assert_eq!(names, ["AppsUseLightTheme", "SystemUsesLightTheme"]);
             assert!(writes.iter().all(|w| w.value == Value::Dword(expected)));
+        }
+    }
+
+    #[test]
+    fn accent_visibility_writes_distinct_keys_even_without_a_palette() {
+        for (taskbar, titles) in [(true, false), (false, true)] {
+            let style = WindowsStyle {
+                accent_on_taskbar: Some(taskbar),
+                accent_on_title_bars: Some(titles),
+                ..Default::default()
+            };
+            let writes = system_writes(&style, None);
+            assert_eq!(writes.len(), 2);
+            assert_eq!(
+                (writes[0].key, writes[0].name),
+                (PERSONALIZE_KEY, "ColorPrevalence")
+            );
+            assert_eq!(writes[0].value, Value::Dword(u32::from(taskbar)));
+            assert_eq!(
+                (writes[1].key, writes[1].name),
+                (DWM_KEY, "ColorPrevalence")
+            );
+            assert_eq!(writes[1].value, Value::Dword(u32::from(titles)));
+        }
+        assert!(system_writes(&WindowsStyle::default(), None).is_empty());
+    }
+
+    #[test]
+    fn five_style_transitions_and_palette_updates_restore_the_first_registry_originals() {
+        use crate::undo::tests::{Memory, Scratch};
+        use crate::undo::{Store, Undo};
+        use mypaper_config::look::{Scheme, Style};
+        use std::time::Duration;
+
+        let scratch = Scratch::new("style-sync-roundtrip");
+        let mut store = Memory::default();
+        // Include an absent value and a non-DWORD original: undo owns exact originals,
+        // irrespective of the type Windows normally uses for the desired setting.
+        store
+            .write(DWM_KEY, "ColorPrevalence", &Value::Binary(vec![3, 9]))
+            .unwrap();
+        store
+            .write(PERSONALIZE_KEY, APPS_THEME, &Value::Dword(1))
+            .unwrap();
+        let mut undo = Undo::new(store.clone(), scratch.journal(), Duration::ZERO);
+        let mut touched = Vec::new();
+        for style in Style::ALL {
+            for appearance in [Scheme::Dark, Scheme::Light] {
+                let look = mypaper_config::Look {
+                    style: Some(style),
+                    appearance: Some(appearance),
+                    ..Default::default()
+                };
+                let raw = mypaper_theme::windows::resolve(&look, None, Some(palette()), false)
+                    .windows
+                    .unwrap();
+                let writes = system_writes(&raw, Some(&palette()));
+                assert_eq!(writes.len(), 8);
+                undo.apply(&writes).unwrap();
+                assert!(!undo.apply(&writes).unwrap(), "identical events do no work");
+                for w in &writes {
+                    assert_eq!(store.read(w.key, w.name).unwrap(), Some(w.value.clone()));
+                }
+                touched = writes;
+            }
+        }
+        let changed = Palette {
+            accent: Color([190, 20, 100]),
+            ..palette()
+        };
+        undo.apply(&system_writes(&style(AUTO_STYLE), Some(&changed)))
+            .unwrap();
+        // A fresh controller models recovery after a hard kill.
+        let mut recovered = Undo::new(store.clone(), scratch.journal(), Duration::ZERO);
+        recovered.restore(|| {}).unwrap();
+        assert!(!recovered.pending());
+        for w in &touched {
+            let expected = match (w.key, w.name) {
+                (DWM_KEY, "ColorPrevalence") => Some(Value::Binary(vec![3, 9])),
+                (PERSONALIZE_KEY, APPS_THEME) => Some(Value::Dword(1)),
+                _ => None,
+            };
+            assert_eq!(store.read(w.key, w.name).unwrap(), expected);
         }
     }
 }

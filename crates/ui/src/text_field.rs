@@ -209,6 +209,20 @@ impl TextField {
         }
         Ok(value.to_string())
     }
+    /// Select all text when opening an address field or renaming an item.
+    pub fn select_all(&self) {
+        self.send(windows::Win32::UI::Controls::EM_SETSEL, WPARAM(0), LPARAM(-1));
+    }
+    /// Select a UTF-16 range, matching RichEdit's character positions.
+    pub fn select_range(&self, range: std::ops::Range<u32>) {
+        self.send(windows::Win32::UI::Controls::EM_SETSEL, WPARAM(range.start as usize), LPARAM(range.end as isize));
+    }
+    /// Arm change notifications after attaching a field that was laid out while inactive.
+    /// Its previous posted invalidation may have arrived while the surface had no field.
+    pub fn request_redraw(&self) {
+        self.inner.state.posted.set(false);
+        self.inner.state.invalidate();
+    }
     pub fn focus(&self) {
         // SAFETY: the field's surface lives throughout the field's use.
         unsafe {

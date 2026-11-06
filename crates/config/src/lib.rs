@@ -4,11 +4,15 @@
 //! changes live (theme switch, pause), so there is no IPC to keep in sync.
 //! Missing fields take their defaults, so older files keep working.
 
+pub mod apps;
 pub mod desktop_menu;
 mod engine;
+mod system;
 pub mod look;
 mod windows;
 pub use engine::{EngineConfig, GpuPreference, RenderOptions, RenderSettings};
+pub use system::{PowerMode, SystemConfig};
+pub use apps::{AppRules, AppsStyle};
 pub use look::Look;
 pub use windows::{Backdrop, Color, Corners, Paint, WindowsStyle};
 
@@ -22,6 +26,11 @@ pub use desktop_menu::DesktopMenu;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    /// Reversible per-user Windows preferences, independent of the wallpaper's styling.
+    #[serde(skip_serializing_if = "SystemConfig::is_empty")]
+    pub system: SystemConfig,
+    /// Optional native services. Every experiment is off until explicitly enabled.
+    pub experimental: Experimental,
     /// Wallpaper GPU preference and frame cap, with optional overrides keyed by theme folder ID.
     pub engine: EngineConfig,
     /// Theme name (looked up like `mypaper_theme::locate`) or folder path.
@@ -53,6 +62,8 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            system: SystemConfig::default(),
+            experimental: Experimental::default(),
             engine: EngineConfig::default(),
             theme: "aurora".into(),
             paused: false,
@@ -64,6 +75,20 @@ impl Default for Config {
             look: Look::default(),
         }
     }
+}
+
+/// Unproven features stay opt-in and incur no runtime cost while disabled.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Experimental {
+    /// Route folder launches and Win+E to the on-demand native Files app.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub files_default: bool,
+    pub file_index: bool,
+    /// Restyle the XAML inside File Explorer and Settings (docs/windows-styling.md, "App
+    /// styler"): core runs `mypaper-styler` only while this is on. Written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub app_styler: bool,
 }
 
 /// `%APPDATA%\mypaper`: config plus the user's own `themes\`.
@@ -116,6 +141,34 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn folder_routing_is_explicitly_opt_in() {
+        let off = Config::parse("{}").unwrap();
+        assert!(!off.experimental.files_default);
+        assert!(!serde_json::to_string(&off).unwrap().contains("files_default"));
+        let on = Config::parse(r#"{"experimental":{"files_default":true}}"#).unwrap();
+        assert!(on.experimental.files_default);
+        assert_eq!(Config::parse(&serde_json::to_string(&on).unwrap()).unwrap(), on);
+    }
+
+    #[test]
+    fn file_index_is_explicitly_opt_in() {
+        assert!(!Config::parse("{}").unwrap().experimental.file_index);
+        let config = Config::parse(r#"{"experimental":{"file_index":true}}"#).unwrap();
+        assert!(Config::parse(&serde_json::to_string(&config).unwrap()).unwrap().experimental.file_index);
+        assert!(Config::parse(r#"{"experimental":{"file_indx":true}}"#).is_err());
+    }
+
+    #[test]
+    fn the_app_styler_is_opt_in_and_only_written_when_on() {
+        let off = Config::parse("{}").unwrap();
+        assert!(!off.experimental.app_styler);
+        assert!(!serde_json::to_string(&off).unwrap().contains("app_styler"));
+        let on = Config::parse(r#"{"experimental":{"app_styler":true}}"#).unwrap();
+        assert!(on.experimental.app_styler);
+        assert_eq!(Config::parse(&serde_json::to_string(&on).unwrap()).unwrap(), on);
+    }
 
     #[test]
     fn missing_fields_default_and_typos_fail() {

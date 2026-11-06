@@ -17,6 +17,27 @@ pub struct SystemClock {
     pub date: String,
 }
 
+/// Whether the clock `config` draws changes from one second to the next: its format shows the
+/// seconds (`seconds` alone only picks Windows' long time when there is no format). A clock that
+/// doesn't ticks once a minute.
+pub fn shows_seconds(config: &crate::config::ClockConfig) -> bool {
+    if config.format.is_none() {
+        return config.seconds;
+    }
+    let at = windows::Win32::Foundation::SYSTEMTIME {
+        wYear: 2026,
+        wMonth: 1,
+        wDayOfWeek: 4,
+        wDay: 1,
+        wHour: 10,
+        wMinute: 10,
+        wSecond: 10,
+        wMilliseconds: 0,
+    };
+    let next = windows::Win32::Foundation::SYSTEMTIME { wSecond: 11, ..at };
+    format(config, &at) != format(config, &next)
+}
+
 /// The former page's token clock, localized with Windows NLS. Quoted text stays literal.
 pub fn format(
     config: &crate::config::ClockConfig,
@@ -132,5 +153,27 @@ pub fn system() -> Option<SystemClock> {
             time_with_seconds: time(&long_time)?,
             date: (len > 1).then(|| String::from_utf16_lossy(&buffer[..len as usize - 1]))?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::ClockConfig;
+
+    #[test]
+    fn only_a_format_with_seconds_ticks_every_second() {
+        let clock = |seconds, format: Option<&str>| ClockConfig {
+            seconds,
+            format: format.map(str::to_owned),
+        };
+        assert!(shows_seconds(&clock(false, Some("HH:mm:ss"))));
+        assert!(
+            !shows_seconds(&clock(true, Some("HH:mm"))),
+            "a preset's minute format wins over `seconds`"
+        );
+        assert!(!shows_seconds(&clock(true, Some("'ss' HH:mm"))), "quoted text is literal");
+        assert!(shows_seconds(&clock(true, None)));
+        assert!(!shows_seconds(&clock(false, None)));
     }
 }

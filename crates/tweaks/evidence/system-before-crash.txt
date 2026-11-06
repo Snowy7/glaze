@@ -1,0 +1,18 @@
+BEFORE [null,{"raw":{"kind":4,"bytes":[0,0,0,0]}},{"raw":{"kind":4,"bytes":[1,0,0,0]}},{"raw":{"kind":4,"bytes":[0,0,0,0]}},{"binary":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"binary":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}]
+
+HKEY_CURRENT_USER\Software\Microsoft\GameBar
+    AutoGameModeEnabled    REG_DWORD    0x1
+
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+    HideFileExt    REG_DWORD    0x1
+
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+    Hidden    REG_DWORD    0x2
+
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced
+    SeparateProcess    REG_DWORD    0x1
+
+APPLIED {"game_mode":true,"show_extensions":false,"show_hidden":false,"separate_process":true,"power_mode":"performance"} shell_flags=0x0/0x1

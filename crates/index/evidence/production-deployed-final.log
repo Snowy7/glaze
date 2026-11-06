@@ -1,0 +1,5 @@
+loaded 11419226 entries in 285.259ms
+scan C:\: 4725399 entries, 218.912s, 575 inaccessible directories
+scan D:\: 6511657 entries, 229.906s, 5 inaccessible directories
+scan E:\: 167617 entries, 6.734s, 2 inaccessible directories
+initial reconciliation and notification replay complete

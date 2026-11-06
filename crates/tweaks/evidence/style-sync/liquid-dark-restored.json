@@ -1,0 +1,10 @@
+﻿{
+    "case":  "liquid-dark",
+    "config_sha256_before":  "F4AF26AEC8255D043312EBF4C0A962868D6BC0C267C616371C9CE56F3AD219B9",
+    "config_sha256_after":  "F4AF26AEC8255D043312EBF4C0A962868D6BC0C267C616371C9CE56F3AD219B9",
+    "config_restored":  true,
+    "all_eight_registry_values_restored":  true,
+    "palette_restored":  true,
+    "matching_windows":  0,
+    "failure":  null
+}

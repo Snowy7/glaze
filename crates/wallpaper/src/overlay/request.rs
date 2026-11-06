@@ -67,6 +67,52 @@ impl Material {
     };
 }
 
+/// An overlay's finer glass knobs and its fade (parity C07, C10, C12, C13), sent with
+/// [`Request::Style`] after each `Open` (a new overlay starts at [`Style::DEFAULT`]). The knobs
+/// mean what `mypaper_glass_ipc::Style`'s do for plates.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
+pub struct Style {
+    /// Brightness of what's behind the glass, a multiplier, 0..=2 (1: as is).
+    pub brightness: f32,
+    /// Saturation of what's behind the glass, 0..=3 (1: as is, 0: grey).
+    pub saturation: f32,
+    /// Corner smoothing, 0..=1: 0 quarter circles, 0.6 iOS's continuous (squircle) corners.
+    pub smoothing: f32,
+    /// The soft light just inside the lit (top) edge, 0..=1 (0.5: the kit's); negative:
+    /// follows the highlight.
+    pub sheen: f32,
+    /// The broad soft shade under the lit edge, 0..=1 (0.5: the kit's); negative: follows the
+    /// highlight.
+    pub depth: f32,
+    /// How long the glass fades in when it first shows, in ms (0..=2000); 0 shows it at once,
+    /// for reduced motion.
+    pub fade_ms: f32,
+}
+
+impl Style {
+    /// What an overlay has until a `Style` request: everything as before, a 300 ms fade.
+    pub const DEFAULT: Self = Self {
+        brightness: 1.0,
+        saturation: 1.0,
+        smoothing: 0.0,
+        sheen: -1.0,
+        depth: -1.0,
+        fade_ms: 300.0,
+    };
+
+    fn valid(&self) -> bool {
+        let within = |v: f32, max: f32| (0.0..=max).contains(&v);
+        let optional = |v: f32| v < 0.0 || within(v, 1.0);
+        within(self.brightness, 2.0)
+            && within(self.saturation, 3.0)
+            && within(self.smoothing, 1.0)
+            && optional(self.sheen)
+            && optional(self.depth)
+            && within(self.fade_ms, 2000.0)
+    }
+}
+
 /// One request from the shell. `client` names the overlay: one per client window.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Request {
@@ -90,6 +136,9 @@ pub enum Request {
     Material { client: HWND, material: Material },
     /// Destroys the overlay. The capture stays warm for a few seconds, for the next popup.
     Close { client: HWND },
+    /// Sets the overlay's finer knobs and fade. An engine older than it refuses it (and only
+    /// it): the rest of the wire is unchanged.
+    Style { client: HWND, style: Style },
 }
 
 impl Request {
@@ -98,7 +147,8 @@ impl Request {
             Self::Open { client, .. }
             | Self::Place { client, .. }
             | Self::Material { client, .. }
-            | Self::Close { client } => client,
+            | Self::Close { client }
+            | Self::Style { client, .. } => client,
         }
     }
 }
@@ -130,7 +180,8 @@ impl Reply {
     }
 }
 
-/// The request on the wire: fixed size, no padding.
+/// The request on the wire: fixed size, no padding. Only a `Style` request sends the `style`
+/// tail; every other request is the shorter first form, as before it existed.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 struct Wire {
@@ -140,12 +191,17 @@ struct Wire {
     rect: [i32; 4],
     radius: f32,
     material: Material,
+    style: Style,
 }
+
+/// The wire without its `style` tail.
+const SHORT: usize = std::mem::offset_of!(Wire, style);
 
 const OPEN: u32 = 1;
 const PLACE: u32 = 2;
 const MATERIAL: u32 = 3;
 const CLOSE: u32 = 4;
+const STYLE: u32 = 5;
 
 impl From<&Request> for Wire {
     fn from(request: &Request) -> Self {
@@ -178,6 +234,10 @@ impl From<&Request> for Wire {
                 wire.material = material;
             }
             Request::Close { .. } => wire.kind = CLOSE,
+            Request::Style { style, .. } => {
+                wire.kind = STYLE;
+                wire.style = style;
+            }
         }
         wire
     }
@@ -224,8 +284,18 @@ impl Wire {
                 material: self.material,
             },
             CLOSE => Request::Close { client },
+            STYLE if self.style.valid() => Request::Style {
+                client,
+                style: self.style,
+            },
             _ => return None,
         })
+    }
+
+    /// The bytes `send` puts on the wire for it.
+    fn bytes(&self) -> &[u8] {
+        let all = bytemuck::bytes_of(self);
+        if self.kind == STYLE { all } else { &all[..SHORT] }
     }
 }
 
@@ -236,11 +306,25 @@ impl Wire {
 pub unsafe fn decode(lparam: LPARAM) -> Option<Request> {
     // SAFETY: the caller's contract.
     let data = unsafe { &*(lparam.0 as *const COPYDATASTRUCT) };
-    if data.dwData != MAGIC || data.cbData as usize != size_of::<Wire>() || data.lpData.is_null() {
+    let len = data.cbData as usize;
+    if data.dwData != MAGIC || !(len == SHORT || len == size_of::<Wire>()) || data.lpData.is_null()
+    {
         return None;
     }
-    // SAFETY: `cbData` bytes at `lpData`, alive for the message; read unaligned.
-    let wire = unsafe { data.lpData.cast::<Wire>().read_unaligned() };
+    // A short wire has no style tail: it reads as zeros, which only a `Style` request (which
+    // must be long) would look at.
+    let mut wire = Wire::zeroed();
+    // SAFETY: `len` (at most the wire's size) bytes at `lpData`, alive for the message.
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            data.lpData.cast::<u8>(),
+            (&raw mut wire).cast::<u8>(),
+            len,
+        )
+    };
+    if wire.kind == STYLE && len != size_of::<Wire>() {
+        return None;
+    }
     wire.decode()
 }
 
@@ -254,10 +338,11 @@ pub fn find_engine() -> Option<HWND> {
 /// engine to take it (it is queued there, not drawn yet).
 pub fn send(engine: HWND, request: &Request) -> Reply {
     let wire = Wire::from(request);
+    let bytes = wire.bytes();
     let data = COPYDATASTRUCT {
         dwData: MAGIC,
-        cbData: size_of::<Wire>() as u32,
-        lpData: (&raw const wire).cast_mut().cast(),
+        cbData: bytes.len() as u32,
+        lpData: bytes.as_ptr().cast_mut().cast(),
     };
     let mut result = 0usize;
     // SAFETY: `data` and `wire` outlive the call; the engine copies them before it returns.
@@ -284,7 +369,7 @@ mod tests {
 
     fn roundtrip(request: Request) -> Option<Request> {
         let wire = Wire::from(&request);
-        let bytes = bytemuck::bytes_of(&wire).to_vec();
+        let bytes = wire.bytes().to_vec();
         let data = COPYDATASTRUCT {
             dwData: MAGIC,
             cbData: bytes.len() as u32,
@@ -322,9 +407,49 @@ mod tests {
             },
             Request::Material { client, material },
             Request::Close { client },
+            Request::Style {
+                client,
+                style: Style {
+                    saturation: 1.8,
+                    smoothing: 0.6,
+                    sheen: 0.4,
+                    fade_ms: 0.0,
+                    ..Style::DEFAULT
+                },
+            },
         ] {
             assert_eq!(roundtrip(request), Some(request));
         }
+    }
+
+    #[test]
+    fn only_a_style_request_is_longer_than_the_wire_before_it() {
+        // An engine older than `Style` takes every other request: its wire was `SHORT` bytes.
+        assert_eq!(SHORT, 56);
+        let client = HWND(0x1234 as *mut _);
+        assert_eq!(Wire::from(&Request::Close { client }).bytes().len(), SHORT);
+        let style = Request::Style {
+            client,
+            style: Style::DEFAULT,
+        };
+        assert_eq!(Wire::from(&style).bytes().len(), size_of::<Wire>());
+        // A style cut short, or out of range, is refused.
+        let mut short = Wire::from(&style);
+        let data = COPYDATASTRUCT {
+            dwData: MAGIC,
+            cbData: SHORT as u32,
+            lpData: (&raw mut short).cast(),
+        };
+        // SAFETY: a valid COPYDATASTRUCT over a live wire.
+        assert_eq!(unsafe { decode(LPARAM(&raw const data as isize)) }, None);
+        let wild = Request::Style {
+            client,
+            style: Style {
+                brightness: 9.0,
+                ..Style::DEFAULT
+            },
+        };
+        assert_eq!(roundtrip(wild), None);
     }
 
     #[test]

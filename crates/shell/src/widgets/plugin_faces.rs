@@ -112,6 +112,21 @@ impl Widgets {
         }
     }
 
+    /// A wheel over plugin widget `id`: the `scroll` pane under the pointer moves, and its
+    /// `on_reach_end` goes to the plugin when the scroll heads to the end.
+    pub(super) fn plugin_wheel(&mut self, id: &str, at: mypaper_ui::Point, delta: i16) {
+        let wheeled = super::views::plugin::scroll::wheel(id, at, delta, Instant::now());
+        if let Some(action) = wheeled.reach_end {
+            self.plugins.face_action(id, &action, None);
+        }
+        if wheeled.moved
+            && let Some(entry) = self.entries.get_mut(id)
+        {
+            entry.model.dirty = true;
+            entry.model.next = Some(Instant::now());
+        }
+    }
+
     /// The field opened by a plugin `field` was submitted: its text goes back as the action's value.
     pub(super) fn submit_plugin_field(&mut self, id: &str, text: String) {
         let Some(entry) = self.entries.get_mut(id) else { return };

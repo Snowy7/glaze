@@ -173,6 +173,16 @@ impl Backdrop {
         }
     }
 
+    /// Drops every pyramid, readback and kept-frame reference (the engine released its drawing
+    /// while every screen is covered). The cadence carries on from where it was.
+    pub fn release(&mut self) {
+        self.latest = None;
+        for state in &mut self.screens {
+            state.pyramid = None;
+            state.reading = None;
+        }
+    }
+
     /// If `draw`'s screen is due, records the copy, the blur and the readback
     /// into `encoder` (after the source drew, before submit) and returns true:
     /// call [`finish`](Self::finish) once the encoder is submitted.

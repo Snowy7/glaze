@@ -293,6 +293,28 @@ pub struct Plugins {
     component_status: HashMap<String, wire::Status>,
     /// Style patches from component plugins, by `(plugin, surface)` (docs/plugins.md, "Styling").
     styles: BTreeMap<(String, String), wire::StylePatch>,
+    repeats: RepeatGuard,
+}
+
+/// Drops an action identical to the last one (same instance, action and value) that comes
+/// within [`RepeatGuard::WINDOW`] of it: a safety net under the shell's press/release pairing,
+/// so one click can't approve or send twice whatever path repeats it. Each drop restarts the
+/// window, so a chain of repeats goes as one. No view kind repeats an action on purpose yet; one
+/// that does (a stepper) should mark its action repeatable and skip this.
+#[derive(Default)]
+struct RepeatGuard(Option<(String, String, Option<String>, Instant)>);
+
+impl RepeatGuard {
+    const WINDOW: Duration = Duration::from_millis(300);
+
+    /// Whether the action goes out; remembers it either way.
+    fn allow(&mut self, instance: &str, action: &str, value: Option<&str>, now: Instant) -> bool {
+        let repeat = self.0.as_ref().is_some_and(|(i, a, v, at)| {
+            i == instance && a == action && v.as_deref() == value && now.saturating_duration_since(*at) < Self::WINDOW
+        });
+        self.0 = Some((instance.into(), action.into(), value.map(Into::into), now));
+        !repeat
+    }
 }
 
 impl Plugins {
@@ -400,6 +422,7 @@ impl Plugins {
             helper_retry: None,
             component_status: HashMap::new(),
             styles: BTreeMap::new(),
+            repeats: RepeatGuard::default(),
         }
     }
 
@@ -699,7 +722,12 @@ impl Plugins {
             && slot.face == face
             && slot.component.is_some()
         {
-            if slot.size != size || slot.settings != settings {
+            if slot.size == size && slot.settings != settings {
+                // Only the options changed: `event::options`, the face stays open.
+                slot.settings = settings;
+                let message = wire::HostMsg::Options { instance: instance.into(), settings: slot.settings.to_string() };
+                self.to_helper(message, now)?;
+            } else if slot.size != size || slot.settings != settings {
                 slot.size = size;
                 slot.settings = settings;
                 let message = component_open(instance, slot);
@@ -787,12 +815,17 @@ impl Plugins {
         }
     }
 
-    /// A click on a view's `action` (or a submitted field's `value`).
+    /// A click on a view's `action` (or a submitted field's `value`). The same action again
+    /// within 300 ms is dropped ([`RepeatGuard`]).
     pub fn face_action(&mut self, instance: &str, action: &str, value: Option<String>) {
         let Some(slot) = self.faces.get(instance) else {
             log::warn!("plugin action {action:?} on {instance}: no face open there");
             return;
         };
+        if !self.repeats.allow(instance, action, value.as_deref(), Instant::now()) {
+            log::warn!("plugin {}: action {action:?} on {instance} repeated within 300 ms; dropped", slot.plugin);
+            return;
+        }
         if slot.component.is_some() {
             let Some(helper) = &self.helper else {
                 log::warn!("plugin {}: action {action:?} on {instance} dropped: the plugin runtime isn't running", slot.plugin);
@@ -1434,6 +1467,20 @@ fn bring_forward(window: windows::Win32::Foundation::HWND) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_action_repeated_within_300_ms_goes_once() {
+        let mut guard = RepeatGuard::default();
+        let t = Instant::now();
+        let ms = |n| t + Duration::from_millis(n);
+        assert!(guard.allow("t3-2", "approve", None, t));
+        assert!(!guard.allow("t3-2", "approve", None, ms(120)), "a repeat");
+        assert!(!guard.allow("t3-2", "approve", None, ms(400)), "a chain of repeats goes as one");
+        assert!(guard.allow("t3-2", "approve", None, ms(800)), "a click after the window");
+        assert!(guard.allow("t3-2", "deny", None, ms(850)), "another action");
+        assert!(guard.allow("t3-1", "deny", None, ms(860)), "another instance");
+        assert!(guard.allow("t3-1", "deny", Some("x"), ms(870)), "another value");
+    }
 
     #[test]
     fn helper_stats_reach_the_studio_snapshot_through_the_shell_bridge() {

@@ -30,6 +30,26 @@ use crate::text::{Text, TextStyle};
 use crate::tokens::{MenuMetrics, Tokens};
 
 thread_local! { static STYLE: RefCell<Option<Tokens>> = const { RefCell::new(None) }; }
+thread_local! { static OPEN_MOTION: std::cell::Cell<Option<MenuMotion>> = const { std::cell::Cell::new(None) }; }
+
+type InteractionTimings = (crate::transition::Timing, crate::transition::Timing);
+thread_local! { static INTERACTION_MOTION: std::cell::Cell<Option<InteractionTimings>> = const { std::cell::Cell::new(None) }; }
+
+/// Opt into configured hover/press timing for menus on this UI thread.
+pub fn set_interaction_motion(motion: Option<InteractionTimings>) {
+    INTERACTION_MOTION.with(|value| value.set(motion));
+}
+
+/// Optional shell-configured opening motion. Unset keeps the kit's existing menu behavior.
+#[derive(Debug, Clone, Copy)]
+pub struct MenuMotion {
+    pub timing: crate::transition::Timing,
+    pub style: crate::reveal::Reveal,
+}
+
+pub fn set_open_motion(motion: Option<MenuMotion>) {
+    OPEN_MOTION.with(|value| value.set(motion));
+}
 
 /// The shell's shared menu style, updated when its active bars/theme change.
 pub fn set_style(tokens: Option<Tokens>) {
@@ -309,6 +329,17 @@ pub fn view<C>(
     hover: Option<usize>,
     tokens: &Tokens,
 ) -> DisplayList {
+    view_animated(items, layout, hover, tokens, None)
+}
+
+/// A menu view with sampled hover/press washes; the ordinary view retains immediate states.
+pub fn view_animated<C>(
+    items: &[Entry<C>],
+    layout: &Layout,
+    hover: Option<usize>,
+    tokens: &Tokens,
+    motion: Option<&crate::interact::motion::InteractionMotion>,
+) -> DisplayList {
     let s = layout.scale;
     let m: MenuMetrics = tokens.menu.scaled(s);
     let c = &tokens.colors;
@@ -378,10 +409,20 @@ pub fn view<C>(
                 bottom: top + row.height - 1.0,
             },
             radius: (radius * 0.6).max(2.0),
-            color: if hover == Some(index) && selectable {
-                c.hover
-            } else {
-                Rgba::TRANSPARENT
+            color: {
+                let immediate = if hover == Some(index) && selectable {
+                    c.hover
+                } else {
+                    Rgba::TRANSPARENT
+                };
+                motion.filter(|_| selectable).map_or(immediate, |m| {
+                    m.wash(
+                        index as HitId,
+                        c.hover,
+                        c.hover.with_alpha((c.hover.a * 1.5).min(1.0)),
+                        immediate,
+                    )
+                })
             },
         });
         let ink = if selectable { c.text } else { c.text_dim };
@@ -483,6 +524,10 @@ struct Panel<C> {
     natural: Layout,
     scroll: f32,
     motion: Option<crate::Tween>,
+    configured_motion: Option<crate::transition::Transition>,
+    snapshot: Option<crate::reveal::Snapshot>,
+    interaction: Option<crate::interact::motion::InteractionMotion>,
+    input: crate::Interaction,
     frames: Option<crate::surface::AnimationFrames>,
     /// When it opened (on glass, its fade follows the glass from there).
     opened: std::time::Instant,
@@ -519,6 +564,10 @@ pub struct Menu<C> {
     /// window costs about 20 ms here, more than the rest of opening a menu, so they are made
     /// ahead of time and reused.
     pool: Vec<(Surface, bool)>,
+    open_motion: Option<MenuMotion>,
+    presentation: Option<(Tokens, MenuMotion)>,
+    interaction_timings: Option<InteractionTimings>,
+    own_interaction: Option<InteractionTimings>,
 }
 
 impl<C: Clone> Menu<C> {
@@ -530,12 +579,29 @@ impl<C: Clone> Menu<C> {
             tokens: Tokens::default(),
             panels: Vec::new(),
             pool: Vec::new(),
+            open_motion: None,
+            presentation: None,
+            interaction_timings: None,
+            own_interaction: None,
         };
         for submenu in [false, true] {
             let surface = menu.create(submenu)?;
             menu.pool.push((surface, submenu));
         }
         Ok(menu)
+    }
+
+    /// Opt into a caller's resolved style and motion, above the thread's menu defaults.
+    pub fn set_presentation(&mut self, tokens: Tokens, opening: MenuMotion) {
+        self.presentation = Some((tokens, opening));
+    }
+
+    pub fn set_interaction_timings(
+        &mut self,
+        hover: crate::transition::Timing,
+        press: crate::transition::Timing,
+    ) {
+        self.own_interaction = Some((hover, press));
     }
 
     /// Opens `items` at `anchor` (screen pixels) on `screen`, replacing a menu already open.
@@ -549,16 +615,37 @@ impl<C: Clone> Menu<C> {
     ) -> Result<()> {
         let started = std::time::Instant::now();
         self.close();
-        self.tokens = STYLE
-            .with_borrow(Clone::clone)
+        self.interaction_timings = self
+            .own_interaction
+            .or_else(|| INTERACTION_MOTION.with(std::cell::Cell::get));
+        self.open_motion = self
+            .presentation
+            .as_ref()
+            .map(|(_, m)| *m)
+            .or_else(|| OPEN_MOTION.with(std::cell::Cell::get));
+        self.tokens = self
+            .presentation
+            .as_ref()
+            .map(|(t, _)| t.clone())
+            .or_else(|| STYLE.with_borrow(Clone::clone))
             .unwrap_or_else(|| tokens.clone());
         // Glass when the engine can draw it: the tokens' own, else the active style's.
         self.tokens.glass = self
             .tokens
             .glass
             .filter(|_| crate::glass::available())
-            .or_else(crate::glass::style);
-        let scale = screen.dpi.max(96) as f32 / 96.0 * tokens.scale.clamp(0.5, 2.0);
+            .or_else(|| {
+                self.presentation
+                    .is_none()
+                    .then(crate::glass::style)
+                    .flatten()
+            });
+        let content_scale = if self.open_motion.is_some() {
+            self.tokens.scale
+        } else {
+            tokens.scale
+        };
+        let scale = screen.dpi.max(96) as f32 / 96.0 * content_scale.clamp(0.5, 2.0);
         let opened = self.push_panel(ui, items, None, scale, |size| {
             place(size, anchor, screen.work)
         });
@@ -601,6 +688,82 @@ impl<C: Clone> Menu<C> {
     pub fn handle(&mut self, ui: &mut Ui, id: SurfaceId, event: &Event) -> Option<Outcome<C>> {
         match *event {
             Event::Frame => {
+                if let Some(index) = self.panels.iter().position(|p| p.surface.id() == id) {
+                    let p = &mut self.panels[index];
+                    if let Some(motion) = &mut p.interaction {
+                        let changed = motion.step(&p.input, std::time::Instant::now());
+                        if !motion.moving() && p.motion.is_none() && p.configured_motion.is_none() {
+                            p.frames = None;
+                        }
+                        if changed {
+                            self.redraw(ui, index);
+                        }
+                    }
+                }
+                if let Some(p) = self.panels.iter_mut().find(|p| p.surface.id() == id)
+                    && let Some(motion) = p.configured_motion
+                {
+                    let now = std::time::Instant::now();
+                    let progress = motion.value(now).clamp(0.0, 1.0);
+                    let edge = margin(&self.tokens, p.layout.scale) as i32;
+                    if let Some(snapshot) = &p.snapshot {
+                        let full =
+                            Rect::new(edge as f32, edge as f32, p.layout.width, p.layout.height);
+                        let style = self
+                            .open_motion
+                            .map_or(crate::reveal::Reveal::Fade, |m| m.style);
+                        let body =
+                            style.body(full, Rect::new(full.left, full.top, 1.0, 1.0), progress);
+                        let list = if motion.done(now) {
+                            snapshot.original.clone()
+                        } else {
+                            snapshot.frame(full, body)
+                        };
+                        let (w, h) = p.layout.size();
+                        let _ = p.surface.present(
+                            ui,
+                            (p.origin.0 - edge, p.origin.1 - edge),
+                            ((w + 2 * edge) as u32, (h + 2 * edge) as u32),
+                            list,
+                        );
+                        p.surface
+                            .set_glass(self.tokens.glass.map(|material| crate::Glass {
+                                body,
+                                radius: self.tokens.radius * p.layout.scale * body.width()
+                                    / full.width(),
+                                material: crate::GlassMaterial {
+                                    blur: material.blur * p.layout.scale,
+                                    ..material
+                                },
+                            }));
+                    }
+                    let slide = if self.tokens.glass.is_none()
+                        && self
+                            .open_motion
+                            .is_some_and(|m| m.style == crate::reveal::Reveal::Slide)
+                    {
+                        ((1.0 - progress) * 6.0 * p.layout.scale).round() as i32
+                    } else {
+                        0
+                    };
+                    let alpha = if self.tokens.glass.is_some() {
+                        progress
+                    } else {
+                        (0.45 + progress * 0.55).min(1.0)
+                    };
+                    let _ = p.surface.set_alpha((alpha * 255.0).round() as u8);
+                    let _ = p
+                        .surface
+                        .move_to((p.origin.0 - edge, p.origin.1 - edge + slide));
+                    if motion.done(now) {
+                        p.configured_motion = None;
+                        p.snapshot = None;
+                        if p.interaction.as_ref().is_none_or(|m| !m.moving()) {
+                            p.frames = None;
+                        }
+                    }
+                    return None;
+                }
                 if let Some(p) = self.panels.iter_mut().find(|p| p.surface.id() == id)
                     && let Some(motion) = p.motion
                 {
@@ -651,8 +814,20 @@ impl<C: Clone> Menu<C> {
                 }
                 None
             }
+            Event::Press(p, _) => {
+                let (panel, target) = self.under(p.screen)?;
+                if self.panels[panel].interaction.is_some() {
+                    self.panels[panel].input.pressed = target.map(|id| id as HitId);
+                    self.select(ui, panel, target, false);
+                    self.update_interaction(panel);
+                    self.redraw(ui, panel);
+                }
+                None
+            }
             Event::Release(p, _) => {
                 let (panel, target) = self.under(p.screen)?;
+                self.panels[panel].input.pressed = None;
+                self.update_interaction(panel);
                 self.select(ui, panel, target, false);
                 self.choose(panel)
             }
@@ -763,6 +938,23 @@ impl<C: Clone> Menu<C> {
         }
     }
 
+    fn update_interaction(&mut self, panel: usize) {
+        let p = &mut self.panels[panel];
+        if let Some(motion) = &mut p.interaction {
+            motion.step(&p.input, std::time::Instant::now());
+            if motion.moving() {
+                let open = self
+                    .open_motion
+                    .map_or(std::time::Duration::ZERO, |m| m.timing.duration);
+                p.frames = Some(p.surface.animation_frames(
+                    motion.hover.duration.max(motion.press.duration).max(open)
+                        + GLASS_DELAY
+                        + std::time::Duration::from_millis(50),
+                ));
+            }
+        }
+    }
+
     /// Makes `target` the selected row of `panel`. A submenu row opens its submenu (selecting
     /// its first item when `into` is set, for the keyboard).
     fn select(&mut self, ui: &mut Ui, panel: usize, target: Option<usize>, into: bool) {
@@ -784,6 +976,8 @@ impl<C: Clone> Menu<C> {
                 }
             }
             self.panels[panel].hover = target;
+            self.panels[panel].input.hover = target.map(|id| id as HitId);
+            self.update_interaction(panel);
             self.redraw(ui, panel);
         }
         let Some(row) = target else { return };
@@ -847,6 +1041,12 @@ impl<C: Clone> Menu<C> {
             natural,
             scroll: 0.0,
             motion: None,
+            configured_motion: None,
+            snapshot: None,
+            interaction: self
+                .interaction_timings
+                .map(|(h, p)| crate::interact::motion::InteractionMotion::new(h, p)),
+            input: crate::Interaction::default(),
             frames: None,
             opened: std::time::Instant::now(),
             origin,
@@ -855,6 +1055,33 @@ impl<C: Clone> Menu<C> {
         });
         self.redraw_checked(ui, self.panels.len() - 1)?;
         let p = self.panels.last_mut().unwrap();
+        if let Some(configured) = self.open_motion {
+            p.surface.set_alpha(255)?;
+            if configured.timing.enabled {
+                if configured.style.scales() {
+                    let edge = margin(&self.tokens, p.layout.scale) as u32;
+                    let (w, h) = p.layout.size();
+                    p.snapshot = crate::reveal::Snapshot::new(
+                        ui,
+                        p.surface.shown().clone(),
+                        (w as u32 + 2 * edge, h as u32 + 2 * edge),
+                    )
+                    .ok();
+                }
+                let delay = if self.tokens.glass.is_some() {
+                    GLASS_DELAY
+                } else {
+                    std::time::Duration::ZERO
+                };
+                p.configured_motion = Some(configured.timing.start(0.0, 1.0, p.opened + delay));
+                p.frames = Some(p.surface.animation_frames(
+                    delay + configured.timing.duration + std::time::Duration::from_millis(50),
+                ));
+                p.surface
+                    .set_alpha(if self.tokens.glass.is_some() { 0 } else { 115 })?;
+            }
+            return Ok(());
+        }
         let mut animations = windows::core::BOOL(1);
         // SAFETY: this system query writes one BOOL to our local.
         let _ = unsafe {
@@ -902,7 +1129,13 @@ impl<C: Clone> Menu<C> {
         }
         let edge = margin(&self.tokens, p.layout.scale) as i32;
         let (w, h) = p.layout.size();
-        let list = view(&p.items, &p.layout, p.hover, &self.tokens);
+        let list = view_animated(
+            &p.items,
+            &p.layout,
+            p.hover,
+            &self.tokens,
+            p.interaction.as_ref(),
+        );
         let at = (p.origin.0 - edge, p.origin.1 - edge);
         let size = ((w + 2 * edge) as u32, (h + 2 * edge) as u32);
         p.surface
@@ -916,6 +1149,9 @@ impl<C: Clone> Menu<C> {
                 },
             }));
         p.surface.present(ui, at, size, list)?;
+        if p.snapshot.is_some() {
+            p.snapshot = crate::reveal::Snapshot::new(ui, p.surface.shown().clone(), size).ok();
+        }
         Ok(())
     }
 

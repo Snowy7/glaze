@@ -5,6 +5,7 @@
 
 pub mod apps;
 pub mod bars;
+pub mod cycles;
 pub mod desktop_menu;
 pub mod flyouts;
 pub mod glass;

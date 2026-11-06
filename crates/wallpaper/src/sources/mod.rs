@@ -10,7 +10,7 @@ mod app;
 pub mod blit;
 mod image;
 mod scene;
-mod shader;
+pub mod shader;
 mod slideshow;
 mod video;
 mod web;
@@ -59,6 +59,13 @@ pub trait Source {
     /// neither the screen nor the cursor. The engine then draws it once per frame into one
     /// kept frame that all those screens restore from.
     fn shared(&self) -> bool {
+        false
+    }
+    /// True when loading the theme again shows exactly what this source would have: its frame
+    /// is a function of the engine clock alone (a shader, a still image). The engine then drops
+    /// it while every screen has been covered for a while and loads it again on the way back.
+    /// A video, slideshow or scene keeps its place in time instead (a reload would restart it).
+    fn releasable(&self) -> bool {
         false
     }
     /// Advances time-based state once per engine tick, before any drawing
@@ -149,6 +156,19 @@ impl Source for Broken {
                 a: 1.0,
             },
         );
+    }
+    fn redraw(&self, _clock: Duration) -> Redraw {
+        Redraw::OnChange
+    }
+}
+
+/// Stands in for a source the engine released while every screen is covered
+/// (`Engine::release`). Never drawn: the theme is loaded again before any screen shows.
+pub struct Released;
+
+impl Source for Released {
+    fn render(&mut self, _gpu: &Gpu, frame: Frame<'_>) {
+        clear(frame.encoder, frame.view, wgpu::Color::BLACK);
     }
     fn redraw(&self, _clock: Duration) -> Redraw {
         Redraw::OnChange

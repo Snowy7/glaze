@@ -3,8 +3,10 @@
 //! Typing filters them; Up and Down move the choice, Enter or a click runs it. With nothing
 //! typed it lists what was run most recently (`launcher.json`), then the rest by name.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
 use mypaper_bars::files;
@@ -13,8 +15,8 @@ use mypaper_bars::system;
 use mypaper_ui::icons::Icon;
 use mypaper_ui::layout::{self, Align, Stack};
 use mypaper_ui::{
-    Accessory, ButtonKind, Frame, HitId, Image, Lead, ListRow, Op, Rect, Rgba, Role, Scroll, TextField,
-    TextRole,
+    Accessory, ButtonKind, Frame, HitId, Image, Lead, ListRow, Op, Rect, Rgba, Role, Scroll,
+    TextField, TextRole,
 };
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Input::KeyboardAndMouse::{VK_DOWN, VK_NEXT, VK_PRIOR, VK_UP};
@@ -214,6 +216,11 @@ pub struct Launcher {
     extras: Vec<App>,
     recommended: Vec<App>,
     files: bool,
+    indexed_files: Option<Vec<App>>,
+    file_sizes: HashMap<String, String>,
+    // Separate from COM app discovery; a cold AppsFolder build must not delay instant files.
+    index_lane: Option<mypaper_bars::flyouts::Lane<()>>,
+    index_generation: Arc<AtomicU64>,
     clipboard_open: bool,
     clipboard: Option<mypaper_bars::flyouts::clipboard::History>,
     menu_entries: Vec<Entry<PanelCommand>>,
@@ -235,7 +242,14 @@ fn field_rects(s: f32) -> (Rect, Rect) {
     // UI's is 1.33 em), centred in the well like the glyph and the placeholder.
     let line = (FIELD_TEXT * s * 1.33).ceil().min(inner.height());
     let top = (inner.top + (inner.height() - line) / 2.0).round();
-    (well, Rect { top, bottom: top + line, ..inner })
+    (
+        well,
+        Rect {
+            top,
+            bottom: top + line,
+            ..inner
+        },
+    )
 }
 
 /// The search text's size, design px (Spotlight's large field).
@@ -291,6 +305,10 @@ impl Launcher {
             extras: settings(),
             recommended: vec![],
             files,
+            indexed_files: None,
+            file_sizes: HashMap::new(),
+            index_lane: None,
+            index_generation: Arc::new(AtomicU64::new(0)),
             clipboard_open: false,
             clipboard: None,
             menu_entries: vec![],
@@ -325,6 +343,10 @@ impl Launcher {
             extras: vec![],
             recommended: vec![],
             files: false,
+            indexed_files: None,
+            file_sizes: HashMap::new(),
+            index_lane: None,
+            index_generation: Arc::new(AtomicU64::new(0)),
             clipboard_open: false,
             clipboard: None,
             menu_entries: vec![],
@@ -402,7 +424,13 @@ impl Launcher {
                     .copied()
                     .filter(|a| a.id.starts_with("settings:")),
             );
-            found.extend(extras.into_iter().filter(|a| a.id.starts_with("file:")));
+            if let Some(files) = &self.indexed_files {
+                // The service has already applied filters and ranked these names. App fuzzy
+                // search would incorrectly reject `ext:`/`path:` and scramble file ranking.
+                found.extend(files.iter());
+            } else {
+                found.extend(extras.into_iter().filter(|a| a.id.starts_with("file:")));
+            }
         } else if self.all_apps {
             found.sort_by_cached_key(|a| a.name.to_lowercase());
         }
@@ -446,11 +474,46 @@ impl Launcher {
             .and_then(|(_, image)| image.clone())
     }
 
+    fn search_files(&mut self, cx: &mut Cx) {
+        let generation = self.index_generation.fetch_add(1, Ordering::Relaxed) + 1;
+        self.indexed_files = None;
+        self.file_sizes.clear();
+        if !self.files || self.query.trim().is_empty() {
+            return;
+        }
+        let query = self.query.clone();
+        let latest = self.index_generation.clone();
+        super::Lanes::run(
+            &mut self.index_lane,
+            "launcher-files",
+            || (),
+            &cx.lanes.replies,
+            &cx.lanes.waker,
+            move |_| {
+                // Fast typing must skip superseded jobs instead of scanning the whole index
+                // for every intermediate prefix before the current query can start.
+                if latest.load(Ordering::Relaxed) != generation {
+                    return Reply::Done;
+                }
+                let request = mypaper_index::Request::Search {
+                    query: query.clone(),
+                    limit: 50,
+                };
+                // Quiet services trim mapped pages; a cold full-volume query faults them back in.
+                let hits = mypaper_index::pipe::request(&request, 250)
+                    .ok()
+                    .filter(|r| r.error.is_none())
+                    .map(|r| r.hits);
+                Reply::IndexedFiles { query, hits }
+            },
+        );
+    }
+
     fn launch(&mut self, index: usize) -> Effect {
         let Some(app) = self.shown().get(index).map(|a| (*a).clone()) else {
             return Effect::None;
         };
-        system::open(app.path.clone());
+        open_with_native_files(&app);
         self.history.record(&app.id, &app.path, index::epoch_ms());
         if let Some(path) = &self.history_path {
             self.history.save(path);
@@ -506,11 +569,20 @@ impl Launcher {
         let id = LIST + n as HitId;
         let radius = f.px(f.theme.radius.small + 4.0);
         // Always pushed (transparent unless chosen), so choosing never shifts the list.
-        let chosen = if n == self.chosen { c.accent_wash } else { Rgba::TRANSPARENT };
+        let chosen = if n == self.chosen {
+            c.accent_wash
+        } else {
+            Rgba::TRANSPARENT
+        };
         f.fill(r, radius, chosen);
         f.wash(id, r, radius, true);
         let size = f.px(32.0);
-        let icon = Rect::new((r.left + (r.width() - size) / 2.0).round(), r.top + f.px(10.0), size, size);
+        let icon = Rect::new(
+            (r.left + (r.width() - size) / 2.0).round(),
+            r.top + f.px(10.0),
+            size,
+            size,
+        );
         match self.icon(&app.id) {
             Some(image) => f.push(Op::Image {
                 rect: icon,
@@ -597,7 +669,14 @@ impl Panel for Launcher {
                 style.weight = 400;
                 let (_, h) = f.text.measure("Ag", &style);
                 let y = field.top + (field.height() - h) / 2.0;
-                f.label_styled(field.left + f.px(2.0), y, "Search apps", &style, c.tertiary, field.width());
+                f.label_styled(
+                    field.left + f.px(2.0),
+                    y,
+                    "Search apps",
+                    &style,
+                    c.tertiary,
+                    field.width(),
+                );
             }
             if let Some(text) = &self.field {
                 f.push(Op::TextField {
@@ -609,7 +688,13 @@ impl Panel for Launcher {
                     f.fill(caret, 0.0, c.label);
                 }
             }
-            let mut column = Stack::column(Rect { top: well.bottom + f.px(10.0), ..area }, f.px(4.0));
+            let mut column = Stack::column(
+                Rect {
+                    top: well.bottom + f.px(10.0),
+                    ..area
+                },
+                f.px(4.0),
+            );
             // The foot keeps its room: a separator and the row of buttons.
             let foot = f.px(9.0) + f.px(f.theme.metrics.control) + 2.0 * f.px(4.0);
             let cap = f.px(ROWS as f32 * 36.0 + 2.0 * HEADER);
@@ -618,11 +703,21 @@ impl Panel for Launcher {
                 f.section_header(column.next(f.px(24.0)), "Clipboard history", None);
                 match &self.clipboard {
                     None => {
-                        let h = f.empty(column.rest(), Some(Icon::Clipboard), "Reading clipboard history…", None);
+                        let h = f.empty(
+                            column.rest(),
+                            Some(Icon::Clipboard),
+                            "Reading clipboard history…",
+                            None,
+                        );
                         column.next(h);
                     }
                     Some(h) if !h.enabled => {
-                        let height = f.empty(column.rest(), Some(Icon::Clipboard), "Clipboard history is off", None);
+                        let height = f.empty(
+                            column.rest(),
+                            Some(Icon::Clipboard),
+                            "Clipboard history is off",
+                            None,
+                        );
                         column.next(height);
                         super::kit::link(f, &mut column, SETTINGS, "Clipboard settings");
                     }
@@ -632,7 +727,8 @@ impl Panel for Launcher {
                         let viewport = column.next(content.min(room));
                         let width = viewport.width();
                         f.scroll(viewport, &self.scroll, Instant::now(), |f, at| {
-                            let mut list = Stack::column(Rect::new(at.x, at.y, width, content), 0.0);
+                            let mut list =
+                                Stack::column(Rect::new(at.x, at.y, width, content), 0.0);
                             for (i, item) in h.entries.iter().enumerate() {
                                 let r = ListRow {
                                     id: CLIP + i as HitId,
@@ -652,14 +748,20 @@ impl Panel for Launcher {
             } else if self.grid() {
                 f.section_header(column.next(f.px(24.0)), "Pinned", None);
                 if shown.is_empty() {
-                    let h = f.empty(column.rest(), Some(Icon::Pin), "Pin apps from All apps", None);
+                    let h = f.empty(
+                        column.rest(),
+                        Some(Icon::Pin),
+                        "Pin apps from All apps",
+                        None,
+                    );
                     column.next(h);
                 } else {
                     let first = self.top / 6 * 6;
                     let count = shown.len().saturating_sub(first).min(12);
                     let (cell_h, gap) = (f.px(80.0), f.px(4.0));
                     let rows = count.div_ceil(6);
-                    let grid = column.next(rows as f32 * cell_h + rows.saturating_sub(1) as f32 * gap);
+                    let grid =
+                        column.next(rows as f32 * cell_h + rows.saturating_sub(1) as f32 * gap);
                     for (n, app) in shown.iter().enumerate().skip(first).take(12) {
                         let r = layout::grid(grid, 6, gap, cell_h, n - first);
                         self.cell(f, n, app, r);
@@ -669,7 +771,9 @@ impl Panel for Launcher {
                     column.space(f.px(6.0));
                     f.section_header(column.next(f.px(24.0)), "Recommended", None);
                     for (i, app) in self.recommended.iter().take(3).enumerate() {
-                        let lead = self.icon(&app.id).map_or(Lead::Icon(Icon::File), Lead::Image);
+                        let lead = self
+                            .icon(&app.id)
+                            .map_or(Lead::Icon(Icon::File), Lead::Image);
                         let r = ListRow {
                             id: RECOMMENDED + i as HitId,
                             lead,
@@ -684,7 +788,11 @@ impl Panel for Launcher {
                     }
                 }
             } else if shown.is_empty() {
-                let title = if self.loading { "Finding apps…" } else { "No apps match" };
+                let title = if self.loading {
+                    "Finding apps…"
+                } else {
+                    "No apps match"
+                };
                 let h = f.empty(column.rest(), Some(Icon::Search), title, None);
                 column.next(h);
             } else {
@@ -700,20 +808,40 @@ impl Panel for Launcher {
                         let top = at.y + tops[i];
                         if kind(app) != category {
                             category = kind(app);
-                            let title = if recent && category == "Apps" { "Recent and all apps" } else { category };
-                            f.section_header(Rect::new(at.x, top - header, width, header), title, None);
+                            let title = if recent && category == "Apps" {
+                                "Recent and all apps"
+                            } else {
+                                category
+                            };
+                            f.section_header(
+                                Rect::new(at.x, top - header, width, header),
+                                title,
+                                None,
+                            );
                         }
                         let lead = match kind(app) {
                             "Settings" => Lead::Icon(Icon::Settings),
-                            "Files" => self.icon(&app.id).map_or(Lead::Icon(Icon::File), Lead::Image),
-                            _ => self.icon(&app.id).map_or(Lead::Icon(Icon::Apps), Lead::Image),
+                            "Files" => self.icon(&app.id).map_or(
+                                Lead::Icon(if self.file_sizes.contains_key(&app.id) {
+                                    Icon::Folder
+                                } else {
+                                    Icon::File
+                                }),
+                                Lead::Image,
+                            ),
+                            _ => self
+                                .icon(&app.id)
+                                .map_or(Lead::Icon(Icon::Apps), Lead::Image),
                         };
                         let r = ListRow {
                             id: LIST + i as HitId,
                             lead,
                             title: &app.name,
                             subtitle: None,
-                            accessory: Accessory::None,
+                            accessory: self
+                                .file_sizes
+                                .get(&app.id)
+                                .map_or(Accessory::None, |text| Accessory::Text(text)),
                             selected: i == self.chosen,
                             enabled: true,
                         };
@@ -748,7 +876,13 @@ impl Panel for Launcher {
                 let (badge, name) = user.take_left(bar.height(), f.px(8.0));
                 f.fill(badge, badge.height() / 2.0, c.fill);
                 f.icon(badge, Icon::User, 15.0, c.secondary);
-                f.text_in(name, &self.user, TextRole::Callout, c.secondary, Align::Start);
+                f.text_in(
+                    name,
+                    &self.user,
+                    TextRole::Callout,
+                    c.secondary,
+                    Align::Start,
+                );
             }
             column.rect.top + column.used()
         });
@@ -797,7 +931,7 @@ impl Panel for Launcher {
             }
             id if id >= RECOMMENDED => {
                 if let Some(app) = self.recommended.get((id - RECOMMENDED) as usize) {
-                    system::open(app.path.clone());
+                    open_with_native_files(app);
                     Effect::Close
                 } else {
                     Effect::None
@@ -914,6 +1048,41 @@ impl Panel for Launcher {
     }
 
     fn reply(&mut self, reply: &Reply, cx: &mut Cx) -> bool {
+        if let Reply::IndexedFiles { query, hits } = reply {
+            if query != &self.query {
+                return false;
+            }
+            self.file_sizes.clear();
+            self.indexed_files = hits.as_ref().map(|hits| {
+                hits.iter()
+                    .map(|hit| {
+                        let id = format!("file:{}", hit.path);
+                        if hit.directory {
+                            self.file_sizes.insert(
+                                id.clone(),
+                                format!(
+                                    "{} · {} {}",
+                                    file_size(hit.size),
+                                    hit.files,
+                                    if hit.files == 1 { "file" } else { "files" }
+                                ),
+                            );
+                        }
+                        App {
+                            id,
+                            path: hit.path.clone(),
+                            name: hit.name.clone(),
+                            icon: None,
+                            keywords: vec![],
+                            packaged: false,
+                        }
+                    })
+                    .collect()
+            });
+            self.restart();
+            self.load_icons(cx);
+            return true;
+        }
         if let Reply::Files(files) = reply {
             let files: Vec<_> = files
                 .iter()
@@ -1005,6 +1174,7 @@ impl Panel for Launcher {
             log::debug!("launcher: query {query:?}");
             self.query = query;
             self.clipboard_open = false;
+            self.search_files(cx);
             self.restart();
             self.load_icons(cx);
         }
@@ -1019,6 +1189,59 @@ impl Panel for Launcher {
             self.launch(self.chosen)
         }
     }
+}
+
+fn file_size(bytes: u64) -> String {
+    for (unit, scale) in [
+        ("TiB", 1u64 << 40),
+        ("GiB", 1 << 30),
+        ("MiB", 1 << 20),
+        ("KiB", 1 << 10),
+    ] {
+        if bytes >= scale {
+            return format!("{:.1} {unit}", bytes as f64 / scale as f64);
+        }
+    }
+    format!("{bytes} B")
+}
+
+/// Route folders and the File Explorer entry to our on-demand browser only while opted in.
+/// Path classification stays on a worker: a disconnected share must not hold up the launcher.
+fn open_with_native_files(app: &App) {
+    let enabled = mypaper_config::Config::load().is_ok_and(|c| c.experimental.files_default);
+    if !enabled {
+        system::open(app.path.clone());
+        return;
+    }
+    let path = app.path.clone();
+    let files_entry =
+        app.name.eq_ignore_ascii_case("File Explorer") || app.name.eq_ignore_ascii_case("Files");
+    let _ = std::thread::Builder::new()
+        .name("launcher-folder".into())
+        .spawn(move || {
+            use std::os::windows::process::CommandExt;
+            let folder = if files_entry {
+                Some("shell:profile".to_owned())
+            } else if std::path::Path::new(&path).is_dir()
+                || (path.starts_with("shell:") && !path.starts_with("shell:AppsFolder"))
+            {
+                Some(path.clone())
+            } else {
+                None
+            };
+            if let Some(folder) = folder
+                && let Ok(executable) =
+                    std::env::current_exe().map(|p| p.with_file_name("mypaper-files.exe"))
+                && std::process::Command::new(executable)
+                    .args(["--", &folder])
+                    .creation_flags(0x08000000)
+                    .spawn()
+                    .is_ok()
+            {
+                return;
+            }
+            system::open(path);
+        });
 }
 
 /// A shortcut path and an AppsFolder id are different launch representations of one app.

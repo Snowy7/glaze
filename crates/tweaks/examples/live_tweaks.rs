@@ -44,6 +44,7 @@ fn show(label: &str, values: &[(String, Option<Value>)]) {
     for (name, value) in values {
         let name = if name.is_empty() { "(default)" } else { name };
         match value {
+            Some(Value::Raw { kind, bytes }) => println!("  {name:<22} type {kind}, {bytes:02X?}"),
             Some(Value::String(s)) => println!("  {name:<22} REG_SZ        {s}"),
             Some(Value::ExpandString(s)) => println!("  {name:<22} REG_EXPAND_SZ {s}"),
             Some(Value::Dword(d)) => println!("  {name:<22} REG_DWORD     {d:#x}"),

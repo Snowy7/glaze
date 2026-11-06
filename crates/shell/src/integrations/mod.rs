@@ -36,6 +36,9 @@ struct State {
     hub: Hub,
     bars: BTreeMap<Provider, Lease>,
     dirty: Arc<AtomicBool>,
+    /// The notifications snapshot changed: the only provider the bars draw directly (media
+    /// reaches them as `Msg::Media`, and a playing track's timeline changes every few seconds).
+    notifications: Arc<AtomicBool>,
     reload: Arc<AtomicBool>,
     consent_complete: Arc<AtomicBool>,
     _watcher: Option<FileWatch>,
@@ -69,7 +72,12 @@ impl State {
         let thread = unsafe { GetCurrentThreadId() };
         let dirty = Arc::new(AtomicBool::new(false));
         let changed = dirty.clone();
-        let hub = Hub::new(move |_| {
+        let notifications = Arc::new(AtomicBool::new(false));
+        let notified = notifications.clone();
+        let hub = Hub::new(move |provider| {
+            if provider == Provider::Notifications {
+                notified.store(true, Ordering::Release);
+            }
             if !changed.swap(true, Ordering::AcqRel) {
                 wake(thread);
             }
@@ -94,6 +102,7 @@ impl State {
             hub,
             bars: BTreeMap::new(),
             dirty,
+            notifications,
             reload,
             consent_complete,
             _watcher: watcher,
@@ -122,6 +131,17 @@ fn request_notification_consent(thread: u32, complete: &Arc<AtomicBool>) {
 }
 pub fn config() -> Config {
     STATE.with_borrow(|s| s.config.clone())
+}
+
+/// Stops every provider and joins its worker while the workers still run. Call once, after
+/// everything holding a lease is gone and before `main` returns. The state is a thread-local of
+/// the UI thread, and those are dropped only inside `ExitProcess`, after Windows has ended every
+/// other thread: its `join` would then meet a killed worker, which std treats as a bug ("threads
+/// should not terminate unexpectedly"): the shell's exit crash (0xc0000409, 0xe06d7363 unwinding).
+pub fn shutdown() {
+    let leases = STATE.with_borrow_mut(|s| std::mem::take(&mut s.bars));
+    drop(leases);
+    STATE.with_borrow(|s| s.hub.stop_all());
 }
 pub fn acquire(provider: Provider) -> anyhow::Result<Lease> {
     STATE.with_borrow(|s| {
@@ -164,8 +184,9 @@ pub fn latest(provider: Provider) -> Option<Snapshot> {
 }
 
 /// Called by the shell after messages, before presenting. Reading unchanged cached state does no IO.
+/// Returns whether the bars must repaint: the settings were reloaded or notifications changed.
 pub fn process() -> bool {
-    let (changed, reload) = STATE.with_borrow_mut(|state| {
+    let (changed, notifications, reload) = STATE.with_borrow_mut(|state| {
         let reload_requested = state.reload.swap(false, Ordering::AcqRel);
         let mut reload = false;
         if reload_requested {
@@ -195,12 +216,16 @@ pub fn process() -> bool {
             state.generation += 1;
             reload = true;
         }
-        (state.dirty.swap(false, Ordering::AcqRel), reload)
+        (
+            state.dirty.swap(false, Ordering::AcqRel),
+            state.notifications.swap(false, Ordering::AcqRel),
+            reload,
+        )
     });
     if changed || reload {
         media::changed(reload);
     }
-    changed || reload
+    notifications || reload
 }
 
 fn provider(module: &ModuleRef) -> Option<Provider> {

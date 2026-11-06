@@ -6,10 +6,7 @@
 //! style's own fill), items are washes, the kit's icons and the theme's type, and hover, press
 //! and keyboard focus come from the kit's [`Interaction`]. Nothing draws an outline on glass.
 //! Items sit on whole device pixels, so text, icons and tray bitmaps stay crisp at every DPI.
-use super::{
-    look::{self, Tokens},
-    services::Model,
-};
+use super::{look::Tokens, services::Model};
 use mypaper_bars::{
     BarsConfig, Module, ModuleRef,
     actions::BarKind,
@@ -117,11 +114,60 @@ impl Out {
 fn panel(f: &mut kit::Frame, out: &mut Out, rect: Rect, radius: f32, tokens: &Tokens) {
     out.shapes.push((rect, radius));
     f.fill(rect, radius, Rgba::HIT);
-    match tokens.fill {
-        Some(color) => f.fill(rect, radius, color),
-        None => {
-            f.surface_shaped(rect, radius, tokens.material.is_some());
-        }
+    if tokens.material.is_some() {
+        return;
+    }
+    let state = if f.input.pressed.is_some() {
+        2
+    } else if f.input.hover.is_some() {
+        1
+    } else {
+        0
+    };
+    if let Some(shadow) = tokens.styles.shadows[state].filter(|_| tokens.shadow) {
+        f.push(Op::Shadow {
+            rect: rect
+                .offset(shadow.x * f.s, 0.0)
+                .inflate(shadow.spread * f.s),
+            radius,
+            spread: (shadow.blur * f.s).max(0.0),
+            drop: shadow.y * f.s,
+            color: shadow.color,
+        });
+    }
+    f.fill(
+        rect,
+        radius,
+        tokens.fill.unwrap_or(tokens.theme.color.surface),
+    );
+    let edge = tokens.styles.edges[state];
+    let width = edge.width * f.s;
+    if width > 0.0 {
+        f.push(Op::Stroke {
+            rect: rect.inflate(-width / 2.0),
+            radius: (radius - width / 2.0).max(0.0),
+            width,
+            color: edge.color,
+        });
+    }
+}
+
+fn item_wash(
+    f: &mut kit::Frame,
+    rect: Rect,
+    radius: f32,
+    tokens: &Tokens,
+    visual: super::styling::Item,
+) {
+    f.fill(rect, radius, visual.fill);
+    let width = visual.edge.width * f.s;
+    if tokens.material.is_none() && width > 0.0 {
+        f.push(Op::Stroke {
+            rect: rect.inflate(-width / 2.0),
+            radius: (radius - width / 2.0).max(0.0),
+            width,
+            color: visual.edge.color,
+        });
     }
 }
 
@@ -227,14 +273,7 @@ fn pack_key(icon: Icon) -> Option<&'static str> {
 }
 
 /// `icon`, or a user icon pack's image for it at `px` device px.
-fn themed(
-    icon: Icon,
-    color: Rgba,
-    px: u32,
-    ui: &Ui,
-    images: &mut Images,
-    full: bool,
-) -> Glyph {
+fn themed(icon: Icon, color: Rgba, px: u32, ui: &Ui, images: &mut Images, full: bool) -> Glyph {
     let key = match (icon, full) {
         (Icon::Delete, true) => Some("trash-full"),
         _ => pack_key(icon),
@@ -245,7 +284,12 @@ fn themed(
 }
 
 /// The text style of a module: the bar's font, the design's weight, the module's overrides.
-fn module_font(module: &ModuleRef, config: &BarsConfig, kind: BarKind, tokens: &Tokens) -> TextStyle {
+fn module_font(
+    module: &ModuleRef,
+    config: &BarsConfig,
+    kind: BarKind,
+    tokens: &Tokens,
+) -> TextStyle {
     let design = if kind == BarKind::Top {
         config.top.design
     } else {
@@ -281,10 +325,19 @@ fn module_font(module: &ModuleRef, config: &BarsConfig, kind: BarKind, tokens: &
 /// A module glyph's size in design px: the bar's `icon`, else for a top bar a little over half
 /// its height up to 16 (14 in macOS's 24 px menu bar), and in a taskbar 16 with Start at the
 /// app icons' size (Windows' 24 px logo).
-fn icon_size(module: &ModuleRef, config: &BarsConfig, kind: BarKind, theme: &mypaper_ui::Theme) -> f32 {
+fn icon_size(
+    module: &ModuleRef,
+    config: &BarsConfig,
+    kind: BarKind,
+    theme: &mypaper_ui::Theme,
+) -> f32 {
     if kind == BarKind::Top {
         return config.top.icon.map_or_else(
-            || (config.top.height as f32 * 0.58).round().clamp(12.0, theme.metrics.icon),
+            || {
+                (config.top.height as f32 * 0.58)
+                    .round()
+                    .clamp(12.0, theme.metrics.icon)
+            },
             |v| v as f32,
         );
     }
@@ -312,14 +365,12 @@ fn contents(
     let font = module_font(module, config, kind, tokens).scaled(scale);
     let color = options
         .and_then(|o| o.style.color.as_ref())
-        .map_or(theme.color.label, |c| {
-            look::resolve_color(c, theme.color.label, theme.color.accent)
-        });
+        .map_or(theme.color.label, |c| tokens.color(c));
     let icon_px = px(icon_size(module, config, kind, theme)) as u32;
     let pad = px(options.and_then(|o| o.style.padding).unwrap_or(7.0));
     let target = Target::Module(module.clone());
-    let fluent_search = matches!(module, ModuleRef::Builtin(Module::Search))
-        && tokens.family == Family::Fluent;
+    let fluent_search =
+        matches!(module, ModuleRef::Builtin(Module::Search)) && tokens.family == Family::Fluent;
     let mut output = Vec::new();
     // An item's glyph from the module's own `icon` option, else `glyph`.
     let mut add = |text: String, glyph: Glyph, target: Target, ui: &mut Ui, images: &mut Images| {
@@ -467,11 +518,21 @@ fn contents(
                     .as_deref()
                     .and_then(|source| images.sized(ui, source, None, icon_px))
                     .map_or(Glyph::None, Glyph::Image);
-                add(String::new(), glyph, Target::Tray(item.id.clone()), ui, images);
+                add(
+                    String::new(),
+                    glyph,
+                    Target::Tray(item.id.clone()),
+                    ui,
+                    images,
+                );
             }
             // The overflow opens toward the screen: down from a top bar.
             let up = kind == BarKind::Dock || config.top.position == TopPosition::Bottom;
-            let chevron = if up { Icon::ChevronUp } else { Icon::ChevronDown };
+            let chevron = if up {
+                Icon::ChevronUp
+            } else {
+                Icon::ChevronDown
+            };
             let glyph = themed(chevron, color, icon_px, ui, images, false);
             add(
                 String::new(),
@@ -597,13 +658,10 @@ fn item(
     let wash = rect.inset(Insets::xy(f.px(1.0), f.px(inset)));
     let radius = options
         .and_then(|o| o.style.radius)
+        .or(tokens.styles.item_radius)
         .map_or_else(|| f.control_radius(wash.height()), |r| f.px(r));
     if let Some(Paint::Color(background)) = options.and_then(|o| o.style.background.as_ref()) {
-        f.fill(
-            wash,
-            radius,
-            look::resolve_color(background, c.label, c.accent),
-        );
+        f.fill(wash, radius, tokens.color(background));
     }
     if tokens.family == Family::Fluent
         && matches!(
@@ -618,7 +676,7 @@ fn item(
     if let Some(border) = options.and_then(|o| o.style.border.as_ref()) {
         let width = (border.width.unwrap_or(1.0) * f.s).round();
         let color = match &border.color {
-            Some(Paint::Color(color)) => look::resolve_color(color, c.label, c.accent),
+            Some(Paint::Color(color)) => tokens.color(color),
             _ => c.separator,
         };
         if width > 0.0 {
@@ -630,7 +688,19 @@ fn item(
             });
         }
     }
-    f.wash(id, wash, radius, true);
+    let visual = tokens.item(
+        id,
+        f.state(id, true),
+        content.current && tokens.styles.configured_items,
+    );
+    item_wash(f, wash, radius, tokens, visual);
+    let mut shown = content.clone();
+    shown.font = shown.font.scaled(visual.scale);
+    shown.icon = (shown.icon * visual.scale).round();
+    if tokens.styles.item_color && options.is_none_or(|o| o.style.color.is_none()) {
+        shown.color = visual.color;
+    }
+    let content = &shown;
     let label = if let Target::Workspace(i) = content.target {
         format!("Desktop {}", i + 1)
     } else if content.text.is_empty() {
@@ -836,7 +906,11 @@ pub fn top(
     let mut f = kit::Frame::new(&mut ui.text, &tokens.theme, scale, &input);
     let radius = px(tokens.radius);
     if t.layout != TopLayout::Islands && !minimal {
-        let r = if t.layout == TopLayout::Strip { 0.0 } else { radius };
+        let r = if t.layout == TopLayout::Strip {
+            0.0
+        } else {
+            radius
+        };
         panel(&mut f, &mut out, Rect::new(left, m, w, h), r, tokens);
     }
     // The centre zone is centred, but never over the sides: a narrow bar slides it over.
@@ -863,7 +937,15 @@ pub fn top(
                         let r = f.control_radius(h);
                         f.fill(rect, r, Rgba::HIT);
                     }
-                    item(&mut f, &mut out, c, rect, config, tokens, minimal);
+                    item(
+                        &mut f,
+                        &mut out,
+                        c,
+                        rect,
+                        config,
+                        tokens,
+                        tokens.text_shadow,
+                    );
                 }
                 x += c.width + gap;
             }
@@ -946,9 +1028,9 @@ pub fn dock(
         }
     };
     let sides = [side_width(0), side_width(1)];
-    let base = apps.len() as f32 * (length + gap) + d.extras.len() as f32 * (size + gap) + 2.0 * pad
-        - gap
-        + dividers;
+    let base =
+        apps.len() as f32 * (length + gap) + d.extras.len() as f32 * (size + gap) + 2.0 * pad - gap
+            + dividers;
     let along = if horizontal { extent.0 } else { extent.1 } as f32;
     // Off unless asked for: no zoom, no room kept for one.
     let magnified = if d.magnify.enabled {
@@ -999,7 +1081,10 @@ pub fn dock(
     .round();
     // Where app `i` starts along the dock, past the dividers before it.
     let along_at = |i: usize, shift: f32| {
-        start + pad + i as f32 * (length + gap) + shift
+        start
+            + pad
+            + i as f32 * (length + gap)
+            + shift
             + split.filter(|&s| i >= s).map_or(0.0, |_| divider)
     };
     let count = apps.len();
@@ -1037,7 +1122,10 @@ pub fn dock(
                 }
             }
             let want = (size * factor).round() as u32;
-            let at = buckets.into_iter().find(|&b| b >= want).unwrap_or(buckets[STEPS]);
+            let at = buckets
+                .into_iter()
+                .find(|&b| b >= want)
+                .unwrap_or(buckets[STEPS]);
             app_icon(ui, images, app, c.label, at)
         })
         .collect();
@@ -1079,12 +1167,28 @@ pub fn dock(
             runs.push((span(count).0, span(rest.len() - 1).1));
         }
         for (from, to) in runs {
-            panel(&mut f, &mut out, plate(from - pad, to - from + 2.0 * pad), px(tokens.radius), tokens);
+            panel(
+                &mut f,
+                &mut out,
+                plate(from - pad, to - from + 2.0 * pad),
+                px(tokens.radius),
+                tokens,
+            );
         }
     } else if !tokens.bare {
-        panel(&mut f, &mut out, plate(panel_start, panel_length), px(tokens.radius), tokens);
+        panel(
+            &mut f,
+            &mut out,
+            plate(panel_start, panel_length),
+            px(tokens.radius),
+            tokens,
+        );
     } else {
-        f.fill(plate(panel_start, panel_length), px(tokens.radius), Rgba::HIT);
+        f.fill(
+            plate(panel_start, panel_length),
+            px(tokens.radius),
+            Rgba::HIT,
+        );
     }
     if taskbar {
         for (i, zone) in groups.iter().enumerate().take(2) {
@@ -1133,18 +1237,27 @@ pub fn dock(
         let id = out.add(Target::Dock(app.clone()));
         let active = app.windows.iter().any(|w| w.active);
         let state = f.state(id, true);
-        let radius = f.control_radius(rect.height()).min(f.px(theme.radius.small + 2.0));
+        let radius = tokens.styles.item_radius.map_or_else(
+            || {
+                f.control_radius(rect.height())
+                    .min(f.px(theme.radius.small + 2.0))
+            },
+            |r| f.px(r),
+        );
         let wash = rect.inflate(f.px(3.0));
+        let visual = tokens.item(id, state, active && tokens.styles.configured_items);
         if taskbar {
             // Windows' task buttons: the active app keeps a resting wash.
             let rest = if active { c.hover } else { Rgba::TRANSPARENT };
             f.fill(wash, radius, rest);
-            f.wash(id, wash, radius, true);
+        }
+        if taskbar || tokens.styles.configured_items {
+            item_wash(&mut f, wash, radius, tokens, visual);
         }
         // A pressed icon sinks a little and darkens, as the Dock's do; the rest is the
         // magnification and the name's tooltip.
         let pressed = state == State::Pressed;
-        let sink = icon_rect.width() * (1.0 - state.press_scale()) / 2.0;
+        let sink = icon_rect.width() * (1.0 - visual.scale) / 2.0;
         let shown = icon_rect.inflate(-sink.round());
         let fade = if motion < 0.0 { -motion } else { 1.0 };
         match &icons[i] {
@@ -1158,7 +1271,11 @@ pub fn dock(
             }
             None => {
                 // No icon: a tile with the app's initial, at the corner ratio of app icons.
-                f.fill(shown, shown.width() * 0.225, c.fill.with_alpha(c.fill.a * fade));
+                f.fill(
+                    shown,
+                    shown.width() * 0.225,
+                    c.fill.with_alpha(c.fill.a * fade),
+                );
                 let letter = app
                     .name
                     .chars()
@@ -1170,7 +1287,11 @@ pub fn dock(
                     shown,
                     &letter,
                     TextRole::Title2,
-                    c.label.with_alpha(fade),
+                    if tokens.styles.item_color {
+                        visual.color.with_alpha(fade)
+                    } else {
+                        c.label.with_alpha(fade)
+                    },
                     Align::Center,
                 );
             }
@@ -1180,16 +1301,22 @@ pub fn dock(
                 .windows
                 .first()
                 .map_or(app.name.as_str(), |w| w.title.as_str());
-            let text = Rect::new(
-                a + size + px(8.0),
-                edge,
-                length - size - px(8.0),
-                size,
-            );
+            let text = Rect::new(a + size + px(8.0), edge, length - size - px(8.0), size);
             let font = tokens.font.scaled(scale);
             let (_, h) = f.text.measure("Ag", &font);
             let y = text.top + ((text.height() - h) / 2.0).round();
-            f.label_styled(text.left, y, title, &font, c.label, text.width());
+            f.label_styled(
+                text.left,
+                y,
+                title,
+                &font,
+                if tokens.styles.item_color {
+                    visual.color
+                } else {
+                    c.label
+                },
+                text.width(),
+            );
         }
         if !app.windows.is_empty() && d.indicator != IndicatorStyle::None {
             let (w, thickness) = match d.indicator {
@@ -1215,10 +1342,14 @@ pub fn dock(
                 } else {
                     c.secondary
                 },
-                |color| look::resolve_color(color, c.label, c.accent),
+                |color| tokens.color(color),
             );
             // Centred in the padding between the icon and the plate's edge.
-            let middle = if forward { edge - pad / 2.0 } else { edge + size + pad / 2.0 };
+            let middle = if forward {
+                edge - pad / 2.0
+            } else {
+                edge + size + pad / 2.0
+            };
             let along = (a + (length - w) / 2.0).round();
             let dot = convert(along, (middle - thickness / 2.0).round(), w, thickness);
             let radius = if d.indicator == IndicatorStyle::Bar {
@@ -1234,7 +1365,14 @@ pub fn dock(
             f.badge(icon_rect.right - f.px(14.0), y, &count, Some(c.accent));
         }
         f.focus_ring(id, wash, radius);
-        f.hit(id, rect.union(icon_rect), Role::Button, &app.name, true, None);
+        f.hit(
+            id,
+            rect.union(icon_rect),
+            Role::Button,
+            &app.name,
+            true,
+            None,
+        );
         badges.push((i, icon_rect));
     }
     // The divider between the kept apps and the others.
@@ -1278,7 +1416,15 @@ pub fn dock(
         let rect = convert(span(k).0.round(), b.round(), s, s);
         let id = out.add(Target::Extra(*extra));
         let state = f.state(id, true);
-        let sink = (rect.width() * (1.0 - state.press_scale()) / 2.0).round();
+        let visual = tokens.item(id, state, false);
+        let radius = tokens
+            .styles
+            .item_radius
+            .map_or_else(|| f.px(theme.radius.small + 2.0), |r| f.px(r));
+        if tokens.styles.configured_items {
+            item_wash(&mut f, rect, radius, tokens, visual);
+        }
+        let sink = (rect.width() * (1.0 - visual.scale) / 2.0).round();
         let shown = rect.inflate(-sink);
         match &extra_glyphs[i] {
             Glyph::Image(image) => {
@@ -1296,8 +1442,19 @@ pub fn dock(
                 } else {
                     c.label
                 };
-                let ink = if state == State::Pressed { c.secondary } else { ink };
-                f.icon(shown, *icon, d.size() as f32 * 0.5 * zoomed(k).0, ink);
+                let ink = if tokens.styles.item_color {
+                    visual.color
+                } else if state == State::Pressed {
+                    c.secondary
+                } else {
+                    ink
+                };
+                f.icon(
+                    shown,
+                    *icon,
+                    d.size() as f32 * 0.5 * zoomed(k).0 * visual.scale,
+                    ink,
+                );
             }
             _ => {}
         }
@@ -1311,6 +1468,20 @@ pub fn dock(
     }
     let mut frame = out.finish(list, dimensions);
     frame.rest = rest;
+    let outset = tokens.shadow_outset(scale);
+    if outset > 0.0 {
+        frame.list = frame.list.translated(outset, outset);
+        for (rect, _) in &mut frame.shapes {
+            *rect = rect.offset(outset, outset);
+        }
+        for center in &mut frame.rest {
+            *center += outset;
+        }
+        frame.size = (
+            frame.size.0 + 2 * outset as u32,
+            frame.size.1 + 2 * outset as u32,
+        );
+    }
     frame
 }
 

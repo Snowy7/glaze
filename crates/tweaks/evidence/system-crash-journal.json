@@ -1,0 +1,186 @@
+{
+  "entries": [
+    {
+      "key": "Software\\Microsoft\\GameBar",
+      "name": "AutoGameModeEnabled",
+      "original": null,
+      "written": {
+        "raw": {
+          "kind": 4,
+          "bytes": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+      "name": "HideFileExt",
+      "original": {
+        "raw": {
+          "kind": 4,
+          "bytes": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "written": {
+        "raw": {
+          "kind": 4,
+          "bytes": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+      "name": "Hidden",
+      "original": {
+        "raw": {
+          "kind": 4,
+          "bytes": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "written": {
+        "raw": {
+          "kind": 4,
+          "bytes": [
+            2,
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+      "name": "SeparateProcess",
+      "original": {
+        "raw": {
+          "kind": 4,
+          "bytes": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "written": {
+        "raw": {
+          "kind": 4,
+          "bytes": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "key": "@mypaper/power-mode",
+      "name": "ac",
+      "original": {
+        "binary": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "written": {
+        "binary": [
+          56,
+          194,
+          9,
+          92,
+          52,
+          70,
+          55,
+          135,
+          66,
+          79,
+          160,
+          69,
+          181,
+          116,
+          213,
+          222
+        ]
+      }
+    },
+    {
+      "key": "@mypaper/power-mode",
+      "name": "dc",
+      "original": {
+        "binary": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "written": {
+        "binary": [
+          56,
+          194,
+          9,
+          92,
+          52,
+          70,
+          55,
+          135,
+          66,
+          79,
+          160,
+          69,
+          181,
+          116,
+          213,
+          222
+        ]
+      }
+    }
+  ]
+}

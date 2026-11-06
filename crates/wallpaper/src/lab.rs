@@ -207,14 +207,16 @@ impl Lab {
         encoder
     }
 
-    /// Submits one timed frame, waits for it and returns [wallpaper, restore, glass] in ms, and
-    /// the glass renderer's passes (label, ms) once [`Lab::profile`] is on.
+    /// Submits one timed frame, waits for it and returns [wallpaper, restore, glass] in GPU ms,
+    /// the CPU ms of recording and submitting it (nothing in that waits for the GPU), and the
+    /// glass renderer's passes (label, ms) once [`Lab::profile`] is on.
     fn timed(
         &mut self,
         clock: Duration,
         frame: u32,
         wallpaper: bool,
-    ) -> ([f64; 3], Vec<(&'static str, f64)>) {
+    ) -> ([f64; 3], f64, Vec<(&'static str, f64)>) {
+        let started = std::time::Instant::now();
         let mut encoder = self.encode(clock, frame, wallpaper);
         encoder.resolve_query_set(&self.queries, 0..4, &self.resolve, 0);
         encoder.copy_buffer_to_buffer(&self.resolve, 0, &self.read, 0, 32);
@@ -231,6 +233,7 @@ impl Lab {
             })
             .unwrap_or_default();
         self.gpu.queue.submit([encoder.finish()]);
+        let cpu = started.elapsed().as_secs_f64() * 1e3;
         let ticks = |bytes: &[u8]| -> Vec<u64> {
             bytes
                 .as_chunks::<8>()
@@ -247,7 +250,7 @@ impl Lab {
             let s = self.map(&self.pass_read, ticks);
             labels.iter().enumerate().map(|(i, l)| (*l, ms(&s, i, i + 1))).collect()
         };
-        ([ms(&stamps, 0, 1), ms(&stamps, 1, 2), ms(&stamps, 2, 3)], passes)
+        ([ms(&stamps, 0, 1), ms(&stamps, 1, 2), ms(&stamps, 2, 3)], cpu, passes)
     }
 
     /// Times the glass renderer's passes from the next frame on.
@@ -392,29 +395,31 @@ fn lab() {
 
     // Wallpaper frames at 30 fps from 5 s, then glass-only frames with the dock moving.
     lab.profile();
-    let mut wallpaper = [vec![], vec![], vec![], vec![]];
+    let mut wallpaper = [vec![], vec![], vec![], vec![], vec![]];
     let mut wallpaper_passes = Passes::default();
     for f in 0..frames {
         let clock = Duration::from_secs_f64(5.0 + f64::from(f) / 30.0);
-        let (ms, passes) = lab.timed(clock, f, true);
+        let (ms, cpu, passes) = lab.timed(clock, f, true);
         for (k, v) in ms.iter().enumerate() {
             wallpaper[k].push(*v);
         }
         wallpaper[3].push(ms.iter().sum());
+        wallpaper[4].push(cpu);
         wallpaper_passes.add(&passes);
     }
-    let mut glass = [vec![], vec![], vec![]];
+    let mut glass = [vec![], vec![], vec![], vec![]];
     let mut glass_passes = Passes::default();
     for f in 0..frames {
         lab.glass
             .set_plates(fixture(160.0 * (f as f32 * 0.05).sin()));
-        let (ms, passes) = lab.timed(Duration::from_secs(5), f, false);
+        let (ms, cpu, passes) = lab.timed(Duration::from_secs(5), f, false);
         glass[0].push(ms[1]);
         glass[1].push(ms[2]);
         glass[2].push(ms[1] + ms[2]);
+        glass[3].push(cpu);
         glass_passes.add(&passes);
     }
-    let names = ["wallpaper", "restore", "glass", "frame"];
+    let names = ["wallpaper", "restore", "glass", "frame", "cpu"];
     let mut report = Vec::new();
     for (name, values) in names.iter().zip(&mut wallpaper) {
         report.push((format!("wallpaper-frame {name}"), spread(values)));
@@ -422,7 +427,7 @@ fn lab() {
     for (name, values) in &mut wallpaper_passes.0 {
         report.push((format!("wallpaper-frame | {name}"), spread(values)));
     }
-    for (name, values) in ["restore", "glass", "frame"].iter().zip(&mut glass) {
+    for (name, values) in ["restore", "glass", "frame", "cpu"].iter().zip(&mut glass) {
         report.push((format!("glass-only {name}"), spread(values)));
     }
     for (name, values) in &mut glass_passes.0 {
@@ -439,21 +444,7 @@ fn lab() {
     eprintln!("wrote {}", out.display());
 }
 
-/// This process's private bytes in MiB.
-fn private_mib() -> f64 {
-    use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX};
-    use windows::Win32::System::Threading::GetCurrentProcess;
-    let mut counters = PROCESS_MEMORY_COUNTERS_EX::default();
-    // SAFETY: our own process; the struct's size goes with it.
-    let _ = unsafe {
-        GetProcessMemoryInfo(
-            GetCurrentProcess(),
-            (&raw mut counters).cast(),
-            size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32,
-        )
-    };
-    counters.PrivateUsage as f64 / 1048576.0
-}
+use crate::trim::private_mib;
 
 /// Private bytes after each step of a two-screen engine's allocations (no swapchains).
 /// `MYPAPER_LAB_THEME=themes\rain-city cargo test -p mypaper-wallpaper lab::memory -- --ignored --nocapture`
@@ -560,6 +551,156 @@ fn memory() {
     drop(kept);
     drop(targets);
     step("frames dropped", Some(&gpu));
+}
+
+/// What releasing the GPU frees and what bringing it back costs, on the engine's own device path
+/// (`Opening`, `engine.gpu: auto`): the theme drawn into two screens with glass, then released
+/// down to each level and brought back, three times. Swapchains are measured live (they need
+/// windows). `MYPAPER_LAB_THEME=themes\rain-city cargo test -p mypaper-wallpaper --release
+/// lab::release -- --ignored --exact --nocapture`
+#[test]
+#[ignore = "dev tool: MYPAPER_LAB_THEME=<theme>"]
+fn release() {
+    use std::time::Instant;
+    let theme = std::env::var("MYPAPER_LAB_THEME").expect("set MYPAPER_LAB_THEME");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let theme = mypaper_theme::LoadedTheme::load(root.join(theme)).unwrap();
+    let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
+    let monitor = Rect {
+        x: 0,
+        y: 0,
+        width: SIZE.0 as i32,
+        height: SIZE.1 as i32,
+    };
+    let mut last = private_mib();
+    let mut step = |name: &str, started: Instant| {
+        let now = private_mib();
+        eprintln!(
+            "{name:>34}: {now:8.2} MiB private ({:+8.2}), {:7.1} ms",
+            now - last,
+            started.elapsed().as_secs_f64() * 1e3
+        );
+        last = now;
+    };
+    // Two screens' kept frame, stand-ins and glass, with one frame drawn.
+    let draw = |gpu: &Gpu, source: &mut Box<dyn Source>| {
+        let size = source.render_size(SIZE);
+        let kept = KeptFrame::new(gpu, size);
+        let targets: Vec<_> = (0..2)
+            .map(|_| {
+                gpu.texture(
+                    "screen stand-in",
+                    SIZE,
+                    gpu.format,
+                    wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                    None,
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut glass = GlassPass::new(Some(&[monitor, monitor])).unwrap();
+        glass.set_plates(fixture(0.0));
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        source.update(gpu, Duration::from_secs(5));
+        source.render(
+            gpu,
+            Frame {
+                screen: 0,
+                size,
+                mouse: [0.0, 0.0],
+                clock: Duration::from_secs(5),
+                frame: 1,
+                view: &kept.view,
+                encoder: &mut encoder,
+            },
+        );
+        kept.drawn.set(Some(1));
+        for (i, target) in targets.iter().enumerate() {
+            let view = target.create_view(&Default::default());
+            kept.restore(gpu, target, &view, &mut encoder);
+            glass.encode(gpu, i, &kept, target, &mut encoder);
+        }
+        gpu.queue.submit([encoder.finish()]);
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
+        (kept, targets, glass)
+    };
+
+    step("start", Instant::now());
+    let t = Instant::now();
+    let mut gpu = Gpu::opened(crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto));
+    eprintln!("GPU: {}", gpu.adapter.get_info().name);
+    step("cold: device opened", t);
+    for round in 1..=3 {
+        // Twice on one device: what a reload costs without a new device.
+        for again in ["", " again"] {
+            let t = Instant::now();
+            let mut source = sources::load(&gpu, &theme, &[]).unwrap();
+            step(&format!("{round}: source loaded{again}"), t);
+            let t = Instant::now();
+            let first = draw(&gpu, &mut source);
+            step(&format!("{round}: first frame + glass{again}"), t);
+            let t = Instant::now();
+            let second = draw(&gpu, &mut source);
+            step(&format!("{round}: second frame + glass{again}"), t);
+            let t = Instant::now();
+            drop((first, second, source));
+            gpu.device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .unwrap();
+            step(&format!("{round}: drawing released{again}"), t);
+        }
+        let t = Instant::now();
+        let (instance, adapter) = gpu.into_adapter();
+        step(&format!("{round}: device released"), t);
+        let t = Instant::now();
+        let reopened = Gpu::from_adapter(instance, adapter);
+        step(&format!("{round}: device on the kept adapter"), t);
+        let t = Instant::now();
+        drop(reopened);
+        step(&format!("{round}: everything released"), t);
+        let t = Instant::now();
+        gpu = Gpu::opened(crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto));
+        step(&format!("{round}: warm: device opened"), t);
+    }
+}
+
+/// Idles 12 s in each of three states, for a wake sampler run alongside on this process: the
+/// device with a frame drawn, the drawing released (device kept), and no device at all.
+/// `cargo test -p mypaper-wallpaper --release lab::idle -- --ignored --exact --nocapture`
+#[test]
+#[ignore = "dev tool: sample this process's thread wakes while it runs"]
+fn idle() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let theme = mypaper_theme::LoadedTheme::load(root.join("themes/rain-city")).unwrap();
+    let phase = |name: &str| {
+        eprintln!("PHASE {name} pid {} at {:?}", std::process::id(), std::time::SystemTime::now());
+        std::thread::sleep(Duration::from_secs(12));
+    };
+    let gpu = Gpu::opened(crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto));
+    let mut source = sources::load(&gpu, &theme, &[]).unwrap();
+    let kept = KeptFrame::new(&gpu, source.render_size(SIZE));
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
+    source.render(
+        &gpu,
+        Frame {
+            screen: 0,
+            size: kept.size(),
+            mouse: [0.0, 0.0],
+            clock: Duration::from_secs(5),
+            frame: 1,
+            view: &kept.view,
+            encoder: &mut encoder,
+        },
+    );
+    gpu.queue.submit([encoder.finish()]);
+    gpu.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    phase("drawn");
+    drop((source, kept));
+    gpu.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    phase("device only");
+    drop(gpu);
+    phase("no device");
 }
 
 /// Private bytes for screen-sized textures, freed and allocated again, under

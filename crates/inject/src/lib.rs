@@ -30,6 +30,9 @@ const SYSTEM_EXECUTABLES: &[&str] = &[
 /// Family names are not unique to Windows (Microsoft also publishes games
 /// through the Store), which is exactly why this is an allowlist.
 const PACKAGE_FAMILIES: &[&str] = &[
+    // Settings (`ImmersiveControlPanel\SystemSettings.exe`) runs with this package identity, so
+    // the path entry above never applies to the real process.
+    "windows.immersivecontrolpanel_cw5n1h2txyewy",
     "Microsoft.WindowsNotepad_8wekyb3d8bbwe",
     "Microsoft.WindowsTerminal_8wekyb3d8bbwe",
     "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
@@ -137,6 +140,17 @@ mod tests {
                 true
             ),
             Verdict::Allow
+        );
+    }
+
+    #[test]
+    fn allows_settings_as_it_really_runs_packaged() {
+        let settings = r"C:\Windows\ImmersiveControlPanel\SystemSettings.exe";
+        let family = Some("windows.immersivecontrolpanel_cw5n1h2txyewy");
+        assert_eq!(check(settings, family, true), Verdict::Allow);
+        assert_eq!(
+            check(settings, family, false),
+            Verdict::Deny(DenyReason::NotSigned)
         );
     }
 

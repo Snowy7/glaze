@@ -311,7 +311,8 @@ fn plugin_face(c: &mut Ctx) {
     };
     let title = data["title"].as_str().unwrap_or_default();
     let icon = plugin::icon(data["icon"].as_str().unwrap_or_default());
-    plugin::draw(&mut c.f, c.rect, title, icon, face.as_ref(), status);
+    let instance = c.m.placed.instance.clone();
+    plugin::scroll::scope(&instance, || plugin::draw(&mut c.f, c.rect, title, icon, face.as_ref(), status));
 }
 
 /// One widget's list being built: the kit's frame plus the widget's inputs.

@@ -421,7 +421,7 @@ impl Model {
                 Widget::Custom => self.integration.custom.next,
                 Widget::Clock => Some(
                     instant
-                        + time::boundary(
+                        + time::clock_tick(
                             now.ms,
                             if self.flag("showSeconds", false)
                                 && !matches!(
@@ -441,7 +441,7 @@ impl Model {
                     && self.data["duration"]
                         .as_f64()
                         .is_some_and(|duration| duration > 0.0))
-                .then(|| instant + time::boundary(now.ms, 1000)),
+                .then(|| instant + time::clock_tick(now.ms, 1000)),
                 Widget::Calendar | Widget::Heatmap => Some(
                     instant + Duration::from_millis((now.midnight_after() - now.ms).max(1) as u64),
                 ),
@@ -497,9 +497,13 @@ impl Model {
                         Some(instant + time::boundary(now.ms - published * 1000, quantum))
                     })
                     .min(),
-                // A plugin face's `animated` spring is still moving: one more frame.
-                Widget::Plugin if super::views::plugin::animated::moving() => {
-                    Some(instant + mypaper_ui::display_frame())
+                // A plugin face's `animated` spring is still moving: one more frame. Its `scroll`
+                // panes ask for frames only while gliding or fading.
+                Widget::Plugin => {
+                    let spring = super::views::plugin::animated::moving()
+                        .then(|| instant + mypaper_ui::display_frame());
+                    let scroll = super::views::plugin::scroll::next(&self.placed.instance, instant);
+                    spring.into_iter().chain(scroll).min()
                 }
                 _ => None,
             }

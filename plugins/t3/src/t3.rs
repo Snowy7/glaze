@@ -755,7 +755,7 @@ mod tests {
         let thread = |i: usize| json!({"id":format!("thread-{i:08}"),"projectId":format!("project-{}", i % 12),"title":format!("Thread number {i} with a title"),
             "providerInstanceId":"codex","status":if i % 7 == 0 {"running"} else {"completed"},"latestRunId":format!("run-{i:08}"),"activeRunId":null,
             "pendingRuntimeRequest":null,"updatedAt":"2026-11-05T21:00:00.000Z","modelSelection":{"model":"gpt-6.1-sol","effort":"xhigh"},
-            "lineage":{"parentThreadId":if i % 5 == 0 {Some(format!("thread-{:08}", i - 1))} else {None},"relationshipToParent":if i % 5 == 0 {"subagent"} else {"root"}},
+            "lineage":{"parentThreadId":if i > 0 && i % 5 == 0 {Some(format!("thread-{:08}", i - 1))} else {None},"relationshipToParent":if i > 0 && i % 5 == 0 {"subagent"} else {"root"}},
             "pendingBackgroundTasks":[],"preview":{"text":"x".repeat(420),"role":"assistant"},"repository":{"root":"D:/Coding/projects/x","branch":"main"}});
         let projects: Vec<Value> = (0..12).map(|i| json!({"id":format!("project-{i}"),"title":format!("Project {i}")})).collect();
         json!({"_tag":"Chunk","requestId":"1","values":[{"kind":"snapshot","snapshot":{"schemaVersion":2,"snapshotSequence":41,

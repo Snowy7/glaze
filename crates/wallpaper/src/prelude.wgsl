@@ -13,7 +13,8 @@ struct Paper {
     _pad: vec2f,
 }
 
-@group(0) @binding(0) var<uniform> paper: Paper;
+// Immediate data (DX12 root constants): set in the draw itself, so a frame uploads no buffer.
+var<immediate> paper: Paper;
 
 @vertex
 fn mypaper_vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {

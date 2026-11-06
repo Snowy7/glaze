@@ -65,6 +65,18 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
       Copy-Item -LiteralPath "$From\$exe.exe" -Destination "$destination\$exe.exe" -Force
     }
   }
+  # Optional native services and on-demand apps ship beside core; none starts at deployment.
+  foreach ($exe in "mypaper-files", "mypaper-index") {
+    if ((Test-Path -LiteralPath "$From\$exe.exe") -and
+        [IO.Path]::GetFullPath("$From\$exe.exe") -ne [IO.Path]::GetFullPath("$destination\$exe.exe")) {
+      if (Get-Process $exe -ErrorAction SilentlyContinue) {
+        # A running optional app can finish on its old image; the next launch gets this build.
+        $aside = "$destination\$exe.exe.old-$(Get-Date -Format yyyyMMddHHmmss)"
+        if (Test-Path -LiteralPath "$destination\$exe.exe") { Move-Item -LiteralPath "$destination\$exe.exe" -Destination $aside -Force }
+      }
+      Copy-Item -LiteralPath "$From\$exe.exe" -Destination "$destination\$exe.exe" -Force
+    }
+  }
   foreach ($plugin in "weather", "rss") {
     if (Test-Path "$From\$plugin.exe") { Copy-Item "$From\$plugin.exe" "$repo\plugins\$plugin\$plugin.exe" -Force }
   }
@@ -94,6 +106,15 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
       }
     }
     Start-Process -FilePath "$destination\mypaper-plugins.exe" -ArgumentList "--compile", "`"$bundle`"" -Wait -WindowStyle Hidden
+  }
+  # The experimental app styler (docs/windows-styling.md, "App styler"): the helper core runs only
+  # while experimental.app_styler is on, and the TAP DLL it loads into Explorer and Settings. Apps
+  # load a hash-named copy of the DLL, so replacing this one is safe while they hold an old build.
+  foreach ($file in "mypaper-styler.exe", "mypaper_app_styler.dll") {
+    if ((Test-Path -LiteralPath "$From\$file") -and
+        [IO.Path]::GetFullPath("$From\$file") -ne [IO.Path]::GetFullPath("$destination\$file")) {
+      Copy-Item -LiteralPath "$From\$file" -Destination "$destination\$file" -Force
+    }
   }
   & "$PSScriptRoot\package\register.ps1" -PackagePath $identity -ExternalLocation $destination -Development
   Start-Process -FilePath "$destination\mypaper-core.exe" -WorkingDirectory $destination -WindowStyle Hidden
