@@ -173,6 +173,19 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
         b.stroke(rect, b.px(7.0), b.px(1.0), b.p.edge);
         c.y = rect.bottom + b.px(8.0);
     });
+    group(b, c, "Experimental", |b, c| {
+        notice(b, c, "New or unproven features. Each one turns on and off live.");
+        setting(app, b, c, "experimental_file_index", "File index", "Instant search and folder sizes");
+        setting(app, b, c, "experimental_files_default", "Open folders in Files", "Folders and Win+E");
+        setting(
+            app,
+            b,
+            c,
+            "experimental_app_styler",
+            "Restyle Explorer and Settings",
+            "Can crash some Settings pages and grow Explorer's memory",
+        );
+    });
     group(b, c, "History", |b, c| {
         select(
             b,

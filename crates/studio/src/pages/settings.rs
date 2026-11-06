@@ -105,6 +105,9 @@ fn general(app: &App, b: &mut B, col: &mut Col) {
         setting(app, b, c, "static_snapshot");
     });
     group(b, col, "Studio", |b, c| setting(app, b, c, "studio_appearance"));
+    group(b, col, "Experimental", |b, c| {
+        rows(app, b, c, &["experimental_file_index", "experimental_files_default", "experimental_app_styler"]);
+    });
 }
 
 fn performance(app: &App, b: &mut B, col: &mut Col) {
