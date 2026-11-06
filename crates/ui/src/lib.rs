@@ -28,6 +28,7 @@ pub mod motion;
 mod render;
 mod scene;
 pub mod scroll;
+pub mod sortable;
 mod surface;
 mod text;
 pub mod theme;

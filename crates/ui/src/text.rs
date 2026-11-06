@@ -244,6 +244,33 @@ impl Text {
         }
     }
 
+    /// Installed system families, for native font pickers. The caller may cache this list.
+    pub fn families(&self) -> Vec<String> {
+        let mut collection = None;
+        let mut names = Vec::new();
+        // SAFETY: DirectWrite owns the collection and localized strings; all output buffers
+        // are sized by GetStringLength and remain live for the corresponding call.
+        unsafe {
+            if self.factory.GetSystemFontCollection(&mut collection, false).is_err() { return names; }
+            let Some(collection) = collection else { return names };
+            for i in 0..collection.GetFontFamilyCount() {
+                let Ok(family) = collection.GetFontFamily(i) else { continue };
+                let Ok(strings) = family.GetFamilyNames() else { continue };
+                let (mut index, mut found) = (0, BOOL(0));
+                let _ = strings.FindLocaleName(w!("en-us"), &mut index, &mut found);
+                if !found.as_bool() { index = 0; }
+                let Ok(len) = strings.GetStringLength(index) else { continue };
+                let mut buffer = vec![0u16; len as usize + 1];
+                if strings.GetString(index, &mut buffer).is_ok() {
+                    names.push(String::from_utf16_lossy(&buffer[..len as usize]));
+                }
+            }
+        }
+        names.sort_by_cached_key(|s| s.to_lowercase());
+        names.dedup();
+        names
+    }
+
     fn laid(&mut self, text: &str, style: &TextStyle) -> Option<&Laid> {
         self.clock += 1;
         let key = (style.key(), Arc::<str>::from(text));
