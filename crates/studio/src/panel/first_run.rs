@@ -327,7 +327,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
             title(
                 b,
                 c,
-                "Make this desktop yours",
+                "Choose a starter",
                 "2 of 3 · A starting point you can change",
             );
             group(b, c, "Starter", |b, c| {
@@ -348,13 +348,6 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                     &choices,
                     &details,
                     |b, i, r| starter_preview(app, b, i, r, taskbar),
-                );
-                notice(
-                    b,
-                    c,
-                    starters
-                        .get(starter)
-                        .map_or("Choose a starter", |(_, line)| *line),
                 );
             });
         }
