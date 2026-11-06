@@ -69,7 +69,8 @@ try {
     if ($secondsFromStart -lt $Seconds) { Start-Sleep -Milliseconds 200 }
   } while ($secondsFromStart -lt $Seconds)
   $last = $rows[$rows.Count-1]
-  [pscustomobject]@{pid=$index.Id;start_utc=$started.ToString('o');exe_sha256=(Get-FileHash -LiteralPath $exe).Hash;observed_seconds=$last.seconds;cpu_seconds=$last.cpu_seconds;one_core_percent=100*$last.cpu_seconds/$last.seconds;first_search=$first;rows=$rows} |
+  $threads = @($index.Threads | ForEach-Object { [pscustomobject]@{id=$_.Id;cpu_seconds=$_.TotalProcessorTime.TotalSeconds;base_priority=$_.BasePriority;current_priority=$_.CurrentPriority} })
+  [pscustomobject]@{pid=$index.Id;start_utc=$started.ToString('o');exe_sha256=(Get-FileHash -LiteralPath $exe).Hash;observed_seconds=$last.seconds;cpu_seconds=$last.cpu_seconds;one_core_percent=100*$last.cpu_seconds/$last.seconds;first_search=$first;threads=$threads;rows=$rows} |
     ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $Output -Encoding utf8
 } finally {
   if ($Restart -and -not $original) { Set-IndexFlag $false }

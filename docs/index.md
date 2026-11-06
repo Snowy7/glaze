@@ -56,6 +56,52 @@ needs a durable recursive change token such as journal replay; timestamp-only pr
 silently leave stale results. Recent-volume skipping intentionally permits offline drift
 until the age deadline or a manual rescan. Live changes after the watch starts are still caught.
 
+### Startup catch-up measurements (2026-11-06)
+
+Measured on the live desktop without input or foreground test windows. The baseline used
+core's normal index-only off/on config path with the old deployed binary; the after sample
+began before the **single** `scripts/deploy-local.ps1` deployment from
+`C:/mypaper-targets/main`. Both record CPU from the helper's process start, rather than
+sampling an already-settled process. They are one live pair, with ordinary filesystem
+activity; other machine workload was not held constant.
+
+| First three minutes | Before | After, legacy cache needing verification |
+|---|---:|---:|
+| Index CPU time | **89.61 CPU-seconds** | **17.33 CPU-seconds** |
+| Average, percent of one logical core | **49.77%** | **9.62%** |
+| First search result after process start | **3,684.29 ms** | **3,370.82 ms** |
+| CPU average during seconds 0-120 | **41.62%** | **4.08%** |
+| CPU average during seconds 120-180 | **66.05%** | **20.54%** |
+
+This is **80.7% less index CPU** in the initial three minutes even though all three volumes
+lacked the new freshness ledger and required a first verification. Catch-up began at
+125.55 seconds from process start (120 seconds after cached readiness/scheduling). At
+180 seconds, the catch-up thread had 12.16 CPU-seconds and Windows base priority **4**;
+notification readers retained base priority **8**. Snapshot validation/query-summary loading
+still costs a few seconds: this change does **not** achieve the older subsecond-startup goal.
+
+The exact deployed release binary also passed a headless `--root` fixture. Cached search
+was available at **221.24 ms**. A live file was found at **224.15 ms** after fixture start,
+during a five-second catch-up delay. A deep file created while stopped was found after
+**5,300.26 ms**, including that delay; offline deletion and resize to **21 bytes** also
+converged. Its ancestor timestamp was explicitly kept unchanged, and the log recorded
+**zero changed top-level markers**, exercising the required conservative fallback. A
+recent restart performed no scan in the observation window, and manual `--rescan` completed
+in **138.47 ms** on this tiny tree. These are fixture timings, not full-volume timings.
+
+Evidence: `crates/index/evidence/startup-{before,after,fixture}.json`,
+`startup-deploy.log`, and `startup-comparison.html`. Tools are
+`crates/index/tools/{measure-startup,verify-startup,observe-catchup}.ps1`.
+Implementation commits: `8b4d885`, `f18aa06`. Index/config tests: **35 + 24 passed**;
+five affected service tests passed again after the recovery-freshness follow-up. Index/config
+Clippy on all targets with warnings denied and the shared release workspace build passed.
+Only owned index paths, additive config fields, and this document changed. No push.
+`C:/mypaper-targets/index/debug` was removed using `cargo clean --profile dev` with the
+explicit target directory; release fixture artifacts are separate from deployment.
+
+The deployed index, shared-target release, and fixture binary all had SHA-256
+`185A8FF0134A0389BEECD8048DD52BE749C9555189975A631DE9FD1789B00642`.
+
 With `launcher.files` enabled in `bars.json`, typing in the launcher queries the helper
 on a dedicated panel-owned worker lane. Superseded queued queries are skipped, and
 replies for old text are ignored. Files retain the helper's ranking; folder results show

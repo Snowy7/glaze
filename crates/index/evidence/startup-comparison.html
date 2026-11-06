@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+#startup-cpu { color:var(--foreground); font-family:var(--font-sans); display:grid; gap:16px; }
+#startup-cpu h3 { font:inherit; font-weight:500; margin:0; }
+#startup-cpu .row { display:grid; gap:6px; }
+#startup-cpu .label { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+#startup-cpu .track { height:16px; background:var(--muted); }
+#startup-cpu .bar { height:16px; background:var(--chart-1); }
+#startup-cpu .after { background:var(--chart-2); }
+#startup-cpu .value { font-variant-numeric:tabular-nums; }
+#startup-cpu .scale { display:flex; justify-content:space-between; color:var(--muted-foreground); }
+</style></head>
+<body><figure id="startup-cpu" style="margin:0" role="img" aria-label="Index CPU during the first three minutes: before 89.61 CPU seconds, after 17.33 CPU seconds, an 80.7 percent reduction.">
+<h3>Index CPU during the first three minutes</h3>
+<div class="row"><div class="label"><span>Before</span><span class="value">89.61 CPU-seconds &middot; 49.77% of one core</span></div><div class="track"><div class="bar" style="width:99.566%"></div></div></div>
+<div class="row"><div class="label"><span>After</span><span class="value">17.33 CPU-seconds &middot; 9.62% of one core</span></div><div class="track"><div class="bar after" style="width:19.253%"></div></div></div>
+<div class="scale"><span>0 CPU-seconds</span><span>90</span></div>
+</figure></body></html>
