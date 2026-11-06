@@ -544,16 +544,16 @@ pub fn intercept(app: &mut App, path: &str, value: Option<Value>) -> bool {
                 "Install plugin",
                 rest == "folder",
                 &[("mypaper plugins", "*.mypaper-plugin")],
-            ) {
-                if let Some(inbox) = app.inbox.clone() {
-                    app.plugins.busy = Some("Reading package…".into());
-                    let thread = app.thread;
-                    std::thread::spawn(move || {
-                        let result = Package::prepare(&source).map_err(|e| format!("{e:#}"));
-                        let _ = inbox.send(crate::app::Msg::PluginPrepared(result));
-                        crate::wake(thread);
-                    });
-                }
+            )
+                && let Some(inbox) = app.inbox.clone()
+            {
+                app.plugins.busy = Some("Reading package…".into());
+                let thread = app.thread;
+                std::thread::spawn(move || {
+                    let result = Package::prepare(&source).map_err(|e| format!("{e:#}"));
+                    let _ = inbox.send(crate::app::Msg::PluginPrepared(result));
+                    crate::wake(thread);
+                });
             }
         }
         "consent" => {

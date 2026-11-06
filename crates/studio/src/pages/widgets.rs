@@ -669,34 +669,6 @@ fn duplicate(docs: &mut crate::docs::Docs, mut layout: Layout, id: &str, cell: [
     Ok(new_id)
 }
 
-#[cfg(test)]
-mod duplication_tests {
-    use super::*;
-    #[test]
-    fn studio_duplicates_owned_photos_and_rolls_back_when_the_layout_is_invalid() {
-        let root = std::env::temp_dir().join(format!("mypaper-studio-copy-{}", std::process::id()));
-        std::fs::create_dir_all(root.join("photo-1/files")).unwrap();
-        std::fs::write(root.join("photo-1/files/picture.png"), b"picked picture").unwrap();
-        let url = mypaper_widgets::pick::data_url("photo", "photo-1", "picture.png");
-        let raw = json!({"instances":[{"instance":"photo-1","widget":"photo","monitor":"primary","cell":[0,0],"size":[2,2],"settings":{"images":[url]}}]}).to_string();
-        let mut storage = mypaper_widgets::storage::Storage::new(root.clone());
-        storage.set("photo-1", "current", Some(json!(url))).unwrap();
-        let mut docs = crate::docs::Docs::fixture(["{}", "{\"version\":1}", &raw, "{}"]);
-        let copied = duplicate(&mut docs, Layout::parse(&raw).unwrap(), "photo-1", [2,0], &root).unwrap();
-        let owned_url = mypaper_widgets::pick::data_url("photo", &copied, "picture.png");
-        assert_eq!(docs.doc(DocId::Widgets).raw["instances"][1]["settings"]["images"][0], owned_url);
-        assert_eq!(storage.get(&copied, "current").unwrap(), json!(owned_url));
-        mypaper_widgets::pick::remove_instance(&root, "photo-1");
-        assert_eq!(std::fs::read(root.join(&copied).join("files/picture.png")).unwrap(), b"picked picture");
-        let layout = Layout::parse(&docs.doc(DocId::Widgets).raw.to_string()).unwrap();
-        let mut broken = crate::docs::Docs::fixture(["{}", "{\"version\":1}", "broken", "{}"]);
-        assert!(duplicate(&mut broken, layout, &copied, [4,0], &root).is_err());
-        assert!(!root.join("photo-3").exists());
-        assert!(!root.join("photo-3.json").exists());
-        assert!(root.join(&copied).join("files/picture.png").exists());
-        std::fs::remove_dir_all(root).unwrap();
-    }
-}
 
 /// A list column's key and label (the manifest keeps them per variant).
 fn list_key(f: &mypaper_widgets::manifest::ListField) -> String {
@@ -896,4 +868,33 @@ pub fn add_sheet(app: &App, b: &mut B) {
         }
         y
     });
+}
+
+#[cfg(test)]
+mod duplication_tests {
+    use super::*;
+    #[test]
+    fn studio_duplicates_owned_photos_and_rolls_back_when_the_layout_is_invalid() {
+        let root = std::env::temp_dir().join(format!("mypaper-studio-copy-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("photo-1/files")).unwrap();
+        std::fs::write(root.join("photo-1/files/picture.png"), b"picked picture").unwrap();
+        let url = mypaper_widgets::pick::data_url("photo", "photo-1", "picture.png");
+        let raw = json!({"instances":[{"instance":"photo-1","widget":"photo","monitor":"primary","cell":[0,0],"size":[2,2],"settings":{"images":[url]}}]}).to_string();
+        let mut storage = mypaper_widgets::storage::Storage::new(root.clone());
+        storage.set("photo-1", "current", Some(json!(url))).unwrap();
+        let mut docs = crate::docs::Docs::fixture(["{}", "{\"version\":1}", &raw, "{}"]);
+        let copied = duplicate(&mut docs, Layout::parse(&raw).unwrap(), "photo-1", [2,0], &root).unwrap();
+        let owned_url = mypaper_widgets::pick::data_url("photo", &copied, "picture.png");
+        assert_eq!(docs.doc(DocId::Widgets).raw["instances"][1]["settings"]["images"][0], owned_url);
+        assert_eq!(storage.get(&copied, "current").unwrap(), json!(owned_url));
+        mypaper_widgets::pick::remove_instance(&root, "photo-1");
+        assert_eq!(std::fs::read(root.join(&copied).join("files/picture.png")).unwrap(), b"picked picture");
+        let layout = Layout::parse(&docs.doc(DocId::Widgets).raw.to_string()).unwrap();
+        let mut broken = crate::docs::Docs::fixture(["{}", "{\"version\":1}", "broken", "{}"]);
+        assert!(duplicate(&mut broken, layout, &copied, [4,0], &root).is_err());
+        assert!(!root.join("photo-3").exists());
+        assert!(!root.join("photo-3.json").exists());
+        assert!(root.join(&copied).join("files/picture.png").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

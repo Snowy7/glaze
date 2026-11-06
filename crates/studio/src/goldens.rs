@@ -38,8 +38,13 @@ fn repo() -> PathBuf {
 }
 
 pub fn app(dark: bool, ui: &Ui) -> App {
-    let docs = Docs::fixture([CONFIG, BARS, WIDGETS, "{}"]);
-    let library = Library::scan_in(&[repo().join("themes")], None, Some("rain-city"));
+    // The test executable may live outside the repo when CARGO_TARGET_DIR is set.
+    let active = repo().join("themes/rain-city");
+    let mut config: serde_json::Value = serde_json::from_str(CONFIG).unwrap();
+    config["theme"] = serde_json::to_value(&active).unwrap();
+    let config = config.to_string();
+    let docs = Docs::fixture([&config, BARS, WIDGETS, "{}"]);
+    let library = Library::scan_in(&[repo().join("themes")], None, active.to_str());
     App::fixture(docs, Theme::fixed(dark, &ui.text), library, (1280, 800))
 }
 
