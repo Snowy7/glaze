@@ -1826,12 +1826,16 @@ impl Bars {
             .filter(|b| b.shows_content())
             .map(|b| &b.config)
             .collect();
+        // Every second only for a clock on screen whose format shows the seconds (a preset's
+        // `HH:mm` with `seconds` on would redraw the same text every second).
         let seconds = self.bars.iter().any(|b| {
-            if b.kind == BarKind::Top {
-                b.config.top.clock.seconds
-            } else {
-                b.config.dock.clock.seconds
-            }
+            b.shows_content()
+                && b.topics().contains(&providers::actions::Topic::Clock)
+                && providers::clock::shows_seconds(if b.kind == BarKind::Top {
+                    &b.config.top.clock
+                } else {
+                    &b.config.dock.clock
+                })
         });
         let tray = self
             .bars
