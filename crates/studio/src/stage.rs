@@ -119,6 +119,13 @@ impl Cache {
 
     /// Share the existing asynchronous shell icon worker with the panel's app lists.
     pub(crate) fn app_icon(&mut self, thread: u32, source: mypaper_bars::icons::Source) -> Option<PathBuf> {
+        // Studio only needs the picture here, not a shell item's display name or launch
+        // metadata. A warm PNG must not load a native shell provider just to rediscover it.
+        if let mypaper_bars::icons::Source::Path(path) = &source {
+            let cached = mypaper_bars::files::local("icons").ok()?
+                .join(mypaper_bars::icons::cache_name(&path.to_lowercase()));
+            if cached.is_file() { return Some(cached); }
+        }
         if self.icons.is_none() && thread != 0 {
             let (tx, rx) = std::sync::mpsc::channel();
             let dir = mypaper_bars::files::local("icons").ok()?;
