@@ -503,8 +503,8 @@ mod tests {
             cbData: STYLE_V1 as u32,
             lpData: bytemuck::bytes_of(&wire).as_ptr().cast_mut().cast(),
         };
-        // SAFETY: a valid COPYDATASTRUCT over the old prefix of a live wire.
         assert_eq!(
+            // SAFETY: a valid COPYDATASTRUCT over the old prefix of a live wire.
             unsafe { decode(LPARAM(&raw const data as isize)) },
             Some(request)
         );

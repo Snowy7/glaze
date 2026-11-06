@@ -593,8 +593,8 @@ fn glass_parity() {
     );
     assert!(
         uncut
-            .chunks_exact(4)
-            .zip(clipped.chunks_exact(4))
+            .as_chunks::<4>().0.iter()
+            .zip(clipped.as_chunks::<4>().0)
             .any(|(a, b)| a[3] > 0 && b[3] == 0),
         "the shader clip removes the outer shadow/hairline"
     );
@@ -609,8 +609,8 @@ fn glass_parity() {
     );
     assert!(
         clipped
-            .chunks_exact(4)
-            .zip(shadow.chunks_exact(4))
+            .as_chunks::<4>().0.iter()
+            .zip(shadow.as_chunks::<4>().0)
             .all(|(a, b)| a[3] == b[3]),
         "inner shadow cannot change the shape"
     );

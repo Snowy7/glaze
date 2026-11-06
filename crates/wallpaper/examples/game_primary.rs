@@ -117,11 +117,11 @@ fn main() -> Result<()> {
     let mut said = false;
     while Instant::now() < until {
         pump(250);
-        if !said && let Some((signal, _)) = mypaper_tweaks::game_activity::read() {
-            if signal.activity.pause_background {
-                println!("game signal on: {:?}", signal.activity);
-                said = true;
-            }
+        if !said && let Some((signal, _)) = mypaper_tweaks::game_activity::read()
+            && signal.activity.pause_background
+        {
+            println!("game signal on: {:?}", signal.activity);
+            said = true;
         }
     }
     // SAFETY: our own window.

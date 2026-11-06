@@ -287,7 +287,7 @@ fn draw(
     let width = size.0 as usize * 4;
     for (y, line) in out.chunks_exact_mut(width).enumerate() {
         let src = &mapped[y * row as usize..y * row as usize + width];
-        for (d, s) in line.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
+        for (d, s) in line.as_chunks_mut::<4>().0.iter_mut().zip(src.as_chunks::<4>().0) {
             let (r, b) = if swap { (s[0], s[2]) } else { (s[2], s[0]) };
             d.copy_from_slice(&[b, s[1], r, 255]);
         }

@@ -31,7 +31,8 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::w;
 
 #[path = "../src/overlay/request.rs"]
-#[allow(dead_code)]
+// The spike uses only the request types from this shared production module.
+#[allow(dead_code, unused_imports)]
 mod request;
 
 use request::{Layer, Material, Reply, Request};
