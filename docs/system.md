@@ -122,6 +122,9 @@ explain the tradeoffs and evidence limits.
 
 The watcher has out-of-context foreground, foreground location, minimize and desktop-switch
 WinEvent hooks, plus a hidden top-level window for presentation/display settings broadcasts. It
+uses the HWND supplied by `EVENT_SYSTEM_FOREGROUND` for that transition: querying
+`GetForegroundWindow` inside the callback can still return the previous window. Geometry events
+and the paused-only fallback query the current foreground normally. No idle recheck is added.
 queries `SHQueryUserNotificationState` when those events occur. It publishes only when the sampled
 activity changes, by atomic file replacement. It creates no worker thread and injects nothing.
 Idle has no timer. While paused, one **1 Hz** timer on the existing hidden window rechecks the

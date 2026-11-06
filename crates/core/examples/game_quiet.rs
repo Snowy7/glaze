@@ -1,11 +1,14 @@
-//! Owned borderless fullscreen fixture, no input injection and no render/timer loop.
+//! Owned borderless fullscreen fixture, guarded own-window activation and no render loop.
 //! Run only under the desktop lock. Covers all monitors, logs the real core signal, and exits
 //! after the requested duration. Never moves/minimizes another application's windows.
 use anyhow::{Context, Result, ensure};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, mouse_event,
+};
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::w;
 
@@ -23,6 +26,46 @@ fn pump(milliseconds: u32) {
             let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
+    }
+}
+
+/// Windows may deny a background launcher foreground permission. Only click a point
+/// verified twice to belong to this fixture, then restore the original cursor position.
+unsafe fn focus_owned(window: HWND) -> Result<()> {
+    // SAFETY: focus and input target only this fixture's own visible window.
+    unsafe {
+        let _ = SetForegroundWindow(window);
+        if GetForegroundWindow() == window {
+            return Ok(());
+        }
+        let mut rect = RECT::default();
+        GetWindowRect(window, &mut rect)?;
+        let point = POINT {
+            x: rect.left + (rect.right - rect.left) / 2,
+            y: rect.top + (rect.bottom - rect.top) / 2,
+        };
+        let owned = || {
+            let mut pid = 0;
+            GetWindowThreadProcessId(WindowFromPoint(point), Some(&mut pid));
+            pid == std::process::id()
+        };
+        ensure!(owned(), "activation point is not fixture-owned");
+        let mut previous = POINT::default();
+        GetCursorPos(&mut previous)?;
+        SetCursorPos(point.x, point.y)?;
+        let result = (|| -> Result<()> {
+            ensure!(owned(), "activation target changed");
+            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+            pump(100);
+            ensure!(
+                GetForegroundWindow() == window,
+                "fixture could not take focus"
+            );
+            Ok(())
+        })();
+        SetCursorPos(previous.x, previous.y)?;
+        result
     }
 }
 
@@ -96,14 +139,7 @@ unsafe fn lifecycle(
             None,
         )?;
         let run = (|| -> Result<()> {
-            let focus = |window| -> Result<()> {
-                let _ = SetForegroundWindow(window);
-                ensure!(
-                    GetForegroundWindow() == window,
-                    "owned fixture could not take focus"
-                );
-                Ok(())
-            };
+            let focus = |window| focus_owned(window);
             let _ = ShowWindow(normal, SW_SHOWNORMAL);
             focus(normal)?;
             phase("normal", false, publisher, &mut results)?;

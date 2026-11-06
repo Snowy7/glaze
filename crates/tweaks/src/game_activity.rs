@@ -241,7 +241,7 @@ impl GameWatcher {
         let snapshot = Snapshot {
             publisher_pid: std::process::id(),
             publisher_started: started(owner.0)?,
-            activity: sample(),
+            activity: sample(None),
         };
         let file = path()?;
         publish(&file, &snapshot)?;
@@ -316,7 +316,7 @@ impl GameWatcher {
             }
             watcher.hooks.push(hook);
         }
-        refresh();
+        refresh(None);
         Ok(watcher)
     }
 }
@@ -352,8 +352,8 @@ fn publish(path: &std::path::Path, snapshot: &Snapshot) -> Result<()> {
     Ok(())
 }
 
-fn refresh() {
-    let activity = sample();
+fn refresh(foreground: Option<HWND>) {
+    let activity = sample(foreground);
     STATE.with(|state| {
         // Win32 calls can reenter; the outer callback publishes the current observation.
         let Ok(mut state) = state.try_borrow_mut() else {
@@ -390,12 +390,12 @@ fn refresh() {
     });
 }
 
-fn sample() -> Activity {
+fn sample(foreground: Option<HWND>) -> Activity {
     // SAFETY: query APIs only, all out buffers valid locals.
     unsafe {
         // Core also hosts legacy windows; scope physical-coordinate queries to this sample.
         let previous_dpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        let foreground = GetForegroundWindow();
+        let foreground = foreground.unwrap_or_else(|| GetForegroundWindow());
         let mut pid = 0;
         GetWindowThreadProcessId(foreground, Some(&mut pid));
         let mut class = [0u16; 128];
@@ -456,7 +456,10 @@ unsafe extern "system" fn on_event(
             return;
         }
     }
-    refresh();
+    // EVENT_SYSTEM_FOREGROUND supplies the new foreground HWND. GetForegroundWindow
+    // can still return the previous window here, even in an immediately posted message.
+    // Other events and the paused-only recheck query the current foreground normally.
+    refresh((event == EVENT_SYSTEM_FOREGROUND).then_some(window));
 }
 
 unsafe extern "system" fn window_proc(
@@ -468,7 +471,7 @@ unsafe extern "system" fn window_proc(
     if matches!(message, WM_SETTINGCHANGE | WM_DISPLAYCHANGE)
         || message == WM_TIMER && wparam.0 == RECHECK
     {
-        refresh();
+        refresh(None);
     }
     // SAFETY: forwarding the window procedure's unchanged arguments.
     unsafe { DefWindowProcW(window, message, wparam, lparam) }
