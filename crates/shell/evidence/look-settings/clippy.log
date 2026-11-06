@@ -1,0 +1,127 @@
+cargo :     Checking mypaper-ui v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\ui)
+At line:2 char:50
++ ... gets\main'; cargo clippy -p mypaper-shell -p mypaper-ui --lib -- -D c ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checking my...aper\crates\ui):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: file is loaded as a module multiple times: `crates\ui\src\interaction_motion.rs`
+  |
+  = help: replace all but one `mod` item with `use` items
+  = help: for further information visit https://clippy.rust-lang.org/main/index.html#duplicate_mod
+  = note: `#[warn(clippy::duplicate_mod)]` on by default
+
+warning: `mypaper-ui` (lib) generated 1 warning
+    Checking mypaper-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
+warning: struct `Layout` is never constructed
+  --> crates\shell\src\widgets\views\integrations\mod.rs:19:19
+   |
+19 | pub(super) struct Layout {
+   |                   ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `layout` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:26:15
+   |
+26 | pub(super) fn layout(
+   |               ^^^^^^
+
+warning: function `footer` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:65:15
+   |
+65 | pub(super) fn footer(f: &mut Frame<'_>, m: &Model, area: Rect, default: &str) {
+   |               ^^^^^^
+
+warning: function `setup` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:85:15
+   |
+85 | pub(super) fn setup(
+   |               ^^^^^
+
+warning: function `metric` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:127:15
+    |
+127 | pub(super) fn metric(f: &mut Frame<'_>, rect: Rect, value: &str, caption: &str, color: Rgba) {
+    |               ^^^^^^
+
+warning: function `pill` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:139:15
+    |
+139 | pub(super) fn pill(f: &mut Frame<'_>, rect: Rect, text: &str, color: Rgba) {
+    |               ^^^^
+
+warning: function `icon_action` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:144:15
+    |
+144 | pub(super) fn icon_action(
+    |               ^^^^^^^^^^^
+
+warning: this `if` statement can be collapsed
+   --> crates\shell\src\studio_pick\mod.rs:627:9
+    |
+627 | /         if let Some(hovered) = &self.hovered
+628 | |             && let Some(target) = targets.iter().find(|t| t.selection == hovered.selection)
+629 | |         {
+630 | |             if !wanted.iter().any(|(t, _)| t.selection == target.selection) {
+...   |
+633 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://clippy.rust-lang.org/main/index.html#collapsible_if
+    = note: `#[warn(clippy::collapsible_if)]` on by default
+help: collapse nested if block
+    |
+628 ~             && let Some(target) = targets.iter().find(|t| t.selection == hovered.selection)
+629 ~             && !wanted.iter().any(|(t, _)| t.selection == target.selection) {
+630 |                 wanted.push((target.clone(), false));
+631 ~             }
+    |
+
+warning: this `if` statement can be collapsed
+   --> crates\shell\src\studio_pick\mod.rs:696:9
+    |
+696 | /         if let Some(gesture) = &mut self.gesture {
+697 | |             if gesture.capture == surface {
+698 | |                 match event {
+699 | |                     Event::Move(p) | Event::Release(p, Button::Left) => {
+...   |
+710 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://clippy.rust-lang.org/main/index.html#collapsible_if
+help: collapse nested if block
+    |
+696 ~         if let Some(gesture) = &mut self.gesture
+697 ~             && gesture.capture == surface {
+698 |                 match event {
+...
+708 |                 return true;
+709 ~             }
+    |
+
+warning: this `if` statement can be collapsed
+   --> crates\shell\src\studio_pick\mod.rs:851:9
+    |
+851 | /         if commit
+852 | |             && self.module_preview.is_some()
+853 | |             && let Some(destination) = &gesture.destination
+854 | |             && let Some((owner, _)) = self.session.owner
+...   |
+867 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://clippy.rust-lang.org/main/index.html#collapsible_if
+help: collapse nested if block
+    |
+854 ~             && let Some((owner, _)) = self.session.owner
+855 ~             && !wire::send(
+856 |                 HWND(owner as _),
+...
+864 |                 self.module_preview = None;
+865 ~             }
+    |
+
+warning: `mypaper-shell` (lib) generated 10 warnings (run `cargo clippy --fix --lib -p mypaper-shell -- -D 
+clippy::correctness` to apply 3 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.54s

@@ -1,6 +1,6 @@
 # Studio settings runtime audit
 
-Audited 2026-11-06 against Studio in this shared checkout. The regex `/"(\/[^"\r\n]*)"/g` finds **120** setting-table paths (the brief counted 106 in an earlier revision). The custom-control table below inventories every distinct slash-prefixed literal in `pages/*.rs`, including virtual paths and draft state, so those cannot be mistaken for dead runtime settings. Regenerate with `node crates/shell/scripts/audit-settings.cjs` after a Studio merge.
+Audited 2026-11-06 against the merged Studio, revision `8eaf3b5d`, including the three new Experimental switches. The regex `/"(\/[^"\r\n]*)"/g` finds **120** setting-table paths (the brief counted 106 in an earlier revision). The custom-control table below inventories every distinct slash-prefixed literal in `pages/*.rs`, including virtual paths and draft state, so those cannot be mistaken for dead runtime settings. Regenerate with `node crates/shell/scripts/audit-settings.cjs` after a Studio merge.
 
 ## Findings
 
@@ -301,4 +301,34 @@ Baseline labels below refer to the code before this task. **PARTIAL** means a St
 
 ## Validation and live evidence
 
-Pending the final merged-Studio audit, release deployment, and isolated fixture capture. This section is updated after verification; no claim of live verification is implied by token tests.
+`cargo test -p mypaper-shell --lib -- --test-threads=1 --nocapture`: **203 passed, 10 intentionally ignored**. `cargo test -p mypaper-ui --lib`: **71 passed**. Eleven focused Look tests cover the nine controls plus strip/glass shape agreement; the widget shape test also covers media-pill and edit-pill overrides. The native RichEdit test verifies font/size changes without losing text or selection, and that repeating a style schedules no repaint. `cargo check -p mypaper-shell -p mypaper-ui --examples` and Clippy correctness checks passed. Existing unrelated dead-code/style warnings remain. The release workspace and fixture built in `C:\mypaper-targets\main`; deployment used only `scripts/deploy-local.ps1`.
+
+Additive kit APIs: `Theme::with_surface_radius(self, radius: f32) -> Self`; `Tokens::icon_set: Option<IconSet>` (default `None` preserves legacy glyph rendering); `TextField::set_style(&self, style: &TextStyle, color: Rgba)` (opt-in, cached, preserves input state); `TextField::prepare(&self) -> Result<()>` prepares inactive specimens while blocking focus/capture requests. Existing `WM_CONFIG` notifications drive the new resolution; there is no new config schema or IPC message.
+
+Live fixture: **11 config revisions**, one process, native no-activate windows over an opaque fixture-owned backdrop. Only its config.json changes; APPDATA and LOCALAPPDATA are isolated. The fixture uses production resolvers, bar/dock/widget/menu display lists, config watcher, and the deployed engine's real glass overlays. It does not reserve app bars, change the taskbar, publish the production plate snapshot, or send synthetic input. Screenshots are cropped only to fixture HWNDs, checked against their owning process.
+
+| Measurement | Observed | Gate / interpretation |
+|---|---:|---|
+| Settled fixture CPU, 20 s | 0.00% of one core | No recurring restyle work measured |
+| Fixture private RAM | 15 MiB | Standalone fixture, not the complete idle fixture |
+| Production shell CPU during sample | 0.23% of one core | The ≤0.1% full idle-fixture gate is **not established** on this active user desktop |
+| Production shell private RAM | 38 MiB | Full fixture budget is ≤40 MiB; this is an uncontrolled desktop sample |
+| User config byte preservation | SHA-256 unchanged | No writes to the user config |
+| Same fixture HWNDs through every revision | Yes | Config updates do not restart surfaces |
+
+Raw results: [verification.json](../crates/shell/evidence/look-settings/verification.json), [revisions.jsonl](../crates/shell/evidence/look-settings/revisions.jsonl), [measure.ps1 sample](../crates/shell/evidence/look-settings/idle.json). The report records the fixture/deployed-shell image hashes and source commit. The fixture exits and its surfaces/overlays are destroyed; the deployed product stays running.
+
+| Control | Before | After |
+|---|---|---|
+| Corners | [PNG](../crates/shell/evidence/look-settings/01-square-top.png) | [PNG](../crates/shell/evidence/look-settings/02-corners-top.png) |
+| Edge | [PNG](../crates/shell/evidence/look-settings/02-corners-top.png) | [PNG](../crates/shell/evidence/look-settings/03-edge-top.png) |
+| Font | [PNG](../crates/shell/evidence/look-settings/03-edge-widget.png) | [PNG](../crates/shell/evidence/look-settings/04-font-widget.png) |
+| Native input font | [PNG](../crates/shell/evidence/look-settings/03-edge-field.png) | [PNG](../crates/shell/evidence/look-settings/04-font-field.png) |
+| Scale | [PNG](../crates/shell/evidence/look-settings/04-font-widget.png) | [PNG](../crates/shell/evidence/look-settings/05-size-widget.png) |
+| Tone on wallpaper | [PNG](../crates/shell/evidence/look-settings/05-size-bare.png) | [PNG](../crates/shell/evidence/look-settings/06-tone-bare.png) |
+| Text shadow | [PNG](../crates/shell/evidence/look-settings/06-tone-bare.png) | [PNG](../crates/shell/evidence/look-settings/07-shadow-bare.png) |
+| Icon set | [PNG](../crates/shell/evidence/look-settings/07-shadow-menu.png) | [PNG](../crates/shell/evidence/look-settings/08-icons-menu.png) |
+| Bars family style | [PNG](../crates/shell/evidence/look-settings/09-style-top.png) | [PNG](../crates/shell/evidence/look-settings/10-bars_style-top.png) |
+| Menus family style | [PNG](../crates/shell/evidence/look-settings/10-bars_style-menu.png) | [PNG](../crates/shell/evidence/look-settings/11-menus_style-menu.png) |
+
+The glass capture [09-style-widget.png](../crates/shell/evidence/look-settings/09-style-widget.png) shows the real backdrop blur inside the same rounded body. The full stock-desktop idle fixture, maximized-app budget, GPU timestamp gates and median-of-three 60 s performance gates were not reproduced: the user remained active and other work/indexing was running. This evidence isolates the cost and visual effect of live restyling; it does not claim those broader product gates passed.

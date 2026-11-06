@@ -1,0 +1,71 @@
+cargo :    Compiling mypaper-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
+At line:2 char:50
++ ... gets\main'; cargo test -p mypaper-shell --lib look::settings -- --tes ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling my...r\crates\shell):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: struct `Layout` is never constructed
+  --> crates\shell\src\widgets\views\integrations\mod.rs:19:19
+   |
+19 | pub(super) struct Layout {
+   |                   ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `layout` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:26:15
+   |
+26 | pub(super) fn layout(
+   |               ^^^^^^
+
+warning: function `footer` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:65:15
+   |
+65 | pub(super) fn footer(f: &mut Frame<'_>, m: &Model, area: Rect, default: &str) {
+   |               ^^^^^^
+
+warning: function `setup` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:85:15
+   |
+85 | pub(super) fn setup(
+   |               ^^^^^
+
+warning: function `metric` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:127:15
+    |
+127 | pub(super) fn metric(f: &mut Frame<'_>, rect: Rect, value: &str, caption: &str, color: Rgba) {
+    |               ^^^^^^
+
+warning: function `pill` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:139:15
+    |
+139 | pub(super) fn pill(f: &mut Frame<'_>, rect: Rect, text: &str, color: Rgba) {
+    |               ^^^^
+
+warning: function `icon_action` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:144:15
+    |
+144 | pub(super) fn icon_action(
+    |               ^^^^^^^^^^^
+
+warning: `mypaper-shell` (lib test) generated 7 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.78s
+     Running unittests src\lib.rs 
+(C:\mypaper-targets\main\debug\build\mypaper-shell/55f7fec482424c16\out\mypaper_shell-55f7fec482424c16.exe)
+
+running 11 tests
+test look::settings::tests::bars_family_style_beats_the_global_style_and_explicit_bar_style_beats_both ... ok
+test look::settings::tests::corners_override_design_and_theme_but_explicit_bar_and_monitor_radii_win ... ok
+test look::settings::tests::edge_switch_reaches_glass_surface_styles_and_specific_border_wins ... ok
+test look::settings::tests::font_family_is_installed_or_falls_back_and_explicit_bar_family_wins ... ok
+test look::settings::tests::icons_select_lucide_or_fluent_independently_of_native_style ... ok
+test look::settings::tests::menus_family_style_is_independent_of_bars_and_resets_to_the_global_style ... ok
+test look::settings::tests::menus_share_explicit_radius_and_edge_with_their_glass_shape ... ok
+test look::settings::tests::strip_bar_drawing_and_published_shapes_share_the_explicit_radius ... ok
+test look::settings::tests::text_shadow_only_changes_text_directly_on_the_wallpaper ... ok
+test look::settings::tests::text_size_is_a_content_scale_and_projection_does_not_apply_it_twice ... ok
+test look::settings::tests::text_tone_only_changes_bare_labels_and_auto_restores_the_wallpaper ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 202 filtered out; finished in 0.04s
+

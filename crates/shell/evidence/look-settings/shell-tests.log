@@ -1,0 +1,296 @@
+cargo :    Compiling mypaper-ui v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\ui)
+At line:2 char:211
++ ... Exit -eq 0){cargo test -p mypaper-shell --lib -- --test-threads=1 --n ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling my...aper\crates\ui):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   Compiling mypaper-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
+warning: struct `Layout` is never constructed
+  --> crates\shell\src\widgets\views\integrations\mod.rs:19:19
+   |
+19 | pub(super) struct Layout {
+   |                   ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `layout` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:26:15
+   |
+26 | pub(super) fn layout(
+   |               ^^^^^^
+
+warning: function `footer` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:65:15
+   |
+65 | pub(super) fn footer(f: &mut Frame<'_>, m: &Model, area: Rect, default: &str) {
+   |               ^^^^^^
+
+warning: function `setup` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:85:15
+   |
+85 | pub(super) fn setup(
+   |               ^^^^^
+
+warning: function `metric` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:127:15
+    |
+127 | pub(super) fn metric(f: &mut Frame<'_>, rect: Rect, value: &str, caption: &str, color: Rgba) {
+    |               ^^^^^^
+
+warning: function `pill` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:139:15
+    |
+139 | pub(super) fn pill(f: &mut Frame<'_>, rect: Rect, text: &str, color: Rgba) {
+    |               ^^^^
+
+warning: function `icon_action` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:144:15
+    |
+144 | pub(super) fn icon_action(
+    |               ^^^^^^^^^^^
+
+warning: `mypaper-shell` (lib test) generated 7 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.10s
+     Running unittests src\lib.rs 
+(C:\mypaper-targets\main\debug\build\mypaper-shell/55f7fec482424c16\out\mypaper_shell-55f7fec482424c16.exe)
+
+running 213 tests
+test bars::bar::tests::only_the_covered_island_loses_its_plate_and_uncover_restores_it ... ok
+test bars::bar::tests::studio_preview_restores_auto_hide_and_keeps_reservations_untouched ... ok
+test bars::icons::tests::a_large_icon_shrinks_to_the_exact_size_and_keeps_its_edges ... ok
+test bars::look::tests::appearance_beats_design_defaults_but_explicit_look_and_monitor_fields_win ... ok
+test bars::look::tests::appearance_fields_and_explicit_backgrounds_reach_the_bar ... ok
+test bars::look::tests::every_bar_style_maps_to_a_kit_style ... ok
+test bars::look::tests::every_windows_palette_token_uses_its_own_shade ... ok
+test bars::look::tests::glass_optics_and_background_frost_resolve_into_cached_plate_and_popup_styles ... ok
+test bars::look::tests::overlay_fade_obeys_resolved_motion_policy_and_duration ... ok
+test bars::look::tests::styles_pick_distinct_materials ... ok
+test bars::look::tests::the_looks_controls_reach_the_bar_unclamped ... ok
+test bars::look::tests::the_system_face_keeps_the_variable_font_and_others_replace_it ... ok
+test bars::look::tests::theme_glass_overrides_design_defaults_but_keeps_explicit_user_fields ... ok
+test bars::maximized::tests::focusing_another_monitor_keeps_this_monitors_dock_hidden ... ok
+test bars::maximized::tests::maximized_app_on_another_monitor_has_no_effect ... ok
+test bars::maximized::tests::maximized_frame_overshoot_and_negative_monitor_coordinates ... ok
+test bars::maximized::tests::non_app_windows_are_skipped_above_a_maximized_app ... ok
+test bars::maximized::tests::rapid_focus_changes_cancel_hide_and_show_and_repeated_events_do_not_starve ... ok
+test bars::maximized::tests::restored_app_above_maximized_app_shows_dock ... ok
+test bars::maximized::tests::switcher_above_maximized_app_keeps_dock_hidden ... ok
+test bars::maximized::tests::topmost_overlays_are_skipped_but_normal_topmost_apps_participate ... ok
+test bars::motion::tests::a_configured_linear_motion_lands_exactly_and_stops_ticking ... ok
+test bars::motion::tests::leaf_values_override_structural_defaults_and_disabled_ancestors_win ... ok
+test bars::motion::tests::never_can_override_the_os_but_cannot_override_performance_or_always ... ok
+test bars::motion::tests::show_and_open_have_separate_leaves ... ok
+test bars::motion::tests::zoom_pushes_neighbors_and_keeps_pointer_anchor ... ok
+test bars::plugin_modules::tests::a_module_shows_its_text_and_clicks_its_first_action ... ok
+test bars::plugin_style::tests::later_patches_stack_over_earlier_ones_and_publishing_the_same_is_free ... ok
+test bars::plugin_style::tests::the_users_fields_win_and_the_plugin_fills_the_rest ... ok
+test bars::preview::tests::cells_keep_their_windows_aspect_between_the_width_limits_and_fit_the_room ... ok
+test bars::preview::tests::preview_cards_and_close_buttons_take_clicks ... ok
+test bars::services::stats_tests::stats_invalidation_follows_the_rendered_integer_percentages ... ok
+test bars::studio_labels::tests::chips_name_configured_actions_and_the_actual_family_default ... ok
+test bars::styling::tests::states_inherit_fields_and_width_only_edges_keep_their_color ... ok
+test bars::tests::bars_match_goldens_in_each_style_and_keep_glass_bodies_hit_testable ... ok
+test bars::tests::docks_on_all_edges_and_taskbar_module_clicks_have_alpha ... ok
+test bars::tests::explicit_native_actions_bypass_custom_panels_and_hover_respects_overrides ... ok
+test bars::tests::floating_dock_draws_added_modules_without_revealing_hidden_defaults ... ok
+test bars::tests::future_deadlines_never_turn_into_busy_polling ... ok
+test bars::tests::headless_bar_renders ... ignored, writes images: MYPAPER_BAR_SHOTS=<dir> [MYPAPER_BAR_BACKDROP=<png>]
+test bars::tests::island_crops_route_clicks_to_original_targets_and_keep_focus_inside_their_tree ... ok
+test bars::tests::islands_leave_the_gaps_click_through_and_minute_clock_damages_only_its_module ... ok
+test bars::tests::liquid_material_uses_the_resolved_style_controls ... ok
+test bars::tests::module_status_tooltips_keep_provider_details_and_custom_failures ... ok
+test bars::tests::preset_style_grid ... ignored, writes images: MYPAPER_BAR_GRID=<dir> [MYPAPER_BAR_BACKDROP=<image>]
+test bars::tests::readme_scene_bars ... ignored, writes images: MYPAPER_README_SCENE=<dir>
+test bars::tests::studio_dock_preview_matches_saved_override_resolution_without_mutating_the_base ... ok
+test bars::tests::studio_fields_reach_the_shared_preview_and_native_bar_views ... ok
+test bars::tray_menu::tests::a_late_or_unacknowledged_request_cannot_open_a_second_tray_menu ... ok
+test desktop_menu::hook::tests::screen_points_survive_the_message_round_trip_including_negative_monitors ... ok
+test desktop_menu::items::plugin_tests::plugin_items_sit_under_their_plugins_name_and_icon ... ok
+test desktop_menu::items::tests::an_installed_terminal_handler_replaces_mypapers_own ... ok
+test desktop_menu::items::tests::check_marks_and_radio_dots_follow_the_desktops_state ... ok
+test desktop_menu::items::tests::existing_explicit_lists_keep_their_order_and_hidden_items ... ok
+test desktop_menu::items::tests::hidden_items_leave_no_gap_and_custom_commands_carry_their_arguments ... ok
+test desktop_menu::items::tests::open_items_are_named_by_what_they_open ... ok
+test desktop_menu::items::tests::preview_order_is_the_editable_list_order_even_after_the_first_reorder ... ok
+test desktop_menu::items::tests::the_default_menu_is_windows_full_menu_then_mypapers ... ok
+test desktop_menu::items::tests::the_default_menu_matches_its_golden_images ... ok
+test desktop_menu::items::tests::without_the_shells_menu_the_built_ins_open_at_once ... ok
+test desktop_menu::shell_menu::live::draw_this_machines_desktop_menu ... ignored
+test desktop_menu::shell_menu::probe::print_the_desktop_menu ... ignored
+test desktop_menu::shell_menu::tests::a_drawing_on_black_and_on_white_gives_its_alpha ... ok
+test desktop_menu::shell_menu::tests::bitmaps_come_out_premultiplied ... ok
+test desktop_menu::shell_menu::tests::labels_lose_their_access_keys_and_shortcuts ... ok
+test desktop_menu::shell_menu::tests::verbs_run_the_program_their_command_names ... ok
+test flyouts::calendar::tests::extra_clocks_follow_dst_fractional_offsets_and_date_rollover ... ok
+test flyouts::launcher::search_tests::exact_prefix_and_word_starts_beat_fuzzy_matches ... ok
+test flyouts::launcher::search_tests::installed_app_list_search_timing ... ignored
+test flyouts::launcher::search_tests::recent_and_frequent_usage_boost_only_matching_apps ... ok
+test flyouts::launcher::search_tests::shortcut_pins_share_indexed_icons_and_keep_their_launch_path ... ok
+test flyouts::launcher::search_tests::typos_and_initials_find_the_intended_app ... ok
+test flyouts::look::plugin_style_tests::a_panel_patch_sets_ink_accent_and_fill ... ok
+test flyouts::look::tests::only_the_blurred_style_has_glass ... ok
+test flyouts::look::tests::the_users_controls_reach_the_flyouts ... ok
+test flyouts::notifications::tests::only_the_list_scrolls_and_the_flyout_keeps_its_size ... ok
+test flyouts::plugin_panel::tests::panel_sizes_follow_their_cells_within_flyout_bounds ... ok
+test flyouts::tests::ending_the_session_asks_first_and_locking_does_not ... ok
+test flyouts::tests::every_flyout_matches_its_golden_image_and_takes_clicks_on_its_whole_body ... ok
+test flyouts::tests::flyouts_open_under_their_module_and_stay_in_the_work_area ... ok
+test flyouts::tests::hover_and_focus_redraw_only_the_control_they_touch ... ok
+test flyouts::tests::notifications_group_by_app_newest_first_and_say_how_old_they_are ... ok
+test flyouts::tests::the_launcher_ranks_prefixes_then_words_then_letters_and_remembers_runs ... ok
+test flyouts::tests::wifi_sends_passwords_to_windows_and_shows_signal_in_four_steps ... ok
+test flyouts::toggles::night_light::tests::night_light_reads_and_writes_the_blob_settings_writes ... ok
+test glass::tests::complete_snapshot_preserves_both_monitors_and_widgets_with_unique_ids ... ok
+test integrations::grok_plugin_tests::grok_component_sizes_and_states_render_on_the_kit ... ok
+test integrations::grok_plugin_tests::grok_prompt_and_routine_hits_reach_the_component ... ok
+test integrations::media::widget_timeline_interpolates_playback_and_preserves_paused_and_live_states ... ok
+test integrations::tests::action_panels_match_goldens_and_keep_controls_inside_the_surface ... ok
+test integrations::tests::integration_bar_modules_match_their_golden_and_route_every_click ... ok
+test integrations::tests::integration_panels_match_goldens_receive_clicks_and_have_no_idle_damage ... ok
+test look::settings::tests::bars_family_style_beats_the_global_style_and_explicit_bar_style_beats_both ... ok
+test look::settings::tests::corners_override_design_and_theme_but_explicit_bar_and_monitor_radii_win ... ok
+test look::settings::tests::edge_switch_reaches_glass_surface_styles_and_specific_border_wins ... ok
+test look::settings::tests::font_family_is_installed_or_falls_back_and_explicit_bar_family_wins ... ok
+test look::settings::tests::icons_select_lucide_or_fluent_independently_of_native_style ... ok
+test look::settings::tests::menus_family_style_is_independent_of_bars_and_resets_to_the_global_style ... ok
+test look::settings::tests::menus_share_explicit_radius_and_edge_with_their_glass_shape ... ok
+test look::settings::tests::strip_bar_drawing_and_published_shapes_share_the_explicit_radius ... ok
+test look::settings::tests::text_shadow_only_changes_text_directly_on_the_wallpaper ... ok
+test look::settings::tests::text_size_is_a_content_scale_and_projection_does_not_apply_it_twice ... ok
+test look::settings::tests::text_tone_only_changes_bare_labels_and_auto_restores_the_wallpaper ... ok
+test look::tests::the_first_concrete_font_family_wins ... ok
+test look::tests::the_themes_bars_appearance_wins_and_highlights_stay_neutral ... ok
+test look::tests::without_a_theme_look_the_defaults_apply ... ok
+test overlay_client::request::channel::tests::a_burst_reads_only_the_latest_complete_placement ... ok
+test overlay_client::request::curve::tests::compositor_pieces_follow_beziers_and_springs_within_one_alpha_step ... ok
+test overlay_client::request::tests::a_real_legacy_receiver_gets_the_supported_style_after_rejecting_the_extension ... ok
+test overlay_client::request::tests::every_request_survives_the_wire ... ok
+test overlay_client::request::tests::legacy_styles_keep_their_knobs_and_new_fields_default ... ok
+test overlay_client::request::tests::malformed_requests_are_refused ... ok
+test overlay_client::request::tests::only_a_style_request_is_longer_than_the_wire_before_it ... ok
+test overlay_client::tests::wire_curves_follow_the_resolved_content_transition ... ok
+test studio_pick::chrome::tests::brackets_share_the_frame_curve_for_square_round_and_capsule_surfaces ... ok
+test studio_pick::chrome::tests::names_stay_inside_work_area_on_all_edges_and_negative_displays ... ok
+test studio_pick::chrome::tests::selected_stroke_has_an_opaque_dark_halo_and_white_line ... ok
+test studio_pick::display_flash::tests::frame_is_only_a_thin_outline_inside_the_display_at_both_dpis ... ok
+test studio_pick::module_drag::tests::insertion_uses_post_removal_indices_and_supports_vertical_bars ... ok
+test studio_pick::module_drag::tests::transfers_preserve_duplicates_and_display_overrides ... ok
+test studio_pick::notice::tests::chip_tracks_either_panel_side_and_stays_above_the_dock ... ok
+test studio_pick::notice::tests::hover_pauses_even_a_partially_faded_chip_then_resumes ... ok
+test studio_pick::notice::tests::stays_calm_then_fades_out_at_three_seconds ... ok
+test studio_pick::panel_position::tests::animation_reaches_both_endpoints_and_has_a_short_smooth_middle ... ok
+test studio_pick::panel_position::tests::moves_to_the_other_edge_then_returns_to_the_remembered_side ... ok
+test studio_pick::panel_position::tests::uses_the_other_displays_near_edge_when_both_edges_are_covered ... ok
+test studio_pick::preview::tests::choice_validation_excludes_commands_sources_and_windows_styling ... ok
+test studio_pick::preview::tests::choices_replace_each_other_and_leave_or_matching_save_restores_the_base ... ok
+test studio_pick::preview::tests::history_replaces_complete_documents_and_freezes_theme_without_reading_files ... ok
+test studio_pick::preview::tests::history_validates_atomically_and_retires_all_parts_on_conflict_or_matching_save ... ok
+test studio_pick::preview::tests::invalid_materials_and_non_preview_paths_are_rejected_atomically ... ok
+test studio_pick::preview::tests::newer_choices_replace_history_and_stale_snapshots_cannot_reopen_it ... ok
+test studio_pick::preview::tests::patches_preserve_unrelated_state_and_reject_missing_widget_indices ... ok
+test studio_pick::preview::tests::release_holds_each_document_until_its_matching_save ... ok
+test studio_pick::preview::tests::stale_sessions_conflicts_cancel_and_disconnect_cannot_reopen_overrides ... ok
+test studio_pick::resize::tests::every_corner_snaps_and_keeps_opposite_edges_fixed ... ok
+test studio_pick::resize::tests::geometry_preview_holds_until_saved_and_never_changes_the_durable_layout ... ok
+test studio_pick::resize::tests::handle_hit_boxes_cover_only_corners ... ok
+test studio_pick::resize::tests::movement_snaps_in_physical_pixels_and_clamps_without_changing_size ... ok
+test studio_pick::resize::tests::resizing_clamps_to_manifest_and_grid_without_underflow ... ok
+test studio_pick::tests::replacement_and_hwnd_reuse_start_a_fresh_session ... ok
+test studio_pick::tests::selected_and_hovered_rows_lift_only_widgets ... ok
+test studio_pick::tests::session_is_owned_and_disconnect_clears_all_transient_state ... ok
+test studio_pick::tests::wallpaper_hit_regions_exclude_icons_and_use_exclusive_edges ... ok
+test studio_pick::wallpaper::tests::large_stills_decode_with_bounded_pixels_and_retain_native_center_size ... ok
+test studio_pick::wallpaper::tests::past_still_obeys_its_own_fit_on_each_display ... ok
+test studio_pick::wallpaper::tests::stills_stay_below_widgets_created_after_the_preview ... ok
+test studio_pick::wire::tests::a_new_drag_never_coalesces_across_the_previous_commit ... ok
+test studio_pick::wire::tests::complete_snapshots_cross_copydata_without_relaxing_normal_message_limits ... ok
+test studio_pick::wire::tests::panel_animation_coalesces_frames_but_keeps_selection_order ... ok
+test studio_pick::wire::tests::preview_queue_is_bounded_and_keeps_only_the_latest_value ... ok
+test widgets::coverage::tests::child_destruction_does_not_invalidate_coverage_but_a_known_app_does ... ok
+test widgets::discord_migration::tests::discord_credentials_are_verified_and_existing_plugin_values_win ... ok
+test widgets::edit::tests::arranging_swaps_shifts_and_refuses_atomically ... ok
+test widgets::edit::tests::configured_bands_apply_without_appbar_and_do_not_double_reserve ... ok
+test widgets::edit::tests::drag_resize_and_add_stay_on_grid_without_overlaps ... ok
+test widgets::edit::tests::keyboard_steps_one_cell_and_clamped_layout_keeps_valid_neighbors ... ok
+test widgets::edit::tests::the_picker_groups_by_category_and_searches_names_categories_and_ids ... ok
+test widgets::edit::tests::the_pill_uses_a_clear_edge_inside_the_usable_area ... ok
+test widgets::edit::tests::tiny_usable_areas_never_expand_back_to_the_nominal_icon_cell ... ok
+test widgets::edit::tests::weather_resizes_one_cell_at_a_time_and_keeps_opposite_edges ... ok
+test widgets::left_button_tests::one_click_one_action ... ok
+test widgets::markdown::tests::task_offsets_and_inline_markers_match_old_notes ... ok
+test widgets::plugin_events::tests::commands_queue_until_the_host_sends_them ... ok
+test widgets::plugin_events::tests::menu_items_and_shortcuts_are_permission_gated ... ok
+test widgets::plugin_events::tests::only_reported_windows_close_with_what_they_were ... ok
+test widgets::plugin_events::tests::shortcuts_need_a_modifier_and_a_key ... ok
+test widgets::plugin_faces::tests::face_variants_follow_rendered_size_and_scale ... ok
+test widgets::plugin_notifications::tests::notification_add_update_remove_preserves_identity_and_privacy ... ok
+test widgets::plugin_options::tests::option_rows_follow_the_schema_and_flip_or_pick_values ... ok
+test widgets::plugin_options::tests::small_number_ranges_offer_every_step ... ok
+test widgets::tests::a_bleed_photo_is_cropped_to_the_body_and_rounded_like_the_plate ... ok
+test widgets::tests::activity_credits_follow_insertions_and_deletions_and_long_break_resets_cycle ... ok
+test widgets::tests::calendar_views_and_the_event_editor_give_every_hit_its_own_id ... ok
+test widgets::tests::compact_flip_clock_keeps_seconds_and_period_clear_of_the_digit_cards ... ok
+test widgets::tests::desktop_kind_is_a_top_level_layered_tool_window ... ok
+test widgets::tests::event_editor_validates_date_time_and_preserves_legacy_wire_data ... ok
+Checking golden: calendar
+Checking golden: clock
+Checking golden: countdown
+Checking golden: crypto
+Checking golden: custom-disk-space
+Checking golden: custom-github-release
+Checking golden: custom-reading-list
+Checking golden: custom-welcome
+Checking golden: custom-widget-1
+Checking golden: heatmap
+Checking golden: launcher
+Checking golden: media-pill
+Checking golden: notes
+Checking golden: now-playing
+Checking golden: photo
+Checking golden: quick-toggles
+Checking golden: quote
+Checking golden: rss
+Checking golden: system-monitor
+Checking golden: timer
+Checking golden: todo
+Checking golden: weather
+test widgets::tests::every_native_widget_has_a_golden_and_hit_testable_body ... ok
+test widgets::tests::every_widget_renders_inside_its_frame_at_every_size ... ok
+test widgets::tests::existing_notes_todo_timer_and_replacement_ids_load_without_rewriting_storage ... ok
+test widgets::tests::existing_user_layout_and_data_load_read_only ... ignored, read-only compatibility check against this user's actual layout and data
+test widgets::tests::explicit_widget_corners_and_edge_reach_the_drawn_body_even_for_pill_variants ... ok
+test widgets::tests::long_content_scrolls_to_the_last_item_without_hits_outside_the_viewport ... ok
+test widgets::tests::media_timeline_updates_reuse_artwork_and_removing_art_clears_its_material ... ok
+test widgets::tests::metric_invalidation_uses_displayed_precision_and_stable_trace_identity ... ok
+test widgets::tests::profile_system_repaint_cost ... ignored, compares real meter repaint strategies under the desktop lock
+test widgets::tests::readme_scene_widgets ... ignored, writes images: MYPAPER_README_SCENE=<dir>
+test widgets::tests::scheduled_ticks_stop_when_hidden_and_minute_clock_never_ticks_faster ... ok
+test widgets::tests::widget_actions_have_click_targets_and_edit_controls_cover_their_shapes ... ok
+test widgets::tests::widget_size_sheets ... ignored, writes docs/media/native/widget-*.png; run when widget views change
+test widgets::tests::widget_styles_preserve_none_solid_and_explicit_text_controls ... ok
+test widgets::time::tests::deadlines_match_the_displayed_digit ... ok
+test widgets::views::integrations::custom_tests::imported_calendar_occurrences_leave_local_events_and_edit_limits_alone ... ok
+test widgets::views::integrations::custom_tests::personal_widgets_dense_sizes_and_size_sheets ... ok
+test widgets::views::integrations::obs_plugin_tests::obs_plugin_faces_render_on_the_kit ... ok
+test widgets::views::media::media_sources_read_as_app_names ... ok
+test widgets::views::plugin::animated::tests::values_round_trip_through_the_child ... ok
+test widgets::views::plugin::canvas::tests::a_canvas_face_draws_natively_and_damages_only_what_moved ... ok
+test widgets::views::plugin::canvas::tests::paths_flatten_with_relative_commands_and_closing ... ok
+test widgets::views::plugin::canvas::tests::shared_images_parse_only_with_a_sound_header ... ok
+test widgets::views::plugin::scroll::tests::rows_are_clipped_to_the_viewport_and_stay_clickable_when_scrolled ... ok
+test widgets::views::plugin::scroll::tests::the_position_survives_view_updates_and_the_end_asks_for_more_once ... ok
+test widgets::views::plugin::tests::fields_use_the_kit_well_and_keep_their_action ... ok
+test widgets::views::plugin::tests::running_rows_fill_the_widget_at_any_scale ... ok
+test widgets::views::plugin::tests::starting_faces_fit_short_tiles_without_an_empty_state_icon ... ok
+test widgets::views::plugin::tests::usage_legend_and_chart_share_readable_brand_inks ... ok
+test widgets::views::plugin::tests::weather_plugin_faces_render_on_the_kit ... ok
+test widgets::views::plugin_tailscale_tests::tailscale_plugin_faces_render_on_the_kit ... ok
+test widgets::views::plugin_tests::discord::discord_plugin_size_sheet_and_native_action_hits ... ok
+test widgets::views::plugin_tests::docker::docker_plugin_size_sheet_and_action_hits ... ok
+test widgets::views::plugin_tests::hits_map_back_to_plugin_actions ... ok
+test widgets::views::plugin_tests::t3_plugin_edge_cases_render_on_the_kit ... ok
+test widgets::views::plugin_tests::t3_plugin_faces_render_on_the_kit ... ok
+
+test result: ok. 203 passed; 0 failed; 10 ignored; 0 measured; 0 filtered out; finished in 8.52s
+

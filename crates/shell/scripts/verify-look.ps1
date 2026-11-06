@@ -9,6 +9,7 @@ $lock='C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
 $realConfig=Join-Path $env:APPDATA 'mypaper\config.json'
 $beforeHash=(Get-FileHash -LiteralPath $realConfig -Algorithm SHA256).Hash
 New-Item -ItemType Directory -Force $evidence,$configRoot,$runRoot | Out-Null
+if (Test-Path -LiteralPath (Join-Path $evidence 'capture-windows.jsonl')) {Remove-Item -LiteralPath (Join-Path $evidence 'capture-windows.jsonl')}
 if (Test-Path -LiteralPath (Join-Path $configRoot 'revisions.jsonl')) {Remove-Item -LiteralPath (Join-Path $configRoot 'revisions.jsonl')}
 if (Test-Path -LiteralPath (Join-Path $configRoot 'stop')) {Remove-Item -LiteralPath (Join-Path $configRoot 'stop')}
 Copy-Item -LiteralPath $From -Destination (Join-Path $runRoot 'mypaper-look-fixture.exe') -Force
@@ -19,10 +20,14 @@ Add-Type -AssemblyName System.Drawing
 Add-Type @'
 using System; using System.Runtime.InteropServices;
 public static class LookCapture {
+ [StructLayout(LayoutKind.Sequential)] public struct Point {public int X,Y;}
  [StructLayout(LayoutKind.Sequential)] public struct Rect {public int Left,Top,Right,Bottom;}
  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr w,out Rect r);
  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr w,out uint pid);
  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+ [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point point);
+ [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr window);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr window,System.Text.StringBuilder name,int length);
  [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
 }
 '@
@@ -52,6 +57,15 @@ function Capture([string]$name,$revision) {
   if($owner -ne $fixture.Id){throw 'Refusing screenshot of a window outside the fixture'}
   $rect=New-Object LookCapture+Rect
   if(-not [LookCapture]::GetWindowRect($hwnd,[ref]$rect)){throw 'GetWindowRect failed'}
+  $point=New-Object LookCapture+Point
+  $point.X=[int](($rect.Left+$rect.Right)/2);$point.Y=[int](($rect.Top+$rect.Bottom)/2)
+  $visible=[LookCapture]::WindowFromPoint($point)
+  $class=[Text.StringBuilder]::new(256)
+  [LookCapture]::GetClassName($visible,$class,256) | Out-Null
+  [uint32]$visibleOwner=0
+  [LookCapture]::GetWindowThreadProcessId($visible,[ref]$visibleOwner) | Out-Null
+  @{step=$name;surface=$surface.name;expected=$hwnd.ToInt64();visible=$visible.ToInt64();class=$class.ToString();owner=$visibleOwner;hung=[LookCapture]::IsHungAppWindow($hwnd)} | ConvertTo-Json -Compress | Add-Content -LiteralPath (Join-Path $evidence 'capture-windows.jsonl')
+  if($visible -ne $hwnd -or [LookCapture]::IsHungAppWindow($hwnd)){throw 'Refusing screenshot of a covered or hung fixture window'}
   $image=[Drawing.Bitmap]::new(($rect.Right-$rect.Left),($rect.Bottom-$rect.Top))
   $graphics=[Drawing.Graphics]::FromImage($image)
   try {
