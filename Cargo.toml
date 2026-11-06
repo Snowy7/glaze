@@ -68,6 +68,10 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
+# Studio's many native settings views favor a smaller resident code footprint.
+[profile.release.package.mypaper-studio]
+opt-level = "s"
+
 
 [patch.crates-io]
 accesskit_windows = { path = "crates/ui/vendor/accesskit_windows" }
