@@ -243,6 +243,19 @@ websocket connection, and 32 pipe pause/resume cycles with no incoming peer traf
 pass. Core/config/wire tests pass; shell has 143 passing tests. Widgets has 146 passing tests
 with one unrelated registry-count assertion excluded (`registry.widgets.len() >= 23`).
 
+The production helper was also measured in an isolated profile with Hello's one-second timer
+(`crates/plugins/examples/quiet_helper.rs`), two 60 s samples. CPU was below the process-time
+counter's resolution in both samples; pausing removed timer deliveries rather than claiming
+a CPU improvement from two rounded zeros. [Raw result](../crates/core/evidence/game-helper.json).
+
+| Isolated helper, 60 s each | Active | Game-paused |
+|---|---:|---:|
+| Plugin view updates | 48 | **0** |
+| CPU / one-core % | 0 ms / 0% | **0 ms / 0%** |
+| Private at end | 4.39 MiB | **4.39 MiB** |
+
+Resume and clean shutdown passed; the temporary profile and both probe processes were removed.
+
 **Limits:** no application background deadline is different from no OS/driver wake. The engine
 keeps its GPU device when covered (the ~66 wakes/s driver thread described above). WinHTTP's
 transport keepalives and external incoming events remain while sockets stay connected; changing
