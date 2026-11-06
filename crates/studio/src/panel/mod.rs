@@ -544,6 +544,7 @@ pub fn build(app: &App, text: &mut Text) -> Built {
     let state = app.panel.as_ref().unwrap();
     if state.specimen_page.replace(Some(page)) != Some(page) {
         state.specimens.borrow_mut().clear();
+        measure::leave_page(app, text);
     }
     let p = palette_for(app);
     let ty = app.theme.ty.clone();
