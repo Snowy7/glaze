@@ -168,7 +168,13 @@ fn cards(
     if choices.is_empty() {
         return None;
     }
-    let columns = if b.t.text_scale > 1.0 { 1 } else if c.w >= b.px(640.0) { 3 } else { 2 };
+    let columns = if b.t.text_scale > 1.0 || c.w < b.px(252.0) {
+        1
+    } else if c.w >= b.px(640.0) {
+        3
+    } else {
+        2
+    };
     app.panel
         .as_ref()
         .unwrap()
@@ -181,7 +187,7 @@ fn cards(
     let gap = b.px(10.0);
     let width = (c.w - (columns - 1) as f32 * gap) / columns as f32;
     let picture_height = if captions.is_some() {
-        b.px(54.0)
+        (width * 10.0 / 16.0).max(b.px(72.0))
     } else {
         width * 9.0 / 16.0
     };
@@ -193,7 +199,7 @@ fn cards(
         .unwrap_or(1)
         .max(1);
     let label_height = height(b, 22.0 * label_lines as f32);
-    let caption_font = super::controls::font(b, 10.0, 400);
+    let caption_font = super::controls::font(b, 11.0, 400);
     let caption_lines = captions.map_or(1, |captions| {
         captions
             .iter()
@@ -207,8 +213,12 @@ fn cards(
             .max(1)
     });
     // Reserve the preview caption so hovering never moves another card.
-    let row_height =
-        picture_height + b.px(3.0) + label_height + height(b, 17.0 * caption_lines as f32) + gap;
+    let row_height = picture_height
+        + b.px(12.0)
+        + label_height
+        + height(b, 17.0 * caption_lines as f32)
+        + b.px(8.0)
+        + gap;
     let top = c.y;
     let row_rect = |index: usize| {
         Rect::new(
@@ -253,19 +263,28 @@ fn cards(
             let area = rect;
             let hovered = highlighted == Some(index);
             if hovered {
-                b.fill(area, b.px(7.0), b.p.hover);
+                b.fill(area, b.px(16.0), b.p.hover);
             } else if *applied {
-                b.fill(area, b.px(7.0), b.p.selected);
+                b.fill(area, b.px(16.0), b.p.selected);
             }
             if b.clip_rect().is_none_or(|clip| rect.intersects(&clip)) {
-                picture(
-                    b,
-                    (index < choices.len()).then_some(index),
-                    Rect::new(rect.left, rect.top, width, picture_height),
+                // Bound every specimen to its picture; captions own the space below it.
+                let pic = Rect::new(
+                    rect.left + b.px(4.0),
+                    rect.top + b.px(4.0),
+                    width - b.px(8.0),
+                    picture_height,
                 );
+                let at = b.list.ops.len();
+                picture(b, (index < choices.len()).then_some(index), pic);
+                let ops = b.list.ops.split_off(at);
+                b.list.ops.push(mypaper_ui::Op::Clipped {
+                    rect: pic,
+                    ops: ops.into(),
+                });
                 let label = Rect::new(
                     rect.left + b.px(8.0),
-                    rect.top + picture_height + b.px(3.0),
+                    rect.top + picture_height + b.px(12.0),
                     width - b.px(36.0),
                     label_height,
                 );
@@ -302,7 +321,7 @@ fn cards(
                                 height(b, 17.0),
                             ),
                             value,
-                            10.0,
+                            11.0,
                             400,
                             b.p.ink2,
                             Align::Start,
@@ -347,7 +366,7 @@ fn cards(
                 }
             }
             if *applied {
-                b.stroke(area, b.px(7.0), b.px(1.5), b.p.ink1);
+                b.stroke(area, b.px(16.0), b.px(1.5), b.p.ink1);
             }
             b.hit_checked(
                 k,
@@ -358,7 +377,7 @@ fn cards(
                 action.clone(),
                 Behavior::Click,
             );
-            b.focus_ring(k, area, b.px(7.0));
+            b.focus_ring(k, area, b.px(16.0));
         }
     });
     c.y = top + count.div_ceil(columns) as f32 * row_height + b.px(6.0);

@@ -191,7 +191,7 @@ pub fn field(
     );
     let r = Rect::new(c.x, c.y + h, c.w, height(b, 32.0));
     crate::ui::text_field(app, b, r, id, None, placeholder, value, label);
-    b.stroke(r, b.px(6.0), b.px(1.0), b.p.edge);
+    b.stroke(r, b.control_radius(r), b.px(1.0), b.p.edge);
     c.y = r.bottom + b.px(10.0);
 }
 

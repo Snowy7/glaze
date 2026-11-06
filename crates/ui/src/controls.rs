@@ -479,7 +479,10 @@ impl<'a, A: Clone> Builder<'a, A> {
 
     /// Capsules for styles without a fixed control radius.
     pub fn control_radius(&self, rect: Rect) -> f32 {
-        self.kit.radius.control.map_or(rect.height() / 2.0, |r| self.px(r).min(rect.height() / 2.0))
+        self.kit
+            .radius
+            .control
+            .map_or(rect.height() / 2.0, |r| self.px(r).min(rect.height() / 2.0))
     }
 
     /// The shared label column for inline value controls.

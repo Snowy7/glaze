@@ -244,7 +244,7 @@ pub fn banner_for(docs: &crate::docs::Docs, doc: crate::docs::DocId) -> Option<(
 /// one button.
 pub fn nav_row(b: &mut B, col: &mut Col, glyph: Glyph, title: &str, detail: &str, action: Action) {
     let k = key(("nav", title));
-    let row = Rect::new(col.x - b.px(8.0), col.y, col.w + b.px(16.0), b.px(48.0));
+    let row = Rect::new(col.x - b.px(8.0), col.y, col.w + b.px(16.0), b.px(b.kit.metrics.row));
     let lead = match glyph {
         Glyph::Icon(icon) => Lead::Badge(icon, false),
         Glyph::Font(_) => Lead::None,

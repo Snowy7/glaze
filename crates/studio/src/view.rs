@@ -2,12 +2,12 @@
 //! All editors are the shared panel pages. Navigation and stage zoom never edit documents.
 
 use mypaper_ui::controls::{
-    Align, Behavior, Builder, ButtonKind, Font, Glyph, ScrollArea, Target, key,
+    Align, Behavior, ButtonKind, Font, Glyph, ScrollArea, Target, key,
 };
 use mypaper_ui::{Chrome, DisplayList, Point, Rect, Role};
 use serde_json::Value;
 
-use crate::actions::{Action, Bar, Choices, Edit};
+use crate::actions::{Action, Bar};
 use crate::app::{App, Overlay};
 use crate::docs::DocId;
 use crate::panel::{Command, Page};
@@ -55,13 +55,18 @@ pub fn regions(app: &App) -> Regions {
     let (w, h) = (app.size.0 as f32, app.size.1 as f32);
     let rail = w < app.px(1100.0);
     let side = app.px(if rail { 56.0 } else { 208.0 });
-    let main = Rect::new(side, 0.0, w - side, h);
-    let bar = Rect::new(side, 0.0, w - side, app.px(48.0));
-    let body = Rect::new(side, bar.bottom, w - side, h - bar.bottom);
+    let main = Rect::new(
+        side,
+        app.px(8.0),
+        w - side - app.px(8.0),
+        h - app.px(8.0),
+    );
+    let bar = Rect::new(side, main.top, main.width(), app.px(48.0));
+    let body = Rect::new(side, bar.bottom, main.width(), h - bar.bottom);
     let staged = has_stage(crate::panel::current_page(app));
     let inspector = staged.then(|| {
         Rect::new(
-            w - inspector_width(app),
+            main.right - inspector_width(app),
             bar.bottom,
             inspector_width(app),
             body.height(),
@@ -70,9 +75,9 @@ pub fn regions(app: &App) -> Regions {
     let stage = inspector.map(|inspector| {
         Rect::new(
             side + app.px(16.0),
-            body.top,
+            body.top + app.px(16.0),
             inspector.left - side - app.px(32.0),
-            body.height() - app.px(16.0),
+            body.height() - app.px(32.0),
         )
     });
     Regions {
@@ -121,8 +126,14 @@ fn prepare_stage(app: &App, ui: &mut mypaper_ui::Ui, viewport: Rect) -> Rect {
         });
         Rect::new(viewport.left, viewport.top, app.px(w), app.px(h))
     } else {
-        let fit = crate::stage::frame(app, viewport);
-        fit.offset(0.0, viewport.top - fit.top)
+        // Reserve the chips beneath the desktop and center the whole composition.
+        let available = Rect::new(
+            viewport.left,
+            viewport.top,
+            viewport.width(),
+            viewport.height() - app.px(48.0),
+        );
+        crate::stage::frame(app, available)
     };
     crate::stage::prepare(
         app,
@@ -162,6 +173,32 @@ fn prepare_stage(app: &App, ui: &mut mypaper_ui::Ui, viewport: Rect) -> Rect {
     frame
 }
 
+/// Display chips stay with the desktop they switch, below its fitted picture.
+fn stage_controls(app: &App, b: &mut B, picture: Rect, viewport: Rect) {
+    let order = crate::panel::controls::display_order(app);
+    let labels: Vec<_> = order
+        .iter()
+        .map(|&i| crate::panel::controls::display_name(app, i))
+        .collect();
+    let labels: Vec<_> = labels.iter().map(String::as_str).collect();
+    let width = b.segmented_width(&labels).min(viewport.width());
+    let rect = Rect::new(
+        viewport.left + (viewport.width() - width) / 2.0,
+        (picture.bottom + b.px(16.0)).min(viewport.bottom - b.px(32.0)),
+        width,
+        b.px(32.0),
+    );
+    b.segmented(
+        key("stage-displays"),
+        rect,
+        &labels,
+        order.iter().position(|&i| i == app.nav.display),
+        "Stage display",
+        true,
+        |i| Action::Panel(Command::Display(order[i])),
+    );
+}
+
 fn selected(app: &App, what: &What) -> bool {
     let page = crate::panel::current_page(app);
     match what {
@@ -193,14 +230,25 @@ pub fn build(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
     let picture = r.stage.map(|viewport| prepare_stage(app, ui, viewport));
     let p = crate::panel::palette_for(app);
     let ty = app.theme.ty.clone();
-    let mut b = Builder::new(&mut ui.text, &p, &ty, app.scale, &app.input);
+    let mut b = crate::ui::builder(&mut ui.text, &p, &ty, app.scale, &app.input);
     b.fill(
         Rect::new(0.0, 0.0, app.size.0 as f32, app.size.1 as f32),
         0.0,
-        p.bg,
+        p.chrome,
     );
     b.fill(r.sidebar, 0.0, p.chrome);
-    b.fill(r.bar, 0.0, p.chrome);
+    b.fill(r.main, app.px(28.0), p.bg);
+    // Only the top edge is rounded; the sheet continues to the window's bottom.
+    b.fill(
+        Rect::new(
+            r.main.left,
+            r.main.top + app.px(28.0),
+            r.main.width(),
+            r.main.height() - app.px(28.0),
+        ),
+        0.0,
+        p.bg,
+    );
     sidebar(app, &mut b, r);
     let mut chrome = vec![
         (r.bar, Chrome::Caption),
@@ -240,12 +288,13 @@ pub fn build(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
             if !app.system.running() {
                 off_card(b, picture, viewport);
             }
+            stage_controls(app, b, picture, viewport);
             viewport.bottom
         });
         focus_regions.push(viewport);
     }
     if let Some(inspector) = r.inspector {
-        b.fill(inspector, 0.0, p.chrome);
+        b.fill(inspector, 0.0, p.bg);
     }
     crate::panel::content(app, &mut b, host, page);
     focus_regions.push(host);
@@ -342,7 +391,7 @@ fn sidebar(app: &App, b: &mut B, r: Regions) {
         b.text_at(mark.right + b.px(8.0), b.px(14.0), "Studio", &font, p.ink1);
     }
     let search = Rect::new(x, b.px(52.0), width, b.px(32.0));
-    b.fill(search, b.px(8.0), p.well);
+    b.fill(search, b.control_radius(search), p.well);
     b.icon(
         Rect::new(x + b.px(8.0), search.top, b.px(20.0), search.height()),
         glyph::SEARCH,
@@ -377,7 +426,7 @@ fn sidebar(app: &App, b: &mut B, r: Regions) {
         Action::Panel(Command::Open(Page::Search)),
         Behavior::Click,
     );
-    b.focus_ring(key("sidebar-search"), search, b.px(8.0));
+    b.focus_ring(key("sidebar-search"), search, b.control_radius(search));
     let status = Rect::new(x, r.sidebar.bottom - b.px(58.0), width, b.px(46.0));
     let nav = Rect::new(x, b.px(96.0), width, status.top - b.px(108.0));
     let nav_key = key("window-sidebar-links");
@@ -426,9 +475,9 @@ fn nav_item(app: &App, b: &mut B, rect: Rect, page: Page, rail: bool) {
     let current = active == page;
     let k = key(("nav-page", page));
     if current {
-        b.fill(rect, b.px(8.0), p.selected);
+        b.fill(rect, b.control_radius(rect), p.selected);
     } else {
-        b.wash(k, rect, b.px(8.0));
+        b.wash(k, rect, b.control_radius(rect));
     }
     let ink = if current || b.hovered(k) {
         p.ink1
@@ -467,7 +516,7 @@ fn nav_item(app: &App, b: &mut B, rect: Rect, page: Page, rail: bool) {
         Action::Panel(Command::Open(page)),
         Behavior::Click,
     );
-    b.focus_ring(k, rect, b.px(8.0));
+    b.focus_ring(k, rect, b.control_radius(rect));
 }
 
 fn status_block(app: &App, b: &mut B, rect: Rect, rail: bool) {
@@ -702,28 +751,6 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
             |i| Action::Panel(Command::StageZoom(i == 1)),
         );
         end = zoom.left - b.px(8.0);
-        let display = Rect::new(end - b.px(108.0), y, b.px(108.0), b.px(28.0));
-        let label = format!("Display {}", app.nav.display + 1);
-        let choices = Choices {
-            edit: Edit::new(DocId::Studio, "/panel/display", "Display"),
-            options: app
-                .monitors
-                .iter()
-                .enumerate()
-                .map(|(i, _)| (serde_json::json!(i), format!("Display {}", i + 1)))
-                .collect(),
-            current: Some(serde_json::json!(app.nav.display)),
-        };
-        b.button(
-            key("stage-display"),
-            display,
-            &label,
-            Some(glyph::MONITOR),
-            ButtonKind::Ghost,
-            true,
-            Action::Choose(choices),
-        );
-        end = display.left - b.px(8.0);
         if page == Page::Look {
             let windows = Rect::new(end - b.px(74.0), y, b.px(74.0), b.px(28.0));
             b.button(
@@ -856,7 +883,7 @@ pub fn sheet(app: &App, b: &mut B, title: &str, width: f32, height: f32) -> Rect
         w,
         h,
     );
-    b.elevated(rect, b.px(12.0));
+    b.elevated(rect, b.px(b.kit.radius.card));
     // Clicks inside the sheet don't reach the scrim.
     b.hit(
         key("sheet-body"),
@@ -945,7 +972,7 @@ fn off_card(b: &mut B, picture: Rect, viewport: Rect) {
         width,
         b.px(100.0),
     );
-    b.elevated(rect, b.px(12.0));
+    b.elevated(rect, b.px(b.kit.radius.card));
     let title = b.font(Font::Title2);
     let caption = b.font(Font::Caption);
     b.text_in(

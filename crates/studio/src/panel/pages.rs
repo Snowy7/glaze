@@ -437,6 +437,10 @@ fn playback_status(app: &App) -> String {
 }
 
 fn root(app: &App, b: &mut B, c: &mut Col) {
+    let windowed = app.panel.as_ref().is_some_and(|state| state.windowed);
+    if windowed {
+        title(b, c, "Your desktop", "Select anything on the stage to edit it");
+    }
     if app.system.running() && !app.system.parts[2].running {
         ui::feedback(
             b,
@@ -445,9 +449,9 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             vec![("Start bars", Action::StartBars)],
         );
     }
-    let h = height(b, 56.0);
+    let h = height(b, 80.0);
     let status = Rect::new(c.x, c.y, c.w, h);
-    b.fill(status, b.px(10.0), b.p.panel);
+    b.fill(status, b.px(b.kit.radius.card), b.p.panel);
     let thumb = Rect::new(
         c.x + b.px(8.0),
         c.y + (h - b.px(32.0)) / 2.0,
@@ -478,8 +482,10 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
     let available = c.right() - x - control_w - b.px(16.0);
     text(
         b,
-        Rect::new(x, c.y + b.px(8.0), available, height(b, 21.0)),
-        &if playing {
+        Rect::new(x, c.y + b.px(18.0), available, height(b, 21.0)),
+        &if playing && windowed {
+            "Playing".into()
+        } else if playing {
             format!("Playing · {}", wallpaper_name(app))
         } else {
             playback_status(app)
@@ -493,15 +499,11 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
         b,
         Rect::new(
             x,
-            c.y + b.px(8.0) + height(b, 24.0),
+            c.y + b.px(18.0) + height(b, 24.0),
             available,
             height(b, 18.0),
         ),
-        &if playing {
-            playback_status(app)
-        } else {
-            wallpaper_name(app).into()
-        },
+        &if playing && !windowed { playback_status(app) } else { wallpaper_name(app).into() },
         12.0,
         400,
         b.p.ink3,
@@ -523,8 +525,10 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
     );
     c.y += h + b.px(12.0);
     ui::displays(app, b, c);
-    ui::search(app, b, c);
-    group(b, c, "Your desktop", |b, c| {
+    if !windowed {
+        ui::search(app, b, c);
+    }
+    group(b, c, if windowed { "On the stage" } else { "Your desktop" }, |b, c| {
         row(
             b,
             c,
@@ -542,7 +546,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
                 b.list.ops.pop();
             }
             let gap = b.px(8.0);
-            let start = c.x + b.px(28.0);
+            let start = c.x;
             let width = ((c.right() - start - gap * 4.0) / 5.0).min(b.px(72.0));
             for (n, &i) in recent.iter().take(5).enumerate() {
                 let r = Rect::new(
@@ -576,6 +580,11 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             }
             c.y += b.px(58.0);
             b.hline(c.x, c.right(), c.y - 1.0, b.p.line);
+        }
+        if windowed {
+            c.y += b.px(12.0);
+            notice(b, c, &format!("{} widgets on this display", crate::editing::widgets::count_here(app)));
+            return;
         }
         let look = crate::editing::look::summary(app)
             .split(" · ")
@@ -632,6 +641,9 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             open(Page::DesktopMenu),
         );
     });
+    if windowed {
+        return;
+    }
     group(b, c, "Around it", |b, c| {
         let windows = super::editors::windows_summary(app);
         row(

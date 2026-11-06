@@ -61,7 +61,7 @@ pub fn row_detail(
         c.x,
         c.y,
         c.w,
-        super::controls::height(b, if detail.is_empty() { 40.0 } else { 56.0 }),
+        super::controls::row_height(b, detail),
     );
     let first_target = b.targets.len();
     let picture = mypaper_ui::sortable::row(

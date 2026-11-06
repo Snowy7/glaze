@@ -253,6 +253,16 @@ fn stage_selection_and_zoom_only_change_navigation_and_keep_the_inspector_in_pla
     let before = app.docs.doc(crate::docs::DocId::Widgets).raw.clone();
     let inspector = crate::view::regions(&app).inspector.unwrap();
     let built = crate::view::build(&app, &mut ui);
+    let viewport = crate::view::regions(&app).stage.unwrap();
+    let desktop = built.targets.iter().find(|target| target.key == mypaper_ui::controls::key("stage-wallpaper")).unwrap().rect;
+    let chips = built.targets.iter().filter(|target| {
+        target.scroll == Some(mypaper_ui::controls::key("window-stage"))
+            && matches!(target.action, Action::Panel(Command::Display(_)))
+    }).map(|target| target.rect).collect::<Vec<_>>();
+    assert_eq!(chips.len(), app.monitors.len());
+    assert!(chips.iter().all(|rect| rect.top > desktop.bottom));
+    assert!(((desktop.left + desktop.right) / 2.0 - (viewport.left + viewport.right) / 2.0).abs() <= 1.0);
+    assert!(((desktop.top + chips[0].bottom) / 2.0 - (viewport.top + viewport.bottom) / 2.0).abs() <= 1.0);
     let clock = built
         .targets
         .iter()

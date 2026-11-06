@@ -796,7 +796,7 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
                 value.as_str().unwrap_or(""),
                 label,
             );
-            b.stroke(control, b.px(6.0), b.px(1.0), b.p.edge);
+            b.stroke(control, b.control_radius(control), b.px(1.0), b.p.edge);
             c.y = control.bottom + b.px(8.0);
         }
         Kind::Custom => c.y += h,
@@ -808,7 +808,7 @@ pub fn search(app: &App, b: &mut B, c: &mut Col) {
     let id = FieldId::Palette;
     let k = field_key(&id);
     let r = Rect::new(c.x, c.y, c.w, height(b, 32.0));
-    b.fill(r, b.px(7.0), b.p.fill);
+    b.fill(r, b.control_radius(r), b.p.fill);
     b.stroke(r, b.control_radius(r), b.px(1.0), b.p.line);
     b.icon(
         Rect::new(r.left + b.px(10.0), r.top, b.px(16.0), r.height()),
@@ -955,10 +955,10 @@ pub fn boundaries(b: &mut B) {
                 b.px(1.0),
                 b.p.edge,
             ),
-            Behavior::Field => b.stroke(target.rect, b.px(6.0), b.px(1.0), b.p.edge),
+            Behavior::Field => b.stroke(target.rect, b.control_radius(target.rect), b.px(1.0), b.p.edge),
             _ => match target.action {
                 Action::Choose(_) if target.rect.height() < b.px(36.0) => {
-                    b.stroke(target.rect, b.px(6.0), b.px(1.0), b.p.edge)
+                    b.stroke(target.rect, b.control_radius(target.rect), b.px(1.0), b.p.edge)
                 }
                 Action::Set(_, _)
                     if target.rect.height() <= b.px(36.0) && target.rect.width() > b.px(48.0) =>
@@ -984,7 +984,8 @@ pub fn boundaries(b: &mut B) {
     }
     for (r, count, same_row) in segments.into_values() {
         if count > 1 && same_row {
-            b.stroke(r.inflate(b.px(2.0)), b.px(7.0), b.px(1.0), b.p.edge);
+            let outer = r.inflate(b.px(2.0));
+            b.stroke(outer, b.control_radius(outer), b.px(1.0), b.p.edge);
         }
     }
 }
