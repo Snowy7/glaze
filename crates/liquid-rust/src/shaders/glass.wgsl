@@ -38,7 +38,7 @@ struct Material {
     edge: vec4f,        // inner hairline, outer edge burn, contrast border, dim
     shadow: vec4f,      // offset y (px), sigma (px), opacity, scheme (mypaper: 1 light, 0 dark)
     light_a: vec4f,     // light tone: lift, luminance, luminance mix, lighten
-    light_b: vec4f,     // light tone: darken to, darken, unused, unused
+    light_b: vec4f,     // light tone: darken to, darken; mypaper: backdrop brightness, saturation
     dark_a: vec4f,      // dark tone
     dark_b: vec4f,
     tint: vec4f,        // OKLab L, a, b, strength
@@ -434,6 +434,12 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
         col = frost(p, sigma);
     }
     col *= 1.0 - mat.edge.w;
+    // mypaper: the backdrop's brightness and saturation, skipped (exactly) when both are 1.
+    let backdrop = mat.light_b.zw;
+    if any(backdrop != vec2f(1.0)) {
+        col *= backdrop.x;
+        col = max(mix(vec3f(luminance(col)), col, backdrop.y), vec3f(0.0));
+    }
 
     // Tone mapping: light and dark faces, chosen by scheme or by the backdrop.
     var g = encode(col);
