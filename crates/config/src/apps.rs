@@ -35,9 +35,10 @@ pub struct AppsStyle {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AppRules {
-    /// Whether the styler touches this app at all (absent: yes, while `experimental.app_styler`
-    /// is on). Explorer also needs `system.separate_process = true`. Not part of the rules file
-    /// the styled app reads ([`AppRules::settled`] leaves it out).
+    /// Whether the styler touches this app at all while `experimental.app_styler` is on. Absent:
+    /// Explorer yes (it also needs `system.separate_process = true`), Settings no (it ends itself
+    /// on one page while attached; docs/windows-styling.md, "App styler"). Not part of the rules
+    /// file the styled app reads ([`AppRules::settled`] leaves it out).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
     /// Properties to set on the elements a selector matches.
