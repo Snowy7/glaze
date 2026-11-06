@@ -199,6 +199,57 @@ mod tests {
     }
 
     #[test]
+    fn a_to_b_and_b_to_a_set_changes_and_reset_only_released_attributes() {
+        let a = WindowStyle::resolve(&style(r##"{"border":"#123456","caption":"#101010","corners":"round","dark_mode":true}"##), None);
+        let b = WindowStyle::resolve(&style(r##"{"caption":"#202020","corners":"square","backdrop":"mica"}"##), None);
+        let forward = a.transition_to(b);
+        assert_eq!(forward.border, Change::Reset);
+        assert_eq!(forward.caption, Change::Set(Color([32; 3])));
+        assert_eq!(forward.caption_text, Change::Keep);
+        assert_eq!(forward.corners, Change::Set(Corners::Square));
+        assert_eq!(forward.backdrop, Change::Set(Backdrop::Mica));
+        assert_eq!(forward.dark_mode, Change::Reset);
+        let backward = b.transition_to(a);
+        assert_eq!(backward.border, Change::Set(Color([0x12, 0x34, 0x56])));
+        assert_eq!(backward.caption, Change::Set(Color([16; 3])));
+        assert_eq!(backward.corners, Change::Set(Corners::Round));
+        assert_eq!(backward.backdrop, Change::Reset);
+        assert_eq!(backward.dark_mode, Change::Set(true));
+    }
+
+    #[test]
+    fn a_to_a_with_new_palette_writes_only_the_resolved_border() {
+        let raw = style(r##"{"border":"auto","caption":"#101010","corners":"round","dark_mode":true}"##);
+        let old = WindowStyle::resolve(&raw, Some(&palette()));
+        assert_eq!(old.transition_to(old).writes(), 0);
+        let next = WindowStyle::resolve(&raw, Some(&Palette { accent: Color([9, 8, 7]), ..palette() }));
+        let delta = old.transition_to(next);
+        assert_eq!(delta.writes(), 1);
+        assert_eq!(delta.border, Change::Set(Color([9, 8, 7])));
+    }
+
+    #[test]
+    fn a_to_a_with_new_palette_changes_only_the_four_accent_registry_values() {
+        use crate::undo::tests::{Memory, Scratch};
+        use crate::undo::Undo;
+        use std::time::Duration;
+        let scratch = Scratch::new("palette-transition-diff");
+        let memory = Memory::default();
+        let mut undo = Undo::new(memory.clone(), scratch.journal(), Duration::ZERO);
+        let raw = style(r##"{"accent":"auto","dark_mode":true,"accent_on_title_bars":true}"##);
+        undo.transition(&system_writes(&raw, Some(&palette())), || {}).unwrap();
+        memory.take_mutations();
+        let next = Palette { accent: Color([9, 8, 7]), ..palette() };
+        undo.transition(&system_writes(&raw, Some(&next)), || {}).unwrap();
+        assert_eq!(memory.take_mutations(), [
+            (DWM_KEY.into(), "AccentColor".into()),
+            (DWM_KEY.into(), "ColorizationColor".into()),
+            (ACCENT_KEY.into(), "AccentColorMenu".into()),
+            (ACCENT_KEY.into(), "AccentPalette".into()),
+        ]);
+    }
+
+    #[test]
     fn a_fixed_color_ignores_the_palette() {
         let style = style(r##"{ "accent": "#ff0000" }"##);
         let writes = system_writes(&style, Some(&palette()));

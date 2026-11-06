@@ -37,7 +37,7 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CHILDID_SELF, EVENT_OBJECT_SHOW, EnumWindows, GA_PARENT, GWL_STYLE, GetAncestor,
+    CHILDID_SELF, EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, EnumWindows, GA_PARENT, GWL_STYLE, GetAncestor,
     GetDesktopWindow, GetWindowLongPtrW, GetWindowThreadProcessId, IsWindow, IsWindowVisible,
     OBJID_WINDOW, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WS_CAPTION,
 };
@@ -117,7 +117,7 @@ impl Styler {
         // removed in `drop`.
         let hook = unsafe {
             SetWinEventHook(
-                EVENT_OBJECT_SHOW,
+                EVENT_OBJECT_DESTROY,
                 EVENT_OBJECT_SHOW,
                 None,
                 Some(on_show),
@@ -237,7 +237,7 @@ fn sweep() {
 
 unsafe extern "system" fn on_show(
     _: HWINEVENTHOOK,
-    _: u32,
+    event: u32,
     hwnd: HWND,
     object: i32,
     child: i32,
@@ -249,6 +249,10 @@ unsafe extern "system" fn on_show(
         return;
     }
     with_state(|s| {
+        if event == EVENT_OBJECT_DESTROY {
+            s.originals.remove(&(hwnd.0 as isize));
+            return;
+        }
         s.consider(hwnd);
         // Forget windows that are gone, so the map does not grow forever.
         // SAFETY: `IsWindow` accepts any handle value.
@@ -480,5 +484,21 @@ fn backdrop_type(backdrop: Backdrop) -> DWM_SYSTEMBACKDROP_TYPE {
         Backdrop::Mica => DWMSBT_MAINWINDOW,
         Backdrop::Acrylic => DWMSBT_TRANSIENTWINDOW,
         Backdrop::Tabbed => DWMSBT_TABBEDWINDOW,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_verdict_is_cached_once_and_pid_reuse_is_rechecked() {
+        let mut cache = ProcessCache::default();
+        let process = ProcessKey { pid: 7, started: 100 };
+        assert!(cache.verdict(process, || true));
+        assert!(cache.verdict(process, || panic!("must not hash this executable twice")));
+        let reused = ProcessKey { started: 200, ..process };
+        assert!(!cache.verdict(reused, || false));
+        assert!(!cache.verdict(reused, || panic!("negative verdicts are cached too")));
     }
 }

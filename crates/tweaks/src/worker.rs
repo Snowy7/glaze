@@ -141,3 +141,26 @@ impl<T> Drop for Worker<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn latest_request_replaces_changes_arriving_during_a_slow_receiver() {
+        let (seen, receive) = mpsc::channel();
+        let (release, gate) = mpsc::channel();
+        let worker = Worker::start(move || Ok(move |value| {
+            seen.send(value).unwrap();
+            if value == 0 { gate.recv().unwrap(); }
+        })).unwrap();
+        worker.submit(0);
+        assert_eq!(receive.recv_timeout(Duration::from_secs(2)).unwrap(), 0);
+        // The consumer is deliberately blocked. None of these submissions may wait on it.
+        for value in 1..=100 { worker.submit(value); }
+        release.send(()).unwrap();
+        assert_eq!(receive.recv_timeout(Duration::from_secs(2)).unwrap(), 100);
+        drop(worker);
+        assert!(receive.try_recv().is_err());
+    }
+}
