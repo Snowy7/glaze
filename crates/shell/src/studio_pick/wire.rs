@@ -537,6 +537,32 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, wp: WPARAM, lp: LP
 mod tests {
     use super::*;
     #[test]
+    fn complete_snapshots_cross_copydata_without_relaxing_normal_message_limits() {
+        let receiver = Endpoint::new(false).unwrap();
+        let sender = Endpoint::new(false).unwrap();
+        let documents = vec![SnapshotDocument {
+            document: Document::Widgets,
+            base_revision: 1,
+            raw: serde_json::json!({"note": "x".repeat(MAX_BYTES * 2)}),
+        }];
+        let message = Message::PreviewSnapshot {
+            session: 7, sequence: 1, documents,
+            theme: SnapshotTheme { raw: serde_json::Value::Null, dir: None },
+        };
+        assert!(send(receiver.hwnd(), sender.hwnd(), &message));
+        assert!(matches!(receiver.next(), Some((source, Message::PreviewSnapshot { documents, .. }))
+            if source == sender.hwnd() && documents[0].raw["note"].as_str().unwrap().len() == MAX_BYTES * 2));
+        assert!(!send(receiver.hwnd(), sender.hwnd(), &Message::Highlight { id: Some("x".repeat(MAX_BYTES * 2)) }));
+        let oversized = Message::PreviewSnapshot {
+            session: 7, sequence: 2,
+            documents: vec![SnapshotDocument { document: Document::Widgets, base_revision: 1,
+                raw: serde_json::json!({"note":"x".repeat(MAX_SNAPSHOT_BYTES)}) }],
+            theme: SnapshotTheme { raw: serde_json::Value::Null, dir: None },
+        };
+        assert!(!send(receiver.hwnd(), sender.hwnd(), &oversized));
+        assert!(receiver.next().is_none());
+    }
+    #[test]
     fn preview_queue_is_bounded_and_keeps_only_the_latest_value() {
         let queue = Queue::default();
         let source = HWND(1 as _);
