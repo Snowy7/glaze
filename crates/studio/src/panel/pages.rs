@@ -31,14 +31,16 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
             true,
             Action::Panel(Command::Done),
         );
-        icon_button(
-            b,
-            Rect::new(b.px(8.0), b.px(10.0), b.px(28.0), b.px(28.0)),
-            glyph::CHEVRON_LEFT,
-            "Back",
-            true,
-            Action::Panel(Command::Back),
-        );
+        if page != Page::Root {
+            icon_button(
+                b,
+                Rect::new(b.px(8.0), b.px(10.0), b.px(28.0), b.px(28.0)),
+                glyph::CHEVRON_LEFT,
+                "Back",
+                true,
+                Action::Panel(Command::Back),
+            );
+        }
         return;
     }
     let committing = matches!(page, Page::AddWidget | Page::AddModule | Page::AddWallpaper);
@@ -312,8 +314,8 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         ui::feedback(
             b,
             c,
-            "Bars aren't running",
-            vec![("Troubleshoot", open(Page::Troubleshoot))],
+            "Bars aren't running; edits apply when the bars start.",
+            vec![("Start bars", Action::StartBars)],
         );
     }
     match page {
@@ -325,6 +327,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::Top | Page::Dock => super::editors::view(app, b, c, page),
         _ => super::editors::view(app, b, c, page),
     }
+    super::lists::drop_overlay(app, b);
     super::editors::reveal_search(app, b, page, first_target);
     super::saving::finish_page(app, b, page, first_op, first_target);
 }
@@ -370,21 +373,20 @@ fn metrics(app: &App) -> String {
     format!("{gpu} · {fps} · {cpu:.1}% CPU · {memory:.0} MB")
 }
 
-fn stopped_parts(app: &App) -> Option<String> {
-    let stopped: Vec<_> = crate::system::PARTS
-        .iter()
-        .zip(app.system.parts)
-        .filter(|(_, part)| !part.running)
-        .map(|((id, _), _)| match *id {
-            "core" => "Core",
-            "engine" => "Engine",
-            _ => "Shell",
-        })
-        .collect();
-    (!stopped.is_empty()).then(|| format!("{} stopped", stopped.join(", ")))
-}
-
 fn playback_status(app: &App) -> String {
+    if !app.system.running() {
+        return "mypaper is off".into();
+    }
+    if !app.system.parts[1].running {
+        return "Engine stopped".into();
+    }
+    if app
+        .get(DocId::Config, "/paused")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return "Paused".into();
+    }
     let Some(wallpaper) = app.library.active().map(|i| &app.library.items[i]) else {
         return "No wallpaper selected".into();
     };
@@ -394,35 +396,51 @@ fn playback_status(app: &App) -> String {
         .get(DocId::Config, "/engine")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
-    let cap = engine
-        .resolve(
-            &wallpaper.id,
-            loaded.as_ref().map_or_default(|theme| theme.engine),
-        )
-        .fps;
+    let resolved = engine.resolve(
+        &wallpaper.id,
+        loaded.as_ref().map_or_default(|theme| theme.engine),
+    );
+    let cap = resolved.fps;
     let source = loaded.as_ref().and_then(|theme| match &theme.wallpaper {
         mypaper_theme::Wallpaper::Shader(source) => Some(source.fps),
         mypaper_theme::Wallpaper::Video(source) => Some(source.fps),
         mypaper_theme::Wallpaper::Scene(source) => Some(source.fps),
         _ => None,
     });
-    match (source, cap, wallpaper.kind) {
+    let rate: String = match (source, cap, wallpaper.kind) {
         (_, _, Some(crate::library::Kind::Image)) => "Still picture".into(),
         (Some(source), cap, _) => format!("{} fps", cap.map_or(source, |cap| cap.min(source))),
         (_, Some(cap), _) => format!("Up to {cap} fps"),
         (_, _, Some(crate::library::Kind::Web)) => "Frame rate set by the page".into(),
         (_, _, Some(crate::library::Kind::App)) => "Frame rate set by the app".into(),
         _ => "At the wallpaper's frame rate".into(),
+    };
+    let gpu = match resolved.gpu {
+        mypaper_config::GpuPreference::Integrated => app
+            .system
+            .gpus
+            .as_ref()
+            .and_then(|gpus| gpus.iter().find(|(_, integrated)| *integrated))
+            .map(|(name, _)| name.as_str()),
+        mypaper_config::GpuPreference::HighPerformance => app
+            .system
+            .gpus
+            .as_ref()
+            .and_then(|gpus| gpus.iter().find(|(_, integrated)| !*integrated))
+            .map(|(name, _)| name.as_str()),
+        mypaper_config::GpuPreference::Auto => app.system.display_gpu.as_deref(),
     }
+    .unwrap_or("Windows' choice");
+    format!("{rate} · {gpu}")
 }
 
 fn root(app: &App, b: &mut B, c: &mut Col) {
-    if app.system.running() && app.system.parts.iter().any(|part| !part.running) {
+    if app.system.running() && !app.system.parts[2].running {
         ui::feedback(
             b,
             c,
-            &stopped_parts(app).unwrap_or_default(),
-            vec![("Troubleshoot", open(Page::Troubleshoot))],
+            "Bars aren't running; edits apply when the bars start.",
+            vec![("Start bars", Action::StartBars)],
         );
     }
     let h = height(b, 56.0);
@@ -443,23 +461,27 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
         .get(DocId::Config, "/paused")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let playing = if !app.system.running() {
-        "Off"
+    let (label, action, icon) = if !app.system.running() {
+        ("Start mypaper", Action::StartMypaper, glyph::PLAY)
     } else if !app.system.parts[1].running {
-        "Stopped"
+        ("Restart engine", Action::Restart("engine"), glyph::REDO)
     } else if paused {
-        "Paused"
+        ("Resume", Action::Pause, glyph::PLAY)
     } else {
-        "Playing"
+        ("Pause", Action::Pause, glyph::PAUSE)
     };
     let x = thumb.right + b.px(10.0);
-    let label = if paused { "Resume" } else { "Pause" };
+    let playing = app.system.running() && app.system.parts[1].running && !paused;
     let control_w = b.measure(label, &ui::font(b, 13.0, 500)).0 + b.px(44.0);
     let available = c.right() - x - control_w - b.px(16.0);
     text(
         b,
         Rect::new(x, c.y + b.px(8.0), available, height(b, 21.0)),
-        &format!("{playing} · {}", wallpaper_name(app)),
+        &if playing {
+            format!("Playing · {}", wallpaper_name(app))
+        } else {
+            playback_status(app)
+        },
         13.0,
         600,
         b.p.ink1,
@@ -473,7 +495,11 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             available,
             height(b, 18.0),
         ),
-        &playback_status(app),
+        &if playing {
+            playback_status(app)
+        } else {
+            wallpaper_name(app).into()
+        },
         12.0,
         400,
         b.p.ink3,
@@ -488,12 +514,13 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             height(b, 28.0),
         ),
         label,
-        Some(if paused { glyph::PLAY } else { glyph::PAUSE }),
+        Some(icon),
         false,
-        app.system.running(),
-        Action::Pause,
+        true,
+        action,
     );
     c.y += h + b.px(12.0);
+    ui::displays(app, b, c);
     ui::search(app, b, c);
     group(b, c, "Your desktop", |b, c| {
         row(
@@ -579,7 +606,11 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             c,
             Some(glyph::WIDGETS),
             "Widgets",
-            &format!("{} on this display", crate::pages::widgets::count_here(app)),
+            &format!(
+                "{} · Display {}",
+                crate::pages::widgets::count_here(app),
+                app.nav.display + 1
+            ),
             "",
             None,
             open(Page::Widgets),
@@ -691,6 +722,7 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
     group(b, c, "On this display", |b, c| {
         if items.is_empty() {
             notice(b, c, "No widgets on this display yet.");
+            super::editors::action_button(b, c, "Add a widget", open(Page::AddWidget));
         }
         for instance in &items {
             let name = app
@@ -711,7 +743,8 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
             if let Some(hit) = b.list.hits.last_mut() {
                 hit.label = format!(
                     "{name}, {caption}, column {}, row {}",
-                    instance.cell[0] + 1, instance.cell[1] + 1
+                    instance.cell[0] + 1,
+                    instance.cell[1] + 1
                 )
                 .into();
             }
@@ -808,47 +841,23 @@ fn performance(app: &App, b: &mut B, c: &mut Col) {
     );
     let current = app
         .get(DocId::Config, "/engine/gpu")
-        .and_then(Value::as_str)
-        .unwrap_or("auto");
-    let gpus = app.system.gpus.as_deref().unwrap_or_default();
-    let integrated = gpus
-        .iter()
-        .find(|(_, i)| *i)
-        .map_or("None found", |(n, _)| n.as_str());
-    let discrete = gpus
-        .iter()
-        .find(|(_, i)| !*i)
-        .map_or("None found", |(n, _)| n.as_str());
-    let edit = Edit::new(DocId::Config, "/engine/gpu", "Graphics card");
-    group(b, c, "Graphics card", |b, c| {
-        for (id, label, caption, icon) in [
-            ("integrated", "Integrated", integrated, glyph::CHIP),
-            (
-                "high-performance",
-                "High performance",
-                discrete,
-                glyph::GAUGE,
-            ),
-            (
-                "auto",
-                "Let Windows choose",
-                app.system
-                    .display_gpu
-                    .as_deref()
-                    .unwrap_or("The card your screens use"),
-                glyph::MONITOR,
-            ),
-        ] {
-            row(
-                b,
-                c,
-                Some(icon),
-                label,
-                "",
-                caption,
-                Some(current == id),
-                Action::Set(edit.clone(), json!(id)),
-            );
+        .cloned()
+        .unwrap_or(json!("auto"));
+    group(b, c, "", |b, c| {
+        super::editors::segments(
+            b,
+            c,
+            "Graphics card",
+            current,
+            Edit::new(DocId::Config, "/engine/gpu", "Graphics card"),
+            vec![
+                (json!("integrated"), "Integrated".into()),
+                (json!("high-performance"), "High performance".into()),
+                (json!("auto"), "Windows' choice".into()),
+            ],
+        );
+        if let Some(card) = &app.system.display_gpu {
+            notice(b, c, &format!("Display graphics: {card}"));
         }
     });
     group(b, c, "Frame rate", |b, c| {
@@ -933,6 +942,42 @@ mod tests {
         app.panel = Some(super::super::State::default());
         app.size = (480, 760);
         app
+    }
+
+    #[test]
+    fn playback_states_offer_the_action_they_can_perform_without_stale_fps() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        for (running, engine, paused, status, action) in [
+            (false, false, true, "mypaper is off", Action::StartMypaper),
+            (
+                true,
+                false,
+                false,
+                "Engine stopped",
+                Action::Restart("engine"),
+            ),
+            (true, true, true, "Paused", Action::Pause),
+        ] {
+            let mut app = fixture(&ui);
+            app.system.parts[0].running = running;
+            app.system.parts[1].running = engine;
+            app.set(&Edit::new(DocId::Config, "/paused", "Pause"), json!(paused));
+            assert_eq!(playback_status(&app), status);
+            let built = super::super::build(&app, &mut ui.text);
+            assert!(built.targets.iter().any(|target| target.action == action));
+            assert!(
+                !built
+                    .list
+                    .hits
+                    .iter()
+                    .any(|hit| hit.label.starts_with("Back"))
+            );
+            assert!(
+                !built.list.ops.iter().any(
+                    |op| matches!(op, mypaper_ui::Op::Text { text, .. } if text.contains("fps"))
+                )
+            );
+        }
     }
 
     #[test]
@@ -1058,8 +1103,8 @@ mod tests {
         for wallpaper in &mut app.library.items {
             wallpaper.active = wallpaper.id == "rain-city";
         }
-        assert_eq!(playback_status(&app), "30 fps");
+        assert!(playback_status(&app).starts_with("30 fps · "));
         app.set(&Edit::new(DocId::Config, "/engine/fps", "Cap"), json!(12));
-        assert_eq!(playback_status(&app), "12 fps");
+        assert!(playback_status(&app).starts_with("12 fps · "));
     }
 }

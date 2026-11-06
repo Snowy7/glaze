@@ -82,7 +82,7 @@ fn release_state_routes_and_shared_units_are_exposed() {
         built
             .targets
             .iter()
-            .any(|target| target.action == Action::Panel(super::Command::Open(Page::Troubleshoot)))
+            .any(|target| target.action == Action::Restart("engine"))
     );
     app.system.parts = Default::default();
     let built = super::build(&app, &mut ui.text);
@@ -93,8 +93,13 @@ fn release_state_routes_and_shared_units_are_exposed() {
         .filter(|hit| hit.rect.top < 48.0)
         .map(|hit| hit.label.as_ref())
         .collect();
-    assert_eq!(header.len(), 2);
-    assert!(header.contains(&"Back") && header.contains(&"Done"));
+    assert_eq!(header, ["Done"]);
+    assert!(
+        built
+            .targets
+            .iter()
+            .any(|target| target.action == Action::StartMypaper)
+    );
     assert_eq!(super::controls::unit(12.0, "px"), "12 px");
     assert_eq!(super::controls::unit(55.0, "%"), "55%");
 }
@@ -119,6 +124,13 @@ fn render_panel_states() {
             ("no-room", Page::AddWidget),
             ("large-home", Page::Root),
             ("large-bars", Page::Bars),
+            ("large-top-bar", Page::Top),
+            ("large-performance", Page::Performance),
+            ("performance-360", Page::Performance),
+            ("performance-360-large-text", Page::Performance),
+            ("wallpaper-web", Page::Wallpaper),
+            ("wallpaper-editable-fit", Page::Wallpaper),
+            ("wallpaper-fit-360-large-text", Page::Wallpaper),
             ("large-widget", Page::Widget),
             ("large-wallpapers", Page::Wallpapers),
             ("high-contrast", Page::Root),
@@ -133,6 +145,21 @@ fn render_panel_states() {
                 )),
                 "stopped-part" => app.system.parts[1].running = false,
                 "bars-stopped" => app.system.parts[2].running = false,
+                "wallpaper-web" | "wallpaper-editable-fit" | "wallpaper-fit-360-large-text" => {
+                    let mut wallpaper = app.library.items[app.library.active().unwrap()].clone();
+                    wallpaper.origin = crate::library::Origin::User;
+                    wallpaper.active = false;
+                    if name == "wallpaper-web" {
+                        wallpaper.kind = Some(crate::library::Kind::Web);
+                        wallpaper.interactive = Some(true);
+                        wallpaper.name = "Web wallpaper".into();
+                    } else {
+                        wallpaper.kind = Some(crate::library::Kind::Image);
+                        wallpaper.name = "Rain picture".into();
+                    }
+                    app.nav.wallpaper = Some(app.library.items.len());
+                    app.library.items.push(wallpaper);
+                }
                 "wallpapers-none-own" => {
                     app.nav.filter = 1;
                     app.library.items.retain(|wallpaper| !wallpaper.editable());
@@ -188,9 +215,13 @@ fn render_panel_states() {
                 }
                 _ => {}
             }
-            if name.starts_with("large-") {
+            if name.starts_with("large-") || name.ends_with("large-text") {
                 app.theme.ty.text_scale = 1.5;
             }
+            if name.contains("360") {
+                app.size.0 = 360;
+            }
+            let width = app.size.0;
             app.toast = None;
             let built = super::build(&app, &mut ui.text);
             let full = (built.scrolls.last().unwrap().content
@@ -206,12 +237,12 @@ fn render_panel_states() {
                 let built = super::build(&app, &mut ui.text);
                 for target in &built.targets {
                     assert!(
-                        target.rect.left >= 0.0 && target.rect.right <= 480.0,
+                        target.rect.left >= 0.0 && target.rect.right <= width as f32,
                         "{name}: {:?}",
                         target.rect
                     );
                 }
-                let image = render(&mut ui, &built.list, 480, app.size.1).unwrap();
+                let image = render(&mut ui, &built.list, width, app.size.1).unwrap();
                 let file = format!(
                     "{name}{}-{}.png",
                     if full_page { "-full" } else { "" },
