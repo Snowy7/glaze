@@ -287,7 +287,7 @@ pub fn row(
     }
     b.hit_checked(
         k,
-        r,
+        area,
         mypaper_ui::Role::RadioButton,
         label,
         Some(checked),

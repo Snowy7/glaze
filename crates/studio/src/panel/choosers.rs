@@ -97,7 +97,9 @@ pub fn draw(
                     .is_none_or(|clip| row_rect(*index).intersects(&clip))
         })
     } else {
-        pointer.and_then(|point| (0..count).find(|index| row_rect(*index).contains(point)))
+        pointer.and_then(|point| {
+            (0..count).find(|index| b.list_row_area(row_rect(*index)).contains(point))
+        })
     };
     let highlighted = hot.filter(|index| {
         app.panel.as_ref().unwrap().chooser.borrow().suppressed != Some(key((id, *index)))
@@ -188,7 +190,7 @@ pub fn draw(
             }
             b.hit_checked(
                 k,
-                rect,
+                area,
                 Role::RadioButton,
                 name,
                 Some(*applied),
