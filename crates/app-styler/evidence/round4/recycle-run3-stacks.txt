@@ -1,0 +1,72 @@
+0:000> ~*k 60;q
+.  0  Id: c958.e934 Suspend: 1 Teb: 00000000`00be5000 Unfrozen
+Child-SP          RetAddr               Call Site
+00000000`008ef918 00007ffe`67a9d16d     win32u!NtUserMsgWaitForMultipleObjectsEx+0x14
+00000000`008ef920 00007ffe`67a9d0ad     explorerframe!SHProcessMessagesUntilEventEx+0x89
+00000000`008ef9b0 00007ff7`adaa7d3a     explorerframe!CExplorerHostCreator::RunHost+0x7d
+00000000`008ef9e0 00007ff7`adad8a45     explorer!wWinMain+0x65a
+00000000`008efea0 00007ffe`aa18dda7     explorer!__scrt_common_main_seh+0x105
+00000000`008efee0 00007ffe`abdfee4c     KERNEL32!BaseThreadInitThunk+0x17
+00000000`008eff10 00000000`00000000     ntdll!RtlUserThreadStart+0x2c
+   1  Id: c958.1626c Suspend: 1 Teb: 00000000`00bed000 Unfrozen
+Child-SP          RetAddr               Call Site
+00000000`0143f808 00007ffe`a6a1cde2     win32u!NtUserMsgWaitForMultipleObjectsEx+0x14
+00000000`0143f810 00007ffe`a6a1c8a3     windows_storage!CShellTaskScheduler::TT_TransitionThreadToRunningOrTerminating+0xc2
+00000000`0143f8e0 00007ffe`a6cb0681     windows_storage!CShellTaskThread::ThreadProc+0x49b
+00000000`0143f9b0 00007ffe`a9ad99a5     windows_storage!CShellTaskThread::s_ThreadProc+0xf1
+00000000`0143fa20 00007ffe`abe0e15b     shcore!ExecuteWorkItemThreadProc+0x15
+00000000`0143fa50 00007ffe`abda51b0     ntdll!RtlpTpWorkCallback+0x22b
+00000000`0143fb30 00007ffe`aa18dda7     ntdll!TppWorkerThread+0x820
+00000000`0143fe90 00007ffe`abdfee4c     KERNEL32!BaseThreadInitThunk+0x17
+00000000`0143fec0 00000000`00000000     ntdll!RtlUserThreadStart+0x2c
+   2  Id: c958.f3dc Suspend: 1 Teb: 00000000`00bef000 Unfrozen
+Child-SP          RetAddr               Call Site
+00000000`0333f5a8 00007ffe`a6a1cde2     win32u!NtUserMsgWaitForMultipleObjectsEx+0x14
+00000000`0333f5b0 00007ffe`a6a1c8a3     windows_storage!CShellTaskScheduler::TT_TransitionThreadToRunningOrTerminating+0xc2
+00000000`0333f680 00007ffe`a6cb0681     windows_storage!CShellTaskThread::ThreadProc+0x49b
+00000000`0333f750 00007ffe`a9ad99a5     windows_storage!CShellTaskThread::s_ThreadProc+0xf1
+00000000`0333f7c0 00007ffe`abe0e15b     shcore!ExecuteWorkItemThreadProc+0x15
+00000000`0333f7f0 00007ffe`abda51b0     ntdll!RtlpTpWorkCallback+0x22b
+00000000`0333f8d0 00007ffe`aa18dda7     ntdll!TppWorkerThread+0x820
+00000000`0333fc30 00007ffe`abdfee4c     KERNEL32!BaseThreadInitThunk+0x17
+00000000`0333fc60 00000000`00000000     ntdll!RtlUserThreadStart+0x2c
+   3  Id: c958.62e0 Suspend: 1 Teb: 00000000`00bf1000 Unfrozen
+Child-SP          RetAddr               Call Site
+00000000`037cf768 00007ffe`a93f2773     ntdll!NtWaitForMultipleObjects+0x14
+00000000`037cf770 00007ffe`ab249abe     KERNELBASE!WaitForMultipleObjectsEx+0x123
+(Inline Function) --------`--------     combase!WaitCoalesced+0x79
+00000000`037cfa60 00007ffe`ab24231f     combase!CROIDTable::WorkerThreadLoop+0xae
+00000000`037cfcd0 00007ffe`ab24222f     combase!CRpcThread::WorkerLoop+0x5b
+00000000`037cfd40 00007ffe`aa18dda7     combase!CRpcThreadCache::RpcWorkerThreadEntry+0x4f
+00000000`037cfd70 00007ffe`abdfee4c     KERNEL32!BaseThreadInitThunk+0x17
+00000000`037cfda0 00000000`00000000     ntdll!RtlUserThreadStart+0x2c
+   4  Id: c958.cfa4 Suspend: 1 Teb: 00000000`00bf3000 Unfrozen
+Child-SP          RetAddr               Call Site
+00000000`03cdfa98 00007ffe`a9acbc41     win32u!NtUserMsgWaitForMultipleObjectsEx+0x14
+00000000`03cdfaa0 00007ffe`a9acbbab     shcore!WorkThreadManager::CThread::WaitForThreadUpdate+0x71
+00000000`03cdfb10 00007ffe`a9ae6617     shcore!WorkThreadManager::CThread::WaitForWork+0x3b
+00000000`03cdfb40 00007ffe`a9ad8027     shcore!WorkThreadManager::CThread::ThreadProc+0x187
+00000000`03cdfba0 00007ffe`a9ad7fc1     shcore!WorkThreadManager::CThread::s_ExecuteThreadProc+0x4b
+00000000`03cdfbe0 00007ffe`aa18dda7     shcore!<lambda_9844335fc14345151eefcc3593dd6895>::<lambda_invoker_cdecl>+0x11
+00000000`03cdfc10 00007ffe`abdfee4c     KERNEL32!BaseThreadInitThunk+0x17
+00000000`03cdfc40 00000000`00000000     ntdll!RtlUserThreadStart+0x2c
+   5  Id: c958.2114 Suspend: 1 Teb: 00000000`00bf7000 Unfrozen
+Child-SP          RetAddr               Call Site
+00000000`03ddf7d8 00007ffe`a93f2773     ntdll!NtWaitForMultipleObjects+0x14
+00000000`03ddf7e0 00007ffe`6dd1840c     KERNELBASE!WaitForMultipleObjectsEx+0x123
+00000000`03ddfad0 00007ffe`6dd17efc     Windows_UI_Xaml!CWindowsServices::WaitForObjects+0x8c
+00000000`03ddfbd0 00007ffe`6dd18a9f     Windows_UI_Xaml!CompositorScheduler::RenderThreadFrame+0x548
+00000000`03ddfdd0 00007ffe`aa18dda7     Windows_UI_Xaml!CompositorScheduler::RenderThreadMain+0x7b
+00000000`03ddfe00 00007ffe`abdfee4c     KERNEL32!BaseThreadInitThunk+0x17
+00000000`03ddfe30 00000000`00000000     ntdll!RtlUserThreadStart+0x2c
+   6  Id: c958.11088 Suspend: 1 Teb: 00000000`00bf9000 Unfrozen "File Explorer Window"
+Child-SP          RetAddr               Call Site
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!std::_Hash<std::_Umap_traits<enum KnownPropertyIndex,DirectUI::TrackerPtr<IInspectable>,std::_Uhash_compare<enum KnownPropertyIndex,std::hash<enum KnownPropertyIndex>,std::equal_to<enum KnownPropertyIndex> >,std::allocator<std::pair<enum KnownPropertyIndex const ,DirectUI::TrackerPtr<IInspectable> > >,0> >::_Find_last+0x14
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!std::_Hash<std::_Umap_traits<enum KnownPropertyIndex,DirectUI::TrackerPtr<IInspectable>,std::_Uhash_compare<enum KnownPropertyIndex,std::hash<enum KnownPropertyIndex>,std::equal_to<enum KnownPropertyIndex> >,std::allocator<std::pair<enum KnownPropertyIndex const ,DirectUI::TrackerPtr<IInspectable> > >,0> >::_Find+0x14
+00000000`048cbfe8 00007ffe`690145f9     Microsoft_UI_Xaml_7ffe68fa0000!std::_Hash<std::_Umap_traits<enum KnownPropertyIndex,DirectUI::TrackerPtr<IInspectable>,std::_Uhash_compare<enum KnownPropertyIndex,std::hash<enum KnownPropertyIndex>,std::equal_to<enum KnownPropertyIndex> >,std::allocator<std::pair<enum KnownPropertyIndex const ,DirectUI::TrackerPtr<IInspectable> > >,0> >::find+0x45
+(Inline Function) --------`--------     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::DependencyObject::GetValue+0x5e
+00000000`048cbff0 00007ffe`6913933b     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::Control::GetValue+0xa9
+Unable to read dynamic function table list head
+Unable to read dynamic function table list head
+00000000`048cc070 00007ffe`66cd1a49     Microsoft_UI_Xaml_7ffe68fa0000!DirectUI::DependencyObject::GetValue+0x3b
+(threads 7 and up: the process was ended while cdb read them)

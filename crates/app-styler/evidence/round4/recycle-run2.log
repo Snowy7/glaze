@@ -1,0 +1,65 @@
+10:32:49 variant design: separate explorer 57456
+10:32:49 design helper attached: True (helper 54148)
+10:32:55 bursts start design (explorer 57456, 20 bursts)
+10:32:55 [start] explorer 57456: 133.6 MB priv, 190.6 MB ws, 2490 handles, 2.78 s cpu | styler 54148: 2.9 MB priv
+10:33:02   burst 1: 2 opened, 2 closed, 8 s with the lock
+10:33:09 [after burst 1] explorer 57456: 195.8 MB priv, 269.1 MB ws, 3743 handles, 10.53 s cpu | styler 54148: 2.9 MB priv
+10:33:25   burst 2: 2 opened, 2 closed, 7 s with the lock
+10:33:31 [after burst 2] explorer 57456: 197.4 MB priv, 271.8 MB ws, 3962 handles, 16.50 s cpu | styler 54148: 2.9 MB priv
+10:33:48   burst 3: 2 opened, 2 closed, 7 s with the lock
+10:33:54 [after burst 3] explorer 57456: 246.1 MB priv, 291.6 MB ws, 3964 handles, 21.23 s cpu | styler 54148: 2.8 MB priv
+10:34:11   burst 4: 2 opened, 2 closed, 6 s with the lock
+10:34:17 [after burst 4] explorer 57456: 382.7 MB priv, 329.6 MB ws, 4372 handles, 28.31 s cpu | styler 54148: 2.8 MB priv
+10:34:33   burst 5: 2 opened, 2 closed, 6 s with the lock
+10:34:40 [after burst 5] explorer 57456: 382.5 MB priv, 328.4 MB ws, 4095 handles, 34.67 s cpu | styler 54148: 2.8 MB priv
+10:34:57   burst 6: 2 opened, 2 closed, 7 s with the lock
+10:35:03 [after burst 6] explorer 57456: 395.3 MB priv, 340.5 MB ws, 4132 handles, 39.77 s cpu | styler 54148: 2.8 MB priv
+10:35:51   burst 7: 2 opened, 2 closed, 7 s with the lock
+10:35:57 [after burst 7] explorer 57456: 540.3 MB priv, 357.3 MB ws, 4218 handles, 46.59 s cpu | styler 54148: 2.7 MB priv
+10:36:13   burst 8: 2 opened, 2 closed, 6 s with the lock
+10:36:19 [after burst 8] explorer 57456: 620.9 MB priv, 373.8 MB ws, 3946 handles, 52.20 s cpu | styler 54148: 2.7 MB priv
+10:37:20   burst 9: 2 opened, 0 closed, 51 s with the lock
+10:37:26 [after burst 9] explorer 57456 is gone
+10:37:36   nothing opened
+10:37:36   nothing opened
+10:37:41   burst 10: 0 opened, 0 closed, 5 s with the lock
+10:37:47 [after burst 10] explorer 57456 is gone
+10:38:03   nothing opened
+10:38:03   nothing opened
+10:38:07   burst 11: 0 opened, 0 closed, 4 s with the lock
+10:38:13 [after burst 11] explorer 57456 is gone
+10:38:23   nothing opened
+10:38:23   nothing opened
+10:38:28   burst 12: 0 opened, 0 closed, 5 s with the lock
+10:38:34 [after burst 12] explorer 57456 is gone
+10:38:44   nothing opened
+10:38:44   nothing opened
+10:38:49   burst 13: 0 opened, 0 closed, 5 s with the lock
+10:38:55 [after burst 13] explorer 57456 is gone
+10:39:05   nothing opened
+10:39:05   nothing opened
+10:39:09   burst 14: 0 opened, 0 closed, 4 s with the lock
+10:39:15 [after burst 14] explorer 57456 is gone
+10:39:25   nothing opened
+10:39:25   nothing opened
+10:39:29   burst 15: 0 opened, 0 closed, 4 s with the lock
+10:39:35 [after burst 15] explorer 57456 is gone
+10:39:45   nothing opened
+10:39:45   nothing opened
+10:39:49   burst 16: 0 opened, 0 closed, 4 s with the lock
+10:39:55 [after burst 16] explorer 57456 is gone
+10:40:10   nothing opened
+10:40:10   nothing opened
+10:40:15   burst 17: 0 opened, 0 closed, 4 s with the lock
+10:40:21 [after burst 17] explorer 57456 is gone
+10:40:31   nothing opened
+10:40:31   nothing opened
+10:40:35   burst 18: 0 opened, 0 closed, 4 s with the lock
+10:40:41 [after burst 18] explorer 57456 is gone
+10:40:51   nothing opened
+10:40:51   nothing opened
+10:40:55   burst 19: 0 opened, 0 closed, 4 s with the lock
+10:41:01 [after burst 19] explorer 57456 is gone
+10:41:11   nothing opened
+10:41:11   nothing opened
+10:41:14   burst 20: 0 opened, 0 closed, 3 s with the lock

@@ -459,13 +459,24 @@ window behind the XAML, so they stay solid in `glass`.
   left 120–410 MB in Explorer's private bytes (754 MB to 2.4 GB over 7 bursts; handles 6.2k to
   14.6k). It is the subscription itself: with the TAP attached and **no rules** (no styling, no
   property reads) a burst still added 127–151 MB; with the flag off, 8–17 MB (3 bursts each way).
-  XAML Diagnostics' live-tree and handle maps hold strong references to what they track (WinUI's
-  `HandleMap`), so Explorer's closed windows stay alive while we are advised. Ending the session
-  doesn't reliably give it back (once 2.5 to 1.3 GB within 10 s, once nothing); restarting
-  Explorer does. The TAP's own map stays flat (it follows removals and drops trees that went
-  without one). Next step: end the subscription (and the TAP's diagnostics references) whenever
-  an app's windows have all closed and re-advise when one opens, then measure again. Until then
-  the flag stays **off**. Evidence: `crates/app-styler/evidence/round3`.
+  Ending the session doesn't reliably give it back (once 2.5 to 1.3 GB within 10 s, once
+  nothing); restarting Explorer does. The TAP's own map stays flat (it follows removals and drops
+  trees that went without one). Evidence: `crates/app-styler/evidence/round3`.
+- **What holds it (round 4, from WinUI's source).** XAML Diagnostics' `RuntimeObjectCache` keeps a
+  strong reference to every parentless object it has seen, until that object is closed: every
+  tree root, and every object outside the tree we ask a handle for. Explorer's island hosts
+  (`DesktopWindowXamlSource`) add themselves as roots but on close only their inner `XamlIsland`
+  signals the removal, so a closed window's root, and its tree, is never let go of. Only
+  destroying XAML Diagnostics empties the cache; unadvising doesn't.
+- **Recycling doesn't work (round 4).** Ending XAML Diagnostics after windows close and attaching
+  a new session (handing the look over) kept Explorer's memory at the flag-off control, but
+  **hung Explorer** after 13-14 recycles in all three runs: its UI thread spun in a corrupted
+  property map (`DependencyObject::GetValue`). The teardown releases the UI threads' XAML
+  objects from whichever thread lets go last, and in the shell Explorer every window has its own
+  UI thread, so no thread can do it safely. Visual Studio never lets go of XAML Diagnostics; the
+  code was reverted. The fix belongs in WinUI (close the root a `DesktopWindowXamlSource` added);
+  the TAP can drop the per-handle part (no handles for objects outside the tree). Until then the
+  flag stays **off**. Evidence and the burst table: `crates/app-styler/evidence/round4`.
 - Missing elements across Windows builds are not errors: a selector that matches nothing does
   nothing.
 - Nothing is persisted in the apps. If anything is ever stuck, closing and reopening the window

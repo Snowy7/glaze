@@ -1,0 +1,25 @@
+10:04:43 variant control: separate explorer 87996
+10:04:49 bursts start control (explorer 87996, 10 bursts)
+10:04:49 [start] explorer 87996: 130.8 MB priv, 186.5 MB ws, 2488 handles, 2.09 s cpu
+10:04:56   burst 1: 2 opened, 2 closed, 7 s with the lock
+10:05:02 [after burst 1] explorer 87996: 168.9 MB priv, 245.8 MB ws, 3671 handles, 9.14 s cpu
+10:05:38   burst 2: 2 opened, 2 closed, 6 s with the lock
+10:05:44 [after burst 2] explorer 87996: 180.0 MB priv, 254.7 MB ws, 3679 handles, 13.95 s cpu
+10:06:24   burst 3: 2 opened, 2 closed, 7 s with the lock
+10:06:30 [after burst 3] explorer 87996: 202.4 MB priv, 278.9 MB ws, 3839 handles, 20.48 s cpu
+10:07:40   burst 4: 2 opened, 2 closed, 6 s with the lock
+10:07:46 [after burst 4] explorer 87996: 361.2 MB priv, 308.8 MB ws, 3696 handles, 27.86 s cpu
+10:08:22   burst 5: 2 opened, 2 closed, 6 s with the lock
+10:08:28 [after burst 5] explorer 87996: 363.6 MB priv, 312.2 MB ws, 3672 handles, 34.31 s cpu
+10:09:28   burst 6: 2 opened, 2 closed, 7 s with the lock
+10:09:34 [after burst 6] explorer 87996: 371.3 MB priv, 318.6 MB ws, 3492 handles, 40.19 s cpu
+10:10:49   burst 7: 2 opened, 2 closed, 6 s with the lock
+10:10:55 [after burst 7] explorer 87996: 592.8 MB priv, 346.1 MB ws, 3625 handles, 47.16 s cpu
+10:11:31   burst 8: 2 opened, 2 closed, 6 s with the lock
+10:11:37 [after burst 8] explorer 87996: 667.4 MB priv, 357.3 MB ws, 3643 handles, 51.91 s cpu
+10:12:13   burst 9: 2 opened, 2 closed, 6 s with the lock
+10:12:19 [after burst 9] explorer 87996: 670.4 MB priv, 360.7 MB ws, 3689 handles, 57.38 s cpu
+10:12:55   burst 10: 2 opened, 2 closed, 6 s with the lock
+10:13:01 [after burst 10] explorer 87996: 670.9 MB priv, 360.7 MB ws, 3709 handles, 62.03 s cpu
+10:13:01 bursts done control
+10:13:01 variant control done; explorer 87996 left open for inspection

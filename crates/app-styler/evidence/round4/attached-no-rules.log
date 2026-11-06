@@ -1,0 +1,16 @@
+10:13:23 variant bare: separate explorer 72936
+10:13:23 probe attached: True (helper 50356)
+10:13:29 bursts start bare (explorer 72936, 4 bursts)
+10:13:29 [start] explorer 72936: 130.8 MB priv, 188.0 MB ws, 2474 handles, 2.09 s cpu | styler 50356: 2.6 MB priv
+10:13:36   burst 1: 2 opened, 2 closed, 8 s with the lock
+10:13:43 [after burst 1] explorer 72936: 272.6 MB priv, 282.2 MB ws, 3850 handles, 9.70 s cpu | styler 50356: 2.6 MB priv
+10:14:19   burst 2: 2 opened, 2 closed, 6 s with the lock
+10:14:25 [after burst 2] explorer 72936: 276.4 MB priv, 286.4 MB ws, 4032 handles, 15.02 s cpu | styler 50356: 2.8 MB priv
+10:15:02   burst 3: 2 opened, 2 closed, 6 s with the lock
+10:15:08 [after burst 3] explorer 72936: 383.8 MB priv, 336.2 MB ws, 4585 handles, 21.59 s cpu | styler 50356: 2.8 MB priv
+10:15:45   burst 4: 2 opened, 2 closed, 7 s with the lock
+10:15:51 [after burst 4] explorer 72936: 525.6 MB priv, 380.3 MB ws, 4910 handles, 27.91 s cpu | styler 50356: 2.6 MB priv
+10:15:51 bursts done bare
+10:15:51 helper 50356 stopped
+10:16:03 [after the session ended] explorer 72936: 525.3 MB priv, 4692 handles
+10:16:03 variant bare done; explorer 72936 left open for inspection
