@@ -272,7 +272,8 @@ impl Engine {
             .iter()
             .filter_map(|s| s.kept.as_ref())
             .find(|k| k.drawn.get().is_some());
-        self.preview.serve(&self.gpu, kept.map(|k| &k.texture));
+        self.preview
+            .serve(&self.gpu, kept.map(|k| &k.texture), &mut self.glass);
         flow
     }
 

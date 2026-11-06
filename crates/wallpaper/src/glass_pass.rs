@@ -174,6 +174,16 @@ impl GlassPass {
         self.screens.get_mut(index).is_some_and(|s| std::mem::take(&mut s.dirty) || s.animating)
     }
 
+    /// A renderer of its own (buffers, blur pyramid) on the pipelines every plate's renderer
+    /// shares, compiled on first use: Studio's previews draw with one. Compiling them again
+    /// took 3-4 ms of every preview answer; a fork takes 0.02 ms (RTX, 2026-11-06).
+    pub fn fork(&mut self, gpu: &Gpu) -> lr::Renderer {
+        let srgb = gpu.format.add_srgb_suffix();
+        self.template
+            .get_or_insert_with(|| lr::Renderer::new(&gpu.device, srgb))
+            .fork(&gpu.device)
+    }
+
     /// Whether a spring runs on any screen (the engine then keeps drawing frames).
     pub fn animating(&self) -> bool {
         self.screens.iter().any(|s| s.animating)

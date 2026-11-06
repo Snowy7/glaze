@@ -34,6 +34,7 @@ use windows::Win32::System::Threading::{
 };
 use windows::core::w;
 
+use crate::glass_pass::GlassPass;
 use crate::gpu::Gpu;
 
 const MAGIC: u32 = 0x5650_504d; // "MPPV"
@@ -118,8 +119,9 @@ impl Preview {
     }
 
     /// Answers a new request, or the parked one once there's a frame, from `kept`: a drawn
-    /// wallpaper frame (`None`: a source that draws itself, or nothing drawn yet).
-    pub fn serve(&mut self, gpu: &Gpu, kept: Option<&wgpu::Texture>) {
+    /// wallpaper frame (`None`: a source that draws itself, or nothing drawn yet). The glass is
+    /// the desktop's own (`pass` lends its compiled pipelines).
+    pub fn serve(&mut self, gpu: &Gpu, kept: Option<&wgpu::Texture>, pass: &mut GlassPass) {
         let Some(event) = self.event else { return };
         // SAFETY: our own event; a zero-timeout poll and a reset.
         let asked = unsafe {
@@ -133,7 +135,7 @@ impl Preview {
             return;
         }
         self.parked = false;
-        match answer(gpu, kept, &mut self.refused) {
+        match answer(gpu, kept, &mut self.refused, pass) {
             Ok(parked) => self.parked = parked,
             Err(e) => log::warn!("Studio preview: {e:#}"),
         }
@@ -151,7 +153,12 @@ impl Drop for Preview {
 
 /// Answers the request in Studio's section, or returns `true` without answering when it repeats
 /// the request last answered "no frame" (`refused`) and there's still no frame.
-fn answer(gpu: &Gpu, kept: Option<&wgpu::Texture>, refused: &mut Option<Asked>) -> Result<bool> {
+fn answer(
+    gpu: &Gpu,
+    kept: Option<&wgpu::Texture>,
+    refused: &mut Option<Asked>,
+    pass: &mut GlassPass,
+) -> Result<bool> {
     // SAFETY: Studio's section, mapped whole and unmapped below; the header is checked before
     // the pixel range (inside the mapping Studio sized for MAX_SIZE) is written.
     unsafe {
@@ -174,7 +181,7 @@ fn answer(gpu: &Gpu, kept: Option<&wgpu::Texture>, refused: &mut Option<Asked>) 
                         (view.Value as *mut u8).add(PIXELS),
                         w as usize * h as usize * 4,
                     );
-                    draw(gpu, kept, (w, h), &header.plates[..count], pixels)?;
+                    draw(gpu, kept, (w, h), &header.plates[..count], pixels, pass)?;
                     *refused = None;
                     0
                 } else {
@@ -213,6 +220,7 @@ fn draw(
     size: (u32, u32),
     plates: &[Plate],
     out: &mut [u8],
+    desktop: &mut GlassPass,
 ) -> Result<()> {
     let device = &gpu.device;
     let target = gpu.texture(
@@ -239,7 +247,7 @@ fn draw(
         quad.draw(&gpu.blit, &mut pass);
     }
     if !plates.is_empty() {
-        glass(gpu, kept, size, plates, &target, &mut encoder);
+        glass(gpu, kept, size, plates, &target, &mut encoder, desktop.fork(gpu));
     }
     let row = (size.0 * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
     let readback = device.create_buffer(&wgpu::BufferDescriptor {
@@ -290,7 +298,8 @@ fn draw(
 }
 
 /// The desktop's glass (liquid-rust, as `glass_pass` draws it) over the preview target, at one
-/// pixel per point: Studio sends the plates in preview pixels.
+/// pixel per point, with `renderer` (a fork of the desktop's): Studio sends the plates in
+/// preview pixels.
 fn glass(
     gpu: &Gpu,
     kept: &wgpu::Texture,
@@ -298,6 +307,7 @@ fn glass(
     plates: &[Plate],
     target: &wgpu::Texture,
     encoder: &mut wgpu::CommandEncoder,
+    mut renderer: lr::Renderer,
 ) {
     let mut scene = lr::Scene::new();
     scene.physics = false;
@@ -325,7 +335,7 @@ fn glass(
             ..Default::default()
         })
     };
-    lr::Renderer::new(&gpu.device, srgb).render(
+    renderer.render(
         &gpu.device,
         &gpu.queue,
         encoder,
