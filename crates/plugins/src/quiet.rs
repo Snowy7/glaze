@@ -31,7 +31,9 @@ pub(crate) fn key(input: &Input) -> Option<Key> {
             SocketEvent::Closed((id, _)) => (plugin.as_str(), "socket-close", id.to_string()),
         },
         Input::Pipe { plugin, event } => match event {
-            PipeEvent::Data((id, _)) => (plugin.as_str(), "pipe-data", id.to_string()),
+            // A pipe is a byte stream, not state snapshots: dropping chunks corrupts its
+            // framing. The transport's 64-event credit bounds this ordered backlog.
+            PipeEvent::Data(_) => return None,
             PipeEvent::Closed(id) => (plugin.as_str(), "pipe-close", id.to_string()),
         },
         Input::Removed(plugin) => (plugin.as_str(), "removed", String::new()),

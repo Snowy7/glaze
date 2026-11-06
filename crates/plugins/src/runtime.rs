@@ -268,6 +268,11 @@ impl State {
     pub fn conn(&self, id: u64) -> Option<&io::Conn> {
         self.sockets.get(&id).or_else(|| self.pipes.get(&id))
     }
+    pub fn set_game_activity(&self, active: bool) {
+        for conn in self.sockets.values().chain(self.pipes.values()) {
+            conn.set_game_activity(active);
+        }
+    }
     /// Forgets a connection whose thread ended; `false` if this instance never opened it (it
     /// belonged to an instance that trapped or unloaded).
     pub fn closed(&mut self, id: u64) -> bool {

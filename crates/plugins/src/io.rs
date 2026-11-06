@@ -44,6 +44,7 @@ struct Queue {
     /// The connection's thread ended (peer closed, error, or our close finished).
     done: bool,
     undelivered: usize,
+    game: bool,
 }
 
 struct Shared {
@@ -78,6 +79,16 @@ fn size(message: &Message) -> usize {
 }
 
 impl Conn {
+    /// Freeze queued polling writes without disconnecting. Reads remain event-driven and
+    /// bounded by the normal credit. WinHTTP's transport keepalive is independent.
+    pub fn set_game_activity(&self, active: bool) {
+        let mut queue = self.0.lock();
+        if queue.game == active { return; }
+        queue.game = active;
+        drop(queue);
+        self.0.poke();
+    }
+
     fn new(pipe: bool) -> Result<Self, String> {
         let wake = if pipe { Some(Event::new()?) } else { None };
         Ok(Self(Arc::new(Shared { queue: Mutex::default(), cv: Condvar::new(), wake })))
@@ -320,7 +331,7 @@ fn read_socket(ws: &WsHandle, shared: &Shared, id: u64, post: &dyn Fn(SocketEven
 fn write_socket(ws: &WsHandle, shared: &Shared) {
     loop {
         let mut queue = shared.lock();
-        while queue.out.is_empty() && !queue.closing && !queue.done {
+        while (queue.out.is_empty() || queue.game) && !queue.closing && !queue.done {
             queue = shared.cv.wait(queue).expect("io queue");
         }
         if queue.done {
@@ -438,7 +449,7 @@ fn run_pipe(shared: &Shared, id: u64, name: &str, post: &dyn Fn(PipeEvent) -> bo
                 Err(e) => break Err(e.message()),
             }
         }
-        if writing.is_none()
+        if writing.is_none() && !queue.game
             && let Some(message) = queue.out.pop_front()
         {
             queue.bytes -= size(&message);

@@ -392,6 +392,20 @@ fn game_pause_defers_initial_load_and_remove_discards_pending_open() {
     assert_eq!(host.loaded(), 1);
 }
 
+#[test]
+fn game_pause_preserves_an_independent_desktop_hold() {
+    let root = root("game-independent", &["hello"]);
+    let mut host = host(&root);
+    open(&mut host, &root, "hello", "h1");
+    let now = Instant::now();
+    host.on_host(HostMsg::GameActivity(true), now);
+    host.on_host(HostMsg::Held(true), now);
+    host.on_host(HostMsg::GameActivity(false), now);
+    assert!(host.topics().is_empty(), "game exit cannot undo user/session pause");
+    host.on_host(HostMsg::Held(false), now);
+    assert_eq!(host.topics(), vec!["windows"]);
+}
+
 /// `cargo test --release -p mypaper-plugins live_t3_event_costs -- --ignored --nocapture`, with
 /// T3 Code running: the real `plugins/t3` against the local server (read-only: it subscribes and
 /// redraws), printing what each event cost, the baseline decode included, and a click-style

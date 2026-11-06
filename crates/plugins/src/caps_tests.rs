@@ -295,13 +295,19 @@ fn game_pause_keeps_socket_connected_and_coalesces_its_events() {
     rig.wait("probe", "ws opened");
     rig.act("probe", "ws-send", "first");
     rig.act("probe", "ws-send", "latest");
-    rig.host.on_host(HostMsg::GameActivity(true), Instant::now());
-    rig.read();
-    let before = rig.lines["probe"].clone();
     let deadline = Instant::now() + Duration::from_secs(5);
+    // Let the peer finish both sends first: a game may freeze the writer before it sends
+    // the second request. These real in-flight replies are delivered to the loop held.
+    let mut incoming = Vec::new();
     for _ in 0..2 {
         let input = rig.rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).unwrap();
         assert!(matches!(input, Input::Socket { event: crate::runtime::mypaper::plugin::websocket::SocketEvent::Message(_), .. }));
+        incoming.push(input);
+    }
+    rig.host.on_host(HostMsg::GameActivity(true), Instant::now());
+    rig.read();
+    let before = rig.lines["probe"].clone();
+    for input in incoming {
         rig.host.on_input(input, Instant::now());
     }
     rig.host.tick(Instant::now() + Duration::from_secs(600));

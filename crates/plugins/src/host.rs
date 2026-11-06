@@ -141,6 +141,9 @@ impl<W: Write> Host<W> {
             HostMsg::GameActivity(active) => {
                 if self.game == active { return true; }
                 self.game = active;
+                for instance in self.plugins.values().filter_map(|p| p.instance.as_ref()) {
+                    instance.store.data().set_game_activity(active);
+                }
                 log::info!("game background pause: {active}");
                 if active {
                     self.moves_due = None;
