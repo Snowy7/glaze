@@ -1,0 +1,12 @@
+﻿{
+    "files_created":  2000,
+    "payload_bytes":  256000,
+    "burst_wall_ms":  2020.56,
+    "burst_index_cpu_ms":  984.38,
+    "move_resize_rename_delete_ms":  158.9,
+    "final_files":  1999,
+    "final_bytes":  256768,
+    "final_search_server_us":  47640,
+    "index_private_mb":  26.25,
+    "indexed_entries":  5853587
+}

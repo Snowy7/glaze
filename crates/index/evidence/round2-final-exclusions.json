@@ -1,0 +1,123 @@
+﻿{
+    "excluded_search_hits":  0,
+    "excluded_stub":  {
+                          "name":  "node_modules",
+                          "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-5e965fca658c4da4ba8952244242f5f4\\node_modules",
+                          "directory":  true,
+                          "size":  0,
+                          "files":  0,
+                          "modified":  1793942840,
+                          "size_unknown":  true,
+                          "excluded":  true
+                      },
+    "known_before":  {
+                         "name":  "rules-5e965fca658c4da4ba8952244242f5f4",
+                         "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-5e965fca658c4da4ba8952244242f5f4",
+                         "directory":  true,
+                         "size":  5,
+                         "files":  1,
+                         "modified":  1793942840,
+                         "size_unknown":  false,
+                         "excluded":  false
+                     },
+    "unknown_with_exclusion":  {
+                                   "name":  "rules-5e965fca658c4da4ba8952244242f5f4",
+                                   "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-5e965fca658c4da4ba8952244242f5f4",
+                                   "directory":  true,
+                                   "size":  5,
+                                   "files":  1,
+                                   "modified":  1793942840,
+                                   "size_unknown":  true,
+                                   "excluded":  false
+                               },
+    "known_after_removal":  {
+                                "name":  "rules-5e965fca658c4da4ba8952244242f5f4",
+                                "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-5e965fca658c4da4ba8952244242f5f4",
+                                "directory":  true,
+                                "size":  5,
+                                "files":  1,
+                                "modified":  1793942840,
+                                "size_unknown":  false,
+                                "excluded":  false
+                            },
+    "rust_before":  {
+                        "name":  "rust",
+                        "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-5e965fca658c4da4ba8952244242f5f4\\rust",
+                        "directory":  true,
+                        "size":  17,
+                        "files":  1,
+                        "modified":  1793942840,
+                        "size_unknown":  false,
+                        "excluded":  false
+                    },
+    "rust_after_marker":  {
+                              "name":  "rust",
+                              "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-5e965fca658c4da4ba8952244242f5f4\\rust",
+                              "directory":  true,
+                              "size":  0,
+                              "files":  0,
+                              "modified":  1793942840,
+                              "size_unknown":  true,
+                              "excluded":  false
+                          },
+    "rust_after_marker_removed":  {
+                                      "name":  "rust",
+                                      "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-5e965fca658c4da4ba8952244242f5f4\\rust",
+                                      "directory":  true,
+                                      "size":  17,
+                                      "files":  1,
+                                      "modified":  1793942840,
+                                      "size_unknown":  false,
+                                      "excluded":  false
+                                  },
+    "dotnet_before":  {
+                          "name":  "dotnet",
+                          "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-5e965fca658c4da4ba8952244242f5f4\\dotnet",
+                          "directory":  true,
+                          "size":  19,
+                          "files":  1,
+                          "modified":  1793942840,
+                          "size_unknown":  false,
+                          "excluded":  false
+                      },
+    "dotnet_after_project":  {
+                                 "name":  "dotnet",
+                                 "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-5e965fca658c4da4ba8952244242f5f4\\dotnet",
+                                 "directory":  true,
+                                 "size":  0,
+                                 "files":  1,
+                                 "modified":  1793942840,
+                                 "size_unknown":  true,
+                                 "excluded":  false
+                             },
+    "dotnet_after_project_removed":  {
+                                         "name":  "dotnet",
+                                         "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-5e965fca658c4da4ba8952244242f5f4\\dotnet",
+                                         "directory":  true,
+                                         "size":  19,
+                                         "files":  1,
+                                         "modified":  1793942840,
+                                         "size_unknown":  false,
+                                         "excluded":  false
+                                     },
+    "after_project_directory_removed":  {
+                                            "name":  "rules-5e965fca658c4da4ba8952244242f5f4",
+                                            "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-5e965fca658c4da4ba8952244242f5f4",
+                                            "directory":  true,
+                                            "size":  22,
+                                            "files":  2,
+                                            "modified":  1793942840,
+                                            "size_unknown":  false,
+                                            "excluded":  false
+                                        },
+    "after_rust_build_directory_removed":  {
+                                               "name":  "rules-5e965fca658c4da4ba8952244242f5f4",
+                                               "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-5e965fca658c4da4ba8952244242f5f4",
+                                               "directory":  true,
+                                               "size":  5,
+                                               "files":  1,
+                                               "modified":  1793942840,
+                                               "size_unknown":  false,
+                                               "excluded":  false
+                                           }
+}

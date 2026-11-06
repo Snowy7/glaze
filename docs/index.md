@@ -58,9 +58,25 @@ union plus IDs, parents, modification times, directory/excluded bits and folded 
 A query combines its name terms' trigrams, rejects impossible blocks, and checks every
 surviving name exactly. One- and two-byte terms bypass the prefilter. The filter has false
 positives but no false negatives; filters on paths are applied after name matching.
-Live overlays are searched separately and suppress their original entries. Ranking and
-Unicode folding are unchanged. Normal query mappings now retain eight 8 MiB name windows
-and four 8 MiB record/path windows; they do not read every 40-byte record on every query.
+The block filters, file/directory summaries and hashed extension unions live in a compact
+private directory. Queries inspect it before touching mapped names. Blocks with more than
+512 bits set gain a 4096-bit query signature so long names cannot saturate the prefilter.
+Directory trigram summaries, including cross-separator trigrams, reject impossible path filters before
+reconstructing paths. Any changed mapped directory path disables that shortcut until the
+next checkpoint. All survivors still use exact name and path checks.
+Keeping filters interleaved only on disk was insufficient: a 5.84M-entry live run stayed
+under the RAM target but needed p95 239.9 ms because every filter check still faulted name
+pages. Extension summaries also avoid reconstructing paths for unrelated file types.
+Search-relevant overlay records own their folded names; size/count-only changes continue
+using the immutable query column. Live overlays are searched separately and suppress their original entries.
+A bounded top-100 prefix cache handles initial keystrokes and common prefixes through six
+UTF-8 bytes. A temporary 4 MiB count-min sketch selects common longer prefixes; it is
+discarded after loading. The cache has at most 8,192 keys. Live overrides are merged, and
+cached results are used only when their rank bounds prove no unseen row can beat them.
+Otherwise the exact scan remains available. Ranking and Unicode folding are unchanged.
+Each of eight search shards retains two 1 MiB name windows, avoiding cross-shard page
+eviction. Record/path reads retain four 2 MiB windows and a 2 MiB path cache. Searches do
+not read every 40-byte record on every query.
 Existing snapshots remain readable and gain the column when reconciled/checkpointed.
 
 Built-in exclusions prune `node_modules`, `.git`, `__pycache__`, `.venv`, `venv`, `.gradle`,
@@ -99,8 +115,13 @@ Notification readers discard changes below static exclusions while preserving bo
 create/delete events; Rust/.NET marker changes re-evaluate the affected subtree.
 
 The helper also consumes `mypaper_tweaks::game_activity::Snapshot`: scan workers and
-generation streams block at bounded work boundaries while `pause_background` is true.
-Watches keep coalescing and queries stay available. Reconciliation/checkpoint/trim
+generation streams and cache validators block at work boundaries while `pause_background`
+is true. Watch readers stop rearming native directory reads, discard the current name
+batch, and mark that root for reconciliation on resume. This avoids sustained context
+switches from build/cache notifications. Queries stay available once a cache is loaded.
+On the pause transition, the path cache is freed and a one-shot working-set trim pages
+out mapped data and rebuildable filter/prefix heaps after workers park. Private commit
+remains allocated for fast resume; resident RAM is reported separately. Reconciliation/checkpoint/trim
 deadlines use a clock stopped for the entire pause. A directory notification wakes the
 reader, and the checked publisher process handle joins its blocking wait set; missing,
 corrupt, disabled or dead publication resumes work. No polling timer is added. Initial
@@ -137,7 +158,7 @@ affected **watched subtree** is the volume root, so that volume is reconciled; o
 volumes are left alone. The non-admin API cannot safely identify a smaller lost subtree.
 This is a limitation relative to precise journal replay.
 
-A cached snapshot answers queries immediately after restart. A background reconciliation
+A cached snapshot answers queries after cached-load validation. A background reconciliation
 still runs once because changes made while the service was off cannot be recovered
 reliably without a journal. Buffered notifications are replayed after scanning. An
 event-driven two-second quiet deadline (or two minutes during sustained writes)
@@ -207,6 +228,98 @@ mypaper-index --bench-scan 'D:\some-representative-tree'
 
 `--root PATH [CACHE]` runs a standalone service for an isolated fixture. Core passes
 `--parent PID` in production. Only one server may own the pipe at a time.
+
+## Round 2 measurements (2026-11-06)
+
+The final workspace release was deployed at 08:20 local and measured without another
+deployment through all C:/D:/E: scans, generation replacements and notification replay.
+The cache contained **6,005,411 record slots**, versus about 11.4 million before default
+exclusions. The machine continued ordinary filesystem writes; this is a live desktop
+measurement, not a controlled storage benchmark.
+
+| Measurement | Round 1 | Round 2 final |
+|---|---:|---:|
+| Active query working set, target <=150 MiB | 859–878 MiB | **71.76 MiB** sampled every 10 ms |
+| Full-pipe warm latency | p50 30.20 / p95 42.21 ms | **p50 0.62 / p95 4.98 ms**, maximum 7.19 ms |
+| First query after quiet working-set trim, target <=40 ms | 91.88–125.36 ms server time | **0.80–6.06 ms full-pipe**, 11 query/filter forms |
+| Background generation OS working-set high-water, target <=256 MiB | 141.91 MiB bounded implementation | **189.21 MiB**, complete uninterrupted three-volume run |
+| Background generation private high-water | 84.22 MiB bounded run | **195.58 MiB** |
+| Settled private / working set after reconciliation | 17.31 / 7.82 MiB | **108.65 / 10.06 MiB** |
+| Reconciliation including checkpoints/replay | About 535 s in an earlier complete run | **333.70 s**, observed for 364.79 s including settling |
+| Cached startup | Usually 174–572 ms, later 1.6–3.2 s outliers | **5,327.55 ms** live; **2,546.55 ms** separate cached load |
+| Million-entry search fixture, 180 queries | p50 3.49 / p95 6.19 ms | **p50 6.23 / p95 14.26 ms**, max 14.99 ms; first after trim 7.00 ms |
+| Million-entry cached load | 16.55 ms before the query column | **444.05 ms** |
+| Million-entry private memory | 2.14 MiB search / 20.18 MiB with wide lookup | **7.00 / 25.04 MiB**, within 40 MiB/million |
+| 2,000-file burst, 256,000 bytes | 1,631.80 ms / 500 ms index CPU | **1,116.75 ms / 718.75 ms CPU** |
+| Move/resize/rename/delete convergence | 303.44 ms | **142.67 ms**; final 1,999 files / 256,768 bytes |
+| Renamed-file query, server time | 97.51 ms | **1.43 ms** |
+| Truly quiet watched tree, 60 seconds | 0.00% of one core / 4 MiB private | **0.00% / 4 MiB private / 1 MiB working set** |
+| Flag lifecycle | Off: 0 processes in 4.11 s; on: ready in 3.24 s | **Off: 0 processes in 2.84 s; on: cached-ready in 5.29 s**, core parent verified |
+
+Warm evidence is 100 rounds of eleven forms (1,100 requests), including initial `c`,
+`ca`, `ra`, `e` keystrokes, ordinary names, extension, directory and path filters, and
+an absent term. Each cold form waits 2.5 seconds for the existing quiet trim. These are
+resident-cold queries with Windows' file cache available, not a disk-cold boot. The
+query sample's process-lifetime OS peak includes the preceding generation work; the
+71.76 MiB figure is the query interval's sampled residency. The main Round 2 query and
+generation targets pass. The **old million-entry <=10 ms gate regressed** on a repeated
+nonmatching path filter (14.99 ms), and **full-index startup misses the old subsecond
+goal**. Retaining adaptive filters and ranked prefixes raises private commit and the
+generation peak. Neither is hidden by the small settled working set.
+
+Final non-admin enumeration used Basic fetch:
+
+| Volume | Entries enumerated | Wall time | Inaccessible directories |
+|---|---:|---:|---:|
+| C: | 2,529,097 | 100.509 s | 566 |
+| D: | 3,089,298 | 174.205 s | 2 |
+| E: | 384,844 | 8.018 s | 0 |
+
+Live exclusion checks verified that excluded names are absent, unknown sizes propagate
+and clear, Rust/.NET markers prune and restore their build trees, and deleting a marked
+project/build directory leaves no ghost unknown aggregate. The 2,000-file fixture also
+verified rename, resize, move and deletion against the live full index.
+
+The idle check temporarily disabled the production flag and ran the deployed binary
+against an isolated one-file watched tree, then verified the core-owned helper's
+off/on lifecycle and restored `experimental.file_index: true`. It does not claim the
+busy full-volume desktop has no filesystem work. Evidence: `round2-idle.json` and
+`round2-lifecycle.json`.
+
+An alternating fetch comparison on the small 1,467–1,468-entry source tree measured
+Basic **5.69–6.20 ms** versus Large **6.81–10.51 ms** (`round2-fetch.jsonl`). Output files
+changed the entry count by one between samples. This is a small warm-tree check, not
+evidence of a universal API speed advantage; Basic remains selected. A broader optional
+comparison was stopped to release the shared live window and is explicitly marked
+incomplete in `round2-fetch-desktop-aborted.json`.
+
+Final guarded launcher capture skipped input because Windows Settings
+(`ApplicationFrameHost`) was foreground (`round2-launcher-capture.txt`). The final
+launcher rendering is not visually certified; full-pipe evidence is used as the brief
+permits. No foreign window was moved, minimized, or typed into.
+
+The game reader fix had already measured 0.000% CPU in the separate game-quiet run,
+but retained 119 MiB resident RAM before the pause-edge trim was added. The first local
+trim proof was rejected: the owned topmost primary-monitor fullscreen fixture was
+verified foreground by Win32, while core's published hint remained stale and false.
+`round2-game-activation.json` and the fullscreen/restored screenshots preserve that
+publisher failure; they are not a successful game performance sample. A real publisher
+signal is required before certifying the new game RAM behavior.
+
+Final binary SHA-256:
+`AB1B89C98F64105548DF9B74A39EB6CAC3B04B5A617147D21E46A5DB7BC16B06`.
+Raw final evidence is `round2-final-{binary,reconcile,warm,cold,million,offline-load,
+exclusions,live}.json` and `round2-final-production.log` under `crates/index/evidence/`.
+Earlier `round2-*` runs are retained as diagnosis evidence; the initial interleaved-only
+filter and first resident-filter designs missed the latency target.
+
+Validation: **19 index tests** and **21 config tests** passed; index Clippy on all
+targets with warnings denied and the workspace release build passed. Relevant commits:
+`1c63748` (layered config), `db7efcc` (query column, exclusions and game gate), `997640e`
+(launcher unknown-size label), `2625876` (resident filters), `0141cd2` (bounded ranked
+prefix/path caches, adaptive summaries, reader parking and game trim), and `af2480b`
+(owned foreground fixture verification). No core, Studio or shared-kit change was made
+by this round; config fields and the two defaulted Hit booleans are additive API changes.
 
 ## Resident-window follow-up (2026-11-06, 05:40–06:20 timebox)
 

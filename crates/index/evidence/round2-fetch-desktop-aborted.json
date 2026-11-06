@@ -1,0 +1,4 @@
+﻿{
+    "completed":  false,
+    "reason":  "Broad optional fetch comparison stopped to release the live coordination window; use the completed small-tree comparison only."
+}

@@ -1,0 +1,14 @@
+﻿powershell : User application in front (ApplicationFrameHost); input skipped
+At line:2 char:7
++ try { powershell -NoProfile -File crates/index/tools/capture-launcher ...
++       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (User applicatio...; input skipped:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+At D:\Coding\projects\desktop\wallpaper\crates\index\tools\capture-launcher.ps1:57 char:142
++ ... chHost')) { throw "User application in front ($foreground); input ski ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (User applicatio...; input skipped:String) [], RuntimeException
+    + FullyQualifiedErrorId : User application in front (ApplicationFrameHost); input skipped
+ 
+
