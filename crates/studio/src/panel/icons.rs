@@ -128,6 +128,43 @@ pub fn plugin_image(app: &App, id: &str) -> Option<std::sync::Arc<Image>> {
     image(app, &path.to_string_lossy())
 }
 
+/// A component face's declared kit icon when the package has no raster artwork.
+pub fn plugin_glyph(app: &App, id: &str) -> Glyph {
+    use mypaper_ui::icons::Icon;
+    let Some((plugin, face)) = id.split_once("--") else {
+        return crate::pages::widgets::glyph_of(id);
+    };
+    let manifest = app
+        .plugins
+        .installed
+        .iter()
+        .find(|manifest| manifest.id == plugin)
+        .cloned()
+        .or_else(|| mypaper_widgets::registry::find_plugin(plugin).map(|(manifest, _)| manifest));
+    let icon = manifest
+        .as_ref()
+        .and_then(|manifest| manifest.faces.iter().find(|item| item.id == face))
+        .and_then(|face| face.icon.as_deref());
+    match icon {
+        Some("cloud-sun") => Icon::CloudSun,
+        Some("cloud") => Icon::Cloud,
+        Some("sun") => Icon::Sun,
+        Some("terminal") => Icon::Terminal,
+        Some("video") => Icon::Video,
+        Some("message") => Icon::Message,
+        Some("globe") => Icon::Globe,
+        Some("layers") => Icon::Layers,
+        Some("sparkles") => Icon::Sparkles,
+        Some("activity") => Icon::Activity,
+        Some("gauge") => Icon::Gauge,
+        Some("clock") => Icon::Clock,
+        Some("calendar") => Icon::Calendar,
+        Some("package") => Icon::Package,
+        _ => return crate::pages::widgets::glyph_of(plugin),
+    }
+    .into()
+}
+
 /// Read a real shell icon into premultiplied BGRA. Used only by fixture rendering, with no
 /// windows, worker, cache files, or changes to the source app.
 fn system_image(path: &str) -> Option<Image> {

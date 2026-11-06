@@ -428,10 +428,17 @@ pub fn material_sample(
         .cloned();
     let image = cached.unwrap_or_else(|| {
         let (width, height) = (background.width as usize, background.height as usize);
+        let scale = b.s
+            * (r.width() / b.px(220.0))
+                .min(r.height() / b.px(130.0))
+                .min(1.0);
         let alpha = 1.0 - sample.clarity;
-        let frosted = blur_crop(background.as_ref().clone(), (sample.blur * b.s * 0.35).round() as usize);
+        let frosted = blur_crop(
+            background.as_ref().clone(),
+            (sample.blur * scale * 0.35).round() as usize,
+        );
         let mut pixels = background.pixels.clone();
-        let radius = (sample.radius * b.s)
+        let radius = (sample.radius * scale)
             .min(height as f32 * 0.36)
             .min(width as f32 * 0.39);
         let tint = sample.tint;
@@ -451,9 +458,9 @@ pub fn material_sample(
                     continue;
                 }
                 let coverage = (0.6 - distance).clamp(0.0, 1.0);
-                let rim = (1.0 + distance / (5.0 * b.s)).clamp(0.0, 1.0);
+                let rim = (1.0 + distance / (5.0 * scale).max(1.0)).clamp(0.0, 1.0);
                 let bend = if style == Style::Liquid {
-                    rim * rim * sample.refraction * 10.0 * b.s
+                    rim * rim * sample.refraction * 10.0 * scale
                 } else {
                     0.0
                 };
@@ -607,6 +614,7 @@ pub fn window_choice(app: &App, b: &mut B, r: Rect, look: Option<usize>) {
             .flatten()
             .map(|color| Rgba::rgb8(color.0, 1.0))
     };
+    radius = radius.min(win.height() * 0.22);
     let caption_ink = custom_color("caption_text").unwrap_or(ink);
     let plate = if look == 1 {
         super::material::look_tint(app, style)
@@ -692,7 +700,7 @@ pub fn window_choice(app: &App, b: &mut B, r: Rect, look: Option<usize>) {
             caption.height(),
         ),
         "Files",
-        10.0,
+        10.0 * scale / b.s,
         500,
         caption_ink,
         Align::Start,
@@ -707,17 +715,17 @@ pub fn window_choice(app: &App, b: &mut B, r: Rect, look: Option<usize>) {
                 caption.height(),
             ),
             symbol,
-            13.0,
+            13.0 * scale / b.s,
             400,
             caption_ink,
             Align::Center,
         );
     }
     let body = Rect::new(
-        win.left + b.px(10.0),
-        caption.bottom + b.px(8.0),
-        win.width() - b.px(20.0),
-        (win.bottom - caption.bottom - b.px(16.0)).max(1.0),
+        win.left + 10.0 * scale,
+        caption.bottom + 8.0 * scale,
+        win.width() - 20.0 * scale,
+        (win.bottom - caption.bottom - 16.0 * scale).max(1.0),
     );
     let sidebar = Rect::new(body.left, body.top, body.width() * 0.25, body.height());
     b.fill(sidebar, 3.0 * scale, ink.with_alpha(0.08));
@@ -768,8 +776,13 @@ pub fn bars(
     raw: &serde_json::Value,
     only: Option<crate::actions::Bar>,
 ) {
-    let width = (rect.width() / b.s).round().max(280.0) as u32;
-    let height = (rect.height() / b.s).round().max(32.0) as u32;
+    // Lay out at desktop width before reducing: narrow layouts overlap Islands' pills.
+    let width = 1280;
+    let height = match only {
+        Some(crate::actions::Bar::Top) => 180,
+        Some(crate::actions::Bar::Dock) => 240,
+        None => 540,
+    };
     let mut specimen = raw.clone();
     if only != Some(crate::actions::Bar::Top) {
         specimen["dock"]["enabled"] = serde_json::json!(true);
@@ -927,7 +940,13 @@ fn bars_at(
             };
             append(frame, x, y, &tokens);
         }
-        let image = Arc::new(mypaper_ui::render(&mut ui, &list, raster.0, raster.1).ok()?);
+        let output_height = rect.height().round().max(1.0) as u32;
+        let vertical_offset = (output_height as f32 - raster.1 as f32) / 2.0;
+        let list = DisplayList {
+            ops: crate::stage::offset(&list.ops, 0.0, vertical_offset).collect(),
+            ..Default::default()
+        };
+        let image = Arc::new(mypaper_ui::render(&mut ui, &list, raster.0, output_height).ok()?);
         drop(ui);
         super::measure::finish_raster(app);
         remember(app, cache_key, &image);

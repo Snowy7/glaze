@@ -100,20 +100,38 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
         );
         if own {
             let selected = crate::panel::widget_look::selected(&instance.appearance);
-            let choices: Vec<_> = super::look::STYLES.iter().map(|(style, name, _)| {
-                (*name, selected == Some(*style), Action::Set(
-                    Edit::new(DocId::Widgets, format!("{base}/appearance"), "Widget style"),
-                    crate::panel::widget_look::appearance(app, instance, *style),
-                ))
-            }).collect();
-            crate::panel::choosers::draw(
-                app, b, c, key(("panel-widget-styles", &instance.instance)), b.px(184.0), &choices,
+            let choices: Vec<_> = super::look::STYLES
+                .iter()
+                .map(|(style, name, _)| {
+                    (
+                        *name,
+                        selected == Some(*style),
+                        Action::Set(
+                            Edit::new(DocId::Widgets, format!("{base}/appearance"), "Widget style"),
+                            crate::panel::widget_look::appearance(app, instance, *style),
+                        ),
+                    )
+                })
+                .collect();
+            let shown = crate::panel::choosers::draw(
+                app,
+                b,
+                c,
+                key(("panel-widget-styles", &instance.instance)),
+                b.px(184.0),
+                &choices,
                 |b, index, rect| {
                     let mut preview = instance.clone();
-                    if let Some(index) = index.filter(|index| selected != Some(super::look::STYLES[*index].0)) {
-                        preview.appearance = serde_json::from_value(
-                            crate::panel::widget_look::appearance(app, instance, super::look::STYLES[index].0)
-                        ).unwrap_or_default();
+                    if let Some(index) =
+                        index.filter(|index| selected != Some(super::look::STYLES[*index].0))
+                    {
+                        preview.appearance =
+                            serde_json::from_value(crate::panel::widget_look::appearance(
+                                app,
+                                instance,
+                                super::look::STYLES[index].0,
+                            ))
+                            .unwrap_or_default();
                     }
                     let (setting, value) = crate::panel::options::face_choice(manifest, &resolved)
                         .unwrap_or(("variant", ""));
@@ -121,41 +139,56 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
                 },
             );
             let style = selected.unwrap_or(inherited);
-            notice(b, c, &format!("This widget's {} settings", selected.map_or("Custom", super::look::style_name)));
-            let uses = crate::look::uses(style);
-            let effective = instance
-                .appearance
-                .over(&layout.appearance.over(&mypaper_widgets::look::defaults()));
-            let mut sliders = Vec::new();
-            if uses[0] {
-                sliders.push(crate::panel::material::Slider {
-                    label: "Clarity",
-                    value: 1.0 - effective.opacity.unwrap_or(0.46) as f64,
-                    max: 1.0,
-                    edit: Edit::new(
-                        DocId::Widgets,
-                        format!("/_panel/clarity{base}/appearance/opacity"),
-                        "Clarity",
-                    ),
-                });
-            }
-            if uses[1] {
-                sliders.push(crate::panel::material::Slider {
-                    label: "Blur",
-                    value: effective.blur.unwrap_or(12.0) as f64,
-                    max: 32.0,
-                    edit: Edit::new(DocId::Widgets, format!("{base}/appearance/blur"), "Blur"),
-                });
-            }
-            crate::panel::material::block(
-                app,
-                b,
-                c,
-                &sliders,
-                Edit::new(DocId::Widgets, format!("{base}/appearance/tint"), "Tint"),
-                app.get(DocId::Widgets, &format!("{base}/appearance/tint")),
-                false,
-            );
+            let preview = shown
+                .map(|index| super::look::STYLES[index].0)
+                .filter(|style| Some(*style) != selected)
+                .map(super::look::style_name);
+            crate::panel::material::applied_controls(b, c, preview, |b, c| {
+                if preview.is_none() {
+                    notice(
+                        b,
+                        c,
+                        &format!(
+                            "This widget's {} settings",
+                            selected.map_or("Custom", super::look::style_name)
+                        ),
+                    );
+                }
+                let uses = crate::look::uses(style);
+                let effective = instance
+                    .appearance
+                    .over(&layout.appearance.over(&mypaper_widgets::look::defaults()));
+                let mut sliders = Vec::new();
+                if uses[0] {
+                    sliders.push(crate::panel::material::Slider {
+                        label: "Clarity",
+                        value: 1.0 - effective.opacity.unwrap_or(0.46) as f64,
+                        max: 1.0,
+                        edit: Edit::new(
+                            DocId::Widgets,
+                            format!("/_panel/clarity{base}/appearance/opacity"),
+                            "Clarity",
+                        ),
+                    });
+                }
+                if uses[1] {
+                    sliders.push(crate::panel::material::Slider {
+                        label: "Blur",
+                        value: effective.blur.unwrap_or(12.0) as f64,
+                        max: 32.0,
+                        edit: Edit::new(DocId::Widgets, format!("{base}/appearance/blur"), "Blur"),
+                    });
+                }
+                crate::panel::material::block(
+                    app,
+                    b,
+                    c,
+                    &sliders,
+                    Edit::new(DocId::Widgets, format!("{base}/appearance/tint"), "Tint"),
+                    app.get(DocId::Widgets, &format!("{base}/appearance/tint")),
+                    false,
+                );
+            });
         }
         select(
             b,
@@ -335,7 +368,17 @@ fn manifest_control(
                 key(("panel-faces", &instance.instance, name)),
                 picture_height,
                 &tiles,
-                |b, index, rect| face(app, b, instance, manifest, name, index.map_or(current, |index| options[index].0), rect),
+                |b, index, rect| {
+                    face(
+                        app,
+                        b,
+                        instance,
+                        manifest,
+                        name,
+                        index.map_or(current, |index| options[index].0),
+                        rect,
+                    )
+                },
             );
         }
         Setting::Number {
@@ -790,9 +833,27 @@ pub(super) fn face(
         resolved_settings.insert("name".into(), json!("Ada"));
     }
     let photo = (instance.widget == "photo")
-        .then(|| app.library.active()
-            .and_then(|i| app.library.items[i].preview.as_ref())
-            .and_then(|p| app.images.borrow_mut().get(p, (256, 160))))
+        .then(|| {
+            let stored = (!app.fixture)
+                .then(|| {
+                    let name = (1..=6)
+                        .find_map(|n| {
+                            resolved_settings
+                                .get(&format!("image{n}"))
+                                .and_then(Value::as_str)
+                                .and_then(mypaper_widgets::pick::parse_data_url)
+                        })?
+                        .name;
+                    let path = mypaper_widgets::files::user("widget-data")
+                        .ok()?
+                        .join(&instance.instance)
+                        .join("files")
+                        .join(name);
+                    app.images.borrow_mut().get(&path, (360, 280))
+                })
+                .flatten();
+            stored.or_else(|| crate::panel::specimens::wallpaper(app))
+        })
         .flatten();
     // Render at native scale before reducing. The shell's text fitting works in DIPs;
     // tiny fractional scales can otherwise turn the greeting into “Good…”.
@@ -800,7 +861,15 @@ pub(super) fn face(
         .get("variant")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let (width, height) = if standalone {
+    let (width, height) = if app.panel.as_ref().unwrap().page == Page::AddWidget {
+        // The kit lays out a gallery face in the tile's proportions, keeping its content in view.
+        (
+            360,
+            (360.0 * pic.height() / pic.width().max(1.0))
+                .round()
+                .max(1.0) as u32,
+        )
+    } else if standalone {
         (
             360,
             (360 * instance.size[1] / instance.size[0].max(1)).clamp(80, 360),
@@ -820,13 +889,15 @@ pub(super) fn face(
     let cache_key = format!(
         "face:{}:{setting}:{value}:{width}:{height}:{:.0}x{:.0}:{}:{}:{}:{:p}",
         instance.widget,
-        pic.width(), pic.height(),
+        pic.width(),
+        pic.height(),
         serde_json::to_string(&appearance).unwrap_or_default(),
         serde_json::to_string(&resolved_settings).unwrap_or_default(),
         app.library
             .active()
             .map_or("", |i| app.library.items[i].id.as_str()),
-        photo.as_ref()
+        photo
+            .as_ref()
             .map_or(std::ptr::null(), std::sync::Arc::as_ptr)
     );
     let state = app.panel.as_ref().unwrap();
@@ -887,6 +958,7 @@ pub(super) fn face(
         drop(storage);
         ui.text.clear_cache();
         if !standalone
+            && instance.widget != "photo"
             && resolved_appearance.surface != Some(mypaper_theme::Surface::None)
             && let Some(image) = crate::panel::specimens::frosted_wallpaper(
                 app,
@@ -912,7 +984,7 @@ pub(super) fn face(
         let plate_index = usize::from(
             !standalone && matches!(list.ops.first(), Some(mypaper_ui::Op::RoundedImage { .. })),
         );
-        if resolved_appearance.surface != Some(mypaper_theme::Surface::None) {
+        if instance.widget != "photo" && resolved_appearance.surface != Some(mypaper_theme::Surface::None) {
             list.ops.insert(
                 plate_index,
                 mypaper_ui::Op::Fill {
@@ -927,9 +999,16 @@ pub(super) fn face(
                 },
             );
         }
-        let thumb_width = pic.width().ceil().max(1.0) as u32;
-        let thumb_height = (thumb_width * height / width).max(1);
-        crate::panel::measure::scale_picture(&mut list.ops, thumb_width as f32 / width as f32);
+        // The shell pads photo content. Crop to that content so Full bleed reaches every edge.
+        let (width, height) = if instance.widget == "photo" {
+            let pad = (width.min(height) as f32 * 0.09).clamp(12.0, 20.0).round();
+            list.ops = crate::stage::offset(&list.ops, -pad, -pad).collect();
+            (width - 2 * pad as u32, height - 2 * pad as u32)
+        } else { (width, height) };
+        let scale = (pic.width() / width as f32).max(pic.height() / height as f32);
+        let thumb_width = (width as f32 * scale).ceil().max(1.0) as u32;
+        let thumb_height = (height as f32 * scale).ceil().max(1.0) as u32;
+        crate::panel::measure::scale_picture(&mut list.ops, scale);
         let image = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, thumb_width, thumb_height).ok()?);
         drop(ui);
         drop(list);
@@ -938,72 +1017,33 @@ pub(super) fn face(
         Some(image)
     });
     if let Some(image) = image {
-        let inner = if standalone {
-            pic
-        } else {
-            pic.inflate(-b.px(3.0))
-        };
-        let factor = (inner.width() / width as f32).min(inner.height() / height as f32);
-        let (w, h) = (width as f32 * factor, height as f32 * factor);
-        if !standalone {
-            crate::panel::specimens::backdrop(
-                app,
-                b,
-                Rect::new(
-                    inner.left + (inner.width() - w) / 2.0 - b.px(3.0),
-                    inner.top + (inner.height() - h) / 2.0 - b.px(3.0),
-                    w + b.px(6.0),
-                    h + b.px(6.0),
-                ),
-            );
-        }
-        crate::stage::image_round(
-            b,
-            Rect::new(
-                inner.left + (inner.width() - w) / 2.0,
-                inner.top + (inner.height() - h) / 2.0,
-                w,
-                h,
-            ),
-            &image,
-            1.0,
-            b.px(8.0),
-        );
+        // A face is a picture crop, never a small card floating inside an empty tile.
+        crate::stage::image_round(b, pic, &image, 1.0, b.px(7.0));
     } else {
         unavailable_face(app, b, manifest, pic);
     }
 }
 
-/// Plugin views arrive from the host at runtime. Keep an unavailable picture useful without
-/// starting a plugin or inventing its live data while browsing the catalog.
+/// No retained plugin face is available in this isolated model: use its own artwork.
 fn unavailable_face(app: &App, b: &mut B, manifest: &WidgetManifest, pic: Rect) {
-    b.fill(pic, b.px(8.0), b.p.well);
-    let size = (pic.height() * 0.38).min(b.px(42.0));
+    b.fill(pic, b.px(7.0), b.p.well);
+    let size = (pic.height() * 0.58).min(b.px(72.0));
     let icon = Rect::new(
         pic.left + (pic.width() - size) / 2.0,
-        pic.top + pic.height() * 0.13,
+        pic.top + (pic.height() - size) / 2.0,
         size,
         size,
     );
     if let Some(image) = crate::panel::icons::plugin_image(app, &manifest.id) {
         crate::stage::image_round(b, icon, &image, 1.0, b.px(5.0));
     } else {
-        b.icon(icon, legacy::glyph_of(&manifest.id), size / b.s, b.p.ink2);
+        b.icon(
+            icon,
+            crate::panel::icons::plugin_glyph(app, &manifest.id),
+            size / b.s,
+            b.p.ink2,
+        );
     }
-    text(
-        b,
-        Rect::new(
-            pic.left + b.px(6.0),
-            icon.bottom + b.px(5.0),
-            pic.width() - b.px(12.0),
-            b.px(24.0),
-        ),
-        "Preview unavailable",
-        11.0,
-        400,
-        b.p.ink3,
-        Align::Center,
-    );
 }
 
 /// Representative inputs for pictures only. Never queries or starts a service or writes data.
@@ -1385,8 +1425,10 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     );
                     // Keep every accessible row, but shape and paint only visible tiles.
                     if b.clip_rect().is_some_and(|clip| {
-                        rect.bottom < clip.top || rect.top > clip.bottom
-                            || rect.right < clip.left || rect.left > clip.right
+                        rect.bottom < clip.top
+                            || rect.top > clip.bottom
+                            || rect.right < clip.left
+                            || rect.left > clip.right
                     }) {
                         continue;
                     }
