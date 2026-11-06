@@ -223,6 +223,51 @@ core visible, of which the main thread's frame is ~0.8 ms and recording plus sub
 0.22 ms (lab, RTX): the rest is acquire, present and the driver (round 1's profile), one of each
 per frame; and the device's ~100 MiB, which needs the patched wgpu-hal.
 
+### Covered and released: only real events wake the engine (6 November 2026, round 3)
+
+Round 2 left the engine waking ~139 times a second with every screen covered (its main thread
+15-28 of them), and 0.13-0.16 % of a core during a game. Each thread's wakes, named
+(`GetThreadDescription`) and dated (creation time against the engine's log), live in the released
+state: a window of our own maximized over DISPLAY2 (DISPLAY1 is covered by the user's windows),
+sampled for 20 s after the 10 s release (`cover-named.ps1`). Before is the build deployed at 08:20,
+after is the same desktop on the 08:36 build, three minutes apart.
+
+| Thread | Before, wakes/s | After | What it is |
+|---|---:|---:|---|
+| NVIDIA driver, made with the device | 65.5 | 66.0 | the D3D12 device's own thread |
+| NVIDIA driver, made at the first present | 24.1 | 24.7 | made by the first swapchain; outlives it |
+| `main` | 17.5 | **0** | see below |
+| `window-events` (coverage hook thread) | 15.7 | 9.5 | WinEvents of every process, filtered there, in 50 ms batches |
+| `notify-rs windows loop` x2 (config, theme) | 9.35 + 9.2 | **gone** | notify 8 polls every 100 ms |
+| `dir-watch` x2 (their replacement) | | **0** | |
+| **Total** | **141.5, 0.156 % of a core** | **100.5, 0.078 %** | |
+
+| Commit | Change |
+|---|---|
+| `c500fc3` | `mypaper_desktop::dir_watch::DirWatch`: one thread per watched folder blocks in an overlapped `ReadDirectoryChangesW` (plus a stop event), so it wakes only when the folder changes. notify 8's Windows backend waits with a 100 ms timeout forever (`WaitForSingleObjectEx(wakeup_sem, 100, TRUE)`): 9.2-9.4 wakes a second per watch, in every state. `watch_file` (the engine's, core's and the styler's config watches) and the engine's theme watch use it; the engine no longer depends on notify. |
+| `fd33733` | `DesktopEvents` (Explorer restart detection, on the engine's and the widgets' main thread) hooked window creation, destruction and showing in *every* process: 1.1-2.4 callbacks a second on a quiet desktop (agents' consoles, headless browsers). It now hooks only the desktop's Explorer while one is known, and every process again once it is lost. |
+| `d35f6ff` | The coverage hook woke its consumers for every window destroyed anywhere (a destroyed window can't be classified): 1.25 of 1.4 coverage wakes a second on a quiet desktop. Coverage is always one window's, so each scan now records the windows that covered something, and only those closing wake anyone. |
+
+With the three, the main thread had no wake in the 20 s sample: it now wakes only for a coverage
+change, a config or theme file change, a display or power change, the shell's plates or Studio.
+
+**What stays, and why.** The two NVIDIA threads (~90 wakes/s, ~0 % CPU) belong to the device.
+`lab::idle_present` (a hidden window of the engine's class, three presented frames): device and
+presented swapchain 66.0 + 24.3 wakes/s, swapchain released 63.3 + 22.1, device dropped **0**;
+`lab::idle`: a bare device has only the first (65-66), none has 0. Releasing the device costs
+~1.6 s back to a first frame and slower first flyouts ("Hidden = free" above), so it stays. The
+`window-events` thread takes every process's raw WinEvents (window moves, captures, the cursor) and
+filters them there; it is bounded at 20 batches a second and follows the desktop's activity (2-36
+a second tonight, 7 with the desktop quiet). Scoping its location hook to the foreground and
+covering windows' processes (as the shell's `win_events` does) would cut it further; and its
+system range (`EVENT_SYSTEM_FOREGROUND..MINIMIZEEND`) also takes mouse-capture and menu events, so
+every click in an app rescans coverage. Neither was measurable without clicking into the user's
+apps, so both are left as follow-ups.
+
+Other processes still run notify watches, each a 10 Hz thread (counted per process after the
+deploy): shell 5 (bars, theme, flyouts' index, game signal), index 2, core 1 (tweaks), Studio 1.
+`DirWatch` is the drop-in for them.
+
 ### Games (6 November 2026)
 
 Core now publishes the conservative fullscreen/game hint by default; explicit
