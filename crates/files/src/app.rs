@@ -560,6 +560,37 @@ impl App {
         Ok(())
     }
 
+    fn complete_operation(&mut self, result: std::result::Result<(), String>) -> Result<()> {
+        self.busy = false;
+        self.drop_target.enabled.store(
+            !self.loading || self.refreshing,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        self.drop_target
+            .destination
+            .lock()
+            .map(|mut d| {
+                *d = self
+                    .location
+                    .as_ref()
+                    .filter(|l| l.filesystem)
+                    .map(|l| l.path.clone())
+            })
+            .ok();
+        // A navigation in flight still owns the previous location until its first reply.
+        // Defer refresh until that navigation finishes, rather than cancelling its epoch.
+        if self.loading {
+            self.directory_dirty = true;
+        } else {
+            self.refresh()?;
+        }
+        match result {
+            Ok(()) => self.status = "Operation complete".into(),
+            Err(error) => self.status = error,
+        }
+        Ok(())
+    }
+
     pub fn submit(&mut self) -> Result<()> {
         match self.field.clone() {
             Field::Address => self.navigate(self.address.text()?, true)?,
@@ -1264,27 +1295,7 @@ impl App {
                     }
                 }
                 Reply::Operation(result) => {
-                    self.busy = false;
-                    self.drop_target
-                        .enabled
-                        .store(true, std::sync::atomic::Ordering::Relaxed);
-                    self.drop_target
-                        .destination
-                        .lock()
-                        .map(|mut d| {
-                            *d = self
-                                .location
-                                .as_ref()
-                                .filter(|l| l.filesystem)
-                                .map(|l| l.path.clone())
-                        })
-                        .ok();
-                    // Cancellation can follow some successful copies/moves; refresh either way.
-                    self.refresh()?;
-                    match result {
-                        Ok(()) => self.status = "Operation complete".into(),
-                        Err(error) => self.status = error,
-                    }
+                    self.complete_operation(result)?;
                 }
                 Reply::Error { epoch, message } if epoch == self.epoch => {
                     self.loading = false;
@@ -1378,5 +1389,44 @@ impl Drop for App {
     fn drop(&mut self) {
         use mypaper_ui::glass::Backdrop;
         self.backdrop.close(self.surface.hwnd());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn a_finishing_operation_does_not_cancel_a_new_navigation() {
+        // SAFETY: this test thread owns its OLE apartment and releases the app before uninitializing.
+        unsafe {
+            windows::Win32::System::Ole::OleInitialize(None).unwrap();
+        }
+        let path = std::path::Path::new(r"C:\mypaper-targets\files\scratch")
+            .join(format!("navigation-{}", std::process::id()));
+        std::fs::create_dir_all(&path).unwrap();
+        let path_text = path.to_string_lossy().into_owned();
+        let mut app = App::new(path_text.clone(), Some(Scheme::Dark)).unwrap();
+        app.location = Some(Location {
+            path: path_text,
+            name: "Old folder".into(),
+            parent: None,
+            filesystem: true,
+        });
+        app.loading = false;
+        app.busy = true;
+        app.navigate("shell:MyComputerFolder".into(), true).unwrap();
+        let navigation = app.epoch;
+        app.complete_operation(Ok(())).unwrap();
+        assert_eq!(
+            app.epoch, navigation,
+            "operation completion replaced the requested folder"
+        );
+        assert!(app.loading && app.directory_dirty);
+        drop(app);
+        // SAFETY: balances OleInitialize after the test's OLE objects have been released.
+        unsafe {
+            windows::Win32::System::Ole::OleUninitialize();
+        }
+        let _ = std::fs::remove_dir(path);
     }
 }
