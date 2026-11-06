@@ -15,8 +15,8 @@ memmap2 = "0.9"
 rayon = "1"
 globset = "0.4"
 mypaper-config.workspace = true
+mypaper-fswatch.workspace = true
 mypaper-tweaks.workspace = true
-notify.workspace = true
 
 [dependencies.windows]
 workspace = true

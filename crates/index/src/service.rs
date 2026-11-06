@@ -343,19 +343,13 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     let initial = state.clone();
     let scan_roots = roots.clone();
     let config_tx = tx.clone();
-    use notify::Watcher;
-    let mut config_watch =
-        notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-            if let Ok(event) = event
-                && event.paths.iter().any(|p| {
-                    p.file_name()
-                        .is_some_and(|n| n.eq_ignore_ascii_case("config.json"))
-                })
-            {
-                let _ = config_tx.try_send(Change::RulesChanged);
-            }
-        })?;
-    config_watch.watch(&mypaper_config::dir()?, notify::RecursiveMode::NonRecursive)?;
+    let _config_watch = mypaper_fswatch::Watch::files(
+        &mypaper_config::dir()?,
+        &["config.json"],
+        move || {
+            let _ = config_tx.try_send(Change::RulesChanged);
+        },
+    )?;
     std::thread::Builder::new()
         .name("index-initial".into())
         .spawn(move || {
