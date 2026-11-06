@@ -42,36 +42,6 @@ impl fmt::Display for Framework {
     }
 }
 
-/// The named events a TAP session shares with the helper, one pair per (process, framework).
-///
-/// XAML Diagnostics keeps every tree it has reported (closed windows included) for as long as the
-/// session holds it, so the helper ends a session after windows close and attaches a new one
-/// (docs/windows-styling.md, "Explorer's memory"). These events carry that hand-over.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SessionEvent {
-    /// Auto-reset, made by the session, set by the helper: end this session but keep the look,
-    /// which the next session in the process takes over.
-    Recycle,
-    /// Manual-reset, made by the session, set once it has let go of XAML Diagnostics: only then
-    /// may a new session attach (two at once would break the newer one).
-    Ended,
-}
-
-impl SessionEvent {
-    /// `Local\mypaper-styler-<pid>-<framework>-<event>`.
-    pub fn name(self, pid: u32, framework: Framework) -> String {
-        let framework = match framework {
-            Framework::System => "system",
-            Framework::WinUi => "winui",
-        };
-        let event = match self {
-            SessionEvent::Recycle => "recycle",
-            SessionEvent::Ended => "ended",
-        };
-        format!("Local\\mypaper-styler-{pid}-{framework}-{event}")
-    }
-}
-
 /// `<rules file>.off` next to the rules: while it exists, every TAP session of that app puts the
 /// app back and detaches, and none starts. The helper writes it when its crash guard gives up on
 /// an app, and removes stale ones when a helper session starts.

@@ -40,12 +40,6 @@ pub(super) struct ThreadResources {
 }
 
 impl ThreadResources {
-    /// For a session taking these over: the dictionary's handle was the last session's, so it
-    /// is looked up again when an override needs it.
-    pub(super) fn forget_dictionary(&mut self) {
-        self.dictionary = None;
-    }
-
     /// The brushes whose colour is overridden here.
     pub(super) fn brushes(&self) -> impl Iterator<Item = InstanceHandle> + '_ {
         self.applied
@@ -124,13 +118,9 @@ impl Session {
         }
         let mut current = current.unwrap_or_else(|| ThreadResources {
             scratch: self.scratch(),
-            dictionary: None,
+            dictionary: self.app_dictionary(),
             applied: Vec::new(),
         });
-        // New, or taken over from the last session (see `forget_dictionary`).
-        if current.dictionary.is_none() {
-            current.dictionary = self.app_dictionary();
-        }
         let (keep, stale): (Vec<_>, Vec<_>) = std::mem::take(&mut current.applied)
             .into_iter()
             .partition(|(k, v, _)| wanted.iter().any(|(wk, wv)| wk == k && wv == v));

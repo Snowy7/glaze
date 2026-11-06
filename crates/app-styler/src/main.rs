@@ -6,7 +6,6 @@
 //! mypaper-styler [--parent PID]        follow the config and style Explorer and Settings;
 //!                                      with --parent (core passes its pid), exit with it
 //! mypaper-styler --preview PRESET      the same with that preset, whatever the flag and theme
-//!                [--only PID]          (tests: style that one process alone)
 //! mypaper-styler --dump PID [--winui] [--out FILE] [--props SELECTOR]
 //!                                      write that app's live XAML tree (for writing rules),
 //!                                      and the property values of what SELECTOR picks
@@ -48,10 +47,7 @@ fn run() -> Result<()> {
             let parent = value("--parent")
                 .map(|p| p.parse().context("--parent expects a process id"))
                 .transpose()?;
-            let only = value("--only")
-                .map(|p| p.parse().context("--only expects a process id"))
-                .transpose()?;
-            return helper::run::run(value("--preview"), parent, only);
+            return helper::run::run(value("--preview"), parent);
         }
         (Some(pid), _) => (pid, false),
         (None, Some(pid)) => (pid, true),
