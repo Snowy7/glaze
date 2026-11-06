@@ -274,7 +274,7 @@ fn run() -> Result<()> {
     let thread = unsafe { GetCurrentThreadId() };
     let (tx, rx) = channel::<Msg>();
     let mut app = App::new(&ui.text, scale, (1280, 800));
-    if panel_mode { app.images.borrow_mut().set_budget(5 << 20); }
+    if panel_mode { app.images.borrow_mut().set_budget(2 << 20); }
     app.window = Some(surface.hwnd());
     app.inbox = Some(tx.clone());
     app.thread = thread;
