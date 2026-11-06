@@ -280,6 +280,13 @@ pub struct Theme {
 pub const SYSTEM_BLUE: Rgba = Rgba::new(0.0, 136.0 / 255.0, 1.0, 1.0);
 
 impl Theme {
+    /// A surface override and its concentric cards, without changing the style's defaults.
+    pub fn with_surface_radius(mut self, radius: f32) -> Self {
+        self.radius.surface = radius;
+        self.radius.card = (radius - self.metrics.pad).max(0.0);
+        self
+    }
+
     /// `style` in `scheme`, with `accent` (Windows' accent colour, or [`SYSTEM_BLUE`]).
     pub fn new(style: Style, scheme: Scheme, accent: Rgba) -> Self {
         let dark = scheme == Scheme::Dark;

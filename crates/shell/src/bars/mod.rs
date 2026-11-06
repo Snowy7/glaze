@@ -1647,6 +1647,7 @@ impl Bars {
         }
         self.monitors = monitors.clone();
         let mut wanted = Vec::new();
+        let desktop = Config::load().unwrap_or_default().look;
         for monitor in monitors {
             let mut config = self.config.for_monitor(&monitor.device, monitor.primary)?;
             config.resolve(services::default_pins);
@@ -1686,6 +1687,7 @@ impl Bars {
                     let mut look = look.clone();
                     look::appearance_layer(&config, bar_key, &mut look, &appearance);
                     look::glass_layer(&config, bar_key, &mut look, self.theme_glass);
+                    crate::look::settings::bar(&desktop, glass::Family::Bars, &config, bar_key, &mut look, &mut appearance, &self.system, &ui.text);
                     let colors = plugin_style::patch_look(
                         surface,
                         bar_key,
@@ -1693,7 +1695,7 @@ impl Bars {
                         &mut look,
                         &mut appearance,
                     );
-                    let mut tokens = look::Tokens::resolve(&look, &appearance, &self.system);
+                    let mut tokens = look::Tokens::resolve_settings(&look, &appearance, &self.system, &desktop, &ui.text);
                     plugin_style::colors(&colors, self.config.raw(), &mut tokens.theme.color);
                     tokens.cache_config(&look, &config);
                     let animation = if kind == BarKind::Dock {
@@ -1703,16 +1705,17 @@ impl Bars {
                     };
                     let mut popup_look = look.clone();
                     look::popup_font(&config, bar_key, &mut popup_look);
-                    let knobs = Config::load()
-                        .map(|c| crate::glass::knobs(&c.look, crate::glass::Family::Menus))
-                        .unwrap_or_default();
-                    let mut popup = crate::flyouts::look::Look::resolve_with(
+                    let mut popup_appearance = appearance.clone();
+                    crate::look::settings::bar(&desktop, glass::Family::Menus, &config, bar_key, &mut popup_look, &mut popup_appearance, &self.system, &ui.text);
+                    let knobs = crate::glass::knobs(&desktop, crate::glass::Family::Menus);
+                    let mut popup_look = crate::flyouts::look::Look::resolve_with(
                         &popup_look,
-                        &appearance,
+                        &popup_appearance,
                         &self.system,
                         &knobs,
-                    )
-                    .menu_tokens();
+                    );
+                    popup_look.apply_settings(&desktop, &ui.text);
+                    let mut popup = popup_look.menu_tokens();
                     if performance {
                         popup.glass = None;
                     }
@@ -1926,12 +1929,13 @@ impl Bars {
         }
     }
     fn read_theme(&mut self) {
+        let desktop = Config::load().unwrap_or_default().look;
         let loaded = Config::load()
             .and_then(|c| mypaper_theme::locate(Some(&c.theme)))
             .and_then(LoadedTheme::load)
             .ok();
         self.images.configure(
-            self.config.icons.as_deref(),
+            self.config.icons.as_deref().or(desktop.text.icon_pack.as_deref()),
             loaded
                 .as_ref()
                 .map_or_else(Default::default, |t| t.dir.clone()),

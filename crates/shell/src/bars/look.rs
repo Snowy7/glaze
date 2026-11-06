@@ -120,6 +120,23 @@ pub fn material(look: &Look, style: Style, tint: Rgba, opacity: Option<f32>) -> 
 }
 
 impl Tokens {
+    /// Production resolution under config.json's Look; previews may keep using `resolve`.
+    pub fn resolve_settings(look: &Look, appearance: &Appearance, system: &accent::System, desktop: &mypaper_config::Look, text: &mypaper_ui::Text) -> Self {
+        let mut tokens = Self::resolve(look, appearance, system);
+        if let Some(set) = crate::look::settings::icons(desktop, text) {
+            tokens.theme.icons = set;
+        }
+        if let Some(edge) = desktop.shape.edge {
+            tokens.border = edge;
+            tokens.theme.border = edge.then_some(tokens.theme.color.separator);
+            tokens.styles = super::styling::Styles::resolve(look, &tokens.theme, |c| {
+                color_with_system(c, &tokens.theme, &tokens.system_colors)
+            });
+        }
+        tokens.theme = tokens.theme.with_surface_radius(tokens.radius);
+        tokens
+    }
+
     pub fn resolve(look: &Look, appearance: &Appearance, system: &accent::System) -> Self {
         let native = look.native_style();
         let family = look.family.unwrap_or_default();
@@ -486,9 +503,14 @@ pub fn menu_tokens(text: &mypaper_ui::Text) -> mypaper_ui::Tokens {
     let mut colors =
         super::plugin_style::patch_look("top-bar", "top", bars.raw(), &mut look, &mut appearance);
     colors.extend(super::plugin_style::tokens("menu"));
-    let mut tokens = Tokens::resolve(&look, &appearance, &accent::read());
-    super::plugin_style::colors(&colors, bars.raw(), &mut tokens.theme.color);
-    tokens.menu(text)
+    let desktop = mypaper_config::Config::load().unwrap_or_default().look;
+    let system = accent::read();
+    popup_font(&bars, "top", &mut look);
+    crate::look::settings::bar(&desktop, crate::glass::Family::Menus, &bars, "top", &mut look, &mut appearance, &system, text);
+    let mut resolved = crate::flyouts::look::Look::resolve_with(&look, &appearance, &system, &crate::glass::knobs(&desktop, crate::glass::Family::Menus));
+    resolved.apply_settings(&desktop, text);
+    resolved.patch_colors(&colors);
+    resolved.menu_tokens()
 }
 
 /// The theme's `bars` appearance, its `auto` accent taken from the wallpaper's palette.
@@ -545,7 +567,7 @@ pub fn appearance_layer(
     }
 }
 
-fn explicit_look(config: &mypaper_bars::BarsConfig, bar: &str, path: &str) -> bool {
+pub(crate) fn explicit_look(config: &mypaper_bars::BarsConfig, bar: &str, path: &str) -> bool {
     config
         .raw()
         .get(bar)

@@ -427,12 +427,24 @@ pub fn view_animated<C>(
         });
         let ink = if selectable { c.text } else { c.text_dim };
         let center_y = top + row.height / 2.0;
-        let glyph = |at_x: f32, glyph: char, size: (f32, f32)| Op::Text {
+        let glyph = |at_x: f32, glyph: char, size: (f32, f32)| {
+            if tokens.icon_set == Some(icons::IconSet::Vector)
+                && let Some(icon) = icons::from_system_glyph(glyph)
+            {
+                let px = tokens.menu.glyph * s;
+                return Op::Icon {
+                    rect: Rect::new(at_x - px / 2.0, center_y - px / 2.0, px, px),
+                    icon,
+                    weight: (1.75 * px / 24.0).max(1.35 * s.min(1.5)),
+                    color: ink,
+                };
+            }
+            Op::Text {
             rect: Rect::new(at_x - size.0 / 2.0, center_y - size.1 / 2.0, size.0, size.1),
             text: glyph.to_string().into(),
             style: glyph_style.clone(),
             color: ink,
-        };
+        }};
         let checked = match item.plain() {
             Entry::Action { checked, .. } => *checked,
             _ => None,
@@ -450,6 +462,13 @@ pub fn view_animated<C>(
         match item.icon() {
             // A check item's icon is its mark: shown only while on.
             Some(_) if checked == Some(false) => {}
+            Some(MenuIcon::Glyph(g)) if tokens.icon_set == Some(icons::IconSet::Vector)
+                && icons::from_system_glyph(*g).is_some() => ops.push(Op::Icon {
+                rect: square,
+                icon: icons::from_system_glyph(*g).expect("checked above"),
+                weight: (1.75 * square.width() / 24.0).max(1.35 * s.min(1.5)),
+                color: ink,
+            }),
             Some(MenuIcon::Glyph(g)) => ops.push(Op::Text {
                 rect: square,
                 text: g.to_string().into(),

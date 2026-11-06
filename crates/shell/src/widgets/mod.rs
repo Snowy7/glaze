@@ -156,6 +156,7 @@ pub struct Probe {
 /// Owned by the shell's UI thread. Call `poll` after dispatch, route queued UI events with
 /// `on_event`, and include `timeout_ms` in the message wait. All methods are non-reentrant.
 pub struct Widgets {
+    desktop_look: mypaper_config::Look,
     layout: Layout,
     layout_error: Option<String>,
     theme_path: Option<PathBuf>,
@@ -285,6 +286,7 @@ impl Widgets {
         holds.set(Fact::OnBattery, mypaper_desktop::on_battery());
         let skin = load_skin(&config);
         let mut widgets = Self {
+            desktop_look: config.look.clone(),
             layout,
             layout_error,
             theme_path: None,
@@ -454,6 +456,13 @@ impl Widgets {
     }
     fn follow_config(&mut self) {
         if let Ok(config) = Config::load() {
+            if self.desktop_look != config.look {
+                self.desktop_look = config.look.clone();
+                for entry in self.entries.values_mut() {
+                    entry.model.dirty = true;
+                    entry.painted = false;
+                }
+            }
             self.holds.apply(&config);
             if apply_style(&config) {
                 for entry in self.entries.values_mut() {
@@ -1013,10 +1022,16 @@ impl Widgets {
             let monitor = devices.iter().position(|d| d == device).unwrap();
             let screen = &self.monitors[monitor];
             let grid = grid_for_bars(&self.layout, screen, &self.bars);
+            let base = self.layout.appearance.over(&look::base(&self.skin));
+            let bare = instance.appearance.surface.or(base.surface) == Some(mypaper_theme::Surface::None);
+            let mut global = crate::look::settings::appearance(&self.desktop_look, glass::Family::Widgets, &base, bare, &mypaper_bars::accent::read());
+            if let Some(font) = global.font.as_mut() {
+                *font = crate::look::settings::font(font, |f| ui.text.has_family(f));
+            }
             let appearance = look::resolve(
                 &instance.appearance,
-                &self.layout.appearance,
-                &look::base(&self.skin),
+                &mypaper_theme::Appearance::default(),
+                &global,
                 self.accent,
             );
             let placed = layout::place(instance, manifest, &grid, &appearance);
@@ -1090,6 +1105,7 @@ impl Widgets {
                 entry.model.dirty = true;
             }
             entry.tokens = tokens(&placed.appearance);
+            entry.tokens.icon_set = crate::look::settings::icons(&self.desktop_look, &ui.text);
             entry.model.placed = placed;
             if !self.settling.contains_key(&instance.instance)
                 && !self
@@ -3724,6 +3740,7 @@ pub(crate) fn tokens(appearance: &serde_json::Map<String, Value>) -> Tokens {
             ),
         },
         radius: layer.radius.unwrap_or(22.0),
+        border: layer.border.unwrap_or(false),
         scale: layer.scale.unwrap_or(1.0),
         ..Tokens::default()
     }
