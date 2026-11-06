@@ -1878,7 +1878,7 @@ impl Bars {
         let tray = self
             .bars
             .iter()
-            .any(|b| b.topics().contains(&providers::actions::Topic::Tray))
+            .any(|b| !self.game_active && b.topics().contains(&providers::actions::Topic::Tray))
             && (self.config.tray.host || self.config.taskbar.mode == TaskbarMode::Hide);
         self.services.subscribe(topics, &configs, seconds, tray);
         crate::integrations::bar_subscriptions(

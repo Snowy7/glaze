@@ -153,6 +153,9 @@ The shell drops game-time clock/stats/custom-command deadlines and provider subs
 all screens. Covered screens keep their existing visibility behavior; visible secondary bars
 keep their cached content until resume. Widgets hold fetchers, stats, media/audio and motion.
 The game hold is independent of tray pause, battery, lock and display-off holds.
+The desktop menu's mouse hook and the tray-host worker also leave during games, returning
+notification-area ownership to Explorer until resume. This avoids handling a game's mouse
+input or third-party tray updates while the shell is quiescent.
 
 The shell relays `mypaper_plugin_api::wire::HostMsg::GameActivity(bool)` to its helper (appended
 to the wire enum, preserving existing discriminants). It precedes opens after a helper restart.

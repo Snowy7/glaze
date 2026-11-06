@@ -333,6 +333,8 @@ impl Shell {
             widgets.set_game_activity(active);
             widgets.poll(ui);
         }
+        // The desktop menu's low-level mouse hook need not see a game's input stream.
+        self.follow_config(ui);
     }
     /// Handles everything queued: inbox messages and input, in order, until both are empty.
     /// Handling one may call into Explorer and so let more arrive; they are handled here too.
@@ -422,7 +424,7 @@ impl Shell {
             }
         };
         self.game_enabled = config.system.game_activity.unwrap_or(true);
-        if !config.desktop_menu.enabled {
+        if !config.desktop_menu.enabled || self.game_active {
             if self.menu.take().is_some() {
                 log::info!("desktop right-click menu off");
             }
