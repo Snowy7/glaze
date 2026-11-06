@@ -145,10 +145,10 @@ pub fn draw(
             let k = key((id, index));
             let rect = Rect::new(c.x, c.y, c.w, row_height);
             // The native pointer sample drives both the specimen and its row highlight.
-            if highlighted == Some(index) {
+            if *selected {
+                b.fill(rect, b.px(7.0), super::tokens::thumb(b.p.dark));
+            } else if highlighted == Some(index) {
                 b.fill(rect, b.px(7.0), b.p.hover);
-            } else if *selected {
-                b.fill(rect, b.px(7.0), b.p.selected);
             }
             text(
                 b,
@@ -161,7 +161,11 @@ pub fn draw(
                 name,
                 13.0,
                 if *selected { 600 } else { 400 },
-                b.p.ink1,
+                if *selected {
+                    super::tokens::hex(0xffffff)
+                } else {
+                    b.p.ink1
+                },
                 Align::Start,
             );
             if *selected {
