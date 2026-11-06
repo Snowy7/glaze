@@ -152,13 +152,7 @@ pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
     images.clear_page();
     drop(images);
     app.stage.borrow_mut().clear_pictures();
-    // Renew the factory too, so native font resources stay owned by this page.
-    if let Ok(page_text) = mypaper_ui::Text::isolated() {
-        *text = page_text;
-    } else {
-        text.clear_cache();
-    }
-    text.set_capacity(24);
+    text.clear_cache();
     // Native thumbnail/icon providers are page-owned too. COM unloads only libraries
     // whose objects and calls have all been released; active UI factories stay live.
     unsafe { windows::Win32::System::Com::CoFreeUnusedLibrariesEx(0, None); }
