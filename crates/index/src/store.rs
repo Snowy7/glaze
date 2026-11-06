@@ -917,4 +917,27 @@ mod tests {
         std::fs::remove_file(&base).unwrap();
         std::fs::remove_file(&delta).unwrap();
     }
+
+    #[test]
+    fn forked_reconciliation_keeps_the_previous_mapping_queryable_during_atomic_replace() {
+        let path =
+            std::env::temp_dir().join(format!("mypaper-index-fork-{}.bin", std::process::id()));
+        let mut store = Store::new();
+        let root = store.insert(0, "X:", DIRECTORY, 0, 0);
+        store.upsert(root, "before.txt", 128, 3, 1);
+        store.save(&path).unwrap();
+        let original = Store::open(&path).unwrap();
+        let mut replacement = original.fork().unwrap();
+        replacement.upsert(root, "after.txt", 128, 5, 2);
+        replacement.save(&path).unwrap();
+        assert!(original.find(r"X:\after.txt").is_none());
+        assert_eq!(original.record(root).size, 3);
+        let latest = Store::open(&path).unwrap();
+        assert_eq!(latest.record(root).size, 8);
+        assert!(latest.find(r"X:\after.txt").is_some());
+        drop(original);
+        drop(replacement);
+        drop(latest);
+        std::fs::remove_file(&path).unwrap();
+    }
 }
