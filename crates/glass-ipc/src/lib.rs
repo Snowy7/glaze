@@ -21,6 +21,9 @@ use windows::Win32::System::Threading::{
 use windows::core::HSTRING;
 
 pub const MAX_PLATES: usize = 96;
+/// The largest blur a plate may ask for, in physical px: 64 DIP (the bars' largest) at 400 %.
+/// The engine's frost tops out at 64 pt whatever the screen's scale (`material::liquid`).
+pub const MAX_BLUR: f32 = 256.0;
 const WORDS: usize = 15;
 const CHANNEL: &str = "Local\\mypaper.glass.v1";
 
@@ -31,7 +34,7 @@ const CHANNEL: &str = "Local\\mypaper.glass.v1";
 pub struct Material {
     /// Clear (1) to tinted (0): iOS 27's Liquid Glass slider, reversed.
     pub clarity: f32,
-    /// Frost, physical pixels (points once divided by the screen's scale).
+    /// Frost, physical pixels (points once divided by the screen's scale), up to [`MAX_BLUR`].
     pub blur: f32,
     /// How far the bevel bends what is behind it (Figma *Refraction*).
     pub refraction: f32,
@@ -120,7 +123,7 @@ impl Plate {
                 .into_iter()
                 .chain(m.tint)
                 .all(|v| (0.0..=1.0).contains(&v))
-            && (0.0..=32.0).contains(&m.blur)
+            && (0.0..=MAX_BLUR).contains(&m.blur)
     }
 }
 
@@ -452,6 +455,22 @@ mod tests {
         worker.join().unwrap();
         assert!(reader.read_changed().unwrap().unwrap().plates.is_empty());
     }
+    #[test]
+    fn blur_takes_the_bars_full_range_at_high_dpi() {
+        let plate = |blur| Plate {
+            id: 1,
+            rect: [0.0, 0.0, 100.0, 40.0],
+            radius: 8.0,
+            material: Material {
+                blur,
+                ..Material::default()
+            },
+        };
+        // 64 DIP (the bars' largest blur) at 150 % and at 400 %.
+        assert!(plate(96.0).valid() && plate(MAX_BLUR).valid());
+        assert!(!plate(MAX_BLUR + 1.0).valid() && !plate(-1.0).valid());
+    }
+
     #[test]
     fn snapshot_replaces_geometry_without_interpolation_and_drop_clears_it() {
         let name = format!("{CHANNEL}.test.{}", std::process::id());
