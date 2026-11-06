@@ -247,6 +247,39 @@ fixture with `MYPAPER_PARITY_OUT=<directory>` and
 The main lab additionally accepts `MYPAPER_LAB_STYLE=brightness,saturation,smoothing,sheen,depth,inner_shadow`
 (negative sheen/depth means unset), applied to captures and timed frames.
 
+The maximum new-shadow/squircle fixture (strength 1 on all eight plates) took **0.096 ms** median
+glass-only GPU time on the RTX, within the 2 ms gate. The inspected contact sheets are
+`C:\mypaper-targets\engine-parity\rain-verification.png` and `overlay\verification.png`.
+
+Live verification used guarded input on mypaper's own dock, with DPI-aware 2560x1440 screenshots.
+The inspected continuous menu faded for five seconds: a screenshot fit of its content opacity was
+0.14 at 0.75 s, 0.30 at 1.52 s, 0.60 at 3.00 s, and 1.00 at 5.31 s. This fit is supporting
+image evidence, not a compositor API reading. Plate/style/inner-shadow sections shared stamp 70:
+bars carried smoothing 0.6, inner shadow 1 and unset top-rim depth; widgets retained neutral optics
+and inner shadow 0. The first live menu's glass arrived in 42 ms (warm capture), separate from its
+fade duration.
+
+The final full shared-checkout release workspace build passed and was deployed through
+`scripts/deploy-local.ps1 -From C:\mypaper-targets\main\release` at 07:38. A later attempt to
+capture custom Bézier/reduced-motion/shadow variants stopped before input when the foreground
+safety guard refused activation; those extra live variants remain unverified. Their resolver,
+wire and GPU/curve behavior are covered by the offline checks above. No user app was clicked.
+The original `bars.json` and `config.json` hashes were restored/unchanged:
+`88032FB713BEDDF3D3B8386859655E7A0E2C05DCBDB2F8E9718C5607C0C61BA0` and
+`B0A117160D59CB8698E47DC874E501C585B2B7B67ADF6B906191EF99A7F9F538`.
+At 07:43, deployed engine/shell hashes matched the shared `main` build:
+`3DEB2FD3A14910B50B68E54222DD3351DBEE05D32F9D815EEF8EA24993F0059B` and
+`7CFF809E907D79CBBF616EA75A84F59471C0765D3D0F203A23F53E864918C0EF`.
+The running PIDs were core 59688, engine 85520, shell 28576. At handback, the 07:43–07:53
+measurement hold remained in force; no further desktop-lock use or restarts are needed for this task.
+
+Live artifacts are `%TEMP%\mypaper-tools\engine-parity`: `menu-linear-*.png`,
+`linear-verification.png`, `linear-opacity-fit.json`, `linear-plates.json`, `bezier-plates.json`
+and `deploy-shared.log`. Crate checks/tests and Clippy passed (pre-existing warnings retained):
+renderer 61 tests, IPC 4, UI 62, shell 146 plus the targeted engine/wire/curve tests (103 engine
+tests in the full run, then the added legacy-receiver test). The first GPU shadow fixture caught
+top-edge shading; bottom-facing normal weighting fixed it, and the fixture then passed.
+
 ## Images
 
 - Before (two outlines, one less rounded): `media/native/glass-before-widgets.png`
