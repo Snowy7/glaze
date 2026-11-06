@@ -62,9 +62,10 @@ use windows::Win32::System::Threading::{
     WaitForMultipleObjects,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GCW_ATOM, GWLP_USERDATA, GetClassLongPtrW,
-    GetWindowLongPtrW, GetWindowThreadProcessId, HWND_MESSAGE, IsWindow, PostMessageW,
-    RegisterClassW, SetWindowLongPtrW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WNDCLASSW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GCW_ATOM, GWLP_USERDATA, GWLP_WNDPROC,
+    GetClassLongPtrW, GetWindowLongPtrW, GetWindowThreadProcessId, HWND_MESSAGE, IsWindow,
+    PostMessageW, RegisterClassW, SetWindowLongPtrW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP,
+    WNDCLASSW,
 };
 use windows_core::{
     BOOL, BSTR, GUID, HRESULT, IInspectable, IUnknown, Interface, PCWSTR, Ref, implement, w,
@@ -192,7 +193,8 @@ fn log(message: &str) {
     {
         // SAFETY: no preconditions.
         let pid = unsafe { GetCurrentProcessId() };
-        let _ = writeln!(file, "[tap {pid}] {message}");
+        // One write per line, so threads logging at once don't interleave.
+        let _ = file.write_all(format!("[tap {pid}] {message}\n").as_bytes());
     }
 }
 
@@ -211,6 +213,8 @@ struct Session {
     state: Mutex<State>,
     /// Signalled whenever a UI thread's record leaves `State::threads` (cleaned up or gone).
     cleaned: Condvar,
+    /// Restyle rounds started; a thread runs only the latest one queued for it.
+    restyles: AtomicU64,
 }
 
 // SAFETY: the tree service is free-threaded; everything else is behind the mutex or atomic.
@@ -282,7 +286,9 @@ impl UiThread {
             )
         }
         .ok()?;
-        let generation = GENERATION.fetch_add(1, Ordering::Relaxed);
+        // Unique across the TAP builds loaded in this process too: each has its own counter, so
+        // it starts from this module's address.
+        let generation = (module.0 as u64) ^ GENERATION.fetch_add(1, Ordering::Relaxed);
         // SAFETY: our own window.
         unsafe { SetWindowLongPtrW(window, GWLP_USERDATA, generation as isize) };
         Some(Self {
@@ -297,18 +303,35 @@ impl UiThread {
 
     /// Whether the window is still this one: ours, on `thread`, of this generation.
     fn alive(self, thread: u32) -> bool {
+        self.dead(thread).is_none()
+    }
+
+    /// Why the window isn't this one any more (`None`: it is). Every TAP build loaded in the
+    /// process registers the same class name (one atom), so the window procedure is what says
+    /// a window is this build's: a job posted to another build's window would be misread.
+    fn dead(self, thread: u32) -> Option<&'static str> {
         let Some(atom) = class_atom() else {
-            return false;
+            return Some("no class");
         };
         let hwnd = self.hwnd();
         let mut pid = 0;
         // SAFETY: plain queries; a stale handle just fails each check.
         unsafe {
-            IsWindow(Some(hwnd)).as_bool()
-                && GetWindowThreadProcessId(hwnd, Some(&mut pid)) == thread
-                && pid == GetCurrentProcessId()
-                && GetClassLongPtrW(hwnd, GCW_ATOM) == usize::from(atom)
-                && GetWindowLongPtrW(hwnd, GWLP_USERDATA) == self.generation as isize
+            if !IsWindow(Some(hwnd)).as_bool() {
+                Some("destroyed")
+            } else if GetWindowThreadProcessId(hwnd, Some(&mut pid)) != thread
+                || pid != GetCurrentProcessId()
+            {
+                Some("another thread's")
+            } else if GetClassLongPtrW(hwnd, GCW_ATOM) != usize::from(atom)
+                || GetWindowLongPtrW(hwnd, GWLP_WNDPROC) != window_proc as *const () as isize
+            {
+                Some("not ours")
+            } else if GetWindowLongPtrW(hwnd, GWLP_USERDATA) != self.generation as isize {
+                Some("another generation")
+            } else {
+                None
+            }
         }
     }
 }
@@ -423,6 +446,7 @@ fn run(diagnostics: Sendable<IXamlDiagnostics>, attach: Attach) {
         abandoned: AtomicBool::new(false),
         state: Mutex::new(State::default()),
         cleaned: Condvar::new(),
+        restyles: AtomicU64::new(0),
     });
     session.reload_rules();
 
@@ -569,7 +593,11 @@ impl Session {
                 stale => {
                     // The thread id came back as a new thread: the old one is gone.
                     if let Some(old) = stale {
-                        forget_locked(&mut state, thread, old.generation);
+                        let why = old.dead(thread).unwrap_or_default();
+                        let n = forget_locked(&mut state, thread, old.generation);
+                        log(&format!(
+                            "thread {thread}: its window is {why}; forgot {n} element(s)"
+                        ));
                         self.cleaned.notify_all();
                     }
                     match UiThread::create() {
@@ -577,7 +605,10 @@ impl Session {
                             state.threads.insert(thread, ui);
                             true
                         }
-                        None => false,
+                        None => {
+                            log(&format!("thread {thread}: no message window"));
+                            false
+                        }
                     }
                 }
             };
@@ -990,6 +1021,7 @@ impl Session {
     /// The rules changed: each UI thread is asked to bring its resource overrides and elements
     /// up to date. Threads that are gone are forgotten.
     fn restyle(self: &Arc<Self>) {
+        let round = self.restyles.fetch_add(1, Ordering::SeqCst) + 1;
         let threads: Vec<(u32, UiThread)> = self
             .lock()
             .threads
@@ -998,17 +1030,18 @@ impl Session {
             .collect();
         for (thread, ui) in threads {
             let session = self.clone();
-            if !post(thread, ui, move || session.restyle_thread(thread)) {
+            if !post(thread, ui, move || session.restyle_thread(thread, round)) {
                 self.forget_thread(thread, ui.generation);
             }
         }
     }
 
-    /// One UI thread's part of a restyle, on that thread: its resources, then every element of
-    /// it the rules want something on or that has something from us, as the map has them now.
-    /// Values no element uses any more are let go of afterwards.
-    fn restyle_thread(&self, thread: u32) {
-        if self.closing.load(Ordering::SeqCst) {
+    /// One UI thread's part of restyle `round`, on that thread: its resources, then every
+    /// element of it the rules want something on or that has something from us, as the map has
+    /// them now. Values no element uses any more are let go of afterwards. A round that a newer
+    /// one (queued behind it) supersedes does nothing.
+    fn restyle_thread(&self, thread: u32, round: u64) {
+        if self.closing.load(Ordering::SeqCst) || self.restyles.load(Ordering::SeqCst) != round {
             return;
         }
         self.apply_resources(thread);
@@ -1081,7 +1114,8 @@ impl Session {
             .get(&thread)
             .is_some_and(|ui| ui.generation == generation)
         {
-            forget_locked(&mut state, thread, generation);
+            let n = forget_locked(&mut state, thread, generation);
+            log(&format!("thread {thread} is gone; forgot {n} element(s)"));
             self.cleaned.notify_all();
         }
     }
@@ -1316,8 +1350,8 @@ fn compile(rules: &AppRules) -> Vec<Rule> {
 }
 
 /// What a UI thread's record and its objects were: leak (forget) everything held there. With the
-/// state locked; the caller notifies `Session::cleaned`.
-fn forget_locked(state: &mut State, thread: u32, generation: u64) {
+/// state locked; the caller notifies `Session::cleaned`. Returns how many elements it knew.
+fn forget_locked(state: &mut State, thread: u32, generation: u64) -> usize {
     if state
         .threads
         .get(&thread)
@@ -1342,10 +1376,12 @@ fn forget_locked(state: &mut State, thread: u32, generation: u64) {
         .filter(|(_, e)| e.thread == thread)
         .map(|(&h, _)| h)
         .collect();
+    let count = gone.len();
     for h in gone {
         state.nodes.remove(&h);
         std::mem::forget(state.styled.remove(&h));
     }
+    count
 }
 
 /// How long closing waits for every UI thread to clean up.
@@ -1399,7 +1435,8 @@ fn post(thread: u32, ui: UiThread, job: impl FnOnce() + Send + 'static) -> bool 
         run_or_defer(Box::new(job));
         return true;
     }
-    if !ui.alive(thread) {
+    if let Some(why) = ui.dead(thread) {
+        log(&format!("thread {thread}: its window is {why}"));
         return false;
     }
     let raw = Box::into_raw(Box::new(Box::new(job) as Job));
@@ -1412,7 +1449,8 @@ fn post(thread: u32, ui: UiThread, job: impl FnOnce() + Send + 'static) -> bool 
             LPARAM(raw as isize),
         )
     };
-    if posted.is_err() {
+    if let Err(e) = posted {
+        log(&format!("thread {thread}: posting failed: {e}"));
         // SAFETY: not posted, so the box is still ours.
         drop(unsafe { Box::from_raw(raw) });
         return false;
