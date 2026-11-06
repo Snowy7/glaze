@@ -99,6 +99,9 @@ pub struct Host<W: Write> {
     notification_plugins: Vec<String>,
     /// The topics last reported in [`HelperMsg::Demand`].
     demand: Vec<String>,
+    /// A game freezes deadlines; retained input is coalesced rather than replayed as a burst.
+    game: bool,
+    deferred: Vec<Input>,
 }
 
 fn size(size: SizeClass) -> WitSize {
@@ -111,7 +114,7 @@ fn size(size: SizeClass) -> WitSize {
 
 impl<W: Write> Host<W> {
     pub fn new(rt: Runtime, out: W, tx: Sender<Input>) -> Self {
-        Self { rt, plugins: HashMap::new(), owners: HashMap::new(), timers: BTreeMap::new(), seq: 0, epoch: Instant::now(), held: false, out, tx, native: None, moves: BTreeMap::new(), moves_due: None, notification_plugins: Vec::new(), demand: Vec::new() }
+        Self { rt, plugins: HashMap::new(), owners: HashMap::new(), timers: BTreeMap::new(), seq: 0, epoch: Instant::now(), held: false, out, tx, native: None, moves: BTreeMap::new(), moves_due: None, notification_plugins: Vec::new(), demand: Vec::new(), game: false, deferred: Vec::new() }
     }
 
     pub fn out(&mut self) -> &mut W {
@@ -130,7 +133,26 @@ impl<W: Write> Host<W> {
 
     /// Handles one shell message; `false` means shut down.
     pub fn on_host(&mut self, message: HostMsg, now: Instant) -> bool {
+        if self.game && !matches!(message, HostMsg::GameActivity(_) | HostMsg::Shutdown | HostMsg::Remove { .. } | HostMsg::Stats) {
+            self.defer(Input::Host(message));
+            return true;
+        }
         match message {
+            HostMsg::GameActivity(active) => {
+                if self.game == active { return true; }
+                self.game = active;
+                log::info!("game background pause: {active}");
+                if active {
+                    self.moves_due = None;
+                    for (_, event) in std::mem::take(&mut self.moves) {
+                        self.defer(Input::Host(HostMsg::System(event)));
+                    }
+                } else {
+                    for input in std::mem::take(&mut self.deferred) {
+                        self.on_input(input, now);
+                    }
+                }
+            }
             HostMsg::Open { plugin, dir, instance, face, size, settings } => {
                 if !self.register(&plugin, dir) {
                     return true;
@@ -266,6 +288,7 @@ impl<W: Write> Host<W> {
 
     /// The system topics a visible (placed, not held) loaded plugin subscribes to and may receive.
     pub fn topics(&self) -> Vec<String> {
+        if self.game { return Vec::new(); }
         use crate::runtime::mypaper::plugin::events::Topic;
         let topics = [(Topic::Windows, "windows"), (Topic::Monitors, "monitors"), (Topic::Media, "media"), (Topic::Power, "power"), (Topic::Theme, "theme")];
         let visible: Vec<&Instance> = self.plugins.values().filter(|p| !self.held && !p.faces.is_empty()).filter_map(|p| p.instance.as_ref()).collect();
@@ -279,7 +302,7 @@ impl<W: Write> Host<W> {
             self.send(HelperMsg::Demand { topics });
         }
         use crate::runtime::mypaper::plugin::events::Topic;
-        let mut plugins: Vec<_> = self.plugins.iter().filter(|(_, p)| !self.held && !p.faces.is_empty()
+        let mut plugins: Vec<_> = self.plugins.iter().filter(|(_, p)| !self.game && !self.held && !p.faces.is_empty()
             && p.instance.as_ref().is_some_and(|i| i.store.data().subscribed(Topic::Notifications)))
             .map(|(id, _)| id.clone()).collect();
         plugins.sort();
@@ -350,6 +373,10 @@ impl<W: Write> Host<W> {
 
     /// A worker's I/O completion.
     pub fn on_input(&mut self, input: Input, now: Instant) -> bool {
+        if self.game && !matches!(input, Input::Host(_) | Input::Eof | Input::Removed(_)) {
+            self.defer(input);
+            return true;
+        }
         match input {
             Input::Removed(plugin) => { self.send(HelperMsg::Removed { plugin }); true }
             Input::Host(message) => self.on_host(message, now),
@@ -419,6 +446,21 @@ impl<W: Write> Host<W> {
             }
             Input::Eof => false,
         }
+    }
+
+    /// Keep the latest state per source/request. Socket/pipe credit belongs to the retained
+    /// event; replacing it returns the old credit, leaving the connection open and bounded.
+    fn defer(&mut self, input: Input) {
+        let key = crate::quiet::key(&input);
+        if key.is_some() && let Some(index) = self.deferred.iter().position(|old| crate::quiet::key(old) == key) {
+            let old = self.deferred.remove(index);
+            if let Some((plugin, id)) = crate::quiet::credit(&old)
+                && let Some(conn) = self.plugins.get(plugin).and_then(|p| p.instance.as_ref()).and_then(|i| i.store.data().conn(id))
+            {
+                conn.delivered();
+            }
+        }
+        self.deferred.push(input);
     }
 
     /// Starts the plugin's native modules (if it declares any and may run native code).
@@ -693,6 +735,7 @@ impl<W: Write> Host<W> {
 
     /// Fires due timers, retries throttled plugins and unloads idle ones.
     pub fn tick(&mut self, now: Instant) {
+        if self.game { return; }
         if self.moves_due.is_some_and(|due| due <= now) {
             self.moves_due = None;
             for (_, event) in std::mem::take(&mut self.moves) {
@@ -732,6 +775,7 @@ impl<W: Write> Host<W> {
 
     /// When the loop must wake next (`None`: only for input).
     pub fn deadline(&self) -> Option<Instant> {
+        if self.game { return None; }
         let timer = self.timers.keys().next().map(|(due, _)| *due);
         let plugins = self.plugins.values().flat_map(|p| [p.retry_at.filter(|_| p.instance.is_none()), p.idle_since.filter(|_| p.instance.is_some()).map(|t| t + IDLE_UNLOAD)]);
         timer.into_iter().chain(self.moves_due).chain(plugins.flatten()).min()

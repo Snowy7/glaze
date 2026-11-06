@@ -20,6 +20,7 @@ mod host;
 mod images;
 mod io;
 mod native;
+mod quiet;
 mod runtime;
 mod settings_permissions;
 #[cfg(test)]
