@@ -707,6 +707,15 @@ pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
 }
 
 pub fn window_choice(app: &App, b: &mut B, r: Rect, look: Option<usize>) {
+    window_at(app, b, r, look, true);
+}
+
+/// The selected Windows look at readable native size, using the chooser's same drawing.
+pub fn window_stage(app: &App, b: &mut B, r: Rect) {
+    window_at(app, b, r, None, false);
+}
+
+fn window_at(app: &App, b: &mut B, r: Rect, look: Option<usize>, thumbnail: bool) {
     let is_custom = look.is_none();
     let custom = app.get(DocId::Config, "/look/windows");
     let look = look.unwrap_or_else(|| {
@@ -735,14 +744,18 @@ pub fn window_choice(app: &App, b: &mut B, r: Rect, look: Option<usize>) {
     );
     let background = material_backdrop(app, size);
     crate::stage::image_round(b, r, &background, 1.0, b.px(8.0));
-    let win = Rect::new(
+    let win = if thumbnail { Rect::new(
         r.left + r.width() * 0.12,
         r.top + r.height() * 0.18,
         r.width() * 1.10,
         r.height() * 1.65,
-    );
+    ) } else {
+        let width = b.px(520.0).min(r.width() - b.px(48.0));
+        let height = b.px(340.0).min(r.height() - b.px(48.0));
+        Rect::new(r.left + (r.width() - width) / 2.0, r.top + (r.height() - height) / 2.0, width, height)
+    };
     let content_start = b.list.ops.len();
-    let scale = win.width() / 180.0;
+    let scale = if thumbnail { win.width() / 180.0 } else { b.s };
     let style = app
         .get(DocId::Config, "/look/style")
         .and_then(|v| serde_json::from_value(v.clone()).ok())

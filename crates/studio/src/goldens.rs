@@ -196,24 +196,35 @@ fn render_window_pages() {
 }
 
 #[test]
-fn window_layout_keeps_the_footer_pinned_and_preview_out_of_narrow_windows() {
+fn window_layout_keeps_the_stage_inspector_band_and_footer_fixed() {
     use crate::panel::{Command, Page};
     let mut ui = Ui::new().unwrap();
-    for (size, rail, preview) in [
-        ((960, 640), true, false),
-        ((1280, 800), false, false),
-        ((1920, 1080), false, true),
+    for (size, rail, inspector_width) in [
+        ((960, 640), true, 340.0),
+        ((1280, 800), false, 340.0),
+        ((1920, 1080), false, 380.0),
     ] {
         let mut app = window_app(true, &ui, size);
         app.run(Action::Panel(Command::Open(Page::AddWidget)));
         let built = crate::view::build(&app, &mut ui);
-        let interactive: Vec<_> = built.list.hits.iter().filter(|hit| hit.id < u32::MAX / 2).map(|hit| hit.id).collect();
-        assert_eq!(interactive, (1..=built.targets.len() as u32).collect::<Vec<_>>());
+        let interactive: Vec<_> = built
+            .list
+            .hits
+            .iter()
+            .filter(|hit| hit.id < u32::MAX / 2)
+            .map(|hit| hit.id)
+            .collect();
+        assert_eq!(
+            interactive,
+            (1..=built.targets.len() as u32).collect::<Vec<_>>()
+        );
         let r = crate::view::regions(&app);
         let (column, live) = crate::view::content_regions(&app);
         assert_eq!(r.rail, rail);
-        assert_eq!(live.is_some(), preview);
-        assert!(column.width() <= 752.0);
+        assert!(live.is_some());
+        assert_eq!(column.width(), inspector_width);
+        assert_eq!(r.bar.height(), 48.0);
+        assert_eq!(r.sidebar.width(), if rail { 56.0 } else { 208.0 });
         let cancel = built
             .targets
             .iter()
@@ -228,5 +239,153 @@ fn window_layout_keeps_the_footer_pinned_and_preview_out_of_narrow_windows() {
                 .iter()
                 .any(|t| t.action == Action::Panel(Command::Done))
         );
+    }
+}
+
+#[test]
+fn stage_selection_and_zoom_only_change_navigation_and_keep_the_inspector_in_place() {
+    use crate::{
+        actions::Bar,
+        panel::{Command, Page},
+    };
+    let mut ui = Ui::new().unwrap();
+    let mut app = window_app(true, &ui, (1280, 800));
+    let before = app.docs.doc(crate::docs::DocId::Widgets).raw.clone();
+    let inspector = crate::view::regions(&app).inspector.unwrap();
+    let built = crate::view::build(&app, &mut ui);
+    let clock = built
+        .targets
+        .iter()
+        .find(|target| target.action == Action::SelectWidget(Some("clock-1".into())))
+        .unwrap()
+        .action
+        .clone();
+    app.run(clock);
+    assert_eq!(app.panel.as_ref().unwrap().page, Page::Widget);
+    app.run(Action::Panel(Command::StageZoom(true)));
+    let built = crate::view::build(&app, &mut ui);
+    assert_eq!(crate::view::regions(&app).inspector.unwrap(), inspector);
+    let stage = crate::view::regions(&app).stage.unwrap();
+    for target in built
+        .targets
+        .iter()
+        .filter(|target| target.scroll == Some(mypaper_ui::controls::key("window-stage")))
+    {
+        if let Some(visible) = target.visible {
+            assert!(
+                visible.left >= stage.left
+                    && visible.top >= stage.top
+                    && visible.right <= stage.right
+                    && visible.bottom <= stage.bottom
+            );
+        }
+    }
+    app.run(Action::Panel(Command::Open(Page::Top)));
+    assert_eq!(app.nav.bar, Some(Bar::Top));
+    assert!(app.panel.as_ref().unwrap().stage_actual);
+    let built = crate::view::build(&app, &mut ui);
+    let slot = crate::actions::Slot {
+        bar: Bar::Top,
+        list: "right",
+        index: 6,
+    };
+    let module = built
+        .targets
+        .iter()
+        .find(|target| target.action == Action::SelectModule(Some(slot.clone())))
+        .unwrap()
+        .action
+        .clone();
+    app.run(module);
+    assert_eq!(crate::panel::current_page(&app), Page::Module);
+    assert_eq!(
+        crate::panel::editors::selected_module_name(&app).as_deref(),
+        Some("Date and clock")
+    );
+    assert_eq!(crate::view::regions(&app).inspector.unwrap(), inspector);
+    assert_eq!(app.docs.doc(crate::docs::DocId::Widgets).raw, before);
+    assert!(!app.docs.can_undo());
+    for page in [
+        Page::Connections,
+        Page::Settings,
+        Page::General,
+        Page::Performance,
+        Page::Keyboard,
+        Page::Troubleshoot,
+        Page::About,
+        Page::History,
+        Page::Search,
+        Page::FirstRun,
+    ] {
+        app.run(Action::Panel(Command::Open(page)));
+        let r = crate::view::regions(&app);
+        assert!(r.stage.is_none() && r.inspector.is_none());
+        assert!(crate::view::content_regions(&app).0.width() <= 672.0);
+    }
+}
+
+/// Additional frame checks for the rail, native-size selection, and creation/restore footers.
+#[test]
+fn render_window_interaction_states() {
+    use crate::panel::{Command, Page};
+    let out = PathBuf::from(
+        std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
+            .unwrap_or_else(|| r"C:\mypaper-targets\studio-window\shots".into()),
+    );
+    let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
+    let mut ui = Ui::new().unwrap();
+    for dark in [true, false] {
+        for (page, name, size, actual) in [
+            (Page::Widget, "widget-100", (1280, 800), true),
+            (Page::Module, "module-100", (1280, 800), true),
+            (Page::Windows, "windows", (1280, 800), false),
+            (Page::General, "large-text", (1280, 800), false),
+            (Page::DesktopMenu, "desktop-menu", (1280, 800), false),
+            (Page::AddWidget, "add-widget-rail", (960, 640), false),
+            (Page::History, "history-restore", (1280, 800), false),
+        ] {
+            let mut app = window_app(dark, &ui, size);
+            app.run(Action::Panel(Command::Open(page)));
+            app.panel.as_mut().unwrap().stage_actual = actual;
+            app.nav.widget = Some("clock-1".into());
+            if name == "large-text" {
+                app.theme.ty.text_scale = 1.5;
+            }
+            if page == Page::Module {
+                app.nav.bar = Some(crate::actions::Bar::Top);
+                app.nav.module = Some(crate::actions::Slot {
+                    bar: crate::actions::Bar::Top,
+                    list: "right",
+                    index: 6,
+                });
+            }
+            if page == Page::History {
+                app.run(Action::SetStyle(Some(mypaper_config::look::Style::Fluent)));
+                app.run(Action::Preset("islands"));
+                app.run(Action::Panel(Command::History(1)));
+                for (i, entry) in app
+                    .panel
+                    .as_ref()
+                    .unwrap()
+                    .history
+                    .borrow_mut()
+                    .entries
+                    .iter_mut()
+                    .enumerate()
+                {
+                    entry.at = 1793958138 + i as u64 * 60;
+                }
+                app.toast = None;
+            }
+            let image = shot(&mut app, &mut ui);
+            let file = format!(
+                "{name}-{}x{}-{}.png",
+                size.0,
+                size.1,
+                if dark { "dark" } else { "light" }
+            );
+            golden::write(&image, &out.join(&file)).unwrap();
+            golden::check(&image, &baseline.join(&file)).unwrap();
+        }
     }
 }

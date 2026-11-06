@@ -19,7 +19,7 @@ pub(crate) mod pages;
 mod peek;
 mod pickers;
 mod saving;
-mod specimens;
+pub(crate) mod specimens;
 mod wallpaper_look;
 mod widget_look;
 pub(crate) use widget_look::slider_edit;
@@ -141,6 +141,7 @@ impl Page {
 pub struct State {
     /// The standalone frame hosts these same pages without any desktop picking session.
     pub windowed: bool,
+    pub stage_actual: bool,
     pub chooser: std::cell::RefCell<choosers::State>,
     reclaim_heap: std::cell::Cell<bool>,
     raster: measure::Raster,
@@ -177,6 +178,7 @@ pub fn after_present(app: &App) {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Open(Page),
+    StageZoom(bool),
     Back,
     Done,
     PickWidget(String),
@@ -239,6 +241,7 @@ pub fn run(app: &mut App, command: Command) {
             | Command::SortHandle(_, _)
     );
     match command {
+        Command::StageZoom(actual) => app.panel.as_mut().unwrap().stage_actual = actual,
         Command::PickFont(edit, current) => pickers::open_font(app, edit, current),
         Command::Design(bar) => {
             app.nav.bar = bar;
@@ -319,6 +322,10 @@ pub fn run(app: &mut App, command: Command) {
         }
         Command::Back => {
             app.overlay = None;
+            if app.panel.as_ref().unwrap().windowed && app.panel.as_ref().unwrap().page == Page::Windows {
+                run(app, Command::Open(Page::Look));
+                return;
+            }
             if app.panel.as_ref().unwrap().page == Page::BarDesign {
                 let page = match app.nav.bar { Some(crate::actions::Bar::Top) => Page::Top, Some(crate::actions::Bar::Dock) => Page::Dock, None => Page::Bars };
                 run(app, Command::Open(page));
@@ -551,7 +558,8 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
                 Page::Wallpapers => FieldId::WallpaperSearch,
                 Page::AddWidget => FieldId::WidgetSearch,
                 _ => {
-                    run(app, Command::Open(Page::Root));
+                    let page = if app.panel.as_ref().unwrap().windowed { Page::Search } else { Page::Root };
+                    run(app, Command::Open(page));
                     FieldId::Palette
                 }
             };
@@ -583,7 +591,19 @@ pub fn palette_for(app: &App) -> mypaper_ui::controls::Palette {
     if app.panel.is_some() && !app.theme.contrast {
         let mut palette = tokens::palette(app.theme.palette.dark);
         if app.panel.as_ref().is_some_and(|state| state.windowed) {
-            palette.bg = tokens::hex(if palette.dark { 0x1a1a1a } else { 0xf4f4f4 });
+            let color = |dark, light| tokens::hex(if palette.dark { dark } else { light });
+            palette.chrome = color(0x161616, 0xf7f7f7);
+            palette.bg = color(0x0a0a0a, 0xe6e6e6);
+            palette.panel = palette.chrome;
+            palette.fill = color(0x262626, 0xdadada);
+            palette.well = palette.fill;
+            palette.hover = color(0x2e2e2e, 0xd6d6d6);
+            palette.selected = color(0x4a4a4a, 0xb0b0b0);
+            palette.line = color(0x2a2a2a, 0xdadada);
+            palette.ink3 = color(0xa6a6a6, 0x4a4a4a);
+            palette.ink4 = color(0x666666, 0xa3a3a3);
+            palette.solid = color(0xf2f2f2, 0x111111);
+            palette.on_solid = color(0x0a0a0a, 0xfafafa);
         }
         palette
     } else {
@@ -634,15 +654,17 @@ pub fn build(app: &App, text: &mut Text) -> Built {
     }
 }
 
+pub(crate) fn current_page(app: &App) -> Page {
+    let page = app.panel.as_ref().map_or(Page::Root, |state| state.page);
+    if matches!(page, Page::Top | Page::Dock) && app.nav.module.is_some() { Page::Module } else { page }
+}
+
 pub(crate) fn prepare_page(app: &App, text: &mut Text) -> Page {
     pick_client::connect(app);
     choosers::begin(app);
     history::observe(app);
-    let mut page = app.panel.as_ref().map_or(Page::Root, |s| s.page);
+    let page = current_page(app);
     history::preview_selected(app);
-    if matches!(page, Page::Top | Page::Dock) && app.nav.module.is_some() {
-        page = Page::Module;
-    }
     let state = app.panel.as_ref().unwrap();
     if state.specimen_page.replace(Some(page)) != Some(page) {
         state.specimens.borrow_mut().clear();

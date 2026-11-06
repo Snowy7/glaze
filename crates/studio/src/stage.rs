@@ -137,7 +137,7 @@ pub fn frame(app: &App, area: Rect) -> Rect {
 pub fn prepare(app: &App, ui: &mut Ui, size: (u32, u32), show: Show) {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     (app.docs.version, size, show, app.nav.display, theme_name(&app.docs)).hash(&mut h);
-    (app.nav.widget.as_deref(), app.fixture).hash(&mut h);
+    (app.nav.widget.as_deref(), app.nav.wallpaper, app.panel.as_ref().map(|state| state.page), app.fixture, app.system.running(), app.system.parts[2].running).hash(&mut h);
     if !app.fixture {
         // A clock on the stage follows the minute.
         let now = shell::widgets::Stamp::now();
@@ -189,6 +189,13 @@ fn build(
         }),
         ..Content::default()
     };
+    if app.panel.as_ref().is_some_and(|state| state.windowed && state.page == crate::panel::Page::Wallpaper)
+        && let Some(wallpaper) = app.nav.wallpaper.and_then(|i| app.library.items.get(i)) {
+        out.still = wallpaper.preview.clone().or_else(|| wallpaper.video.clone());
+    }
+    if !app.system.running() || !app.system.parts[2].running {
+        return out;
+    }
     let theme_dir = theme_name(&app.docs).and_then(|t| mypaper_theme::locate(Some(&t)).ok());
     let loaded = theme_dir.as_deref().and_then(|d| mypaper_theme::LoadedTheme::load(d).ok());
     images.configure(
@@ -682,12 +689,19 @@ pub fn draw(app: &App, b: &mut B, frame: Rect, show: Show, pick: impl Fn(Option<
         size,
         shapes: c.shapes.clone(),
     };
-    let glass = if app.fixture { None } else { app.glass.borrow_mut().image(&request) };
+    // At 100% the desktop is larger than its viewport. Draw native vector content through
+    // the crop without allocating an offscreen desktop-sized glass bitmap.
+    let cropped = b.clip_rect().is_some_and(|clip| frame.width() > clip.width() + 1.0 || frame.height() > clip.height() + 1.0);
+    let glass = if app.fixture || cropped { None } else { app.glass.borrow_mut().image(&request) };
+    let still_size = if cropped {
+        let factor = (1024.0 / frame.width().max(1.0)).min(768.0 / frame.height().max(1.0)).min(1.0);
+        ((frame.width() * factor).max(1.0) as u32, (frame.height() * factor).max(1.0) as u32)
+    } else { size };
     let engine = glass.is_some();
     let r = b.px(12.0);
     match glass {
         Some(image) => image_round(b, frame, &image, 1.0, r),
-        None => match c.still.as_ref().and_then(|s| app.images.borrow_mut().get(s, size)) {
+        None => match c.still.as_ref().and_then(|s| app.images.borrow_mut().get(s, still_size)) {
             Some(still) => image_round(b, frame, &still, 1.0, r),
             None => b.fill(frame, r, Rgba::rgb8([0x1d, 0x22, 0x2c], 1.0)),
         },
@@ -700,10 +714,8 @@ pub fn draw(app: &App, b: &mut B, frame: Rect, show: Show, pick: impl Fn(Option<
         stand_in(b, &c.shapes, frame.left, frame.top);
     }
     b.list.ops.extend(offset(&c.ops, frame.left, frame.top));
-    // The picture is rounded; bars and widgets drawn over it can reach its corners, so a ring
-    // in the page colour trims them, starting a pixel inside the edge (no antialiased seam).
-    let t = b.px(6.0);
-    b.stroke(frame.inflate(t - 0.5), r + t - 0.5, t * 2.0 + 1.0, p.bg);
+    // Mask only the rounded corners. An inset stroke also erases the top bar's text.
+    round_crop(b, if cropped { b.clip_rect().unwrap_or(frame) } else { frame }, r, p.bg);
     // Items: the bare wallpaper first (so items win), then each.
     let items: Vec<Item> = c
         .items
@@ -728,6 +740,20 @@ pub fn draw(app: &App, b: &mut B, frame: Rect, show: Show, pick: impl Fn(Option<
         }
     }
     items
+}
+
+fn round_crop(b: &mut B, rect: Rect, radius: f32, color: Rgba) {
+    let radius = radius.min(rect.width() / 2.0).min(rect.height() / 2.0);
+    for row in 0..radius.ceil() as u32 {
+        let y = row as f32;
+        let dy = (radius - y - 0.5).max(0.0);
+        let cut = radius - (radius * radius - dy * dy).max(0.0).sqrt();
+        for x in [rect.left, rect.right - cut] {
+            for top in [rect.top + y, rect.bottom - y - 1.0] {
+                b.fill(Rect::new(x, top, cut, 1.0), 0.0, color);
+            }
+        }
+    }
 }
 
 /// The selection outline (2 px white over a 1 px dark line: readable on any wallpaper) and a

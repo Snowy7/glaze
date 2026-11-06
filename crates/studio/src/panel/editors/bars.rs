@@ -988,6 +988,13 @@ fn module_rows(app: &App, b: &mut B, c: &mut Col, bar: Bar, list: &'static str, 
     }
 }
 
+pub fn selected_module_name(app: &App) -> Option<String> {
+    let slot = app.nav.module.as_ref()?;
+    let list = bar_value(app, &format!("/{}/{}", slot.bar.key(), slot.list))?;
+    let id = list.as_array()?.get(slot.index)?.as_str()?;
+    Some(name(id).to_owned())
+}
+
 pub fn module(app: &App, b: &mut B, c: &mut Col) {
     let Some(slot) = &app.nav.module else { return };
     let list = bar_value(app, &format!("/{}/{}", slot.bar.key(), slot.list));
