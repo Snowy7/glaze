@@ -88,13 +88,15 @@ fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
     } else {
         scan::subtree(root, Fetch::Basic)?
     };
-    eprintln!(
-        "scan {}: {} entries, {:.3}s, {} inaccessible directories",
-        root.display(),
-        scanned.store.len() - 1,
-        scanned.seconds,
-        scanned.denied
-    );
+    if parallel {
+        eprintln!(
+            "scan {}: {} entries, {:.3}s, {} inaccessible directories",
+            root.display(),
+            scanned.store.len() - 1,
+            scanned.seconds,
+            scanned.denied
+        );
+    }
     let mut state = state.write().expect("index state");
     if state.store.is_empty() {
         // First volume: move its buffers instead of allocating a duplicate full index.
