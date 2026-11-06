@@ -49,8 +49,10 @@ fn render_panel_pages() {
             (Page::Root, "root"),
             (Page::Widgets, "widgets"),
             (Page::Bars, "bars"),
+            (Page::Bars, "bars-display-2"),
             (Page::BarDesign, "bars-design"),
             (Page::Performance, "performance"),
+            (Page::Performance, "performance-custom"),
             (Page::Top, "top-bar"),
             (Page::Top, "top-bar-designs"),
             (Page::Dock, "dock"),
@@ -77,6 +79,7 @@ fn render_panel_pages() {
             (Page::Wallpapers, "wallpapers"),
             (Page::Wallpapers, "wallpapers-broken"),
             (Page::Wallpaper, "wallpaper"),
+            (Page::Wallpaper, "wallpaper-own-look"),
             (Page::Wallpaper, "wallpaper-broken"),
             (Page::AddWallpaper, "add-wallpaper"),
             (Page::AddWallpaper, "add-wallpaper-app"),
@@ -116,6 +119,26 @@ fn render_panel_pages() {
             let mut app = app(&ui, dark);
             app.panel.as_mut().unwrap().page = page;
             match name {
+                "bars-display-2" => {
+                    app.nav.display = 1;
+                    for (path, value) in [("/top/height", json!(44)), ("/top/design", json!("fluent")), ("/dock/enabled", json!(false))] {
+                        app.run(Action::Set(crate::actions::Edit::new(DocId::Bars, format!("/overrides/DISPLAY2{path}"), "This display"), value));
+                    }
+                }
+                "performance-custom" => {
+                    app.run(Action::Set(crate::actions::Edit::new(DocId::Config, "/engine/fps", "Frame rate"), json!(73)));
+                    app.nav.more.insert(mypaper_ui::controls::key(("panel-custom-fps", "/engine/fps")));
+                }
+                "wallpaper-own-look" => {
+                    let mut wallpaper = app.library.items[app.library.active().unwrap()].clone();
+                    wallpaper.id = "rain-copy".into();
+                    wallpaper.name = "Rainy Hong Kong (copy)".into();
+                    wallpaper.active = false;
+                    wallpaper.origin = crate::library::Origin::User;
+                    app.nav.more.insert(mypaper_ui::controls::key(("panel-wallpaper-look", &wallpaper.id)));
+                    app.nav.wallpaper = Some(app.library.items.len());
+                    app.library.items.push(wallpaper);
+                }
                 "newer-settings" | "malformed-settings" => {
                     let source = if name == "newer-settings" {
                         "{\"future_setting\":true}"
