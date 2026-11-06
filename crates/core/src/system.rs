@@ -3,7 +3,7 @@
 
 use mypaper_config::Config;
 use mypaper_tweaks::game_activity::GameWatcher;
-use mypaper_tweaks::system::SystemTweaks;
+use mypaper_tweaks::system::{SystemTweaks, writes};
 
 pub struct SystemSettings {
     preferences: Option<SystemTweaks>,
@@ -30,6 +30,14 @@ impl SystemSettings {
     }
 
     fn apply(&mut self, config: &Config) {
+        if writes(&config.system).is_empty() {
+            // Startup still recovers a crashed run, then releases the unused controller.
+            self.preferences = None;
+        } else if self.preferences.is_none() {
+            self.preferences = SystemTweaks::new()
+                .inspect_err(|error| log::warn!("system preferences unavailable: {error:#}"))
+                .ok();
+        }
         if let Some(preferences) = &mut self.preferences
             && let Err(error) = preferences.apply(&config.system)
         {
@@ -54,5 +62,6 @@ impl SystemSettings {
         {
             log::error!("system preferences await next-start recovery: {error:#}");
         }
+        self.preferences = None;
     }
 }
