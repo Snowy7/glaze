@@ -243,17 +243,7 @@ pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
         return true;
     }
     app.panel.as_mut().unwrap().theme_retry = Some(Action::Set(edit.clone(), value.clone()));
-    // The existing writer checks ownership and validates the complete theme before one write.
-    match crate::library::edit_theme(&folder, "", Some(next)) {
-        Ok(()) => {
-            super::saving::theme_saved(app, &folder);
-            app.library =
-                crate::library::Library::scan(crate::app::theme_name(&app.docs).as_deref());
-            app.docs.saved = crate::docs::Saved::Done(std::time::Instant::now());
-            super::history::record_drag(app, &edit.label);
-        }
-        Err(error) => super::saving::theme_failed(app, &folder, &format!("{error:#}")),
-    }
+    app.edit_theme(&edit.label, &folder, "", Some(next));
     true
 }
 
