@@ -31,13 +31,17 @@ impl DesktopExtras {
             .ok();
         let mut extras = Self { classic };
         extras.apply_classic(config.classic_context_menu);
+        apply_folder_routing(config.experimental.files_default);
         extras
     }
 
     /// `config.json` changed: bring the switch in line.
     pub fn follow_config(&mut self) {
         match Config::load() {
-            Ok(config) => self.apply_classic(config.classic_context_menu),
+            Ok(config) => {
+                self.apply_classic(config.classic_context_menu);
+                apply_folder_routing(config.experimental.files_default);
+            }
             Err(e) => log::warn!("desktop extras unchanged: {e:#}"),
         }
     }
@@ -57,6 +61,17 @@ impl DesktopExtras {
             Err(e) => log::warn!("classic context menu not changed: {e:#}"),
         }
     }
+}
+
+/// Persistent, journaled routing needs no resident process or worker. Config changes and
+/// startup reconcile it; disabling also recovers a journal left by an interrupted run.
+fn apply_folder_routing(enabled: bool) {
+    let result = (|| -> anyhow::Result<()> {
+        let executable = std::env::current_exe()?.with_file_name("mypaper-files.exe");
+        mypaper_tweaks::folder_routing::FolderRouting::new()?.set(enabled, &executable)?;
+        Ok(())
+    })();
+    if let Err(error) = result { log::warn!("folder routing unchanged: {error:#}"); }
 }
 
 /// Tells the user the classic menu change needs an Explorer restart. Shown on its own thread

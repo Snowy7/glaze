@@ -65,6 +65,18 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
       Copy-Item -LiteralPath "$From\$exe.exe" -Destination "$destination\$exe.exe" -Force
     }
   }
+  # Optional native services and on-demand apps ship beside core; none starts at deployment.
+  foreach ($exe in "mypaper-files", "mypaper-index") {
+    if ((Test-Path -LiteralPath "$From\$exe.exe") -and
+        [IO.Path]::GetFullPath("$From\$exe.exe") -ne [IO.Path]::GetFullPath("$destination\$exe.exe")) {
+      if (Get-Process $exe -ErrorAction SilentlyContinue) {
+        # A running optional app can finish on its old image; the next launch gets this build.
+        $aside = "$destination\$exe.exe.old-$(Get-Date -Format yyyyMMddHHmmss)"
+        if (Test-Path -LiteralPath "$destination\$exe.exe") { Move-Item -LiteralPath "$destination\$exe.exe" -Destination $aside -Force }
+      }
+      Copy-Item -LiteralPath "$From\$exe.exe" -Destination "$destination\$exe.exe" -Force
+    }
+  }
   foreach ($plugin in "weather", "rss") {
     if (Test-Path "$From\$plugin.exe") { Copy-Item "$From\$plugin.exe" "$repo\plugins\$plugin\$plugin.exe" -Force }
   }

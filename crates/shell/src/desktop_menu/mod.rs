@@ -312,7 +312,8 @@ impl DesktopMenu {
                         && !ui.text.has_family("Segoe MDL2 Assets")
                 }),
         };
-        let items = items::build_with(&self.settings.menu, state, sources);
+        let mut items = items::build_with(&self.settings.menu, state, sources);
+        if let Some(files) = files_app_item() { items.push(files); }
         if items.is_empty() {
             replay_right_click(at);
             return;
@@ -507,6 +508,17 @@ fn clipboard_has_files() -> bool {
     // CF_HDROP: files copied or cut in Explorer.
     // SAFETY: no preconditions.
     unsafe { IsClipboardFormatAvailable(15) }.is_ok()
+}
+
+/// An on-demand Files launch is offered only while the same folder-routing experiment is on.
+fn files_app_item() -> Option<mypaper_ui::Entry<Command>> {
+    if !mypaper_config::Config::load().ok()?.experimental.files_default { return None; }
+    let executable = std::env::current_exe().ok()?.with_file_name("mypaper-files.exe");
+    if !executable.is_file() { return None; }
+    Some(mypaper_ui::Entry::action("Open Desktop in Files", Command::Custom {
+        command: executable.to_string_lossy().into_owned(),
+        args: vec!["--".into(), "shell:Desktop".into()],
+    }).with_icon(mypaper_ui::MenuIcon::Glyph(items::glyph::FOLDER)))
 }
 
 fn create_uia() -> Result<IUIAutomation> {
