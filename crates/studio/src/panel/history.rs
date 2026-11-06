@@ -353,6 +353,25 @@ fn summary(app: &App, before: &Desktop, after: &Desktop) -> String {
         return "Look: color, text or shape changed".into();
     }
     if before.bars != after.bars {
+        if before.bars.get("overrides") != after.bars.get("overrides")
+            && let Some(monitor) = app.display()
+        {
+            let resolve = |raw: &Value| {
+                mypaper_bars::BarsConfig::parse(&raw.to_string())
+                    .ok()?
+                    .for_monitor(&monitor.device, monitor.primary)
+                    .ok()
+            };
+            if let (Some(old), Some(new)) = (resolve(&before.bars), resolve(&after.bars)) {
+                if old.top.design != new.top.design {
+                    return format!("Display {}: top bar design changed", app.nav.display + 1);
+                }
+                if old.dock.design != new.dock.design {
+                    return format!("Display {}: dock design changed", app.nav.display + 1);
+                }
+            }
+            return format!("Display {}: bars changed", app.nav.display + 1);
+        }
         let name = |bars: &Value| {
             crate::pages::bars::PRESETS
                 .iter()

@@ -129,7 +129,14 @@ pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
     )
 }
 
-fn design_name(app: &App, bar: Option<Bar>) -> String {
+pub fn design_name(app: &App, bar: Option<Bar>) -> String {
+    if bar.is_none() && !same_pair(app) {
+        return format!(
+            "{} + {}",
+            design_name(app, Some(Bar::Top)),
+            design_name(app, Some(Bar::Dock))
+        );
+    }
     let path = bar.map_or_else(|| "/preset".into(), |bar| format!("/{}/design", bar.key()));
     let value = bar_value(app, &path)
         .and_then(|v| v.as_str().map(str::to_owned))
@@ -143,6 +150,22 @@ fn design_name(app: &App, bar: Option<Bar>) -> String {
         .iter()
         .find(|(id, _)| *id == value)
         .map_or(value.clone(), |(_, label)| (*label).into())
+}
+
+fn same_pair(app: &App) -> bool {
+    let current = resolved(app);
+    let preset = current
+        .get("preset")
+        .and_then(Value::as_str)
+        .unwrap_or("monochrome");
+    mypaper_bars::BarsConfig::parse(&json!({"preset":preset}).to_string())
+        .ok()
+        .and_then(|v| serde_json::to_value(v).ok())
+        .is_none_or(|preset| {
+            ["/top/design", "/dock/design"]
+                .into_iter()
+                .all(|path| current.pointer(path) == preset.pointer(path))
+        })
 }
 
 fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str, caption: &str) {
@@ -640,12 +663,13 @@ pub fn designs(app: &App, b: &mut B, c: &mut Col) {
     };
     let path = bar.map_or_else(|| "/preset".into(), |bar| format!("/{}/design", bar.key()));
     let current = bar_value(app, &path).unwrap_or(json!("monochrome"));
+    let pair = bar.is_some() || same_pair(app);
     let choices: Vec<_> = designs
         .iter()
         .map(|(id, label)| {
             (
                 *label,
-                current == *id,
+                pair && current == *id,
                 if bar.is_none() {
                     if app.monitors.len() < 2 {
                         Action::Preset(id)

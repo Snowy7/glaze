@@ -531,20 +531,13 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             None,
             open(Page::Look),
         );
-        let preset = app
-            .get(DocId::Bars, "/preset")
-            .and_then(Value::as_str)
-            .unwrap_or("monochrome");
-        let preset = crate::pages::bars::PRESETS
-            .iter()
-            .find(|(id, _)| *id == preset)
-            .map_or(preset, |(_, n)| *n);
+        let preset = super::editors::bar_design_name(app, None);
         row(
             b,
             c,
             Some(glyph::BARS),
             "Bars",
-            preset,
+            &preset,
             "",
             None,
             open(Page::Bars),

@@ -1,7 +1,8 @@
 mod bars;
 mod connections;
 pub use bars::{
-    bar_path, bar_value, insert_module, move_module, overview as bars_overview, same_bars,
+    bar_path, bar_value, design_name as bar_design_name, insert_module, move_module,
+    overview as bars_overview, same_bars,
 };
 pub use connections::{connect, connection_module, disconnect, hide_connection_widget};
 mod look;
