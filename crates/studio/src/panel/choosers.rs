@@ -575,7 +575,7 @@ mod tests {
             .find(|target| target.action == Action::SetStyle(Some(Style::Fluent)))
             .unwrap();
         let rect = target.rect;
-        app.input.pointer = Some(Point::new(rect.left + 20.0, rect.top + 10.0));
+        app.input.pointer = Some(Point::new(rect.left + 1.0, rect.top + 10.0));
         app.input.hover = None;
         let frame = crate::panel::build(&app, &mut ui.text);
         assert!(frame.list.ops.iter().any(
