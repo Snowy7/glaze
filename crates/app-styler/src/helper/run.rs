@@ -288,9 +288,18 @@ impl Helper {
             if self.disabled.contains(app) {
                 continue;
             }
-            let enabled = switches.app(app).and_then(|r| r.enabled).unwrap_or(true);
-            let why_not = if !enabled {
+            let switch = switches.app(app).and_then(|r| r.enabled);
+            let why_not = if switch == Some(false) {
                 Some(format!("look.apps.{app}.enabled is false"))
+            } else if app == "settings" && switch.is_none() {
+                // Windows 11 26100: with XAML Diagnostics attached (rules or not), Settings fails
+                // fast on Personalization > Background (E_INVALIDARG from a TemplateBinding in
+                // CDependencyObject::SetEffectiveValue). Never without it. So only on request.
+                Some(
+                    "off unless look.apps.settings.enabled is true (Settings ends itself on \
+                     Personalization > Background while it is attached)"
+                        .to_owned(),
+                )
             } else if app == "explorer" && config.system.separate_process != Some(true) {
                 // XAML Diagnostics keeps every folder window Explorer ever showed until that
                 // process exits: only the separate folder process exits (after its last
