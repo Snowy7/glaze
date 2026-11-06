@@ -229,10 +229,14 @@ fn reconcile(state: &RwLock<State>, root: &Path, parallel: bool) -> Result<()> {
 fn merge(store: &mut Store, source_store: &Store, root: &Path) -> Result<()> {
     let text = root.to_string_lossy();
     let old = store.find(&text);
-    let parent = old
+    let Some(parent) = old
         .map(|id| store.record(id).parent)
         .or_else(|| root.parent().and_then(|p| store.find(&p.to_string_lossy())))
-        .unwrap_or(0);
+    else {
+        // Marker notifications can originate below a pruned ancestor. They cannot create
+        // a new top-level root; only volume reconciliation is allowed to do that.
+        return Ok(());
+    };
     if let Some(id) = old {
         store.remove(id);
     }
@@ -343,13 +347,10 @@ pub fn run(roots: Vec<PathBuf>, cache: PathBuf) -> Result<()> {
     let initial = state.clone();
     let scan_roots = roots.clone();
     let config_tx = tx.clone();
-    let _config_watch = mypaper_fswatch::Watch::files(
-        &mypaper_config::dir()?,
-        &["config.json"],
-        move || {
+    let _config_watch =
+        mypaper_fswatch::Watch::files(&mypaper_config::dir()?, &["config.json"], move || {
             let _ = config_tx.try_send(Change::RulesChanged);
-        },
-    )?;
+        })?;
     std::thread::Builder::new()
         .name("index-initial".into())
         .spawn(move || {
@@ -777,6 +778,30 @@ fn benchmark(count: usize) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn marker_below_unindexed_parent_cannot_import_an_orphan_root() {
+        let dir = std::env::temp_dir().join(format!("mypaper-orphan-{}", std::process::id()));
+        let target = dir.join("node_modules/project/target");
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::write(target.join("CACHEDIR.TAG"), b"").unwrap();
+        let scanned = scan::scan(&dir, Fetch::Basic).unwrap();
+        let state = RwLock::new(State {
+            store: scanned.store,
+            scanning: false,
+            cache: dir.join("cache"),
+            activity: None,
+            rules: Arc::new(RwLock::new(Rules::new(&Default::default(), Path::new("")).unwrap())),
+            quiet: Arc::new(crate::quiet::Quiet::default()),
+        });
+        let before = state.read().unwrap().store.len();
+        reconcile(&state, &target, false).unwrap();
+        let state = state.read().unwrap();
+        assert_eq!(state.store.len(), before);
+        assert_eq!(state.store.record(state.store.record(0).first).next, NONE);
+        assert!(state.store.find(&target.to_string_lossy()).is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn live_final_state_changes_keep_subtree_sizes_and_moves_current() {

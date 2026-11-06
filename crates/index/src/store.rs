@@ -760,7 +760,7 @@ impl Store {
                 && (lower.len() == name.len() || lower.as_bytes().get(name.len()) == Some(&b'\\'))
             {
                 let mut id = root;
-                for part in path[name.len()..].split('\\').filter(|s| !s.is_empty()) {
+                for part in lower[name.len()..].split('\\').filter(|s| !s.is_empty()) {
                     id = self.child(id, part)?;
                 }
                 return Some(id);
@@ -1359,6 +1359,20 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sizes_walks_folded_components_when_unicode_changes_byte_length() {
+        let mut store = Store::new();
+        let root = store.insert(0, "K:", DIRECTORY, 0, 0);
+        let dir = store.insert(root, "Kelvin", DIRECTORY, 0, 0);
+        store.insert(dir, "report.txt", 128, 7, 0);
+        store.roll_up();
+        let hits = store.sizes("\u{212a}:\\\u{212a}elvin", 50);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].size, 7);
+        assert_eq!(hits[1].name, "report.txt");
+        assert!(store.sizes("\u{212a}:\\missing", 50).is_empty());
+    }
 
     #[test]
     fn path_prefilter_stays_conservative_after_a_directory_name_change() {
