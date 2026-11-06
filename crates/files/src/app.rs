@@ -401,7 +401,22 @@ impl App {
                 self.surface.set_text_field(Some(self.editor.clone()));
                 self.editor.request_redraw();
                 self.editor.focus();
-                self.editor.select_all();
+                let directory = self
+                    .selection
+                    .items
+                    .first()
+                    .and_then(|index| self.shown.get(*index))
+                    .is_some_and(|entry| entry.directory);
+                let selected = if directory {
+                    name.as_str()
+                } else {
+                    Path::new(&name)
+                        .file_stem()
+                        .and_then(|stem| stem.to_str())
+                        .unwrap_or(&name)
+                };
+                self.editor
+                    .select_range(0..selected.encode_utf16().count() as u32);
             }
             Field::NewFolder => {
                 self.error = None;
