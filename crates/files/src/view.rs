@@ -953,7 +953,7 @@ fn preview_panel(f: &mut Frame<'_>, app: &App, area: Rect, now: Instant, large: 
         );
     } else {
         f.quiet_icon_button(
-            PREVIEW,
+            PREVIEW_CLOSE,
             close,
             Icon::Close,
             "Close preview pane (Alt+P)",

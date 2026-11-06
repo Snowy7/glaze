@@ -43,6 +43,7 @@ pub const PREVIEW: u32 = 23;
 pub const LOOK_CLOSE: u32 = 24;
 pub const LOOK_PREVIOUS: u32 = 25;
 pub const LOOK_NEXT: u32 = 26;
+pub const PREVIEW_CLOSE: u32 = 27;
 pub const HEADER: u32 = 100;
 pub const SIDEBAR: u32 = 200;
 pub const CRUMB: u32 = 500;
@@ -1011,7 +1012,7 @@ impl App {
                     .as_ref()
                     .map_or_else(|| "shell:profile".into(), |l| l.path.clone()),
             )?,
-            PREVIEW => self.command(Command::Preview)?,
+            PREVIEW | PREVIEW_CLOSE => self.command(Command::Preview)?,
             id if (TAB..TAB + 32).contains(&id) => self.switch_tab((id - TAB) as usize)?,
             id if (TAB_CLOSE..TAB_CLOSE + 32).contains(&id) => {
                 self.close_tab((id - TAB_CLOSE) as usize)?
