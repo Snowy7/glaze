@@ -30,10 +30,11 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
         c,
         &manifest.name,
         &format!(
-            "{} × {} · {} · Display {}",
-            instance.size[0],
-            instance.size[1],
-            position(app, &layout, instance),
+            "{} · Display {}",
+            position(app, &layout, instance)
+                .split(',')
+                .next()
+                .unwrap_or(""),
             app.nav.display + 1
         ),
     );
@@ -69,123 +70,82 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
             }
         });
     }
-    let size = Rect::new(c.x, c.y + b.px(6.0), c.w, b.px(36.0));
-    text(
-        b,
-        Rect::new(size.left, size.top, b.px(130.0), size.height()),
-        &format!("Size   {} \u{00d7} {}", instance.size[0], instance.size[1]),
-        13.0,
-        400,
-        b.p.ink1,
-        Align::Start,
-    );
-    for (i, label, action) in [
-        (0, "Narrower", Action::ResizeWidget(-1, 0)),
-        (1, "Wider", Action::ResizeWidget(1, 0)),
-        (2, "Shorter", Action::ResizeWidget(0, -1)),
-        (3, "Taller", Action::ResizeWidget(0, 1)),
-    ] {
-        let r = Rect::new(
-            size.right - b.px(128.0) + b.px(i as f32 * 32.0),
-            size.top,
-            b.px(28.0),
-            b.px(28.0),
-        );
-        crate::panel::controls::icon_button(
-            b,
-            r,
-            if i % 2 == 0 {
-                mypaper_ui::icons::Icon::Remove.into()
-            } else {
-                glyph::ADD
-            },
-            label,
-            true,
-            action,
-        );
-    }
-    c.y = size.bottom + b.px(5.0);
+    size_controls(b, c, instance);
     notice(b, c, "Drag the corner brackets on the desktop to resize.");
     group(b, c, "Its look", |b, c| {
         let own = instance.appearance != Default::default();
+        let inherited = crate::panel::widget_look::inherited_style(app);
+        let reset = Action::Unset(Edit::new(
+            DocId::Widgets,
+            format!("{base}/appearance"),
+            "Follow Look",
+        ));
         toggle(
             b,
             c,
             "Its own look",
-            if own { "Your override" } else { "From Look" },
+            if own { "Only this widget" } else { "From Look" },
             own,
             if own {
-                Action::Unset(Edit::new(
-                    DocId::Widgets,
-                    format!("{base}/appearance"),
-                    "Follow Look",
-                ))
+                reset.clone()
             } else {
                 Action::Set(
-                    Edit::new(
-                        DocId::Widgets,
-                        format!("{base}/appearance/surface"),
-                        "Its own look",
-                    ),
-                    json!("glass"),
+                    Edit::new(DocId::Widgets, format!("{base}/appearance"), "Its own look"),
+                    crate::panel::widget_look::appearance(app, instance, inherited),
                 )
             },
         );
         if own {
-            let style_path = format!("{base}/appearance/style");
-            select(
-                b,
-                c,
-                "Style",
-                app.get(DocId::Widgets, &style_path)
-                    .cloned()
-                    .unwrap_or(json!("minimal")),
-                Edit::new(DocId::Widgets, style_path, "Widget style"),
-                [
-                    ("liquid", "Liquid"),
-                    ("minimal", "Minimal"),
-                    ("depth", "Depth"),
-                    ("neon", "Neon"),
-                    ("paper", "Paper"),
-                    ("aero", "Aero"),
-                ]
-                .into_iter()
-                .map(|(v, l)| (json!(v), l.into()))
-                .collect(),
-            );
-            select(
-                b,
-                c,
-                "Background",
-                app.get(DocId::Widgets, &format!("{base}/appearance/surface"))
-                    .cloned()
-                    .unwrap_or(json!("glass")),
-                Edit::new(
-                    DocId::Widgets,
-                    format!("{base}/appearance/surface"),
-                    "Background",
-                ),
-                [("glass", "Glass"), ("solid", "Solid"), ("none", "None")]
-                    .into_iter()
-                    .map(|(v, l)| (json!(v), l.into()))
-                    .collect(),
-            );
-            for (name, label, range, fallback) in [
-                ("opacity", "Tint strength", (0.0, 1.0, 0.01), 0.46),
-                ("blur", "Blur", (0.0, 64.0, 1.0), 12.0),
-                ("radius", "Corners", (0.0, 48.0, 1.0), 22.0),
-            ] {
-                number(
-                    app,
+            let selected = crate::panel::widget_look::selected(&instance.appearance);
+            super::look::style_tiles(app, b, c, selected, |style| {
+                Action::Set(
+                    Edit::new(DocId::Widgets, format!("{base}/appearance"), "Widget style"),
+                    crate::panel::widget_look::appearance(app, instance, style),
+                )
+            });
+            let style = selected.unwrap_or(inherited);
+            let uses = crate::look::uses(style);
+            let effective = instance
+                .appearance
+                .over(&layout.appearance.over(&mypaper_widgets::look::defaults()));
+            if uses[0] {
+                let opacity = effective.opacity.unwrap_or(0.46) as f64;
+                material_row(
                     b,
                     c,
-                    DocId::Widgets,
-                    &format!("{base}/appearance/{name}"),
-                    label,
-                    range,
-                    fallback,
+                    "Clarity",
+                    1.0 - opacity,
+                    (0.0, 1.0, 0.01),
+                    &format!("{:.0}%", (1.0 - opacity) * 100.0),
+                    Edit::new(
+                        DocId::Widgets,
+                        format!("/_panel/clarity{base}/appearance/opacity"),
+                        "Clarity",
+                    ),
                 );
             }
+            if uses[1] {
+                let blur = effective.blur.unwrap_or(12.0) as f64;
+                material_row(
+                    b,
+                    c,
+                    "Blur",
+                    blur,
+                    (0.0, 32.0, 1.0),
+                    &format!("{blur:.0} px"),
+                    Edit::new(DocId::Widgets, format!("{base}/appearance/blur"), "Blur"),
+                );
+            }
+            text(
+                b,
+                Rect::new(c.x, c.y, c.w, height(b, 26.0)),
+                "Tint",
+                13.0,
+                400,
+                b.p.ink1,
+                Align::Start,
+            );
+            c.y += height(b, 28.0);
             crate::panel::colors::swatches(
                 app,
                 b,
@@ -201,6 +161,7 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
                     [230, 230, 230],
                 ],
             );
+            action_button(b, c, "Follow Look", reset);
         }
     });
     let half = (c.w - b.px(8.0)) / 2.0;
@@ -226,6 +187,115 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
     c.y += b.px(44.0);
 }
 
+/// Wide and Tall measure grid cells, with separate named steppers on the same line.
+fn size_controls(b: &mut B, c: &mut Col, instance: &Instance) {
+    text(
+        b,
+        Rect::new(c.x, c.y, c.w, height(b, 24.0)),
+        "Size",
+        13.0,
+        500,
+        b.p.ink1,
+        Align::Start,
+    );
+    c.y += height(b, 27.0);
+    let gap = b.px(12.0);
+    let width = (c.w - gap) / 2.0;
+    let h = height(b, 34.0);
+    for (axis, label) in ["Wide", "Tall"].into_iter().enumerate() {
+        let r = Rect::new(c.x + axis as f32 * (width + gap), c.y, width, h);
+        let button_width = b.px(28.0);
+        text(
+            b,
+            Rect::new(
+                r.left,
+                r.top,
+                r.width() - button_width * 2.0 - b.px(4.0),
+                r.height(),
+            ),
+            &format!("{label} {}", instance.size[axis]),
+            13.0,
+            400,
+            b.p.ink1,
+            Align::Start,
+        );
+        for (i, delta) in [-1, 1].into_iter().enumerate() {
+            let action = if axis == 0 {
+                Action::ResizeWidget(delta, 0)
+            } else {
+                Action::ResizeWidget(0, delta)
+            };
+            crate::panel::controls::icon_button(
+                b,
+                Rect::new(
+                    r.right - button_width * (2 - i) as f32,
+                    r.top,
+                    button_width,
+                    h,
+                ),
+                if delta < 0 {
+                    mypaper_ui::icons::Icon::Remove.into()
+                } else {
+                    glyph::ADD
+                },
+                &format!(
+                    "{label}: {}",
+                    if delta < 0 {
+                        "one cell less"
+                    } else {
+                        "one cell more"
+                    }
+                ),
+                instance.size[axis] > 1 || delta > 0,
+                action,
+            );
+        }
+    }
+    c.y += h + b.px(6.0);
+}
+
+fn material_row(
+    b: &mut B,
+    c: &mut Col,
+    label: &str,
+    value: f64,
+    range: (f64, f64, f64),
+    readout: &str,
+    edit: Edit,
+) {
+    let stacked = c.w < b.px(340.0) || b.t.text_scale > 1.0;
+    let h = height(b, 38.0);
+    text(
+        b,
+        Rect::new(
+            c.x,
+            c.y,
+            if stacked { c.w } else { b.px(80.0) },
+            if stacked { height(b, 24.0) } else { h },
+        ),
+        label,
+        13.0,
+        400,
+        b.p.ink1,
+        Align::Start,
+    );
+    if stacked {
+        c.y += height(b, 24.0);
+    }
+    let inset = if stacked { 0.0 } else { b.px(84.0) };
+    b.slider(
+        key(("widget-material", edit.path.as_ref())),
+        Rect::new(c.x + inset, c.y, c.w - inset, h),
+        value,
+        range,
+        readout,
+        b.px(58.0),
+        label,
+        Action::Slider(edit),
+    );
+    c.y += h;
+}
+
 #[allow(clippy::too_many_arguments)]
 fn manifest_control(
     app: &App,
@@ -246,7 +316,7 @@ fn manifest_control(
             label,
             options,
             ..
-        } if options.len() >= 3
+        } if options.len() >= 2
             && matches!(
                 name.as_str(),
                 "variant" | "face" | "layout" | "style" | "look" | "shape" | "display" | "frame"
@@ -284,10 +354,47 @@ fn manifest_control(
                 b,
                 c,
                 key(("panel-faces", name)),
-                options.len(),
+                options.len().min(2),
                 false,
                 &tiles,
                 |b, i, pic| face(app, b, instance, manifest, name, options[i].0, pic),
+            );
+        }
+        Setting::Number {
+            key: name,
+            label,
+            step,
+            ..
+        }
+        | Setting::Slider {
+            key: name,
+            label,
+            min: _,
+            max: _,
+            step,
+            ..
+        } => {
+            let schema = serde_json::to_value(setting).expect("manifest option");
+            let value = resolved.get(name).and_then(Value::as_f64).unwrap_or(0.0);
+            let range = (
+                schema["min"].as_f64().unwrap_or(0.0),
+                schema["max"].as_f64().unwrap_or(100.0),
+                step.unwrap_or(1.0),
+            );
+            let unit = number_unit(name, &schema);
+            let shown = number_readout(value, &unit);
+            material_row(
+                b,
+                c,
+                label,
+                value,
+                range,
+                &shown,
+                Edit::new(
+                    DocId::Widgets,
+                    format!("{base}/settings/{}", crate::docs::token(name)),
+                    label.as_str(),
+                ),
             );
         }
         Setting::Boolean {
@@ -473,7 +580,7 @@ fn manifest_control(
                                         schema["max"].as_f64().unwrap_or(100.0),
                                         schema["step"].as_f64().unwrap_or(1.0),
                                     ),
-                                    &format!("{value:.0}"),
+                                    &number_readout(value, &number_unit(name, schema)),
                                     b.px(48.0),
                                     label,
                                     Action::Slider(Edit::new(DocId::Widgets, field_path, label)),
@@ -587,6 +694,43 @@ fn manifest_control(
     }
 }
 
+fn number_unit(name: &str, schema: &Value) -> String {
+    if let Some(unit) = schema
+        .get("unit")
+        .and_then(Value::as_str)
+        .filter(|unit| !unit.is_empty())
+    {
+        return unit.into();
+    }
+    if name.ends_with("Minutes") {
+        "min"
+    } else if name.ends_with("Seconds") {
+        "s"
+    } else if name.to_lowercase().contains("scale") || name == "sensitivity" {
+        "\u{00d7}"
+    } else if name == "maxItems" {
+        "headlines"
+    } else if name == "sessionsBeforeLong" {
+        "sessions"
+    } else {
+        ""
+    }
+    .into()
+}
+
+fn number_readout(value: f64, unit: &str) -> String {
+    let number = if value.fract().abs() < 0.001 {
+        format!("{value:.0}")
+    } else {
+        format!("{value:.1}")
+    };
+    if unit.is_empty() {
+        number
+    } else {
+        format!("{number} {unit}")
+    }
+}
+
 /// Face tiles use the actual shell view with an isolated sample model; no services or writes.
 pub(super) fn face(
     app: &App,
@@ -610,7 +754,7 @@ pub(super) fn face(
                 .borrow_mut()
                 .get(path, (pic.width() as u32, pic.height() as u32))
         {
-            crate::stage::image_round(b, pic, &image, 0.65, b.px(8.0));
+            crate::stage::image_round(b, pic, &image, 1.0, b.px(8.0));
         }
     }
     let mut settings = instance.settings.clone();
@@ -668,6 +812,7 @@ pub(super) fn face(
     let Ok(mut model) = Model::new(placed, &mut storage, now) else {
         return;
     };
+    sample_content(&mut model, now);
     if instance.widget == "weather" {
         model.data = json!({"current":{"temperature":22,"condition":"Partly cloudy","code":2,"isDay":true,"location":{"name":"Hong Kong"}},"forecast":{"days":[{"date":"2026-11-06","max":24,"min":19,"code":2},{"date":"2026-11-07","max":23,"min":18,"code":3},{"date":"2026-11-08","max":25,"min":20,"code":0}]}});
     }
@@ -680,15 +825,27 @@ pub(super) fn face(
     }
     // Render at native scale before reducing. The shell's text fitting works in DIPs;
     // tiny fractional scales can otherwise turn the greeting into “Good…”.
+    let variant = model
+        .placed
+        .settings
+        .get("variant")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     let (width, height) = if standalone {
         (
             360,
             (360 * instance.size[1] / instance.size[0].max(1)).clamp(80, 360),
         )
-    } else if instance.widget == "weather" && value == "compact" {
-        (450, 100)
     } else {
-        (360, 220)
+        match (instance.widget.as_str(), variant) {
+            ("weather", "compact") => (360, 108),
+            ("clock", "analog") => (240, 220),
+            ("clock", "world") => (320, 220),
+            ("media-pill", _) => (360, 90),
+            ("now-playing", "strip") => (360, 112),
+            ("notes" | "calendar" | "photo", _) => (280, 240),
+            _ => (360, 220),
+        }
     };
     if instance.widget == "clock" && value == "words" {
         model.placed.settings.insert("name".into(), json!("Ada"));
@@ -722,11 +879,32 @@ pub(super) fn face(
             },
             b.text,
         );
+        if !standalone
+            && resolved_appearance.surface != Some(mypaper_theme::Surface::None)
+            && let Some(image) = crate::panel::specimens::frosted_wallpaper(
+                app,
+                resolved_appearance.blur.unwrap_or(12.0),
+            )
+        {
+            list.ops.insert(
+                0,
+                mypaper_ui::Op::RoundedImage {
+                    rect: Rect::new(0.0, 0.0, width as f32, height as f32),
+                    image,
+                    opacity: 1.0,
+                    source: None,
+                    radius: resolved_appearance.radius.unwrap_or(22.0),
+                },
+            );
+        }
+        let plate_index = usize::from(
+            !standalone && matches!(list.ops.first(), Some(mypaper_ui::Op::RoundedImage { .. })),
+        );
         list.ops.insert(
-            0,
+            plate_index,
             mypaper_ui::Op::Fill {
                 rect: Rect::new(0.0, 0.0, width as f32, height as f32),
-                radius: 22.0,
+                radius: resolved_appearance.radius.unwrap_or(22.0),
                 color: resolved_appearance
                     .tint
                     .map_or(crate::panel::tokens::hex(0x344052), |color| {
@@ -736,7 +914,20 @@ pub(super) fn face(
             },
         );
         let mut ui = mypaper_ui::Ui::new().ok()?;
-        let image = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, width, height).ok()?);
+        let native = std::sync::Arc::new(mypaper_ui::render(&mut ui, &list, width, height).ok()?);
+        // Cache only the picture's size, not a native widget-sized raster per gallery tile.
+        let thumb_width = 224;
+        let thumb_height = (thumb_width * height / width).max(1);
+        let mut reduced = mypaper_ui::DisplayList::default();
+        reduced.ops.push(mypaper_ui::Op::Image {
+            rect: Rect::new(0.0, 0.0, thumb_width as f32, thumb_height as f32),
+            image: native,
+            opacity: 1.0,
+            source: None,
+        });
+        let image = std::sync::Arc::new(
+            mypaper_ui::render(&mut ui, &reduced, thumb_width, thumb_height).ok()?,
+        );
         crate::panel::specimens::remember(app, cache_key, &image);
         Some(image)
     });
@@ -744,7 +935,7 @@ pub(super) fn face(
         let inner = if standalone {
             pic
         } else {
-            pic.inflate(-b.px(6.0))
+            pic.inflate(-b.px(3.0))
         };
         let factor = (inner.width() / width as f32).min(inner.height() / height as f32);
         let (w, h) = (width as f32 * factor, height as f32 * factor);
@@ -761,6 +952,103 @@ pub(super) fn face(
             b.px(8.0),
         );
     }
+}
+
+/// Representative inputs for pictures only. Never queries or starts a service or writes data.
+fn sample_content(
+    model: &mut mypaper_shell::preview::widgets::Model,
+    now: mypaper_shell::preview::widgets::Stamp,
+) {
+    match model.placed.widget.as_str() {
+        "now-playing" | "media-pill" => {
+            model.data = json!({"title":"Night Drive", "artist":"Kairo", "app":"Music", "playing":true, "position":83, "duration":246, "_at":now.ms});
+            model.artwork = Some(sample_artwork());
+            model.artwork_backdrop = model.artwork.clone();
+            model.artwork_tint = Some(crate::panel::tokens::hex(0x7da8db));
+            model.spectrum = (0..48)
+                .map(|i| 0.18 + ((i as f32 * 0.67).sin().abs() * 0.65))
+                .collect();
+        }
+        "notes" => {
+            model.note =
+                "# A little space\n\nMake something you love.\nTake a walk at sunset.".into()
+        }
+        "todo" => {
+            model.tasks = serde_json::from_value(json!([{"text":"Plan the weekend", "done":false}, {"text":"Read a chapter", "done":false}, {"text":"Go for a walk", "done":true}])).unwrap_or_default();
+        }
+        "crypto" => {
+            model.data = json!({"coins":[{"id":"bitcoin","name":"Bitcoin","symbol":"BTC","price":68420.0,"change":2.4},{"id":"ethereum","name":"Ethereum","symbol":"ETH","price":2480.0,"change":1.2}],"at":now.ms})
+        }
+        "rss" => {
+            model.data = json!({"items":[{"title":"A new view of the night sky","source":"Science","published":now.ms-1800000},{"title":"Small ideas, beautifully made","source":"Design","published":now.ms-3600000}]})
+        }
+        "system-monitor" => {
+            use mypaper_widgets::stats::{Net, SystemStats, Usage};
+            model.stats = Some(SystemStats {
+                cpu: 23.0,
+                memory: Usage {
+                    used: 12 << 30,
+                    total: 32 << 30,
+                },
+                gpu: Some(18.0),
+                net: Some(Net {
+                    down: 2457600.0,
+                    up: 393216.0,
+                }),
+                disks: None,
+                battery: None,
+                uptime: 86400.0,
+                network: None,
+            });
+            for (id, level) in [("cpu", 23.0), ("ram", 38.0), ("gpu", 18.0), ("net", 42.0)] {
+                model.history.insert(
+                    id.into(),
+                    (0..24)
+                        .map(|i| level + (i as f64 * 0.45).sin() * 9.0)
+                        .collect(),
+                );
+            }
+        }
+        "heatmap" => {
+            for day in 1..=28 {
+                model
+                    .counts
+                    .insert(format!("2026-10-{day:02}"), (day * 7) % 5);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn sample_artwork() -> std::sync::Arc<mypaper_ui::Image> {
+    use std::sync::{Arc, OnceLock};
+    static ARTWORK: OnceLock<Arc<mypaper_ui::Image>> = OnceLock::new();
+    ARTWORK
+        .get_or_init(|| {
+            let mut pixels = Vec::with_capacity(128 * 128 * 4);
+            for y in 0..128 {
+                for x in 0..128 {
+                    let glow = ((x as f32 - 82.0).hypot(y as f32 - 36.0) / 100.0).clamp(0.0, 1.0);
+                    let stripe = ((x + y / 2) / 14) % 3 == 0;
+                    let [r, g, b] = if stripe {
+                        [244, 141, 111]
+                    } else {
+                        [
+                            (35.0 + 35.0 * (1.0 - glow)) as u8,
+                            (61.0 + 90.0 * (1.0 - glow)) as u8,
+                            (112.0 + 90.0 * (1.0 - glow)) as u8,
+                        ]
+                    };
+                    pixels.extend_from_slice(&[b, g, r, 255]);
+                }
+            }
+            Arc::new(mypaper_ui::Image {
+                width: 128,
+                height: 128,
+                pixels,
+            })
+        })
+        .clone()
 }
 
 fn photos(
@@ -882,6 +1170,41 @@ pub fn can_add_widget(app: &App, id: &str) -> bool {
     manifest.instances.allows(total, here)
 }
 
+const BUILTINS: [&str; 17] = [
+    "clock",
+    "calendar",
+    "countdown",
+    "crypto",
+    "heatmap",
+    "launcher",
+    "media-pill",
+    "notes",
+    "now-playing",
+    "photo",
+    "quick-toggles",
+    "quote",
+    "rss",
+    "system-monitor",
+    "timer",
+    "todo",
+    "weather",
+];
+
+fn developer_mode(app: &App) -> bool {
+    app.get(DocId::Studio, "/developer_mode")
+        .and_then(Value::as_bool)
+        == Some(true)
+        || std::env::var("MYPAPER_DEVELOPER_MODE").is_ok_and(|value| value == "1")
+}
+
+fn development_plugin(id: &str, name: &str) -> bool {
+    matches!(id, "hello" | "hello-ts" | "native-echo")
+        || format!("{id} {name}")
+            .to_lowercase()
+            .split(|ch: char| !ch.is_alphanumeric())
+            .any(|word| matches!(word, "demo" | "test" | "example" | "experimental"))
+}
+
 pub fn add(app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "Add a widget", "Choose one, then Add to your desktop");
     field(
@@ -895,90 +1218,153 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
     );
     let query = app.text(&FieldId::WidgetSearch).trim().to_lowercase();
     let selected = &app.panel.as_ref().unwrap().add_widget;
-    let builtins = [
-        "clock",
-        "calendar",
-        "countdown",
-        "crypto",
-        "heatmap",
-        "launcher",
-        "media-pill",
-        "notes",
-        "now-playing",
-        "photo",
-        "quick-toggles",
-        "quote",
-        "rss",
-        "system-monitor",
-        "timer",
-        "todo",
-        "weather",
-    ];
-    let mut categories = Vec::new();
-    for (id, widget) in &app.registry.widgets {
-        if builtins.contains(&id.as_str()) {
-            let category = widget.manifest.category.clone().unwrap_or("Other".into());
-            if !categories.contains(&category) {
-                categories.push(category);
-            }
-        }
-    }
-    categories.push("Your apps".to_owned());
     let layout = legacy::layout(app);
-    let mut count = 0;
-    for category in categories {
-        let widgets: Vec<_> = app
-            .registry
-            .widgets
-            .iter()
-            .filter(|(id, w)| {
-                let group = if builtins.contains(&id.as_str()) {
-                    w.manifest.category.as_deref().unwrap_or("Other")
-                } else {
-                    "Your apps"
-                };
-                group == category
-                    && format!(
-                        "{} {}",
-                        w.manifest.name,
-                        w.manifest.description.as_deref().unwrap_or("")
-                    )
-                    .to_lowercase()
-                    .contains(&query)
-            })
-            .collect();
-        if widgets.is_empty() {
+    let mut sections: std::collections::BTreeMap<(u8, String), Vec<_>> = Default::default();
+    for (id, installed) in &app.registry.widgets {
+        let manifest = &installed.manifest;
+        let section = if BUILTINS.contains(&id.as_str()) {
+            (0, "Built in".to_owned())
+        } else if let Some((plugin, _)) = id.split_once("--") {
+            let name = app
+                .plugins
+                .installed
+                .iter()
+                .find(|p| p.id == plugin)
+                .map(|p| p.name.as_str())
+                .unwrap_or_else(|| manifest.name.split(" · ").next().unwrap_or(plugin));
+            if !developer_mode(app) && development_plugin(plugin, name) {
+                continue;
+            }
+            (2, name.to_owned())
+        } else {
+            if !developer_mode(app) && development_plugin(id, &manifest.name) {
+                continue;
+            }
+            (1, "Your widgets".to_owned())
+        };
+        if !format!(
+            "{} {} {}",
+            manifest.name,
+            manifest.description.as_deref().unwrap_or(""),
+            section.1
+        )
+        .to_lowercase()
+        .contains(&query)
+        {
             continue;
         }
-        group(b, c, &category, |b, c| {
-            for (id, widget) in widgets {
-                let manifest = &widget.manifest;
-                let already = layout.instances.iter().filter(|i| i.widget == *id).count();
-                let detail = if already > 0 {
-                    format!(
-                        "{} · {already} on your desktop",
-                        manifest.description.as_deref().unwrap_or("")
-                    )
-                } else {
-                    manifest.description.clone().unwrap_or_default()
-                };
-                crate::panel::icons::row(
-                    app,
-                    b,
-                    c,
-                    id,
-                    legacy::glyph_of(id),
-                    &manifest.name,
-                    &detail,
-                    selected.as_deref() == Some(id),
-                    Action::Panel(Command::PickWidget(id.clone())),
-                );
-                count += 1;
-            }
-        });
+        sections.entry(section).or_default().push((id, manifest));
     }
-    if count == 0 {
+    if sections.is_empty() {
         notice(b, c, "No widgets match this search.");
+    }
+    for ((_, heading), widgets) in sections {
+        group(b, c, &heading, |b, c| {
+            let gap = b.px(10.0);
+            let width = (c.w - gap) / 2.0;
+            let picture_height = width * 0.67;
+            let caption_height = height(b, 66.0);
+            let row_height = picture_height + caption_height + b.px(12.0);
+            b.group(key(("widget-gallery", heading.as_str())), |b| {
+                for (i, (id, manifest)) in widgets.iter().enumerate() {
+                    let rect = Rect::new(
+                        c.x + (i % 2) as f32 * (width + gap),
+                        c.y + (i / 2) as f32 * row_height,
+                        width,
+                        picture_height + caption_height,
+                    );
+                    let k = key(("widget-gallery-tile", id.as_str()));
+                    let on = selected.as_deref() == Some(id.as_str());
+                    b.plate(k, rect.inflate(b.px(3.0)), b.px(10.0), on);
+                    let instance = Instance {
+                        instance: format!("catalog-{id}"),
+                        widget: (*id).clone(),
+                        monitor: String::new(),
+                        cell: [0, 0],
+                        size: manifest.size.default,
+                        settings: Default::default(),
+                        appearance: Default::default(),
+                    };
+                    // Use the editor's exact face renderer, with its default option values.
+                    let resolved = manifest.resolve_settings(&Map::new());
+                    let face_key = [
+                        "variant", "face", "style", "layout", "look", "shape", "display", "frame",
+                    ]
+                    .into_iter()
+                    .find(|key| resolved.get(*key).is_some_and(Value::is_string))
+                    .unwrap_or("variant");
+                    let value = resolved.get(face_key).and_then(Value::as_str).unwrap_or("");
+                    face(
+                        app,
+                        b,
+                        &instance,
+                        manifest,
+                        face_key,
+                        value,
+                        Rect::new(rect.left, rect.top, width, picture_height),
+                    );
+                    let name = manifest
+                        .name
+                        .split_once(" · ")
+                        .map_or(manifest.name.as_str(), |(_, face)| face);
+                    text(
+                        b,
+                        Rect::new(
+                            rect.left + b.px(4.0),
+                            rect.top + picture_height + b.px(5.0),
+                            width - b.px(8.0),
+                            height(b, 22.0),
+                        ),
+                        name,
+                        13.0,
+                        600,
+                        b.p.ink1,
+                        Align::Start,
+                    );
+                    let already = layout
+                        .instances
+                        .iter()
+                        .filter(|instance| instance.widget == **id)
+                        .count();
+                    let detail = if already > 0 {
+                        format!("{already} on your desktop")
+                    } else {
+                        manifest.description.clone().unwrap_or_default()
+                    };
+                    let mut font = b.font(mypaper_ui::controls::Font::Caption);
+                    font.size = b.px(11.0) * b.t.text_scale;
+                    let lines = b.text.lines(&detail, &font, width - b.px(8.0), 2);
+                    for (line, value) in lines.iter().enumerate() {
+                        b.text_in(
+                            Rect::new(
+                                rect.left + b.px(4.0),
+                                rect.top
+                                    + picture_height
+                                    + height(b, 28.0)
+                                    + line as f32 * height(b, 15.0),
+                                width - b.px(8.0),
+                                height(b, 15.0),
+                            ),
+                            value,
+                            &font,
+                            b.p.ink3,
+                            Align::Start,
+                        );
+                    }
+                    b.hit_checked(
+                        k,
+                        rect,
+                        mypaper_ui::Role::RadioButton,
+                        &format!("{name}: {detail}"),
+                        Some(on),
+                        Action::Panel(Command::PickWidget((*id).clone())),
+                        mypaper_ui::controls::Behavior::Click,
+                    );
+                    b.focus_ring(k, rect, b.px(10.0));
+                }
+            });
+            c.y += widgets.len().div_ceil(2) as f32 * row_height;
+        });
     }
     notice(
         b,
