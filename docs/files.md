@@ -45,6 +45,17 @@ run-only appearance overrides, useful when checking a look without changing the 
   the kit context menu, whose hit targets belonged to the old layout. Rename carries its path
   and is dismissed if that path disappears. Thumbnail requests/replies use `(path, size)` keys
   and navigation epochs, and OLE drag sources snapshot paths before entering the drag loop.
+  The [focused regression](../crates/files/evidence/selection-refresh/regression.json) first
+  reproduced Enter resolving to `b.exe` instead of `c.txt`, then passed insertion, sorting,
+  range-anchor and removal cases. All 20 Files tests pass with an isolated scratch profile.
+  After the shared release deployment, a live scratch fixture used harmless directories named
+  `a.txt`, `b.exe`, `c.txt` and an externally inserted `0setup.msi`. Inspected DPI-aware captures
+  show [the original selection](../crates/files/evidence/selection-refresh/select.png),
+  [the watcher refresh](../crates/files/evidence/selection-refresh/refreshed.png), and
+  [Enter navigating into c.txt](../crates/files/evidence/selection-refresh/enter.png).
+  The [deployment hashes](../crates/files/evidence/selection-refresh/deployed.json) match the
+  approved `C:\mypaper-targets\main` build. The fixture's separate profile leaves the user's
+  Files session/preferences untouched; desktop actions hold the lock individually.
 - Arrow keys, Home/End, Page Up/Down, type-to-select, Enter, Backspace, Alt+arrows, mouse Back/
   Forward, Ctrl/Shift selection and rubber-band selection are supported. `F5` refreshes.
 

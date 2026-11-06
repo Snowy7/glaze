@@ -1,0 +1,31 @@
+{
+    "utc":  "2026-11-06T07:44:03.2942811Z",
+    "head":  "25f97261ebef629cb51ab25b0e0aeae2ae9ca2ec",
+    "deployment":  "scripts/deploy-local.ps1",
+    "source":  "C:\\mypaper-targets\\main\\release",
+    "files":  {
+                  "deployed":  "4D6CF5EACDFE644243DC3B9E0CD3152BCA17CBA0CDB404B230E08C260C135E94",
+                  "built":  "4D6CF5EACDFE644243DC3B9E0CD3152BCA17CBA0CDB404B230E08C260C135E94"
+              },
+    "plugins":  {
+                    "deployed":  "942A3A667EA306F614F8B669DA912D45894DD29E4EA18AFCA175B324ED302B6D",
+                    "built":  "942A3A667EA306F614F8B669DA912D45894DD29E4EA18AFCA175B324ED302B6D"
+                },
+    "processes":  [
+                      {
+                          "ProcessName":  "mypaper-core",
+                          "Id":  55692,
+                          "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-core.exe"
+                      },
+                      {
+                          "ProcessName":  "mypaper-shell",
+                          "Id":  65256,
+                          "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-shell.exe"
+                      },
+                      {
+                          "ProcessName":  "mypaper-wallpaper",
+                          "Id":  74184,
+                          "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-wallpaper.exe"
+                      }
+                  ]
+}

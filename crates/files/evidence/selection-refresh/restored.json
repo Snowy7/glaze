@@ -1,0 +1,24 @@
+{
+    "utc":  "2026-11-06T07:54:30.8329356Z",
+    "owned_files_test_exited":  true,
+    "owned_hello_helper_exited":  true,
+    "desktop":  [
+                    {
+                        "ProcessName":  "mypaper-core",
+                        "Id":  41180,
+                        "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-core.exe"
+                    },
+                    {
+                        "ProcessName":  "mypaper-shell",
+                        "Id":  45568,
+                        "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-shell.exe"
+                    },
+                    {
+                        "ProcessName":  "mypaper-wallpaper",
+                        "Id":  56932,
+                        "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-wallpaper.exe"
+                    }
+                ],
+    "files_hash":  "BC95347E45336F53D80D4BCD80C3D91C22B11F889B703ACBEAF036B10C72E203",
+    "plugins_hash":  "AB1CC1B3CA55357A1EE828DC3B3AA23A92DA14ADCC31136365C47BDE3D2070A6"
+}

@@ -162,6 +162,13 @@ calls (`secrets`, `storage`, `system`) are synchronous.
   64-message backlog, the host closes it and, on resume, delivers the retained messages followed
   by `socket.closed` with a game-pause backlog reason. Plugins should reconnect from that event.
   The worker's later close cannot replace this reason. Pipes keep their existing read backpressure.
+  The [pause regressions](../crates/plugins/evidence/ordered-pause/regression.json) reproduced
+  the lost first reply, then verified ordered replay, the full-backlog close and its preserved
+  reason. A real local echo-server test retains both replies on the same connection across
+  pause/resume. All 47 enabled host tests passed. The
+  [deployed Hello check](../crates/plugins/evidence/ordered-pause/hello-live.json) uses an isolated
+  profile and the deployed helper: four timer views before pause, none while paused, successful
+  resume and clean shutdown. Its five-second samples are a behavior check, not a performance gate.
 - **Notifications**: `notify.show` raises a Windows toast from mypaper (AppUserModelID
   `mypaper.Plugins`, display name "mypaper", registered under HKCU on first use) with the
   plugin's title and body and "via <plugin name>" as the attribution line, from a worker thread.

@@ -1,0 +1,32 @@
+quiet_helper.exe : [2026-11-06T07:43:53Z INFO  mypaper_plugins::host] plugin hello loaded
+At line:2 char:1
++ & 'C:\mypaper-targets\files\debug\examples\quiet_helper.exe' 'D:\Codi ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([2026-11-06T07:...in hello loaded:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+helper pid=58020, paused=false, measuring 5s
+[2026-11-06T07:43:58Z INFO  mypaper_plugins::host] game background pause: true
+helper pid=58020, paused=true, measuring 5s
+[2026-11-06T07:44:03Z INFO  mypaper_plugins::host] game background pause: false
+[2026-11-06T07:44:03Z INFO  mypaper_plugins::host] plugin hello unloaded
+[
+  {
+    "cpu_core_pct": 0.0,
+    "cpu_ms": 0.0,
+    "paused": false,
+    "private_after": 4898816,
+    "private_before": 4898816,
+    "seconds": 5.0001909,
+    "views": 4
+  },
+  {
+    "cpu_core_pct": 0.0,
+    "cpu_ms": 0.0,
+    "paused": true,
+    "private_after": 4898816,
+    "private_before": 4898816,
+    "seconds": 5.0005055,
+    "views": 0
+  }
+]

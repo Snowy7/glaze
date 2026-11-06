@@ -1,0 +1,33 @@
+{
+    "finding":  "Game-pause coalescing replaced distinct replies on the same socket",
+    "regression":  "host::pause_tests::game_pause_preserves_socket_replies_and_closes_a_full_backlog",
+    "before":  {
+                   "expected":  [
+                                    "reply-1",
+                                    "reply-2"
+                                ],
+                   "actual":  [
+                                  "reply-2"
+                              ],
+                   "result":  "failed"
+               },
+    "after":  {
+                  "result":  "passed",
+                  "cases":  [
+                                "distinct replies retain arrival order",
+                                "guest receives nothing during pause",
+                                "resume delivers both replies",
+                                "64 retained messages request transport closure",
+                                "late closure does not overwrite backlog reason",
+                                "resume delivers retained messages before close"
+                            ]
+              },
+    "socket_integration":  "caps_tests::game_pause_keeps_socket_connected_and_delivers_replies_in_order: passed against local websocket echo server, same connection across pause/resume",
+    "crate_tests":  {
+                        "passed":  47,
+                        "ignored":  2,
+                        "failed":  0,
+                        "seconds":  23.39
+                    },
+    "cargo_check":  "passed"
+}
