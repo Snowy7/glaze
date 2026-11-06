@@ -500,6 +500,7 @@ fn panel_controls_stay_inside_laptop_and_scaled_widths() {
             Page::Root,
             Page::Widgets,
             Page::Bars,
+            Page::BarDesign,
             Page::Settings,
             Page::Performance,
             Page::Widget,
@@ -788,6 +789,7 @@ fn a_list_drag_writes_once_on_drop_and_is_one_undo_step() {
 fn sorting_modules_keeps_the_editor_on_the_same_module_and_removing_closes_it() {
     let ui = Ui::new().unwrap();
     let mut app = app(&ui, true);
+    app.monitors.truncate(1);
     app.nav.module = Some(crate::actions::Slot {
         bar: crate::actions::Bar::Top,
         list: "right",
