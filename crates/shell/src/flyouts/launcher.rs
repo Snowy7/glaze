@@ -679,6 +679,7 @@ impl Panel for Launcher {
                 );
             }
             if let Some(text) = &self.field {
+                text.set_style(&mypaper_ui::TextStyle::new(&f.theme.font.family, Self::field_text(f.s)), c.label);
                 f.push(Op::TextField {
                     rect: field,
                     field: text.clone(),

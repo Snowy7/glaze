@@ -498,6 +498,7 @@ pub fn picker(
         Some(Icon::Search),
     );
     if let Some(field) = state.field {
+        field.set_style(&f.font(mypaper_ui::TextRole::Body), theme.color.label);
         field.set_rect(field_rect);
         f.push(Op::TextField {
             rect: field_rect,

@@ -555,6 +555,7 @@ pub fn field(c: &mut Ctx, rect: Rect, hint: &str, icon: Option<Icon>) {
     let open = c.m.field.as_ref();
     let mut inner = c.f.field_frame(rect, hint, open.is_none(), open.is_some(), icon);
     if let Some(field) = open {
+        field.set_style(&c.f.font(TextRole::Body), c.f.theme.color.label);
         // RichEdit draws its line at the top of its rect: a one-line field gets a rect one line
         // tall, centred like the icon and the placeholder (as the launcher's search field).
         if !field.multiline() {
