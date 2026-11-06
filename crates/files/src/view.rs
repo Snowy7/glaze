@@ -984,21 +984,21 @@ fn preview_panel(f: &mut Frame<'_>, app: &App, area: Rect, now: Instant, large: 
             let line = px(20.0);
             let offset = app.preview_scroll.offset(now);
             let style = TextStyle::new("Cascadia Mono", px(12.0));
+            let character = f.text.measure("M", &style).0.max(1.0);
+            let wrapped = crate::preview::wrapped(
+                lines,
+                (body.width() / character).floor().max(1.0) as usize,
+            );
             f.scroll(body, &app.preview_scroll, now, |f, origin| {
-                for i in model::visible_range(lines.len(), offset, body.height(), line) {
-                    // Clip long lines before DirectWrite shaping; one malicious line cannot make a giant layout.
-                    let text: String = lines[i]
-                        .chars()
-                        .take((body.width() / px(6.0)) as usize + 8)
-                        .collect();
+                for i in model::visible_range(wrapped.len(), offset, body.height(), line) {
                     f.push(Op::Text {
                         rect: Rect::new(origin.x, origin.y + i as f32 * line, body.width(), line),
-                        text: text.into(),
+                        text: wrapped[i].clone().into(),
                         style: style.clone(),
                         color: color.label,
                     });
                 }
-                lines.len() as f32 * line
+                wrapped.len() as f32 * line
             });
             f.text_in(
                 footer,

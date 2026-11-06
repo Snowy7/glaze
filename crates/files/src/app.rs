@@ -434,6 +434,7 @@ impl App {
 
     fn remember_folder(&mut self) {
         if !self.loading
+            && self.error.is_none()
             && let Some(location) = self.location.clone()
         {
             self.cache.insert(crate::tabs::Folder {
@@ -459,7 +460,7 @@ impl App {
             query_text: self.query_text.clone(),
             indexed: self.indexed,
             sizes: self.sizes.clone(),
-            loaded: !self.loading,
+            loaded: !self.loading && self.error.is_none(),
         };
     }
 
