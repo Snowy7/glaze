@@ -124,7 +124,12 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
             &COLORS,
         );
     });
-    if more(app, b, c, "Text and icons, Shape, Different for") {
+    let more_hint = if b.t.text_scale > 1.0 {
+        ""
+    } else {
+        "Text and icons, Shape, Different for"
+    };
+    if more(app, b, c, more_hint) {
         group(b, c, "Text and icons", |b, c| {
             for id in [
                 "font",
