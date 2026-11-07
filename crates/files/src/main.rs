@@ -218,3 +218,36 @@ fn set_window_icons(hwnd: windows::Win32::Foundation::HWND, scale: f32) -> anyho
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod icon_tests {
+    /// Run under the desktop lock. Creates only a hidden icon proof window,
+    /// using the same embedded resource and setup function as Files startup.
+    #[test]
+    #[ignore = "live icon proof requires the desktop lock"]
+    fn embedded_icons_on_a_nonactivating_window() {
+        use mypaper_ui::{Kind, Role, Surface, Ui};
+        use windows::Win32::UI::WindowsAndMessaging::*;
+        let _ui = Ui::new().unwrap();
+        let surface = Surface::new(
+            Kind::App { min: (200, 120) },
+            "Files icon proof",
+            Role::Window,
+        )
+        .unwrap();
+        super::set_window_icons(surface.hwnd(), surface.scale()).unwrap();
+        // SAFETY: queries only the HWND created on this test thread.
+        unsafe {
+            for (kind, class) in [(ICON_BIG, GCLP_HICON), (ICON_SMALL, GCLP_HICONSM)] {
+                let window = SendMessageW(
+                    surface.hwnd(),
+                    WM_GETICON,
+                    Some(windows::Win32::Foundation::WPARAM(kind as usize)),
+                    None,
+                );
+                assert_ne!(window.0, 0);
+                assert_eq!(window.0 as usize, GetClassLongPtrW(surface.hwnd(), class));
+            }
+        }
+    }
+}
