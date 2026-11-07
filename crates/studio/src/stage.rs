@@ -672,7 +672,7 @@ pub fn offset(ops: &[Op], dx: f32, dy: f32) -> impl Iterator<Item = Op> + '_ {
     let p = move |p: Point| Point::new(p.x + dx, p.y + dy);
     ops.iter().filter_map(move |op| {
         Some(match op.clone() {
-            Op::Arc { center, radius, sweep, width, color } => Op::Arc { center: p(center), radius, sweep, width, color },
+            Op::Arc { center, radius, start, sweep, width, color } => Op::Arc { center: p(center), radius, start, sweep, width, color },
             Op::Image { rect, image, opacity, source } => Op::Image { rect: r(rect), image, opacity, source },
             Op::RoundedImage { rect, image, opacity, source, radius } => Op::RoundedImage { rect: r(rect), image, opacity, source, radius },
             Op::TextField { .. } => return None,

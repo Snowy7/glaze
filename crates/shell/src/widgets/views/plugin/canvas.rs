@@ -134,7 +134,7 @@ pub fn draw(f: &mut Frame<'_>, rect: Rect, commands: &[Draw], tone: impl Fn(&Fra
                         f.fill(Rect::new(center.x - r * s, center.y - r * s, d, d), r * s, tone(f, c));
                     }
                     Paint::Stroke(c, width) => {
-                        f.push(Op::Arc { center, radius: r * s, sweep: std::f32::consts::TAU, width: width * s, color: tone(f, c) })
+                        f.push(Op::Arc { center, radius: r * s, start: 0.0, sweep: std::f32::consts::TAU, width: width * s, color: tone(f, c) })
                     }
                 }
             }
