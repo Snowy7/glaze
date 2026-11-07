@@ -79,6 +79,7 @@ struct Press {
 pub struct Bars {
     studio_active: bool,
     studio_config: Option<BarsConfig>,
+    studio_look: Option<mypaper_config::Look>,
     studio_theme: Option<Option<LoadedTheme>>,
     studio_image_root: Option<std::path::PathBuf>,
     studio_stamp: (Option<u64>, u64, Option<u64>),
@@ -159,6 +160,7 @@ impl Bars {
         let mut bars = Self {
             studio_active: false,
             studio_config: None,
+            studio_look: None,
             studio_theme: None,
             studio_image_root: None,
             studio_stamp: (None, 0, None),
@@ -821,8 +823,13 @@ impl Bars {
                 let mut look = if bar.kind == BarKind::Top { config.top.look.clone() } else { config.dock.look.clone() };
                 look::appearance_layer(&config, key, &mut look, &appearance);
                 look::glass_layer(&config, key, &mut look, theme_glass);
+                let desktop = self.studio_look.clone().unwrap_or_else(|| Config::load().unwrap_or_default().look);
+                crate::look::settings::bar(&desktop, glass::Family::Bars, &config, key, &mut look, &mut appearance, &self.system, &ui.text);
                 let colors = plugin_style::patch_look(if bar.kind == BarKind::Top { "top-bar" } else { "dock" }, key, effective.raw(), &mut look, &mut appearance);
-                let mut tokens = look::Tokens::resolve(&look, &appearance, &self.system);
+                let mut tokens = look::Tokens::resolve_settings(&look, &appearance, &self.system, &desktop, &ui.text);
+                let m = &bar.monitor;
+                let h = if bar.kind == BarKind::Dock { 64.0 } else { 40.0 } * m.dpi as f32 / 96.0;
+                tokens.adapt_ink(&look, Some(mypaper_ui::Rect::new(m.rect.x as f32, m.rect.y as f32 + if bar.kind == BarKind::Dock { m.rect.height as f32 - h } else { 0.0 }, m.rect.width as f32, h)));
                 plugin_style::colors(&colors, effective.raw(), &mut tokens.theme.color);
                 tokens.cache_config(&look, &config);
                 if config.performance.active(mypaper_desktop::on_battery()) { tokens.material = None; }
@@ -938,6 +945,17 @@ impl Bars {
         module: Option<&crate::studio_pick::module_drag::Preview>,
     ) {
         use crate::studio_pick::wire::{self, Document};
+        let desktop_raw = mypaper_config::path().ok().and_then(|p| std::fs::read(p).ok())
+            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
+        let desktop = desktop_raw.as_ref().and_then(|raw| {
+            preview.effective(Document::Config, wire::revision(raw))
+                .and_then(|(_, ops)| wire::patched(raw, ops))
+                .and_then(|raw| Config::parse(&raw.to_string()).ok()).map(|c| c.look)
+        });
+        if self.studio_look != desktop {
+            self.studio_look = desktop;
+            self.studio_dock_pending = true;
+        }
         if !preview.has(Document::Bars)
             && module.is_none()
             && self.studio_stamp.0.is_none()
@@ -1965,6 +1983,8 @@ impl Bars {
                         &mut appearance,
                     );
                     let mut tokens = look::Tokens::resolve_settings(&look, &appearance, &self.system, &desktop, &ui.text);
+                    let h = if kind == BarKind::Dock { 64.0 } else { 40.0 } * monitor.dpi as f32 / 96.0;
+                    tokens.adapt_ink(&look, Some(mypaper_ui::Rect::new(monitor.rect.x as f32, monitor.rect.y as f32 + if kind == BarKind::Dock { monitor.rect.height as f32 - h } else { 0.0 }, monitor.rect.width as f32, h)));
                     tokens.explicit_radius |= look::explicit_look(&config, bar_key, "/radius");
                     plugin_style::colors(&colors, self.config.raw(), &mut tokens.theme.color);
                     tokens.cache_config(&look, &config);

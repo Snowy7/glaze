@@ -571,6 +571,7 @@ impl Widgets {
         let config = config.and_then(|(_, ops)| wire::patched(&self.studio_config_raw, &ops))
             .unwrap_or_else(|| self.studio_config_raw.clone());
         if let Ok(config) = Config::parse(&config.to_string()) {
+            self.desktop_look = config.look.clone();
             self.knobs = glass::knobs(&config.look, glass::Family::Widgets);
             if apply_style(&config) {
                 for entry in self.entries.values_mut() {
@@ -1266,7 +1267,7 @@ impl Widgets {
                 entry.model.photo = model::Photo::default();
                 entry.model.dirty = true;
             }
-            entry.tokens = tokens(&placed.appearance);
+            entry.tokens = surface_tokens(&placed, self.studio_skin.as_ref().unwrap_or(&self.skin), &self.knobs, screen.dpi as f32 / 96.0, rect);
             entry.tokens.icon_set = crate::look::settings::icons(&self.desktop_look, &ui.text);
             entry.model.corner_override = instance.appearance.radius.or(self.desktop_look.shape.corners).or(effective.appearance.radius).or(self.studio_skin.as_ref().unwrap_or(&self.skin).appearance.radius);
             entry.model.edge_override = instance.appearance.border.or(self.desktop_look.shape.edge).or(effective.appearance.border);
@@ -3876,7 +3877,7 @@ fn plate_material(
     let base = if mypaper_ui::theme::lensed(style) {
         let liquid = look::liquid(skin);
         let intensity = liquid.intensity.unwrap_or(1.0);
-        let skin_tint = liquid.tint.unwrap_or(0.06);
+        let skin_tint = liquid.tint.unwrap_or(0.06).max(if tint != look::DEFAULT_TINT { 0.22 } else { 0.06 });
         Material {
             clarity: 1.0 - (skin_tint * opacity / 0.46).clamp(0.0, 1.0),
             blur: number(a, "blur").unwrap_or(12.0) * liquid.blur.unwrap_or(12.0) / 12.0,
@@ -3954,6 +3955,20 @@ pub(crate) fn tokens(appearance: &serde_json::Map<String, Value>) -> Tokens {
         scale: layer.scale.unwrap_or(1.0),
         ..Tokens::default()
     }
+}
+
+/// Resolve ink from the same material sent to the wallpaper engine, over this widget's backdrop.
+fn surface_tokens(placed: &mypaper_widgets::layout::Placed, skin: &look::Skin, knobs: &Knobs, scale: f32, rect: Rect) -> Tokens {
+    let mut tokens = tokens(&placed.appearance);
+    if placed.appearance.get("surface").and_then(Value::as_str) == Some("none") { return tokens; }
+    let under = crate::glass::tone::backdrop(Some(rect), tokens.colors.text.r > 0.5);
+    let material = (placed.appearance.get("surface").and_then(Value::as_str) != Some("solid"))
+        .then(|| plate_material(placed, skin, knobs, scale)).flatten();
+    let surface = material.map_or_else(|| mypaper_ui::theme::over(tokens.material.tint, under), |m| crate::glass::tone::face(&m, under, rect.width().min(rect.height()) / scale));
+    tokens.colors.text = crate::glass::tone::ink(surface, 4.5, 0.88);
+    tokens.colors.text_dim = crate::glass::tone::ink(surface, 3.0, 0.72);
+    tokens.glass = material;
+    tokens
 }
 fn usable_for(monitor: &Monitor, bars: &BarsConfig) -> RectF {
     let scale = monitor.dpi as f64 / 96.0;

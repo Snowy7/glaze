@@ -206,6 +206,11 @@ pub fn theme(model: &Model, tokens: &Tokens) -> Theme {
     if let Some(set) = &tokens.icon_set { theme.icons = set.clone(); }
     if let Some(radius) = model.corner_override { theme = theme.with_surface_radius(radius); }
     if let Some(edge) = model.edge_override { theme.border = edge.then_some(theme.color.separator); }
+    if !notch && model.placed.appearance.get("surface").and_then(Value::as_str) != Some("none") {
+        theme.color.label = tokens.colors.text;
+        theme.color.secondary = tokens.colors.text_dim;
+        theme.color.tertiary = tokens.colors.text_dim;
+    }
     theme
 }
 
