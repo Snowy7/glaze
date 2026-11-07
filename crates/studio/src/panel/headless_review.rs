@@ -127,6 +127,7 @@ fn hidden_window_memory_tour() {
             "input_or_activation_used": false,
             "baseline_working_set_mib": baseline.working_mb,
             "after_tour_working_set_mib": after_tour.working_mb,
+            "after_tour_private_mib": after_tour.private_mb,
             "max_page_working_set_mib": max_page,
             "process_peak_working_set_mib": counters.PeakWorkingSetSize as f64 / 1048576.0,
             "target_mib": 60,
