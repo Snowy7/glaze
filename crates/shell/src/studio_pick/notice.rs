@@ -141,6 +141,7 @@ impl Notice {
                     role: Role::Button,
                     label: self.text.clone().into(),
                     enabled: self.step != 0,
+                    actionable: self.step != 0,
                     checked: None,
                 }],
                 ..Default::default()

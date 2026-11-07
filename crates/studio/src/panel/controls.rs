@@ -582,6 +582,7 @@ pub fn button(
             role: Role::Button,
             label: label.into(),
             enabled: false,
+            actionable: false,
             checked: None,
         });
     }
@@ -612,6 +613,7 @@ pub fn icon_button(b: &mut B, r: Rect, icon: Glyph, label: &str, enabled: bool, 
             role: Role::Button,
             label: label.into(),
             enabled: false,
+            actionable: false,
             checked: None,
         });
     }
