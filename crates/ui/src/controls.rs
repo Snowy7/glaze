@@ -442,6 +442,7 @@ pub struct Builder<'a, A> {
     pub scrolls: Vec<ScrollArea>,
     clips: Vec<(Key, Rect)>,
     group: Option<Key>,
+    filled_controls: bool,
 }
 
 impl<'a, A: Clone> Builder<'a, A> {
@@ -459,6 +460,7 @@ impl<'a, A: Clone> Builder<'a, A> {
             scrolls: Vec::new(),
             clips: Vec::new(),
             group: None,
+            filled_controls: false,
         }
     }
 
@@ -474,6 +476,13 @@ impl<'a, A: Clone> Builder<'a, A> {
         self.kit.metrics = geometry.metrics;
         self.kit.radius = geometry.radius;
         self.kit.icon_weight = geometry.icon_weight;
+        self
+    }
+
+    /// Filled app controls with a recessed segment track and an unoutlined vector slider.
+    /// Opt-in so existing flyout and widget callers retain their own control treatment.
+    pub fn with_filled_controls(mut self) -> Self {
+        self.filled_controls = true;
         self
     }
 
@@ -1074,7 +1083,15 @@ impl<'a, A: Clone> Builder<'a, A> {
         let c = self.kit.color;
         let radius = self.control_radius(outer);
         let inner_radius = (radius - (2.0 * self.s).round()).max(0.0);
-        self.fill(outer, radius, c.well);
+        self.fill(
+            outer,
+            radius,
+            if self.filled_controls {
+                self.p.well
+            } else {
+                c.well
+            },
+        );
         let style = self.font(Font::Caption);
         for (i, (seg, item)) in segs.iter().zip(items).enumerate() {
             let on = selected == Some(i);
@@ -1082,7 +1099,9 @@ impl<'a, A: Clone> Builder<'a, A> {
                 self.fill(
                     *seg,
                     inner_radius,
-                    if self.p.selected == self.p.solid {
+                    if self.filled_controls {
+                        self.p.fill
+                    } else if self.p.selected == self.p.solid {
                         self.p.solid
                     } else {
                         segment_fill(self.p.dark)
@@ -1091,7 +1110,9 @@ impl<'a, A: Clone> Builder<'a, A> {
             }
             self.wash(keys[i], *seg, inner_radius);
             let ink = if on {
-                if self.p.selected == self.p.solid {
+                if self.filled_controls {
+                    self.p.ink1
+                } else if self.p.selected == self.p.solid {
                     self.p.on_solid
                 } else {
                     hex(0xffffff)
@@ -1167,7 +1188,9 @@ impl<'a, A: Clone> Builder<'a, A> {
                 true,
                 |i| action(first + i),
             );
-            self.stroke(r, self.control_radius(r), self.px(1.0), self.p.edge);
+            if !self.filled_controls {
+                self.stroke(r, self.control_radius(r), self.px(1.0), self.p.edge);
+            }
             bottom = r.bottom + self.px(4.0);
         }
         Rect::new(rect.left, rect.top, rect.width(), bottom - rect.top)
@@ -1294,14 +1317,46 @@ impl<'a, A: Clone> Builder<'a, A> {
             rect.height(),
         );
         let t = ((value - min) / (max - min)).clamp(0.0, 1.0) as f32;
-        self.kit(&[key], |_| {}, |f, id| f.slider(id, area, t, label, None));
         let knob = (18.0 * self.s).round();
-        let track = Rect::new(
+        let mut track = Rect::new(
             area.left + knob / 2.0,
             rect.top + rect.height() / 2.0 - self.px(2.0),
             area.width() - knob,
             self.px(4.0),
         );
+        if self.filled_controls {
+            // Keep one device-space center for the track, fill and thumb at fractional DPI.
+            // Direct2D antialiases these vector primitives; never round the moving thumb.
+            let mid = rect.top + rect.height() / 2.0;
+            let thickness = self.px(3.0);
+            track.top = mid - thickness / 2.0;
+            track.bottom = mid + thickness / 2.0;
+            self.fill(track, thickness / 2.0, p.control);
+            let at = track.left + track.width() * t;
+            self.fill(Rect { right: at, ..track }, thickness / 2.0, p.ink2);
+            let diameter = self.px(if self.pressed(key) { 18.0 } else { 16.0 });
+            let thumb = Rect::new(
+                at - diameter / 2.0,
+                mid - diameter / 2.0,
+                diameter,
+                diameter,
+            );
+            if self.hovered(key) || self.pressed(key) {
+                self.fill(
+                    thumb.inflate(self.px(4.0)),
+                    diameter / 2.0 + self.px(4.0),
+                    p.hover,
+                );
+            }
+            self.fill(thumb, diameter / 2.0, p.ink1);
+            self.focus_ring(
+                key,
+                thumb.inflate(self.px(3.0)),
+                diameter / 2.0 + self.px(3.0),
+            );
+        } else {
+            self.kit(&[key], |_| {}, |f, id| f.slider(id, area, t, label, None));
+        }
         let style = self.font(Font::Caption);
         self.text_in(
             Rect::new(

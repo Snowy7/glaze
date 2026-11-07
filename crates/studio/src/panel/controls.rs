@@ -28,7 +28,10 @@ pub fn height(b: &B, base: f32) -> f32 {
 }
 
 pub fn row_height(b: &B, caption: &str) -> f32 {
-    height(b, b.kit.metrics.row + if caption.is_empty() { 0.0 } else { 12.0 })
+    height(
+        b,
+        b.kit.metrics.row + if caption.is_empty() { 0.0 } else { 12.0 },
+    )
 }
 
 pub use mypaper_ui::controls::format_value as unit;
@@ -118,7 +121,8 @@ pub fn label_width(b: &B, c: &Col) -> f32 {
 pub fn displays(app: &App, b: &mut B, c: &mut Col) {
     // In the standalone frame the display picker belongs to its stage.
     if app.panel.as_ref().is_some_and(|state| state.windowed)
-        && crate::view::has_stage(super::current_page(app)) {
+        && crate::view::has_stage(super::current_page(app))
+    {
         return;
     }
     if app.monitors.len() < 2 {
@@ -159,7 +163,6 @@ pub fn displays(app: &App, b: &mut B, c: &mut Col) {
         true,
         |i| Action::Panel(super::Command::Display(order[i])),
     );
-    b.stroke(r, b.control_radius(r), b.px(1.0), b.p.line);
     c.y = r.bottom + b.px(4.0);
 }
 
@@ -640,7 +643,16 @@ pub fn row(
     if let Some(g) = icon {
         let gw = b.px(18.0);
         let tile = Rect::new(x, c.y + (h - gw) / 2.0, gw, gw);
-        b.icon(tile, g, 16.0, if on || b.hovered(k) { b.p.ink1 } else { b.p.ink3 });
+        b.icon(
+            tile,
+            g,
+            16.0,
+            if on || b.hovered(k) {
+                b.p.ink1
+            } else {
+                b.p.ink3
+            },
+        );
         x += gw + b.px(10.0);
     }
     let tail_w = height(b, 16.0);
@@ -650,7 +662,16 @@ pub fn row(
             b.icon(tail, glyph::CHECK, 16.0, b.p.ink1);
         }
     } else {
-        b.icon(tail, if choice { glyph::CHEVRON_DOWN } else { glyph::CHEVRON_RIGHT }, 15.0, b.p.ink3);
+        b.icon(
+            tail,
+            if choice {
+                glyph::CHEVRON_DOWN
+            } else {
+                glyph::CHEVRON_RIGHT
+            },
+            15.0,
+            b.p.ink3,
+        );
     }
     let end = tail.left - b.px(8.0);
     let value_w = if value.is_empty() {
@@ -802,19 +823,42 @@ pub fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str,
         Kind::Select { options, .. } => {
             b.list.ops.truncate(label_op);
             super::editors::select(
-                b, c, label, value, edit,
-                options.iter().map(|(value, label)| (
-                    serde_json::from_str(value).expect("setting value"), (*label).to_owned()
-                )).collect(),
+                b,
+                c,
+                label,
+                value,
+                edit,
+                options
+                    .iter()
+                    .map(|(value, label)| {
+                        (
+                            serde_json::from_str(value).expect("setting value"),
+                            (*label).to_owned(),
+                        )
+                    })
+                    .collect(),
             );
         }
         Kind::Choice { options, .. } => {
             let mut options: Vec<_> = options.iter().collect();
             options.sort_by_key(|(_, label)| *label != "As is");
             b.list.ops.truncate(label_op);
-            super::editors::segments(b, c, label, value, edit, options.into_iter().map(|(value, label)| (
-                serde_json::from_str(value).expect("setting value"), (*label).to_owned()
-            )).collect());
+            super::editors::segments(
+                b,
+                c,
+                label,
+                value,
+                edit,
+                options
+                    .into_iter()
+                    .map(|(value, label)| {
+                        (
+                            serde_json::from_str(value).expect("setting value"),
+                            (*label).to_owned(),
+                        )
+                    })
+                    .collect(),
+            );
         }
         Kind::Slider {
             min,
@@ -982,69 +1026,32 @@ pub fn notice(b: &mut B, c: &mut Col, message: &str) {
     c.y += b.paragraph(c.x, c.y, c.w, message, &style, height(b, 18.0), b.p.ink3) + b.px(12.0);
 }
 
-/// Give reused kit controls the same visible boundary as the panel's native controls.
+/// Give fields and toggles the panel's visible boundary; sliders and segments own their fills.
 /// Run inside the body's scroll clip, after its controls have registered their geometry.
 pub fn boundaries(b: &mut B) {
-    let mut segments: std::collections::HashMap<_, (Rect, usize, bool)> =
-        std::collections::HashMap::new();
     for target in b.targets.clone() {
         match target.behavior {
-            Behavior::Slider {
-                track,
-                min,
-                max,
-                value,
-                ..
-            } => {
-                b.stroke(track, b.px(2.0), b.px(1.0), b.p.edge);
-                let t = ((value - min) / (max - min)).clamp(0.0, 1.0) as f32;
-                let knob = b.px(18.0).round();
-                let r = Rect::new(
-                    (track.left + track.width() * t - knob / 2.0).round(),
-                    (track.top + track.height() / 2.0 - knob / 2.0).round(),
-                    knob,
-                    knob,
-                );
-                b.fill(r, knob / 2.0, b.kit.color.knob);
-                b.stroke(r, knob / 2.0, b.px(1.0), b.p.edge);
-            }
             Behavior::Toggle => b.stroke(
                 target.rect.inflate(-b.px(4.0)),
                 b.px(radius::MEDIUM),
                 b.px(1.0),
                 b.p.edge,
             ),
-            Behavior::Field => b.stroke(target.rect, b.control_radius(target.rect), b.px(1.0), b.p.edge),
+            Behavior::Field => b.stroke(
+                target.rect,
+                b.control_radius(target.rect),
+                b.px(1.0),
+                b.p.edge,
+            ),
             _ => match target.action {
-                Action::Choose(_) if target.rect.height() < b.px(36.0) => {
-                    b.stroke(target.rect, b.control_radius(target.rect), b.px(1.0), b.p.edge)
-                }
-                Action::Set(_, _)
-                    if target.rect.height() <= b.px(36.0) && target.rect.width() > b.px(48.0) =>
-                {
-                    if let Some(group) = target.group {
-                        segments
-                            .entry(group)
-                            .and_modify(|(r, count, same_row)| {
-                                *same_row &= (r.top - target.rect.top).abs() < 1.0
-                                    && (r.bottom - target.rect.bottom).abs() < 1.0;
-                                *count += 1;
-                                r.left = r.left.min(target.rect.left);
-                                r.top = r.top.min(target.rect.top);
-                                r.right = r.right.max(target.rect.right);
-                                r.bottom = r.bottom.max(target.rect.bottom);
-                            })
-                            .or_insert((target.rect, 1, true));
-                    }
-                }
+                Action::Choose(_) if target.rect.height() < b.px(36.0) => b.stroke(
+                    target.rect,
+                    b.control_radius(target.rect),
+                    b.px(1.0),
+                    b.p.edge,
+                ),
                 _ => {}
             },
-        }
-    }
-    for (r, count, same_row) in segments.into_values() {
-        if count > 1 && same_row {
-            let outer = r.inflate(b.px(2.0));
-            b.stroke(outer, b.control_radius(outer), b.px(1.0), b.p.edge);
         }
     }
 }
