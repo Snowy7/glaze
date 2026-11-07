@@ -686,6 +686,7 @@ pub fn offset(ops: &[Op], dx: f32, dy: f32) -> impl Iterator<Item = Op> + '_ {
             Op::Clipped {rect,ops}=>Op::Clipped {rect:r(rect),ops:offset(&ops,dx,dy).collect::<Vec<_>>().into()},
             Op::RoundedClipped {rect,radius,ops}=>Op::RoundedClipped {rect:r(rect),radius,ops:offset(&ops,dx,dy).collect::<Vec<_>>().into()},
             Op::Shadow { rect, radius, spread, drop, color } => Op::Shadow { rect: r(rect), radius, spread, drop, color },
+            Op::SoftShadow { rect, radius, blur, offset, spread, color } => Op::SoftShadow { rect: r(rect), radius, blur, offset, spread, color },
             Op::Clip { rect } => Op::Clip { rect: r(rect) },
             Op::Unclip => Op::Unclip,
         })

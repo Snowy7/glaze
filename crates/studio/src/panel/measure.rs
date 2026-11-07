@@ -116,6 +116,21 @@ pub fn scale_picture(ops: &mut [mypaper_ui::Op], scale: f32) {
                 *spread *= scale;
                 *drop *= scale;
             }
+            Op::SoftShadow {
+                rect: r,
+                radius,
+                blur,
+                offset,
+                spread,
+                ..
+            } => {
+                rect(r);
+                *radius *= scale;
+                *blur *= scale;
+                offset.0 *= scale;
+                offset.1 *= scale;
+                *spread *= scale;
+            }
             Op::Clipped { rect: r, ops } => {
                 rect(r);
                 scale_picture(std::sync::Arc::make_mut(ops), scale);
