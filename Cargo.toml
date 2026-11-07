@@ -22,7 +22,7 @@ mypaper-tweaks = { path = "crates/tweaks" }
 mypaper-bars = { path = "crates/bars" }
 # The UI library, its own repo since 2026-11-07. .cargo/config.toml patches it to the sibling
 # checkout at D:/Coding/projects/desktop/stillkit, so both change together on this PC.
-mypaper-ui = { package = "stillkit", git = "https://github.com/Snowy7/stillkit", rev = "9dfd39b0516d6fcf59538b6534ec124821ee74c6" }
+mypaper-ui = { package = "stillkit", git = "https://github.com/Snowy7/stillkit", rev = "38c21c4687cd213b3890e6a033effb49b2170043" }
 
 anyhow = "1"
 bytemuck = { version = "1", features = ["derive"] }
@@ -70,4 +70,4 @@ opt-level = "s"
 
 [patch.crates-io]
 # stillkit's vendored adapter; Cargo applies only this workspace's patches.
-accesskit_windows = { git = "https://github.com/Snowy7/stillkit", rev = "9dfd39b0516d6fcf59538b6534ec124821ee74c6" }
+accesskit_windows = { git = "https://github.com/Snowy7/stillkit", rev = "38c21c4687cd213b3890e6a033effb49b2170043" }

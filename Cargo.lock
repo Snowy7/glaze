@@ -24,7 +24,7 @@ dependencies = [
 [[package]]
 name = "accesskit_windows"
 version = "0.35.2"
-source = "git+https://github.com/Snowy7/stillkit?rev=9dfd39b0516d6fcf59538b6534ec124821ee74c6#9dfd39b0516d6fcf59538b6534ec124821ee74c6"
+source = "git+https://github.com/Snowy7/stillkit?rev=38c21c4687cd213b3890e6a033effb49b2170043#38c21c4687cd213b3890e6a033effb49b2170043"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
@@ -3126,6 +3126,7 @@ dependencies = [
  "png 0.18.1",
  "skrifa 0.44.0",
  "taffy",
+ "unicode-segmentation",
  "vello_cpu",
  "wayland-client",
  "wayland-protocols",
