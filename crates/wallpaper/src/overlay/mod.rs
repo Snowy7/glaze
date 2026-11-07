@@ -48,6 +48,7 @@ mod abi;
 mod capture;
 mod geometry;
 mod glass;
+mod recovery;
 pub mod request;
 mod timing;
 mod window;
@@ -89,6 +90,9 @@ use self::window::OverlayWindow;
 const WM_FRAME: u32 = WM_APP + 0x4F0;
 /// Posted by the window-destroy hook: a client may be gone.
 const WM_PRUNE: u32 = WM_APP + 0x4F1;
+/// Opt-in, input-free live regression fixture. 1 loses capture; 2 removes our shared DX12
+/// device. Ignored unless MYPAPER_TEST_OVERLAY_RECOVERY was set at process start.
+const WM_TEST_RECOVERY: u32 = WM_APP + 0x4F3;
 /// Registered message posted to a client whose window must exclude itself from capture
 /// (`WDA_EXCLUDEFROMCAPTURE`), when this Windows has no per-session exclusion list.
 pub const EXCLUDE_YOURSELF: windows::core::PCWSTR = w!("mypaper.glass.exclude-yourself");
@@ -146,7 +150,11 @@ impl PlateOverlay {
         Some(Self {
             id: plate.id,
             client,
-            layer: if topmost { Layer::Popup } else { Layer::Desktop },
+            layer: if topmost {
+                Layer::Popup
+            } else {
+                Layer::Desktop
+            },
             rect: Rect {
                 x: left,
                 y: top,
@@ -184,6 +192,18 @@ pub struct Gpu {
     pub queue: wgpu::Queue,
 }
 
+impl Gpu {
+    pub fn removed_reason(&self) -> windows::core::HRESULT {
+        // SAFETY: read-only diagnostic on our shared device, including after loss.
+        unsafe {
+            self.device
+                .as_hal::<wgpu::hal::api::Dx12>()
+                .and_then(|hal| hal.raw_device().GetDeviceRemovedReason().err())
+                .map_or(windows::core::HRESULT(0), |e| e.code())
+        }
+    }
+}
+
 /// What the overlays did, for measuring.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Stats {
@@ -210,6 +230,8 @@ pub struct Stats {
 /// Requests and wakes, filled by the request window's procedure.
 #[derive(Default)]
 struct Inbox {
+    diagnostics: bool,
+    test_loss: Cell<usize>,
     requests: RefCell<VecDeque<Request>>,
     frames: Cell<bool>,
     prune: Cell<bool>,
@@ -342,7 +364,7 @@ pub struct Overlays {
     // Drop order: the window first (its procedure points at `inbox`).
     window: MessageWindow,
     inbox: Rc<Inbox>,
-    gpu: Gpu,
+    gpu: crate::gpu::DeviceSlot<Gpu>,
     open: Vec<Overlay>,
     sessions: Vec<Session>,
     live: Option<Live>,
@@ -361,6 +383,14 @@ pub struct Overlays {
     pipes: Option<Rc<Pipelines>>,
     /// The shortest time between two captured frames ([`set_fps`](Self::set_fps)).
     interval: Duration,
+    /// Last requests are independent of GPU objects, including an Open that failed midway.
+    desired: recovery::Requests,
+    plates: Vec<PlateOverlay>,
+    retry_at: Option<Instant>,
+    retry_delay: Duration,
+    /// Shared DX12 loss must rebuild the wallpaper's device too, before replaying overlays.
+    gpu_lost: bool,
+    failure: Option<String>,
 }
 
 /// What exists only while an overlay is open, or the capture is warm.
@@ -404,16 +434,101 @@ struct Overlay {
 }
 
 impl Overlays {
+    /// Whether recovery also needs a new engine device (capture-only loss does not).
+    pub fn needs_gpu(&self) -> bool {
+        self.gpu_lost
+    }
+
+    /// The engine replaced its lost DX12 device; rebuild capture and replay on the next tick.
+    pub fn replace_gpu(&mut self, gpu: Gpu) {
+        self.discard_device();
+        self.gpu.replace(gpu);
+        self.gpu_lost = false;
+        self.retry_at = Some(Instant::now());
+    }
+
+    /// Release every reference to the shared device before the engine reopens its adapter.
+    pub fn release_gpu(&mut self) {
+        self.discard_device();
+        self.gpu.clear();
+        self.gpu_lost = true;
+        self.retry_at.get_or_insert(Instant::now());
+    }
+
+    fn discard_device(&mut self) {
+        for session in &self.sessions {
+            self.closed_counts = self.closed_counts.plus(session.counts());
+        }
+        self.sessions.clear();
+        self.open.clear();
+        self.live = None;
+        self.pipes = None;
+        self.hooks.clear();
+        self.inbox.placements.borrow_mut().clear();
+        self.inbox.frames.set(false);
+        self.warm_until = None;
+        self.exclusion_changed = true;
+    }
+
+    /// Enter recovery once, rather than emitting a warning for every animation request.
+    fn failed(&mut self, operation: &str, error: anyhow::Error) {
+        if recovery::device_lost(&error) {
+            let dx12 = self.gpu.removed_reason();
+            self.gpu_lost |= dx12.is_err();
+            if self.retry_at.is_none() {
+                let dx11 = self.live.as_ref().map(|live| live.capture.removed_reason());
+                log::warn!(
+                    "glass overlays: device lost during {operation}: {error:#}; GetDeviceRemovedReason D3D11={dx11:?}, DX12={dx12:?}; recovering"
+                );
+                self.discard_device();
+                self.retry_at = Some(Instant::now() + self.retry_delay);
+            }
+        } else {
+            let message = format!("{operation}: {error:#}");
+            if self.failure.as_ref() != Some(&message) {
+                log::warn!("glass overlays: {message}");
+                self.failure = Some(message);
+            }
+        }
+    }
+
+    fn reopen(&mut self) -> Result<()> {
+        // SAFETY: read-only stale-window check. A Close received during a cold open stays
+        // queued and is processed in order on the next tick.
+        let desired = self
+            .desired
+            .live(|hwnd| unsafe { IsWindow(Some(hwnd)) }.as_bool());
+        for overlay in desired {
+            self.apply(overlay.open())?;
+            self.apply(Request::Style {
+                client: overlay.client,
+                style: overlay.style,
+            })?;
+        }
+        for plate in self.plates.clone() {
+            // Frozen plates need a fresh crop on the new device before they can freeze again.
+            self.sync_plate(&PlateOverlay {
+                live: true,
+                ..plate
+            })?;
+        }
+        self.sync_placements();
+        Ok(())
+    }
+
     /// Creates the request window (`OVERLAY_CLASS`) on this thread. Nothing else exists until
     /// an overlay opens.
     pub fn new(gpu: Gpu) -> Result<Self> {
         capture::ask_borderless();
-        let inbox = Rc::new(Inbox::default());
+        let inbox = Rc::new(Inbox {
+            diagnostics: std::env::var_os("MYPAPER_TEST_OVERLAY_RECOVERY").is_some(),
+            ..Default::default()
+        });
         let window = MessageWindow::new(&inbox)?;
         Ok(Self {
             window,
             inbox,
-            gpu,
+            gpu: gpu.into(),
             open: Vec::new(),
             sessions: Vec::new(),
             live: None,
@@ -426,6 +541,12 @@ impl Overlays {
             warm_until: None,
             pipes: None,
             interval: capture::MIN_INTERVAL,
+            desired: recovery::Requests::default(),
+            plates: Vec::new(),
+            retry_at: None,
+            retry_delay: Duration::from_secs(1),
+            gpu_lost: false,
+            failure: None,
         })
     }
 
@@ -447,6 +568,7 @@ impl Overlays {
         self.warm_until
             .into_iter()
             .chain(self.inbox.motion_deadline())
+            .chain(self.retry_at)
             .min()
     }
 
@@ -484,6 +606,57 @@ impl Overlays {
     /// Handles what arrived since the last call: requests, gone clients, waiting frames.
     /// Returns how many requests it handled.
     pub fn tick(&mut self) -> usize {
+        if self.retry_at.is_none() && self.gpu.get().is_some() {
+            let reason = self.gpu.removed_reason();
+            if reason.is_err() {
+                self.failed(
+                    "shared device health",
+                    windows::core::Error::from_hresult(reason).into(),
+                );
+            }
+        }
+        match self.inbox.test_loss.take() {
+            1 => self.failed(
+                "diagnostic capture loss",
+                windows::core::Error::from_hresult(
+                    windows::Win32::Graphics::Dxgi::DXGI_ERROR_DEVICE_REMOVED,
+                )
+                .into(),
+            ),
+            2 => {
+                use windows::core::Interface;
+                // SAFETY: opt-in fixture removes only our process's logical device, never
+                // another application's device. Production does not accept this message.
+                unsafe {
+                    if let Some(hal) = self.gpu.device.as_hal::<wgpu::hal::api::Dx12>()
+                        && let Ok(device) =
+                            hal.raw_device()
+                                .cast::<windows::Win32::Graphics::Direct3D12::ID3D12Device5>()
+                    {
+                        device.RemoveDevice();
+                    }
+                }
+                self.failed(
+                    "diagnostic DX12 loss",
+                    windows::core::Error::from_hresult(
+                        windows::Win32::Graphics::Dxgi::DXGI_ERROR_DEVICE_REMOVED,
+                    )
+                    .into(),
+                );
+            }
+            _ => {}
+        }
+        if self.retry_at.is_none()
+            && let Some(live) = &self.live
+        {
+            let reason = live.capture.removed_reason();
+            if reason.is_err() {
+                self.failed(
+                    "capture health",
+                    windows::core::Error::from_hresult(reason).into(),
+                );
+            }
+        }
         self.inbox.take_motion(Instant::now());
         // A cold open takes the shell's sent requests while it works (see 	ake_sent); those
         // run here, after it, in the order they came.
@@ -496,7 +669,7 @@ impl Overlays {
             handled += requests.len();
             for request in requests {
                 if let Err(e) = self.handle(request) {
-                    log::warn!("glass overlay {request:?}: {e:#}");
+                    self.failed("request", e);
                 }
             }
         }
@@ -519,6 +692,7 @@ impl Overlays {
                 while let Some(o) = self.open.iter().position(|o| o.client == client) {
                     self.close_at(o);
                 }
+                self.desired.remember(Request::Close { client });
             }
         }
         if handled > 0 {
@@ -526,10 +700,35 @@ impl Overlays {
         }
         if self.inbox.frames.take() {
             for index in 0..self.sessions.len() {
+                if let Some(error) = self.sessions[index].take_error() {
+                    self.failed("frame pool", error.into());
+                    break;
+                }
                 if let Some(frame) = self.sessions[index].take()
                     && let Err(e) = self.update(index, frame)
                 {
-                    log::warn!("glass overlay update: {e:#}");
+                    self.failed("update", e);
+                    // Recovery drops sessions, so no indices from this generation remain valid.
+                    break;
+                }
+            }
+        }
+        if !self.gpu_lost && self.retry_at.is_some_and(|at| at <= Instant::now()) {
+            match self.reopen() {
+                Ok(()) => {
+                    self.retry_at = None;
+                    self.retry_delay = Duration::from_secs(1);
+                    self.failure = None;
+                    log::info!(
+                        "glass overlays: device recovered; reopened {} overlays",
+                        self.open.len()
+                    );
+                }
+                Err(e) => {
+                    self.failed("reopen", e);
+                    self.discard_device();
+                    self.retry_delay = (self.retry_delay * 2).min(Duration::from_secs(30));
+                    self.retry_at = Some(Instant::now() + self.retry_delay);
                 }
             }
         }
@@ -558,6 +757,14 @@ impl Overlays {
 
     /// Handles one request now (the window queues them for [`tick`](Self::tick)).
     pub fn handle(&mut self, request: Request) -> Result<()> {
+        self.desired.remember(request);
+        if self.retry_at.is_some() {
+            return Ok(());
+        }
+        self.apply(request)
+    }
+
+    fn apply(&mut self, request: Request) -> Result<()> {
         match request {
             Request::Open {
                 client,
@@ -606,15 +813,23 @@ impl Overlays {
     /// (see the module docs): opens the new live ones, moves, restyles, freezes or thaws the
     /// rest, and closes those gone. Unchanged plates cost a comparison each.
     pub fn sync_plates(&mut self, plates: &[PlateOverlay]) {
+        self.plates = plates.to_vec();
+        if self.retry_at.is_some() {
+            return;
+        }
         while let Some(o) = self.open.iter().position(|o| {
             o.plate
                 .is_some_and(|id| !plates.iter().any(|p| p.id == id && p.client == o.client))
         }) {
             self.close_at(o);
         }
+        if self.retry_at.is_some() {
+            return;
+        }
         for plate in plates {
             if let Err(e) = self.sync_plate(plate) {
-                log::warn!("glass overlay for plate {:#x}: {e:#}", plate.id);
+                self.failed("plate", e);
+                break;
             }
         }
     }
@@ -670,6 +885,10 @@ impl Overlays {
     /// Freezes overlay `o` (its glass stays as drawn, nothing is captured for it, and a monitor
     /// left with only frozen overlays loses its session) or thaws it (it takes the next frame).
     fn set_frozen(&mut self, o: usize, frozen: bool) -> Result<()> {
+        // A rebuilt frozen plate needs one fresh crop before retaining its last frame again.
+        if frozen && self.open[o].shown.is_none() {
+            return Ok(());
+        }
         if std::mem::replace(&mut self.open[o].frozen, frozen) == frozen {
             return Ok(());
         }
@@ -901,7 +1120,7 @@ impl Overlays {
         // capture running, so its glass is there in a frame instead of ~260 ms.
         self.keep_warm();
         if let Err(e) = self.sync_capture(None) {
-            log::warn!("glass overlays: {e:#}");
+            self.failed("close", e);
         }
     }
 
@@ -1139,6 +1358,7 @@ impl Overlays {
         // SAFETY: a commit on a live device: the new glass shows at the next composition.
         unsafe { live.dcomp.Commit()? };
         self.stats.passes += which.len() as u64;
+        self.failure = None;
         Ok(())
     }
 
@@ -1424,6 +1644,10 @@ unsafe extern "system" fn inbox_proc(
             inbox.prune.set(true);
             LRESULT(0)
         }
+        (WM_TEST_RECOVERY, Some(inbox)) if inbox.diagnostics => {
+            inbox.test_loss.set(wparam.0);
+            LRESULT(0)
+        }
         // SAFETY: the system's own message, forwarded unchanged.
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
     }
@@ -1481,15 +1705,31 @@ mod plate_tests {
                 height: 100
             }
         );
-        assert_eq!(p.material.tint, [26, 26, 31, 102], "the stained tint survives");
-        assert_eq!((p.style.smoothing, p.style.sheen, p.style.depth), (0.6, 0.5, -1.0));
+        assert_eq!(
+            p.material.tint,
+            [26, 26, 31, 102],
+            "the stained tint survives"
+        );
+        assert_eq!(
+            (p.style.smoothing, p.style.sheen, p.style.depth),
+            (0.6, 0.5, -1.0)
+        );
         assert_eq!(p.style.fade_ms, Style::DEFAULT.fade_ms);
-        assert!(PlateOverlay::of(&plate, &style, me + 1, true).is_none(), "another publisher");
+        assert!(
+            PlateOverlay::of(&plate, &style, me + 1, true).is_none(),
+            "another publisher"
+        );
         // SAFETY: our own window.
         unsafe { DestroyWindow(window).unwrap() };
-        assert!(PlateOverlay::of(&plate, &style, me, true).is_none(), "a stale id");
+        assert!(
+            PlateOverlay::of(&plate, &style, me, true).is_none(),
+            "a stale id"
+        );
         let auto = mypaper_glass_ipc::Plate { id: 3, ..plate };
-        assert!(PlateOverlay::of(&auto, &style, me, true).is_none(), "an id without a window");
+        assert!(
+            PlateOverlay::of(&auto, &style, me, true).is_none(),
+            "an id without a window"
+        );
     }
 
     #[test]

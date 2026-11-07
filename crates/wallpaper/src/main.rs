@@ -23,10 +23,10 @@ mod control;
 mod engine;
 mod game;
 mod glass_pass;
-mod material;
 mod gpu;
 #[cfg(test)]
 mod lab;
+mod material;
 // Glass overlays, driven by the loop below; their measuring calls serve the spike examples.
 #[allow(dead_code)]
 mod overlay;
@@ -206,6 +206,7 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
     startup::ready("wallpaper", "loop_ms");
     let mut desktop_lost = false;
     let mut desktop_at = None;
+    let mut gpu_retry_at = None;
     let parent_handle: Vec<_> = parent.iter().map(parent::Parent::handle).collect();
     let code = loop {
         if let Some(code) = pump(&mut engine, &mut live) {
@@ -218,6 +219,34 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
         // Requests and capture frames arrived as messages in that pump.
         if let Some(overlays) = &mut overlays {
             overlays.tick();
+        }
+        // Check before drawing: loss may arrive while wallpaper rendering is held. Capture
+        // loss alone rebuilds only D3D11; actual shared DX12 loss replaces both users' resources.
+        if engine.gpu_lost() || overlays.as_ref().is_some_and(overlay::Overlays::needs_gpu) {
+            let now = Instant::now();
+            if gpu_retry_at.is_none_or(|at| now >= at) {
+                if let Some(overlays) = &mut overlays {
+                    overlays.release_gpu();
+                }
+                match engine.recover_gpu() {
+                    Ok(()) => {
+                        gpu_retry_at = None;
+                        if let Some(overlays) = &mut overlays {
+                            overlays.replace_gpu(engine.overlay_gpu());
+                        }
+                    }
+                    Err(e) => {
+                        if gpu_retry_at.is_none() {
+                            log::warn!("GPU: recovery waiting for adapter: {e:#}");
+                        }
+                        gpu_retry_at = Some(now + Duration::from_secs(2));
+                    }
+                }
+            }
+            if gpu_retry_at.is_some() {
+                waiter.wait(gpu_retry_at, &parent_handle);
+                continue;
+            }
         }
         if let Some(events) = &desktop_events {
             desktop_lost |= events.take_lost();

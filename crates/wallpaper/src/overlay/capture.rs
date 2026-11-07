@@ -34,10 +34,11 @@ use windows::Win32::Foundation::{CloseHandle, HMODULE, HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_UNKNOWN;
 use windows::Win32::Graphics::Direct3D11::{
     D3D11_BOX, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-    D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS, D3D11_QUERY_DATA_TIMESTAMP_DISJOINT,
-    D3D11_QUERY_DESC, D3D11_QUERY_TIMESTAMP, D3D11_QUERY_TIMESTAMP_DISJOINT, D3D11_SDK_VERSION,
-    D3D11CreateDevice, ID3D11Device, ID3D11Device1, ID3D11Device5, ID3D11DeviceContext,
-    ID3D11DeviceContext4, ID3D11Fence, ID3D11Query, ID3D11Texture2D,
+    D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS,
+    D3D11_QUERY_DATA_TIMESTAMP_DISJOINT, D3D11_QUERY_DESC, D3D11_QUERY_TIMESTAMP,
+    D3D11_QUERY_TIMESTAMP_DISJOINT, D3D11_SDK_VERSION, D3D11CreateDevice, ID3D11Device,
+    ID3D11Device1, ID3D11Device5, ID3D11DeviceContext, ID3D11DeviceContext4, ID3D11Fence,
+    ID3D11Multithread, ID3D11Query, ID3D11Texture2D,
 };
 use windows::Win32::Graphics::Direct3D12::{
     D3D12_FENCE_FLAG_SHARED, D3D12_HEAP_FLAG_SHARED, D3D12_HEAP_PROPERTIES,
@@ -70,8 +71,9 @@ pub const MIN_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / 30);
 /// The shortest time between two captured frames under a frame-rate cap (`engine.fps`): the
 /// cap's frame time, never shorter than [`MIN_INTERVAL`].
 pub fn interval(fps: Option<u32>) -> Duration {
-    fps.filter(|&fps| fps > 0)
-        .map_or(MIN_INTERVAL, |fps| (Duration::from_secs(1) / fps).max(MIN_INTERVAL))
+    fps.filter(|&fps| fps > 0).map_or(MIN_INTERVAL, |fps| {
+        (Duration::from_secs(1) / fps).max(MIN_INTERVAL)
+    })
 }
 
 fn time_span(interval: Duration) -> windows::Foundation::TimeSpan {
@@ -122,8 +124,8 @@ impl CaptureDevice {
         // No driver threads of its own: this device only copies crops and fills DirectComposition
         // surfaces. Without the flag NVIDIA's D3D11 driver starts ~56 worker threads with the
         // first overlay, +40 MiB private that stay until the engine exits.
-        let flags =
-            D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS;
+        let flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT
+            | D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS;
         // SAFETY: a live adapter; the out pointers outlive the call.
         unsafe {
             D3D11CreateDevice(
@@ -141,6 +143,14 @@ impl CaptureDevice {
         }
         let d3d11: ID3D11Device = d3d11.context("no D3D11 device")?;
         let context: ID3D11DeviceContext = context.context("no D3D11 context")?;
+        // WGC's free-threaded pool and DirectComposition also use this immediate context.
+        // Device calls are thread-safe; context calls are not unless this is enabled.
+        // SAFETY: the context's own multithread interface, before sharing it with WGC.
+        let _ = unsafe {
+            context
+                .cast::<ID3D11Multithread>()?
+                .SetMultithreadProtected(true)
+        };
         // SAFETY: creates a fence and shares it between two live devices; the handle is closed
         // once both hold the fence.
         let (fence12, fence11) = unsafe {
@@ -324,6 +334,14 @@ impl CaptureDevice {
         Ok(self.device.cast()?)
     }
 
+    /// Query once when entering recovery, before releasing the failed capture device.
+    pub fn removed_reason(&self) -> windows::core::HRESULT {
+        // SAFETY: read-only diagnostic on this device, including after removal.
+        unsafe { self.device.GetDeviceRemovedReason() }
+            .err()
+            .map_or(windows::core::HRESULT(0), |e| e.code())
+    }
+
     /// Timestamp queries around the copies, for measuring (see [`CopyTimer`]).
     pub fn copy_timer(&self) -> Result<CopyTimer> {
         let desc = |query| D3D11_QUERY_DESC {
@@ -415,6 +433,7 @@ impl CopyTimer {
 /// What the frame handler and the engine's thread share about one session.
 #[derive(Default)]
 struct Watch {
+    error: Option<windows::core::Error>,
     /// The open overlays' frames, monitor-local: a frame matters if its dirty rects touch one.
     regions: Vec<Rect>,
     /// Frames rendered with an older exclusion list (they may show our own windows) are dropped.
@@ -514,8 +533,17 @@ impl Session {
                 let Some(pool) = pool.as_ref() else {
                     return Ok(());
                 };
-                let frame = pool.TryGetNextFrame()?;
-                if keep(&shared, &frame) {
+                let wake = match pool.TryGetNextFrame() {
+                    Ok(frame) => keep(&shared, &frame),
+                    Err(error) => {
+                        shared
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .error = Some(error);
+                        true
+                    }
+                };
+                if wake {
                     // SAFETY: posting to the engine's window, which outlives the session.
                     let _ = unsafe {
                         PostMessageW(Some(HWND(notify as *mut _)), message, WPARAM(0), LPARAM(0))
@@ -573,6 +601,11 @@ impl Session {
     /// The frame waiting for this thread, if one is.
     pub fn take(&self) -> Option<Direct3D11CaptureFrame> {
         self.lock().pending.take()
+    }
+
+    /// Frame-pool errors happen on WGC's thread; handle them on the owning engine thread.
+    pub fn take_error(&self) -> Option<windows::core::Error> {
+        self.lock().error.take()
     }
 
     pub fn counts(&self) -> Counts {
