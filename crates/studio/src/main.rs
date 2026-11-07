@@ -274,7 +274,7 @@ fn run() -> Result<()> {
     app.inbox = Some(tx.clone());
     app.thread = thread;
     app.images.borrow_mut().connect(tx.clone(), thread);
-    surface.set_icon_png(include_bytes!("../assets/icon-32.png"));
+    set_window_icons(surface.hwnd(), scale)?;
     let (bounds, maximized) = if panel_mode { (panel::placement(&app), false) } else { placement(&app, scale) };
     surface.place(bounds);
     panel::round_window(surface.hwnd());
@@ -315,8 +315,44 @@ fn run() -> Result<()> {
     result
 }
 
-/// The message loop: sleeps until input, a worker's message, the engine's glass answer, or the
-/// next timer (a toast, a live status refresh while visible).
+/// The class and task switchers use the same embedded artwork as executable icon lookup.
+fn set_window_icons(hwnd: windows::Win32::Foundation::HWND, scale: f32) -> Result<()> {
+    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GCLP_HICON, GCLP_HICONSM, ICON_BIG, ICON_SMALL, IMAGE_ICON, LR_SHARED, LoadImageW,
+        SendMessageW, SetClassLongPtrW, WM_SETICON,
+    };
+    // SAFETY: resource 101 is linked into our exe. LR_SHARED keeps both icons alive for
+    // the class and window lifetime; Windows owns them and they must not be destroyed.
+    unsafe {
+        let instance = GetModuleHandleW(None)?;
+        for (kind, class, size) in [
+            (ICON_BIG, GCLP_HICON, 32.0),
+            (ICON_SMALL, GCLP_HICONSM, 16.0),
+        ] {
+            let size = (size * scale).round() as i32;
+            let icon = LoadImageW(
+                Some(instance.into()),
+                windows::core::PCWSTR(101usize as *const u16),
+                IMAGE_ICON,
+                size,
+                size,
+                LR_SHARED,
+            )
+            .context("Studio icon resource")?;
+            SetClassLongPtrW(hwnd, class, icon.0 as isize);
+            SendMessageW(
+                hwnd,
+                WM_SETICON,
+                Some(WPARAM(kind as usize)),
+                Some(LPARAM(icon.0 as isize)),
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The message loop sleeps until input, a worker's message or the next timer.
 fn pump(studio: &Rc<RefCell<Studio>>, rx: &Receiver<Msg>) -> Result<()> {
     let mut msg = MSG::default();
     loop {

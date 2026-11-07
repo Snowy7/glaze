@@ -369,6 +369,21 @@ pub fn cache_name(key: &str) -> String {
     format!("{hash:016x}.png")
 }
 
+/// An executable replaced at the same path can acquire new artwork. Keep the previous
+/// cached bitmap out of the next shell session without invalidating unrelated icons.
+fn file_cache_name(key: &str) -> String {
+    let version = std::fs::metadata(key).ok().map(|metadata| {
+        (
+            metadata.len(),
+            metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok()),
+        )
+    });
+    cache_name(&format!("{key}:{version:?}"))
+}
+
 /// Stores ready-made PNG bytes in the cache (named by their content) and returns the URL.
 pub fn store_png(dir: &Path, png: &[u8]) -> Option<String> {
     let name = cache_name(&String::from_utf8_lossy(png));
@@ -386,7 +401,7 @@ pub(crate) fn icon(
     wic: &IWICImagingFactory,
     dir: &Path,
 ) -> Option<String> {
-    let name = cache_name(key);
+    let name = file_cache_name(key);
     let file = dir.join(&name);
     if file.exists() {
         return Some(file.display().to_string());
@@ -522,6 +537,19 @@ mod tests {
         assert_ne!(cache_name(r"c:\a.exe"), cache_name(r"c:\b.exe"));
         assert!(cache_name("x").ends_with(".png"));
         assert_eq!(cache_name("x").len(), 16 + 4);
+    }
+
+    #[test]
+    fn replacing_an_executable_invalidates_its_disk_icon() {
+        let path =
+            std::env::temp_dir().join(format!("mypaper-icon-cache-{}.exe", std::process::id()));
+        let key = path.to_str().unwrap();
+        std::fs::write(&path, b"before").unwrap();
+        let before = file_cache_name(key);
+        assert_eq!(before, file_cache_name(key));
+        std::fs::write(&path, b"new executable with an icon").unwrap();
+        assert_ne!(before, file_cache_name(key));
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
