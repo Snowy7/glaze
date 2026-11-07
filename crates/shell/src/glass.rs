@@ -9,6 +9,9 @@ use mypaper_glass_ipc as ipc;
 use mypaper_ui::Rect;
 use mypaper_ui::theme::Knobs;
 
+#[path = "glass_tone.rs"]
+pub mod tone;
+
 /// A plate's material: the kit's, so a surface's glass (`theme::material` tuned by the user's
 /// [`Knobs`]) is published as it is. Blur here is physical px.
 pub type Material = mypaper_ui::GlassMaterial;

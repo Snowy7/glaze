@@ -71,7 +71,15 @@ pub fn appearance(
         accent: look.accent,
         tint: match material.tint {
             Some(Paint::Color(c)) => Some(c),
-            _ => None,
+            Some(Paint::Auto) => mypaper_tweaks::palette::read().map(|p| {
+                let dark = match look.appearance {
+                    Some(Scheme::Light) => false,
+                    Some(Scheme::Dark) => true,
+                    _ => system.scheme == accent::Scheme::Dark,
+                };
+                crate::glass::tone::wallpaper_tint(p.palette.accent, dark)
+            }),
+            None => None,
         },
         shadow: bare.then_some(look.text.shadow).flatten(),
         ..Default::default()

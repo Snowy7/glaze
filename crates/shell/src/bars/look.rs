@@ -144,6 +144,20 @@ impl Tokens {
         tokens
     }
 
+    /// Re-evaluate the label roles against the actual material on this monitor.
+    pub fn adapt_ink(&mut self, look: &Look, rect: Option<mypaper_ui::Rect>) {
+        if self.bare { return; }
+        let under = crate::glass::tone::backdrop(rect, self.theme.scheme == mypaper_ui::Scheme::Dark);
+        let surface = self.material.map_or_else(
+            || mypaper_ui::theme::over(self.fill.unwrap_or(self.theme.color.surface), under),
+            |m| crate::glass::tone::face(&m, under, rect.map_or(40.0, |r| r.width().min(r.height()))),
+        );
+        crate::glass::tone::apply(&mut self.theme, surface);
+        self.styles = super::styling::Styles::resolve(look, &self.theme, |c| {
+            color_with_system(c, &self.theme, &self.system_colors)
+        });
+    }
+
     pub fn resolve(look: &Look, appearance: &Appearance, system: &accent::System) -> Self {
         let native = look.native_style();
         let family = look.family.unwrap_or_default();
@@ -174,7 +188,8 @@ impl Tokens {
         );
         let mut glass_look = look.clone();
         glass_look.glass.blur = glass_look.glass.blur.or(appearance.blur);
-        let material = material(&glass_look, kit, tint, appearance.opacity);
+        let strength = appearance.opacity.or(appearance.tint.map(|_| 0.22));
+        let material = material(&glass_look, kit, tint, strength);
         let system_colors =
             std::array::from_fn(|i| hex(&system.accent[i]).unwrap_or(theme.color.accent));
         let fill = match &look.background {
