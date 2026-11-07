@@ -1,5 +1,5 @@
-//! Per-user preferences and the opt-in activity publisher, using core's existing
-//! config notification and message loop. No consumer is paused in this slice.
+//! Per-user preferences and the default-on activity publisher, using core's existing
+//! config notification and message loop. Children watch its lifetime-checked publication.
 
 use mypaper_config::Config;
 use mypaper_tweaks::game_activity::GameWatcher;
@@ -43,7 +43,7 @@ impl SystemSettings {
         {
             log::warn!("system preferences not applied: {error:#}");
         }
-        if config.system.game_activity == Some(true) {
+        if config.system.game_activity.unwrap_or(true) {
             if self.game.is_none() {
                 self.game = GameWatcher::start()
                     .inspect_err(|error| log::warn!("game activity unavailable: {error:#}"))

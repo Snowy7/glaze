@@ -36,7 +36,6 @@ use mypaper_theme::{Appearance, LoadedTheme};
 use mypaper_ui::{
     Button, Entry, Event, Menu, Outcome, Point, Rect, SurfaceId, Ticker, Ui, screen_at,
 };
-use notify::Watcher;
 use services::Services;
 use std::{
     collections::BTreeMap,
@@ -100,8 +99,8 @@ pub struct Bars {
     menu: Option<Menu<Command>>,
     tray_menu: Option<tray_menu::Host>,
     press: Option<Press>,
-    watches: Vec<notify::RecommendedWatcher>,
-    theme_watch: Option<notify::RecommendedWatcher>,
+    watches: Vec<mypaper_fswatch::Watch>,
+    theme_watch: Option<mypaper_fswatch::Watch>,
     appearance: Appearance,
     theme_glass: Option<mypaper_theme::Liquid>,
     system: providers::accent::System,
@@ -125,6 +124,7 @@ pub struct Bars {
     /// When the shown tooltip started fading in.
     tooltip_fade: Option<Instant>,
     warm_due: Option<(Instant, usize, u32)>,
+    game_active: bool,
 }
 
 /// Keeps startup failures reversible before `Bars` owns the journal.
@@ -203,6 +203,7 @@ impl Bars {
             tooltip_due: None,
             tooltip_fade: None,
             warm_due: None,
+            game_active: false,
         };
         bars.read_theme();
         startup::ready("shell", "theme_ms");
@@ -1785,24 +1786,9 @@ impl Bars {
                 self.system.animations,
                 config.performance.active(mypaper_desktop::on_battery()),
             );
-            let mut bar_look = config.dock.look.clone();
-            let appearance = config.appearance.over(&self.appearance);
-            look::appearance_layer(config, "dock", &mut bar_look, &appearance);
-            look::popup_font(config, "dock", &mut bar_look);
-            look::glass_layer(config, "dock", &mut bar_look, self.theme_glass);
-            let knobs = Config::load()
-                .map(|c| crate::glass::knobs(&c.look, crate::glass::Family::Menus))
-                .unwrap_or_default();
-            let mut popup = crate::flyouts::look::Look::resolve_with(
-                &bar_look,
-                &appearance,
-                &self.system,
-                &knobs,
-            )
-            .menu_tokens();
-            if config.performance.active(mypaper_desktop::on_battery()) {
-                popup.glass = None;
-            }
+            let popup = dock
+                .and_then(|b| b.tokens.popup.clone())
+                .unwrap_or_else(|| tokens.clone());
             let performance = config.performance.active(mypaper_desktop::on_battery());
             menu.set_interaction_timings(
                 motion::resolve(
@@ -1930,6 +1916,7 @@ impl Bars {
         }
         self.monitors = monitors.clone();
         let mut wanted = Vec::new();
+        let desktop = Config::load().unwrap_or_default().look;
         for monitor in monitors {
             let mut config = self.config.for_monitor(&monitor.device, monitor.primary)?;
             config.resolve(services::default_pins);
@@ -1969,6 +1956,7 @@ impl Bars {
                     let mut look = look.clone();
                     look::appearance_layer(&config, bar_key, &mut look, &appearance);
                     look::glass_layer(&config, bar_key, &mut look, self.theme_glass);
+                    crate::look::settings::bar(&desktop, glass::Family::Bars, &config, bar_key, &mut look, &mut appearance, &self.system, &ui.text);
                     let colors = plugin_style::patch_look(
                         surface,
                         bar_key,
@@ -1976,9 +1964,55 @@ impl Bars {
                         &mut look,
                         &mut appearance,
                     );
-                    let mut tokens = look::Tokens::resolve(&look, &appearance, &self.system);
+                    let mut tokens = look::Tokens::resolve_settings(&look, &appearance, &self.system, &desktop, &ui.text);
+                    tokens.explicit_radius |= look::explicit_look(&config, bar_key, "/radius");
                     plugin_style::colors(&colors, self.config.raw(), &mut tokens.theme.color);
                     tokens.cache_config(&look, &config);
+                    let animation = if kind == BarKind::Dock {
+                        &config.dock.animation
+                    } else {
+                        &config.top.animation
+                    };
+                    let mut popup_look = look.clone();
+                    look::popup_font(&config, bar_key, &mut popup_look);
+                    let mut popup_appearance = appearance.clone();
+                    crate::look::settings::bar(&desktop, glass::Family::Menus, &config, bar_key, &mut popup_look, &mut popup_appearance, &self.system, &ui.text);
+                    let knobs = crate::glass::knobs(&desktop, crate::glass::Family::Menus);
+                    let popup_look = crate::flyouts::look::Look::resolve_settings(
+                        &popup_look,
+                        &popup_appearance,
+                        &self.system,
+                        &knobs,
+                        &desktop,
+                        &ui.text,
+                    );
+                    let mut popup = popup_look.menu_tokens();
+                    if performance {
+                        popup.glass = None;
+                    }
+                    look::glass_fade(
+                        &mut popup.glass_style,
+                        motion::resolve(
+                            animation,
+                            kind == BarKind::Dock,
+                            motion::Leaf::Open,
+                            self.system.animations,
+                            performance,
+                        ),
+                        motion::presentation(animation, kind == BarKind::Dock, motion::Leaf::Open),
+                    );
+                    tokens.popup = Some(popup);
+                    look::glass_fade(
+                        &mut tokens.glass_style,
+                        motion::resolve(
+                            animation,
+                            kind == BarKind::Dock,
+                            motion::Leaf::Show,
+                            self.system.animations,
+                            performance,
+                        ),
+                        motion::presentation(animation, kind == BarKind::Dock, motion::Leaf::Show),
+                    );
                     // No glass on battery saver: the theme's own surface draws instead.
                     if performance {
                         tokens.material = None;
@@ -2084,12 +2118,22 @@ impl Bars {
         self.subscribe();
         self.dirty();
     }
+    /// Freeze background providers on every screen during core's conservative game hint.
+    pub fn set_game_activity(&mut self, active: bool) {
+        if self.game_active == active { return; }
+        self.game_active = active;
+        // The shared source sleeps through games, including the exit's foreground event.
+        // Re-arm the subscription's snapshot bits so visibility reconciles on both edges.
+        self.services.start();
+        self.subscribe();
+    }
     fn subscribe(&mut self) {
         let topics = self
             .bars
             .iter()
             .filter(|b| b.shows_content())
             .flat_map(Bar::topics)
+            .filter(|_| !self.game_active)
             .filter(|t| self.fullscreen.is_none() || !t.periodic())
             .collect();
         let configs: Vec<_> = self
@@ -2112,17 +2156,18 @@ impl Bars {
         let tray = self
             .bars
             .iter()
-            .any(|b| b.topics().contains(&providers::actions::Topic::Tray))
+            .any(|b| !self.game_active && b.topics().contains(&providers::actions::Topic::Tray))
             && (self.config.tray.host || self.config.taskbar.mode == TaskbarMode::Hide);
         self.services.subscribe(topics, &configs, seconds, tray);
         crate::integrations::bar_subscriptions(
             self.bars
                 .iter()
                 .filter(|b| b.shows_content())
+                .filter(|_| !self.game_active)
                 .flat_map(|b| visible_modules(b.kind, &b.config)),
             self.bars
                 .iter()
-                .any(|b| b.shows_content() && b.kind == BarKind::Dock),
+                .any(|b| !self.game_active && b.shows_content() && b.kind == BarKind::Dock),
         );
         let trash = self.bars.iter().any(|b| {
             b.shows_content()
@@ -2157,12 +2202,13 @@ impl Bars {
         }
     }
     fn read_theme(&mut self) {
+        let desktop = Config::load().unwrap_or_default().look;
         let loaded = Config::load()
             .and_then(|c| mypaper_theme::locate(Some(&c.theme)))
             .and_then(LoadedTheme::load)
             .ok();
         self.images.configure(
-            self.config.icons.as_deref(),
+            self.config.icons.as_deref().or(desktop.text.icon_pack.as_deref()),
             loaded
                 .as_ref()
                 .map_or_else(Default::default, |t| t.dir.clone()),
@@ -2180,25 +2226,10 @@ impl Bars {
             look::warn_dropped(&value);
         }
         if let Some(theme) = &loaded {
-            self.theme_watch =
-                notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                    if event.is_ok_and(|e| {
-                        !matches!(e.kind, notify::EventKind::Access(_))
-                            && e.paths.iter().any(|p| {
-                                p.file_name()
-                                    .is_some_and(|f| f.eq_ignore_ascii_case("theme.json"))
-                            })
-                    }) {
-                        crate::inbox::post(crate::inbox::WM_CONFIG, 0);
-                    }
-                })
-                .ok()
-                .and_then(|mut watcher| {
-                    watcher
-                        .watch(&theme.dir, notify::RecursiveMode::NonRecursive)
-                        .ok()?;
-                    Some(watcher)
-                });
+            self.theme_watch = mypaper_fswatch::Watch::files(&theme.dir, &["theme.json"], || {
+                crate::inbox::post(crate::inbox::WM_CONFIG, 0);
+            })
+            .ok();
         }
     }
     fn watch(&mut self) {
@@ -2206,21 +2237,9 @@ impl Bars {
             return;
         };
         let waker = self.services.waker.clone();
-        if let Ok(mut watcher) =
-            notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
-                if let Ok(event) = result
-                    && (event.kind.is_modify() || event.kind.is_create() || event.kind.is_remove())
-                    && event
-                        .paths
-                        .iter()
-                        .any(|p| p.file_name().is_some_and(|f| f == "bars.json"))
-                {
-                    waker.send(providers::wake::Msg::Config);
-                }
-            })
-            && watcher
-                .watch(&dir, notify::RecursiveMode::NonRecursive)
-                .is_ok()
+        if let Ok(watcher) = mypaper_fswatch::Watch::files(&dir, &["bars.json"], move || {
+            waker.send(providers::wake::Msg::Config);
+        })
         {
             self.watches.push(watcher);
         }

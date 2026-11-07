@@ -1,0 +1,12 @@
+﻿{
+    "helper":  56772,
+    "publisher":  53744,
+    "shell":  20000,
+    "activity":  {
+                     "pause_background":  false,
+                     "reason":  "idle",
+                     "foreground_pid":  14420
+                 },
+    "helper_resumes":  3,
+    "shell_resumes":  3
+}

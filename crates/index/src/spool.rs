@@ -22,6 +22,7 @@ impl Drop for Files {
 }
 
 pub(crate) struct Spool {
+    windows: crate::residency::Windows,
     records: MmapMut,
     names: MmapMut,
     pub count: usize,
@@ -66,6 +67,7 @@ impl Spool {
         let records = create("records", 64_000_000 * size_of::<Record>() as u64)?;
         let names = create("names", 2 * 1024 * 1024 * 1024)?;
         Ok(Self {
+            windows: crate::residency::Windows::writable(),
             records,
             names,
             count: 0,
@@ -75,9 +77,21 @@ impl Spool {
     }
 
     pub fn record(&self, id: usize) -> Record {
+        self.windows.touch(
+            self.records.as_ptr(),
+            self.records.len(),
+            id * size_of::<Record>(),
+            size_of::<Record>(),
+        );
         bytemuck::cast_slice::<u8, Record>(&self.records)[id]
     }
     pub fn set(&mut self, id: usize, record: Record) {
+        self.windows.touch(
+            self.records.as_ptr(),
+            self.records.len(),
+            id * size_of::<Record>(),
+            size_of::<Record>(),
+        );
         bytemuck::cast_slice_mut::<u8, Record>(&mut self.records)[id] = record;
     }
     pub fn push(&mut self, record: Record) {
@@ -94,10 +108,18 @@ impl Spool {
             end <= self.names.len(),
             "scan name blob exceeds 2 GiB per volume"
         );
+        self.windows.touch(
+            self.names.as_ptr(),
+            self.names.len(),
+            self.names_len,
+            name.len(),
+        );
         self.names[self.names_len..end].copy_from_slice(name);
         self.names_len = end;
     }
     pub fn bytes(&self, start: usize, len: usize) -> &[u8] {
+        self.windows
+            .touch(self.names.as_ptr(), self.names.len(), start, len);
         &self.names[start..start + len]
     }
 }

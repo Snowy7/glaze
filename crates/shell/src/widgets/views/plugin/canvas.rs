@@ -199,7 +199,7 @@ fn fill(f: &mut Frame<'_>, outlines: &[Vec<Point>], color: Rgba) {
             }
         }
         xs.sort_by(f32::total_cmp);
-        for span in xs.chunks_exact(2) {
+        for span in xs.as_chunks::<2>().0 {
             f.fill(Rect::new(span[0], y - 0.5, span[1] - span[0], 1.0), 0.0, color);
         }
     }

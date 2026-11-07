@@ -1,0 +1,22 @@
+{
+    "rules":  {
+                  "ButtonEntityItem \u003e Button#ContainerButton":  {
+                                                                         "BorderThickness":  "0",
+                                                                         "CornerRadius":  "10"
+                                                                     },
+                  "Grid#RootPageGrid":  {
+                                            "Background":  "Transparent"
+                                        },
+                  "Rectangle#SelectionIndicator":  {
+                                                       "Fill":  "#2e42b8"
+                                                   },
+                  "SettingsExpander ExpanderToggleButton#ContainerButton":  {
+                                                                                "BorderThickness":  "0",
+                                                                                "CornerRadius":  "10"
+                                                                            },
+                  "TextBox#CommandSearchTextBox":  {
+                                                       "BorderThickness":  "0",
+                                                       "CornerRadius":  "16"
+                                                   }
+              }
+}

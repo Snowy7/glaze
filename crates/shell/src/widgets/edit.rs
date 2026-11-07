@@ -377,8 +377,18 @@ pub fn chrome_theme() -> Theme {
     theme
 }
 
+/// The edit controls share the desktop's type, icons and explicit surface shape.
+pub fn chrome_look(look: &mypaper_config::Look, text: &Text) -> Theme {
+    let mut theme = chrome_theme();
+    if let Some(radius) = look.shape.corners { theme = theme.with_surface_radius(radius); }
+    if let Some(edge) = look.shape.edge { theme.border = edge.then_some(theme.color.separator); }
+    if let Some(font) = &look.text.font { theme.font.family = crate::look::settings::font(font, |f| text.has_family(f)).into(); }
+    if let Some(icons) = crate::look::settings::icons(look, text) { theme.icons = icons; }
+    theme
+}
+
 /// The edit pill: "+" (add a widget) and Done, a small capsule that floats over the desktop.
-pub fn pill(theme: &Theme, s: f32, hot: &Interaction, text: &mut Text) -> (DisplayList, (u32, u32)) {
+pub fn pill(theme: &Theme, s: f32, hot: &Interaction, text: &mut Text, radius: Option<f32>) -> (DisplayList, (u32, u32)) {
     let mut f = Frame::new(text, theme, s, hot);
     let (pad, gap, add) = (f.px(6.0), f.px(4.0), f.px(36.0));
     let (done_w, _) = f.button_size("Done", false);
@@ -387,7 +397,7 @@ pub fn pill(theme: &Theme, s: f32, hot: &Interaction, text: &mut Text) -> (Displ
         (pad * 2.0 + add).ceil(),
     );
     let body = Rect::new(0.0, 0.0, size.0, size.1);
-    f.surface_shaped(body, size.1 / 2.0, false);
+    f.surface_shaped(body, radius.map_or(size.1 / 2.0, |r| f.px(r)), false);
     f.icon_button(
         PILL_ADD,
         Rect::new(pad, pad, add, add),
@@ -488,6 +498,7 @@ pub fn picker(
         Some(Icon::Search),
     );
     if let Some(field) = state.field {
+        field.set_style(&f.font(mypaper_ui::TextRole::Body), theme.color.label);
         field.set_rect(field_rect);
         f.push(Op::TextField {
             rect: field_rect,

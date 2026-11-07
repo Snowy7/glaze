@@ -37,6 +37,25 @@ impl RenderOptions {
     }
 }
 
+/// What the wallpaper does while core's game signal is on (docs/system.md, "Games").
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DuringGames {
+    /// Every screen pauses on the theme's still, and after 10 s the engine lets go of what it
+    /// draws with, as when every screen is covered (Wallpaper Engine's "other app fullscreen:
+    /// pause").
+    #[default]
+    Pause,
+    /// Screens the game doesn't cover keep animating.
+    Keep,
+}
+
+impl DuringGames {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct EngineConfig {
@@ -44,6 +63,9 @@ pub struct EngineConfig {
     pub fps: Option<u32>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub wallpapers: BTreeMap<String, RenderOptions>,
+    /// Written only when not the default, so configs stay readable by older builds.
+    #[serde(skip_serializing_if = "DuringGames::is_default")]
+    pub during_games: DuringGames,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,6 +98,16 @@ impl EngineConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn during_games_defaults_to_pause_and_is_written_only_when_kept() {
+        let config: EngineConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(config.during_games, DuringGames::Pause);
+        assert!(!serde_json::to_string(&config).unwrap().contains("during_games"));
+        let keep: EngineConfig = serde_json::from_str(r#"{"during_games":"keep"}"#).unwrap();
+        assert_eq!(keep.during_games, DuringGames::Keep);
+        assert!(serde_json::to_string(&keep).unwrap().contains(r#""during_games":"keep""#));
+        assert!(serde_json::from_str::<EngineConfig>(r#"{"during_games":"maybe"}"#).is_err());
+    }
     #[test]
     fn auto_defaults_and_per_wallpaper_precedence_are_explicit() {
         let mut global = EngineConfig::default();

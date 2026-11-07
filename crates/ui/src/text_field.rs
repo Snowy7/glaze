@@ -43,6 +43,7 @@ impl HostVTable {
 }
 
 struct State {
+    allow_focus: Cell<bool>,
     window: HWND,
     rect: Cell<RECT>,
     revision: Cell<u64>,
@@ -84,6 +85,7 @@ pub struct TextField {
     inner: Rc<Inner>,
 }
 struct Inner {
+    styled: RefCell<Option<(crate::TextStyle, Rgba)>>,
     services: ITextServices2,
     state: Rc<State>,
     _host: TextHost,
@@ -116,6 +118,7 @@ impl TextField {
             *slot = ch;
         }
         let state = Rc::new(State {
+            allow_focus: Cell::new(true),
             window,
             rect: Cell::new(winrect(rect)),
             revision: Cell::new(0),
@@ -155,6 +158,7 @@ impl TextField {
         };
         let field = Self {
             inner: Rc::new(Inner {
+                styled: RefCell::new(None),
                 services,
                 state,
                 _host: host,
@@ -181,6 +185,27 @@ impl TextField {
     }
     pub fn revision(&self) -> u64 {
         self.inner.state.revision.get()
+    }
+
+    /// Opt into live type/color changes without replacing the services, text or selection.
+    /// An unchanged request sends no RichEdit messages and schedules no repaint.
+    pub fn set_style(&self, style: &crate::TextStyle, color: Rgba) {
+        if self.inner.styled.borrow().as_ref().is_some_and(|(old, ink)| old == style && *ink == color) {
+            return;
+        }
+        let mut format = self.inner.state.format;
+        format.yHeight = (style.size * 15.0).round() as i32;
+        format.crTextColor = COLORREF((color.r * 255.0) as u32 | (((color.g * 255.0) as u32) << 8) | (((color.b * 255.0) as u32) << 16));
+        format.szFaceName.fill(0);
+        // RichEdit names the GDI face; the kit's variable-axis alias has no named GDI face.
+        let family = if style.family.as_ref() == crate::VARIABLE { "Segoe UI" } else { &style.family };
+        for (slot, ch) in format.szFaceName[..31].iter_mut().zip(family.encode_utf16()) { *slot = ch; }
+        *self.inner.styled.borrow_mut() = Some((style.clone(), color));
+        // TxSendMessage consumes the format synchronously; RichEdit copies its contents.
+        let format_ptr = LPARAM((&format as *const CHARFORMATW) as isize);
+        self.send(EM_SETCHARFORMAT, WPARAM(0), format_ptr);
+        self.send(EM_SETCHARFORMAT, WPARAM(SCF_ALL as usize), format_ptr);
+        self.inner.state.invalidate();
     }
     pub fn set_rect(&self, rect: Rect) {
         let rect = winrect(rect);
@@ -223,7 +248,16 @@ impl TextField {
         self.inner.state.posted.set(false);
         self.inner.state.invalidate();
     }
+
+    /// Prepare an inactive specimen for drawing; focus/capture stay disabled until `focus`.
+    pub fn prepare(&self) -> Result<()> {
+        self.inner.state.allow_focus.set(false);
+        // SAFETY: layout activation on the owning UI thread, with the field's client rect.
+        unsafe { self.inner.services.OnTxInPlaceActivate(&mut self.inner.state.rect.get())?; }
+        Ok(())
+    }
     pub fn focus(&self) {
+        self.inner.state.allow_focus.set(true);
         // SAFETY: the field's surface lives throughout the field's use.
         unsafe {
             let _ = SetForegroundWindow(self.inner.state.window);
@@ -415,6 +449,7 @@ impl ITextHost_Impl for Host_Impl {
         self.state.invalidate();
     }
     fn TxSetCapture(&self, capture: BOOL) {
+        if !self.state.allow_focus.get() { return; }
         // SAFETY: synchronous host callback on the UI thread; the surface owns this HWND.
         unsafe {
             if capture.as_bool() {
@@ -425,6 +460,7 @@ impl ITextHost_Impl for Host_Impl {
         }
     }
     fn TxSetFocus(&self) {
+        if !self.state.allow_focus.get() { return; }
         // SAFETY: synchronous host callback on the UI thread; the surface owns this HWND.
         unsafe {
             let _ = SetFocus(Some(self.state.window));
@@ -655,6 +691,33 @@ mod tests {
     use super::*;
     use crate::{DisplayList, Kind, Op, Role, Surface, Ui, render};
     use windows::Win32::UI::Controls::{EM_SETSEL, EM_UNDO};
+
+    #[test]
+    fn live_type_changes_preserve_text_selection_and_settle_after_one_request() {
+        let surface = Surface::new(Kind::Popup {activate:false}, "Live type test", Role::TextInput).unwrap();
+        let field = TextField::new(surface.hwnd(), Rect::new(0.0,0.0,300.0,80.0), false, 14.0, Rgba::HIT).unwrap();
+        field.set_text("Keep this text").unwrap();
+        field.prepare().unwrap();
+        field.select_range(2..6);
+        let style = crate::TextStyle::new("Consolas", 24.0);
+        field.set_style(&style, Rgba::rgb8([255;3],1.0));
+        assert_eq!(field.text().unwrap(), "Keep this text");
+        let mut range = CHARRANGE::default();
+        field.send(EM_EXGETSEL, WPARAM(0), LPARAM((&mut range as *mut CHARRANGE) as isize));
+        assert_eq!((range.cpMin,range.cpMax), (2,6));
+        let mut format = CHARFORMATW {cbSize:size_of::<CHARFORMATW>() as u32,..Default::default()};
+        field.send(EM_GETCHARFORMAT, WPARAM(0), LPARAM((&mut format as *mut CHARFORMATW) as isize));
+        let end = format.szFaceName.iter().position(|c|*c==0).unwrap_or(32);
+        assert_eq!(String::from_utf16_lossy(&format.szFaceName[..end]), "Consolas");
+        assert_eq!(format.yHeight, 360);
+        let mut ui = Ui::new().unwrap();
+        let list = DisplayList {ops:vec![Op::TextField {rect:Rect::new(0.0,0.0,300.0,80.0),field:field.clone(),revision:field.revision()}],..Default::default()};
+        let image = render(&mut ui,&list,300,80).unwrap();
+        assert!(image.pixels.as_chunks::<4>().0.iter().any(|px|px[3]>1), "an inactive field paints real glyphs without taking focus");
+        let revision = field.revision();
+        field.set_style(&style, Rgba::rgb8([255;3],1.0));
+        assert_eq!(field.revision(), revision, "no recurring restyle invalidations");
+    }
 
     #[test]
     fn rich_edit_draws_bidi_cjk_selection_and_undo_on_the_software_target() {

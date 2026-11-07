@@ -25,9 +25,9 @@ keep its shaders, pipeline and parameter values as they are.
    opaque face.
 6. **A soft drop shadow** grows with size and over busy content.
 7. **Shape matters.** One edge, matching the surface exactly. The UI draws no outline on glass
-   (widgets, bar islands, flyouts and the desktop menu only take clicks there). We use quarter-circle
-   corners (`Shape::Circular`) because our surfaces are D2D rounded rectangles. Apple's
-   continuous corners (`Shape::Rounded`) are one switch away once the UI kit draws squircles.
+   (widgets, bar islands, flyouts and the desktop menu only take clicks there). The default is
+   quarter-circle corners (`Shape::Circular`); squircle surfaces use smoothing 0.6 with the same
+   continuous contour in the kit, plate shader and overlay coverage.
 8. **Liquid merging and glass on glass** are in the renderer (smooth-union SDF per container;
    higher layers refract lower glass). Plates don't use containers yet, because our islands
    don't fuse in the UI.
@@ -66,14 +66,19 @@ sent after each `Open` (a new overlay starts at `Style::DEFAULT`).
 | `smoothing` | 0..=1, 0 | corner smoothing: 0 quarter circles, 0.6 iOS's continuous squircle (`Shape::Smooth`); the surface must draw the same corners |
 | `sheen` | 0..=1, unset | the kit's rim light inside the lit (top) edge, 0.5 = the kit's; unset (`None`, or negative on the overlay wire) follows `highlight` |
 | `depth` | 0..=1, unset | the kit's broad rim shade under the lit edge, 0.5 = the kit's; unset follows `highlight` |
-| `fade_ms` (overlays only) | 0..=2000, 300 | how long the glass fades in when it first shows; 0 shows it at once (reduced motion) |
+| `inner_shadow` | 0..=1, 0 | independent soft shade at the bottom-facing inner edge; zero skips its SDF/blur work |
+| `fade_ms` (overlays only) | 0..=5000, 300 | how long the glass fades in when it first shows; 0 shows it at once (reduced motion) |
+| `fade_curve` (overlays only) | resolved Bézier or physical spring; default cubic ease-out | shell names resolve to the content's curve; compiled into a DirectComposition animation once when glass shows |
 
 Plate blur (`Material::blur`, physical px) now takes up to 256 px (64 DIP at 400 %); frost still
 tops out at 64 pt. Styles resolve into the glass's material and shape only when a plate (or
 overlay) changes, never per frame; brightness and saturation are one multiply-add in the glass
 shader, skipped when both are 1. Plate styles travel in a second section stamped with the
-snapshot's sequence, and only a `Style` request is longer than the old overlay wire, so a shell
-or engine on either side of the change keeps working with defaults.
+snapshot's sequence. `inner_shadow` uses another sequence-stamped section, `<channel>.inner-shadow`
+(392 bytes), leaving the original five-word style stride unchanged. Only a `Style` request is
+longer than the old overlay wire. Engines accept both its original 80-byte form (new fields
+default) and its extended 104-byte form. A new shell retries the original form, with the supported
+2,000 ms cap, when an older engine rejects the extension; its other optics still work.
 
 Glass follows the scheme, never the content (`adapt_to_content` off): our labels follow the
 surface's colours. Plates move exactly as published (`Scene::place`, since the shell owns motion);
@@ -189,6 +194,154 @@ to 77.3 mid-bar and rising to 95.7 at the bottom, a gradient under every label; 
 top line (90.3), a flat face (77-79) from row 2 to row 21, and the bottom rim in rows 22-23. The
 glass costs no more: glass-only frames 2.39 ms median on the iGPU (2.48 ms before, the fixture's
 40 pt bar now has a shallower lens).
+
+## Engine parity (6 November 2026)
+
+C10, C12 and C14 finish the [bars handoff](bars.md#finer-glass-controls-2026-11-06).
+For smoothed overlays, `Material::clip_to_shape` makes the shader's own continuous coverage the
+clip and suppresses its outer shadow/hairline; DirectComposition supplies only the rectangular
+bound. The circular/default path is unchanged. A visible restyle commits its new clip with the
+matching shader frame, avoiding an intermediate mismatched contour.
+
+The bars' legacy `look.glass.depth` now maps, times glass intensity, to
+`mypaper_glass_ipc::Style::inner_shadow` and overlay `request::Style::inner_shadow`.
+This is a bottom-facing inset shade, independent of the engine's existing top-rim `depth`.
+Unset is zero. It resolves with the plate/overlay material, and at zero the shader skips its
+distance/blur calculation entirely. It occupies an unused GPU material slot; GPU buffers keep
+their existing sizes. `mypaper_ui::glass::GlassStyle` carries the same field through
+`Tokens::glass_style`, menus, flyouts and bars.
+
+Glass takes the same resolved show/open duration and curve as the content, including the full
+5,000 ms limit, every named curve, custom cubic Béziers and physical springs. The UI carries
+`GlassStyle::fade_curve: Option<transition::Easing>`; the wire carries
+`request::FadeCurve::{DEFAULT, bezier([f32; 4]), spring(mass, stiffness, damping, seconds)}`.
+At first show, the engine builds DirectComposition polynomial segments with adaptive subdivision;
+no engine animation frames or curve-sampling timer were added. The default wire curve retains
+the original cubic polynomial exactly. Disabled/reduced motion sends zero milliseconds and
+settles opacity immediately. Glass slides remain a stationary fade to avoid capture flashes.
+
+Offline verification (`CARGO_TARGET_DIR=C:\mypaper-targets\engine-perf`):
+
+- `lab::lab`, rain-city, RTX 4070 SUPER, 2560x1440, eight plates, captures at 3 and 12 seconds:
+  default final and kept frames are **100% bit-identical**, largest difference **0/255**.
+- GPU timestamps, 150 frames per run: baseline glass-only median **0.090 ms**, after runs
+  **0.088 and 0.092 ms**; glass on wallpaper-change frames **0.127 ms** before and
+  **0.101 / 0.114 ms** after. No added shadow SDF/blur work at defaults and no sustained GPU
+  regression observed; the small timing differences are not claimed as an improvement.
+- `lab::glass_parity` renders a transparent 512x320 continuous overlay fixture. Its new bottom
+  shadow leaves the top pixel and every alpha byte unchanged; bottom BGRA changes from
+  `[181,196,210,255]` to `[150,166,180,255]`. At radius 48, 18 sampled corner pixels retain
+  alpha that a circular clip would trim (up to 49/255). The outside stays transparent.
+- Curve tests compare compositor pieces against 10,001 samples plus endpoint probes, within
+  one alpha step, including extreme Béziers and the fastest permitted undamped spring. Shell
+  tests match every named curve, a custom Bézier and an overdamped spring to the content's
+  resolved transition. Five-second duration and reduced-motion policy are covered.
+- Compatibility: the original 1,928-byte style section keeps its five-word stride. Tests cover
+  mismatched/missing extension stamps and a real message-only legacy receiver that rejects
+  104 bytes then accepts the 80-byte fallback with its original optics and 2,000 ms cap.
+
+Raw lab frames/timestamps are `C:\mypaper-targets\engine-parity\{before,after,after-final}`;
+the inspected overlay images and metrics are in its `overlay` directory. Reproduce the overlay
+fixture with `MYPAPER_PARITY_OUT=<directory>` and
+`cargo test -p mypaper-wallpaper lab::glass_parity -- --ignored --exact --nocapture`.
+The main lab additionally accepts `MYPAPER_LAB_STYLE=brightness,saturation,smoothing,sheen,depth,inner_shadow`
+(negative sheen/depth means unset), applied to captures and timed frames.
+
+The maximum new-shadow/squircle fixture (strength 1 on all eight plates) took **0.096 ms** median
+glass-only GPU time on the RTX, within the 2 ms gate. The inspected contact sheets are
+`C:\mypaper-targets\engine-parity\rain-verification.png` and `overlay\verification.png`.
+
+Live verification used guarded input on mypaper's own dock, with DPI-aware 2560x1440 screenshots.
+The inspected continuous menu faded for five seconds: a screenshot fit of its content opacity was
+0.14 at 0.75 s, 0.30 at 1.52 s, 0.60 at 3.00 s, and 1.00 at 5.31 s. This fit is supporting
+image evidence, not a compositor API reading. Plate/style/inner-shadow sections shared stamp 70:
+bars carried smoothing 0.6, inner shadow 1 and unset top-rim depth; widgets retained neutral optics
+and inner shadow 0. The first live menu's glass arrived in 42 ms (warm capture), separate from its
+fade duration.
+
+The final full shared-checkout release workspace build passed and was deployed through
+`scripts/deploy-local.ps1 -From C:\mypaper-targets\main\release` at 07:38. A later attempt to
+capture custom Bézier/reduced-motion/shadow variants stopped before input when the foreground
+safety guard refused activation; those extra live variants remain unverified. Their resolver,
+wire and GPU/curve behavior are covered by the offline checks above. No user app was clicked.
+The original `bars.json` and `config.json` hashes were restored/unchanged:
+`88032FB713BEDDF3D3B8386859655E7A0E2C05DCBDB2F8E9718C5607C0C61BA0` and
+`B0A117160D59CB8698E47DC874E501C585B2B7B67ADF6B906191EF99A7F9F538`.
+At 07:43, deployed engine/shell hashes matched the shared `main` build:
+`3DEB2FD3A14910B50B68E54222DD3351DBEE05D32F9D815EEF8EA24993F0059B` and
+`7CFF809E907D79CBBF616EA75A84F59471C0765D3D0F203A23F53E864918C0EF`.
+The running PIDs were core 59688, engine 85520, shell 28576. At handback, the 07:43–07:53
+measurement hold remained in force; no further desktop-lock use or restarts are needed for this task.
+
+Live artifacts are `%TEMP%\mypaper-tools\engine-parity`: `menu-linear-*.png`,
+`linear-verification.png`, `linear-opacity-fit.json`, `linear-plates.json`, `bezier-plates.json`
+and `deploy-shared.log`. Crate checks/tests and Clippy passed (pre-existing warnings retained):
+renderer 61 tests, IPC 4, UI 62, shell 146 plus the targeted engine/wire/curve tests (103 engine
+tests in the full run, then the added legacy-receiver test). The first GPU shadow fixture caught
+top-edge shading; bottom-facing normal weighting fixed it, and the fixture then passed.
+
+## Glass over web and app wallpapers (P14, 6 November 2026)
+
+A `web` or `app` wallpaper draws with windows of its own (WebView2, an embedded app), so the
+engine has no kept frame to draw the shell's plates into, and widgets and bars had no glass there.
+Now the engine draws those plates as overlays itself (`Overlays::sync_plates`,
+`Engine::native_plates`). The shell is unchanged: it publishes plates as always, and each screen
+takes the route its source needs.
+
+- **Which plates.** Those on a screen whose source is native (`Source::native`) and whose centre
+  is on that screen. A web page's held still is not native (the swapchain shows it), so a screen
+  next to a fullscreen game gets plates drawn over its still as before.
+- **Which window.** A plate's id carries its surface's window in its low 32 bits (widgets use their
+  HWND; bars their island's, plus the shape index above bit 32; `mypaper_glass_ipc::Plate::id`).
+  The overlay goes directly under that window, if it is a live window of the plates' publisher:
+  in the desktop band for a widget (`Layer::Desktop`, which the kit keeps together with its
+  widget, `Surface::keep_above_desktop`), topmost under a bar (`Layer::Popup`). These overlays are
+  keyed by plate id, apart from the shell's own requests for the same window (a bar over an app
+  window still opens its own, P15).
+- **Same glass.** The plate's material (with its stained tint, carried in the overlay material's
+  fourth tint byte, which the shell leaves at 0), style (brightness, saturation, smoothing,
+  sheen, depth, inner shadow) and corners; it fades in over 300 ms like other overlay glass.
+- **Refresh follows the wallpaper.** The capture delivers a frame only when that monitor changes;
+  frames whose dirty rects miss every overlay are dropped on WGC's thread, and a crop that is
+  touched is compared on the GPU before any glass is drawn. A still page costs no glass passes.
+  An animated one redraws its plates at most 30 times a second, or at the theme's `fps` when that
+  is lower (`Overlays::set_fps`, the capture's minimum update interval).
+- **Stops.** On a covered or held screen (a maximized window, a game, paused) the overlays are
+  *frozen*: the glass stays as last drawn, nothing is captured for them, and a monitor with only
+  frozen overlays has no capture session. Released (every screen covered for 10 s), or another
+  kind of wallpaper: they close. A plate first seen on a covered screen waits until it is seen.
+
+Other routes, and why not: the static snapshot only has stills; capturing the wallpaper's own
+window would still need a window above the WebView to show the glass in, which is what the overlay
+route already has (and its monitor capture already leaves our windows out); WebView2's
+`CapturePreview` is a PNG encode per frame.
+
+**Measured** on the live desktop (RTX 4070 SUPER, DISPLAY2 visible with seven glass plates: six
+widgets and the dock, the top bar draws none; DISPLAY1 covered), 30 s each with `measure.ps1`, the theme
+switched in place (`webglass/ab.ps1`), CPU in % of one core. Glass updates and passes come from the
+engine's overlay totals over the time the theme was shown.
+
+| `themes/examples/webdemo` (animated, 30 fps) | Engine CPU | Engine GPU 3D | Engine private | WebView2 CPU | Glass updates/s (passes/s) |
+|---|---:|---:|---:|---:|---:|
+| Before (no glass, 08:01 build) | 0.21 % | 0 % | 169 MB | 9.6 % | - |
+| After | 5.83 % | 6.81 % | 206 MB | 12.1 % | 29.2 (198) |
+| After, a still page (`still-web`) | **0.31 %** | 0.12 % | 210 MB | 0.15 % | 1.7 (1.8) |
+| After, the web demo under `"engine": { "fps": 10 }` (`web-10fps`) | 1.41 % | 2.93 % | 211 MB | 8.5 % | 9.7 (66) |
+
+So a still page costs what the wallpaper did (its few updates are windows overlapping widgets, such
+as Studio's, whose glass is under them), and an animated page costs one glass update per
+captured frame for every plate it touches: here about 0.28 ms of engine CPU per overlay pass, and
++37 MB for the capture device, DirectComposition and each overlay's crops. Lower the page's own
+rate, or the theme's `engine.fps`, to lower both.
+
+Captures (DPI-aware, 2560x1440 of DISPLAY2) are in `C:\mypaper-targets\engine-perf\webglass`:
+`webglass-web-before-1.png` (no glass under the widgets or the dock), `webglass-web-after-2.png`,
+`webglass-still-after.png`, and crops `widgets-{before-1,after-2}.png`, `dock-{before-1,after-2}.png`.
+
+**Known limit.** Two engines at once (one still exiting while its replacement starts, seen once
+tonight during another agent's lifecycle test) each capture the other's glass, which feeds back
+into red and blue blocks under the bars until the old one exits. A normal restart stops the old
+engine first.
 
 ## Images
 

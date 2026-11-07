@@ -1,0 +1,8 @@
+{
+    "build":  "cargo build --release --workspace; crates/index/tools/build-release.ps1",
+    "panic":  "unwind",
+    "index_sha256":  "4E70DA4E6E80E8A529C7FDEF63BA98830E5CB4BEBF271D8CF940FCDD37BC513F",
+    "index_built":  "2026-11-06T10:53:31.9432502+03:00",
+    "commit":  "f6d08996abf6fc922e9efe045b43fd87f2124560",
+    "captured_at":  "2026-11-06T10:54:11.5552590+03:00"
+}

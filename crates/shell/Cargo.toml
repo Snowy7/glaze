@@ -9,6 +9,7 @@ license.workspace = true
 mypaper-plugin-api = { path = "../plugin-api" }
 mypaper-plugin-sdk = { path = "../plugin-sdk" }
 mypaper-config.workspace = true
+mypaper-fswatch.workspace = true
 mypaper-index.workspace = true
 mypaper-desktop.workspace = true
 mypaper-theme.workspace = true
@@ -18,7 +19,6 @@ mypaper-glass-ipc.workspace = true
 mypaper-bars.workspace = true
 mypaper-integrations = { path = "../integrations" }
 bytemuck.workspace = true
-notify.workspace = true
 serde_json.workspace = true
 resvg = { version = "0.45", default-features = false }
 
@@ -68,6 +68,10 @@ mypaper-ui = { workspace = true, features = ["golden"] }
 [[example]]
 name = "mypaper-widget-fixture"
 path = "src/widgets/live.rs"
+
+[[example]]
+name = "mypaper-look-fixture"
+path = "examples/look_fixture.rs"
 
 [lints]
 workspace = true

@@ -1,0 +1,13 @@
+powershell : Exception calling "Connect" with "1" argument(s): "The operation has timed out."
+At line:2 char:1
++ powershell -NoProfile -File crates/index/tools/measure-game-burst.ps1 ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Exception calli...has timed out.":String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+At D:\Coding\projects\desktop\wallpaper\crates\index\tools\measure-game-burst.ps1:14 char:5
++     $pipe.Connect(500)
++     ~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : TimeoutException
+ 

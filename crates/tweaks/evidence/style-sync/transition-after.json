@@ -1,0 +1,114 @@
+{
+  "fixture": "2 modeled windows; 2 x 20ms receivers; real disk journal and 100ms restore settle; actual worker; excludes file-watcher scheduling, signature IO and real app paint",
+  "samples": [
+    {
+      "attribute_writes_per_window": 3,
+      "broadcasts": 1,
+      "case": "light-to-dark",
+      "config_to_last_fixture_window_settled_ms": 91.2783,
+      "iteration": 0,
+      "main_thread_blocked_ms": 0.7396,
+      "registry_mutations": 3
+    },
+    {
+      "attribute_writes_per_window": 3,
+      "broadcasts": 1,
+      "case": "light-to-dark",
+      "config_to_last_fixture_window_settled_ms": 83.4098,
+      "iteration": 1,
+      "main_thread_blocked_ms": 0.661,
+      "registry_mutations": 3
+    },
+    {
+      "attribute_writes_per_window": 3,
+      "broadcasts": 1,
+      "case": "light-to-dark",
+      "config_to_last_fixture_window_settled_ms": 89.5603,
+      "iteration": 2,
+      "main_thread_blocked_ms": 0.6661,
+      "registry_mutations": 3
+    },
+    {
+      "attribute_writes_per_window": 3,
+      "broadcasts": 1,
+      "case": "dark-to-light",
+      "config_to_last_fixture_window_settled_ms": 92.35000000000001,
+      "iteration": 0,
+      "main_thread_blocked_ms": 0.5854,
+      "registry_mutations": 3
+    },
+    {
+      "attribute_writes_per_window": 3,
+      "broadcasts": 1,
+      "case": "dark-to-light",
+      "config_to_last_fixture_window_settled_ms": 86.215,
+      "iteration": 1,
+      "main_thread_blocked_ms": 0.6052,
+      "registry_mutations": 3
+    },
+    {
+      "attribute_writes_per_window": 3,
+      "broadcasts": 1,
+      "case": "dark-to-light",
+      "config_to_last_fixture_window_settled_ms": 88.9727,
+      "iteration": 2,
+      "main_thread_blocked_ms": 0.8724,
+      "registry_mutations": 3
+    },
+    {
+      "attribute_writes_per_window": 1,
+      "broadcasts": 1,
+      "case": "palette-update",
+      "config_to_last_fixture_window_settled_ms": 88.3319,
+      "iteration": 0,
+      "main_thread_blocked_ms": 0.6962999999999999,
+      "registry_mutations": 4
+    },
+    {
+      "attribute_writes_per_window": 1,
+      "broadcasts": 1,
+      "case": "palette-update",
+      "config_to_last_fixture_window_settled_ms": 88.6366,
+      "iteration": 1,
+      "main_thread_blocked_ms": 0.6593,
+      "registry_mutations": 4
+    },
+    {
+      "attribute_writes_per_window": 1,
+      "broadcasts": 1,
+      "case": "palette-update",
+      "config_to_last_fixture_window_settled_ms": 85.5842,
+      "iteration": 2,
+      "main_thread_blocked_ms": 0.7705000000000001,
+      "registry_mutations": 4
+    },
+    {
+      "attribute_writes_per_window": 1,
+      "broadcasts": 1,
+      "case": "palette-drag-20",
+      "config_to_last_fixture_window_settled_ms": 155.8533,
+      "iteration": 0,
+      "main_thread_blocked_ms": 19.205199999999998,
+      "registry_mutations": 4
+    },
+    {
+      "attribute_writes_per_window": 1,
+      "broadcasts": 1,
+      "case": "palette-drag-20",
+      "config_to_last_fixture_window_settled_ms": 146.54819999999998,
+      "iteration": 1,
+      "main_thread_blocked_ms": 13.379800000000001,
+      "registry_mutations": 4
+    },
+    {
+      "attribute_writes_per_window": 1,
+      "broadcasts": 1,
+      "case": "palette-drag-20",
+      "config_to_last_fixture_window_settled_ms": 153.6149,
+      "iteration": 2,
+      "main_thread_blocked_ms": 13.571299999999999,
+      "registry_mutations": 4
+    }
+  ],
+  "version": "direct"
+}

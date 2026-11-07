@@ -1,0 +1,5 @@
+11:04:10 shell explorer 0; SeparateProcess=1
+11:04:12 round 1: window 20255558 in explorer 86504 (a separate process); foreground pid before 28080, after 86504
+11:05:11   explorer 86504 exited 56.5 s after its last window closed
+11:05:43 round 2: window 54790542 in explorer 86172 (a separate process); foreground pid before 28080, after 86172
+11:06:42   explorer 86172 exited 56.7 s after its last window closed

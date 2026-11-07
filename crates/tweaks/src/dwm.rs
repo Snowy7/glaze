@@ -21,7 +21,7 @@ use anyhow::{Result, bail};
 use mypaper_inject::signature::microsoft_signed;
 use mypaper_inject::{Target, Verdict, evaluate};
 use mypaper_theme::{Backdrop, Corners, WindowsStyle};
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, LPARAM};
+use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, HWND, LPARAM};
 use windows::Win32::Graphics::Dwm::{
     DWM_SYSTEMBACKDROP_TYPE, DWM_WINDOW_CORNER_PREFERENCE, DWMSBT_AUTO, DWMSBT_MAINWINDOW,
     DWMSBT_NONE, DWMSBT_TABBEDWINDOW, DWMSBT_TRANSIENTWINDOW, DWMWA_BORDER_COLOR,
@@ -33,33 +33,61 @@ use windows::Win32::Graphics::Dwm::{
 use windows::Win32::Storage::Packaging::Appx::GetPackageFamilyName;
 use windows::Win32::System::SystemInformation::GetWindowsDirectoryW;
 use windows::Win32::System::Threading::{
-    OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    GetProcessTimes, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    QueryFullProcessImageNameW,
 };
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CHILDID_SELF, EVENT_OBJECT_SHOW, EnumWindows, GA_PARENT, GWL_STYLE, GetAncestor,
-    GetDesktopWindow, GetWindowLongPtrW, GetWindowThreadProcessId, IsWindow, IsWindowVisible,
-    OBJID_WINDOW, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WS_CAPTION,
+    CHILDID_SELF, EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, EnumWindows, GA_PARENT, GWL_STYLE,
+    GetAncestor, GetDesktopWindow, GetWindowLongPtrW, GetWindowThreadProcessId, IsWindow,
+    IsWindowVisible, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WS_CAPTION,
 };
 use windows::core::{BOOL, PWSTR};
 
 use crate::color::colorref;
 use crate::palette::Palette;
-use crate::plan::WindowStyle;
+use crate::plan::{Change, WindowStyle};
 
 thread_local! {
     /// What the WinEvent callback needs. Callbacks run on the thread that
     /// installed the hook, so no lock is required.
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
+    static ALLOWLIST: RefCell<ProcessCache> = RefCell::new(ProcessCache::default());
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ProcessKey {
+    pid: u32,
+    started: u64,
+}
+
+#[derive(Default)]
+struct ProcessCache(HashMap<u32, (u64, bool)>);
+
+impl ProcessCache {
+    fn verdict(&mut self, key: ProcessKey, evaluate: impl FnOnce() -> bool) -> bool {
+        if let Some(&(started, allowed)) = self.0.get(&key.pid)
+            && started == key.started
+        {
+            return allowed;
+        }
+        let allowed = evaluate();
+        self.0.insert(key.pid, (key.started, allowed));
+        allowed
+    }
+}
+
+struct Tracked {
+    process: ProcessKey,
+    dark: bool,
+    applied: WindowStyle,
 }
 
 struct State {
-    /// The theme's section as written: says which attributes are ours to restore.
-    raw: WindowsStyle,
     style: WindowStyle,
     windows_dir: PathBuf,
     /// Every window we styled, with the dark-mode value it had before.
-    originals: HashMap<isize, bool>,
+    originals: HashMap<isize, Tracked>,
 }
 
 /// Styles allowlisted windows while alive; restores them on drop.
@@ -72,7 +100,6 @@ impl Styler {
     /// `Styler` can exist per thread.
     pub fn start(raw: &WindowsStyle, palette: Option<&Palette>) -> Result<Self> {
         let state = State {
-            raw: raw.clone(),
             style: WindowStyle::resolve(raw, palette),
             windows_dir: windows_dir()?,
             originals: HashMap::new(),
@@ -91,7 +118,7 @@ impl Styler {
         // removed in `drop`.
         let hook = unsafe {
             SetWinEventHook(
-                EVENT_OBJECT_SHOW,
+                EVENT_OBJECT_DESTROY,
                 EVENT_OBJECT_SHOW,
                 None,
                 Some(on_show),
@@ -109,9 +136,11 @@ impl Styler {
         Ok(styler)
     }
 
-    /// Re-applies the style with a new palette (an `"auto"` color changed).
-    pub fn restyle(&self, palette: Option<&Palette>) {
-        with_state(|s| s.style = WindowStyle::resolve(&s.raw, palette));
+    /// Updates attributes in place, retaining each window's first dark-mode value.
+    pub fn update(&self, raw: &WindowsStyle, palette: Option<&Palette>) {
+        with_state(|s| {
+            s.style = WindowStyle::resolve(raw, palette);
+        });
         sweep();
     }
 }
@@ -124,15 +153,15 @@ impl Drop for Styler {
             return;
         };
         let mut restored = 0;
-        for (&key, &dark) in &state.originals {
+        for (&key, tracked) in &state.originals {
             let hwnd = hwnd_from(key);
             // The handle may have been reused by a window that is not ours
             // to touch, so check again before writing.
             // SAFETY: `IsWindow` accepts any handle value.
             if unsafe { IsWindow(Some(hwnd)) }.as_bool()
-                && process_allowed(hwnd, &state.windows_dir)
+                && allowed_process(hwnd, &state.windows_dir) == Some(tracked.process)
             {
-                reset(hwnd, &state.raw, dark);
+                apply_transition(hwnd, tracked.applied, WindowStyle::default(), tracked.dark);
                 restored += 1;
             }
         }
@@ -177,14 +206,29 @@ fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
 impl State {
     /// Styles the window if it is eligible; returns whether it was.
     fn consider(&mut self, hwnd: HWND) -> bool {
-        if !is_candidate(hwnd) || !process_allowed(hwnd, &self.windows_dir) {
+        if !is_candidate(hwnd) {
             return false;
         }
+        let Some(process) = allowed_process(hwnd, &self.windows_dir) else {
+            return false;
+        };
         // Remember the dark-mode value from before our first change only.
-        self.originals
+        let tracked = self
+            .originals
             .entry(hwnd.0 as isize)
-            .or_insert_with(|| read_dark(hwnd));
-        apply(hwnd, &self.style);
+            .or_insert_with(|| Tracked {
+                process,
+                dark: read_dark(hwnd),
+                applied: WindowStyle::default(),
+            });
+        if tracked.process != process {
+            *tracked = Tracked {
+                process,
+                dark: read_dark(hwnd),
+                applied: WindowStyle::default(),
+            };
+        }
+        tracked.applied = apply_transition(hwnd, tracked.applied, self.style, tracked.dark);
         true
     }
 }
@@ -198,7 +242,7 @@ fn sweep() {
 
 unsafe extern "system" fn on_show(
     _: HWINEVENTHOOK,
-    _: u32,
+    event: u32,
     hwnd: HWND,
     object: i32,
     child: i32,
@@ -210,6 +254,10 @@ unsafe extern "system" fn on_show(
         return;
     }
     with_state(|s| {
+        if event == EVENT_OBJECT_DESTROY {
+            s.originals.remove(&(hwnd.0 as isize));
+            return;
+        }
         s.consider(hwnd);
         // Forget windows that are gone, so the map does not grow forever.
         // SAFETY: `IsWindow` accepts any handle value.
@@ -248,14 +296,28 @@ fn is_candidate(hwnd: HWND) -> bool {
 
 /// Does the window's process pass the injection allowlist?
 fn process_allowed(hwnd: HWND, windows_dir: &Path) -> bool {
+    allowed_process(hwnd, windows_dir).is_some()
+}
+
+fn allowed_process(hwnd: HWND, windows_dir: &Path) -> Option<ProcessKey> {
     let mut pid = 0;
     // SAFETY: `pid` is a valid out pointer.
     unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
     // SAFETY: opens a query-only handle, closed by `Process`'s drop.
     let Ok(handle) = (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }) else {
-        return false;
+        return None;
     };
     let process = Process(handle);
+    let key = ProcessKey {
+        pid,
+        started: process.started()?,
+    };
+    ALLOWLIST
+        .with_borrow_mut(|cache| cache.verdict(key, || evaluate_process(&process, windows_dir)))
+        .then_some(key)
+}
+
+fn evaluate_process(process: &Process, windows_dir: &Path) -> bool {
     let Some(image) = process.image() else {
         return false;
     };
@@ -285,6 +347,15 @@ impl Drop for Process {
 }
 
 impl Process {
+    fn started(&self) -> Option<u64> {
+        let mut created = FILETIME::default();
+        let mut exit = FILETIME::default();
+        let mut kernel = FILETIME::default();
+        let mut user = FILETIME::default();
+        // SAFETY: query-only handle and four valid output FILETIME pointers.
+        unsafe { GetProcessTimes(self.0, &mut created, &mut exit, &mut kernel, &mut user) }.ok()?;
+        Some((u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime))
+    }
     fn image(&self) -> Option<PathBuf> {
         let mut buffer = [0u16; 1024];
         let mut len = buffer.len() as u32;
@@ -326,7 +397,7 @@ fn windows_dir() -> Result<PathBuf> {
 
 /// Sets one DWM attribute. Failures are expected (older Windows builds lack
 /// the newer attributes) and not worth more than a trace line.
-fn set<T>(hwnd: HWND, attribute: DWMWINDOWATTRIBUTE, value: T) {
+fn set<T>(hwnd: HWND, attribute: DWMWINDOWATTRIBUTE, value: T) -> bool {
     // SAFETY: `value` is a plain value and its size is passed with it.
     let result = unsafe {
         DwmSetWindowAttribute(
@@ -336,9 +407,14 @@ fn set<T>(hwnd: HWND, attribute: DWMWINDOWATTRIBUTE, value: T) {
             size_of::<T>() as u32,
         )
     };
-    if let Err(e) = result {
-        log::trace!("DWM attribute {} on {hwnd:?}: {e}", attribute.0);
+    if let Err(e) = &result {
+        if attribute == DWMWA_WINDOW_CORNER_PREFERENCE {
+            log::warn!("DWM corner preference on {hwnd:?} was rejected: {e}");
+        } else {
+            log::trace!("DWM attribute {} on {hwnd:?}: {e}", attribute.0);
+        }
     }
+    result.is_ok()
 }
 
 fn read_dark(hwnd: HWND) -> bool {
@@ -355,29 +431,94 @@ fn read_dark(hwnd: HWND) -> bool {
     read.is_ok() && dark.as_bool()
 }
 
-fn apply(hwnd: HWND, style: &WindowStyle) {
-    if let Some(color) = style.border {
-        set(hwnd, DWMWA_BORDER_COLOR, colorref(color));
+fn apply_transition(
+    hwnd: HWND,
+    mut before: WindowStyle,
+    next: WindowStyle,
+    dark: bool,
+) -> WindowStyle {
+    let delta = before.transition_to(next);
+    fn update<T: Copy>(
+        field: &mut Option<T>,
+        next: Option<T>,
+        change: Change<T>,
+        write: impl FnOnce(Option<T>) -> bool,
+    ) {
+        if !matches!(change, Change::Keep) && write(next) {
+            *field = next;
+        }
     }
-    if let Some(color) = style.caption {
-        set(hwnd, DWMWA_CAPTION_COLOR, colorref(color));
-    }
-    if let Some(color) = style.caption_text {
-        set(hwnd, DWMWA_TEXT_COLOR, colorref(color));
-    }
-    if let Some(corners) = style.corners {
+    update(&mut before.border, next.border, delta.border, |v| {
         set(
             hwnd,
-            DWMWA_WINDOW_CORNER_PREFERENCE,
-            corner_preference(corners),
-        );
-    }
-    if let Some(backdrop) = style.backdrop {
-        set(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, backdrop_type(backdrop));
-    }
-    if let Some(dark) = style.dark_mode {
-        set(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, BOOL::from(dark));
-    }
+            DWMWA_BORDER_COLOR,
+            v.map_or(DWMWA_COLOR_DEFAULT, colorref),
+        )
+    });
+    update(&mut before.caption, next.caption, delta.caption, |v| {
+        set(
+            hwnd,
+            DWMWA_CAPTION_COLOR,
+            v.map_or(DWMWA_COLOR_DEFAULT, colorref),
+        )
+    });
+    update(
+        &mut before.caption_text,
+        next.caption_text,
+        delta.caption_text,
+        |v| {
+            set(
+                hwnd,
+                DWMWA_TEXT_COLOR,
+                v.map_or(DWMWA_COLOR_DEFAULT, colorref),
+            )
+        },
+    );
+    update(&mut before.corners, next.corners, delta.corners, |v| {
+        let requested = v.map_or(DWMWCP_DEFAULT, corner_preference);
+        if !set(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, requested) {
+            return false;
+        }
+        let mut actual = DWM_WINDOW_CORNER_PREFERENCE::default();
+        // SAFETY: the output is the exact type/size of this DWM attribute.
+        let read = unsafe {
+            DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                (&raw mut actual).cast(),
+                size_of_val(&actual) as u32,
+            )
+        };
+        if read.is_err() || actual != requested {
+            log::warn!(
+                "DWM corners on {hwnd:?}: requested {}, read {:?} ({read:?})",
+                requested.0,
+                actual.0
+            );
+            return false;
+        }
+        true
+    });
+    update(&mut before.backdrop, next.backdrop, delta.backdrop, |v| {
+        set(
+            hwnd,
+            DWMWA_SYSTEMBACKDROP_TYPE,
+            v.map_or(DWMSBT_AUTO, backdrop_type),
+        )
+    });
+    update(
+        &mut before.dark_mode,
+        next.dark_mode,
+        delta.dark_mode,
+        |v| {
+            set(
+                hwnd,
+                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                BOOL::from(v.unwrap_or(dark)),
+            )
+        },
+    );
+    before
 }
 
 /// Puts back the defaults for the attributes `raw` sets, and the dark-mode
@@ -419,5 +560,27 @@ fn backdrop_type(backdrop: Backdrop) -> DWM_SYSTEMBACKDROP_TYPE {
         Backdrop::Mica => DWMSBT_MAINWINDOW,
         Backdrop::Acrylic => DWMSBT_TRANSIENTWINDOW,
         Backdrop::Tabbed => DWMSBT_TABBEDWINDOW,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_verdict_is_cached_once_and_pid_reuse_is_rechecked() {
+        let mut cache = ProcessCache::default();
+        let process = ProcessKey {
+            pid: 7,
+            started: 100,
+        };
+        assert!(cache.verdict(process, || true));
+        assert!(cache.verdict(process, || panic!("must not hash this executable twice")));
+        let reused = ProcessKey {
+            started: 200,
+            ..process
+        };
+        assert!(!cache.verdict(reused, || false));
+        assert!(!cache.verdict(reused, || panic!("negative verdicts are cached too")));
     }
 }

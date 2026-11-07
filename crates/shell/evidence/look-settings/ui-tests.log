@@ -1,0 +1,85 @@
+cargo :     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+At line:2 char:50
++ ... gets\main'; cargo test -p mypaper-ui --lib -- --test-threads=1 --noca ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Finished `t...get(s) in 0.22s:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+     Running unittests src\lib.rs 
+(C:\mypaper-targets\main\debug\build\mypaper-ui/2b26dd1333197c7a\out\mypaper_ui-2b26dd1333197c7a.exe)
+
+running 71 tests
+test a11y::semantic_tests::ranges_fields_reordering_and_live_feedback_expose_semantic_contracts ... ok
+test a11y::semantic_tests::status_nodes_cannot_collide_with_disabled_controls ... ok
+test a11y::tests::an_active_adapter_survives_duplicate_hits_and_a_stale_focus ... ok
+test a11y::tests::deferred_adapter_keeps_the_latest_hits_before_activation ... ok
+test a11y::tests::duplicate_hits_and_stale_focus_still_make_a_valid_tree ... ok
+test a11y::tests::hits_become_nodes_with_their_state_and_focus ... ok
+test calendar::tests::civil_roundtrip_and_leap_months ... ok
+test chart::tests::compact_accounts_keep_initials_and_percent_at_dashboard_widths ... ok
+test color_row::popover::tests::color_model_round_trips_primaries_greys_and_custom_colors ... ok
+test color_row::popover::tests::pointer_covers_the_square_and_hue_strip_and_clamps_at_edges ... ok
+test controls::tests::hits_index_targets_and_scrolled_out_items_take_no_clicks ... ok
+test controls::tests::kit_controls_follow_the_builders_input_and_draw_no_outlines_at_rest ... ok
+test controls::tests::segments_share_a_group_and_report_their_check_state ... ok
+test controls::tests::text_steps_meet_the_kit_floors_on_every_surface ... ok
+test focus::tests::steps_skip_disabled_items_and_wrap ... ok
+test geom::continuous::tests::continuous_corner_matches_engine_extent_and_preserves_capsules ... ok
+test geom::continuous::tests::continuous_hit_fill_clears_corners_and_translates_with_its_surface ... ok
+test geom::tests::pixels_cover_fractional_edges_and_clip_to_the_bitmap ... ok
+test glass::tests::the_shape_is_the_body_on_screen_in_whole_pixels ... ok
+test icons::tests::every_icon_has_an_outline ... ok
+test icons::tests::levels_clamp_and_mdl2_gets_outlined_media ... ok
+test icons::tests::path_data_parses_compact_arcs_relative_moves_and_smooth_curves ... ok
+test interact::motion::tests::hover_and_press_have_separate_timing_and_rest_stops_frames ... ok
+test interact::tests::keys_move_a_visible_focus_and_enter_fires_it ... ok
+test interact::tests::press_shows_at_once_and_release_over_the_same_item_fires ... ok
+test interact::tests::releasing_elsewhere_cancels_and_disabled_items_never_fire ... ok
+test interaction_motion::tests::hover_and_press_have_separate_timing_and_rest_stops_frames ... ok
+test kit::tests::a_hover_changes_only_its_wash_and_a_click_never_shows_a_ring ... ok
+test kit::tests::a_scroll_view_clips_its_content_and_hits_and_keeps_its_header ... ok
+test layered_app::tests::alpha_canvas_preserves_native_client_geometry_and_can_return_to_opaque ... ok
+test layout::tests::stacks_splits_and_grids_place_boxes_without_overlap ... ok
+test menu::tests::layout_stacks_rows_and_sizes_to_the_widest_label ... ok
+test menu::tests::long_menus_fit_the_monitor_and_keyboard_selection_scrolls_into_view ... ok
+test menu::tests::submenus_butt_against_their_parent_level_with_their_row ... ok
+test menu::tests::the_menu_opens_at_the_cursor_and_flips_away_from_screen_edges ... ok
+test menu::tests::the_view_hits_every_row_but_separators_and_marks_state ... ok
+test modules::tests::vendor_drivers_match_and_system_dlls_do_not ... ok
+test motion::tests::a_tween_ends_exactly_on_its_target ... ok
+test motion::tests::springs_start_at_rest_and_settle_on_one_in_every_damping_regime ... ok
+test motion::tests::the_ticker_fires_only_while_armed ... ok
+test render::a_sparse_read_keeps_row_offsets_inside_one_nonzero_origin_lock ... ok
+test render::bounded_canvas_bands_preserve_partial_damage_and_the_last_short_band ... ok
+test render::canvas_releases_pictures_that_left_the_display_list ... ok
+test render::marker_and_retained_clips_are_nested_and_balanced ... ok
+test render::partial_updates_preserve_oversized_elliptical_corners ... ok
+test render::sparse_meter_updates_match_a_complete_render ... ok
+test render::tests::a_fill_lands_premultiplied_and_only_the_damaged_area_is_redrawn ... ok
+test render::tests::a_rounded_image_clears_its_corners_and_maps_its_source_crop ... ok
+test render::tests::bitmap_ops_preserve_premultiplied_alpha_and_only_cover_their_rect ... ok
+test reveal::tests::pointer_coordinates_and_rectangles_follow_the_same_transform ... ok
+test reveal::tests::presentation_styles_have_distinct_starts_and_an_exact_final_body ... ok
+test scene::tests::a_changed_scrolled_meter_damages_its_own_bounds_and_not_the_whole_viewport ... ok
+test scene::tests::damage_covers_only_the_operations_that_changed ... ok
+test scene::tests::identical_lists_need_no_redraw_whatever_their_hits_say ... ok
+test scene::tests::meter_sweep_damage_keeps_the_unchanged_ring ... ok
+test scene::tests::sparse_damage_keeps_distant_changes_separate_and_merges_neighbors ... ok
+test scroll::tests::the_scrollbar_shows_while_scrolling_then_fades_and_ticks_stop ... ok
+test scroll::tests::touchpad_deltas_move_at_once_and_notches_glide_within_the_content ... ok
+test sortable::tests::drop_inserts_across_multiple_rows_and_rejects_outside_indices ... ok
+test text::tests::long_text_is_cut_with_an_ellipsis_and_wraps_into_bounded_lines ... ok
+test text::tests::the_layout_cache_stays_bounded_and_keeps_what_is_in_use ... ok
+test text_field::tests::live_type_changes_preserve_text_selection_and_settle_after_one_request ... ok
+test text_field::tests::rich_edit_draws_bidi_cjk_selection_and_undo_on_the_software_target ... ok
+test theme::tests::apple_springs_match_liquid_rust ... ok
+test theme::tests::knobs_drive_every_glass_style_to_both_ends ... ok
+test theme::tests::labels_keep_their_contrast_floors_over_their_own_surface_in_every_style ... ok
+test theme::tests::radii_are_concentric_and_glass_draws_no_border ... ok
+test theme::tests::small_glass_flips_with_its_backdrop_and_panels_follow_the_scheme ... ok
+test transition::tests::a_timed_transition_lands_exactly_and_disabled_never_moves ... ok
+test watch::tests::a_thread_local_watch_can_be_dropped_during_process_exit ... ok
+test watch::tests::atomic_replacement_removal_and_recreation_reload_without_a_poll_timer ... ok
+
+test result: ok. 71 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.09s
+

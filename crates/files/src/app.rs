@@ -43,6 +43,7 @@ pub const PREVIEW: u32 = 23;
 pub const LOOK_CLOSE: u32 = 24;
 pub const LOOK_PREVIOUS: u32 = 25;
 pub const LOOK_NEXT: u32 = 26;
+pub const PREVIEW_CLOSE: u32 = 27;
 pub const HEADER: u32 = 100;
 pub const SIDEBAR: u32 = 200;
 pub const CRUMB: u32 = 500;
@@ -157,7 +158,7 @@ pub struct App {
     pub indexed: bool,
     pub geometry: Geometry,
     pub drag: Option<Drag>,
-    pub sizes: HashMap<String, u64>,
+    pub sizes: HashMap<String, crate::model::Size>,
     pub decorations: HashMap<(String, i32), Option<Decoration>>,
     pending_images: HashSet<(String, i32)>,
     image_order: VecDeque<(String, i32)>,
@@ -410,7 +411,7 @@ impl App {
         self.selection.clear();
         self.scroll.reset();
         self.entries = Arc::default();
-        self.shown = Arc::default();
+        self.replace_shown(Arc::default())?;
         self.sizes.clear();
         self.pending_images.clear();
         self.drop_target
@@ -420,7 +421,7 @@ impl App {
             .ok();
         if let Some(folder) = cached {
             self.entries = folder.entries.clone();
-            self.shown = folder.entries;
+            self.replace_shown(folder.entries)?;
             self.sizes = folder.sizes;
             if record {
                 self.history.visit(folder.location.path.clone());
@@ -434,6 +435,7 @@ impl App {
 
     fn remember_folder(&mut self) {
         if !self.loading
+            && self.error.is_none()
             && let Some(location) = self.location.clone()
         {
             self.cache.insert(crate::tabs::Folder {
@@ -459,7 +461,7 @@ impl App {
             query_text: self.query_text.clone(),
             indexed: self.indexed,
             sizes: self.sizes.clone(),
-            loaded: !self.loading,
+            loaded: !self.loading && self.error.is_none(),
         };
     }
 
@@ -493,7 +495,7 @@ impl App {
         self.navigate(tab.path, false)?;
         self.history = tab.history;
         if tab.loaded {
-            self.shown = tab.shown;
+            self.replace_shown(tab.shown)?;
             self.selection = tab.selection;
             self.scroll = tab.scroll;
             self.query_text = tab.query_text;
@@ -701,6 +703,28 @@ impl App {
             .collect()
     }
 
+    /// Every row replacement reconciles all selection indexes and cancels gestures/menu hits
+    /// made against the previous layout. Rename and image work already carry paths, not indexes.
+    fn replace_shown(&mut self, entries: Arc<Vec<FileEntry>>) -> Result<()> {
+        self.selection.remap(&self.shown, &entries);
+        self.shown = entries;
+        if matches!(self.drag, Some(Drag::Item { .. } | Drag::Rubber { .. })) {
+            self.drag = None;
+        }
+        self.interaction.pressed = None;
+        self.interaction.hover = None;
+        if self.interaction.focus.is_some_and(|id| id >= ITEM) {
+            self.interaction.focus = self.selection.focus.map(|i| ITEM + i as u32);
+        }
+        self.menu.close();
+        if let Field::Rename(path) = &self.field
+            && !self.shown.iter().any(|entry| &entry.path == path)
+        {
+            self.focus(Field::None)?;
+        }
+        Ok(())
+    }
+
     fn open_selection(&mut self) -> Result<()> {
         let selected = self
             .selection
@@ -780,8 +804,24 @@ impl App {
             }
             Command::Refresh => self.refresh()?,
             Command::Terminal => {
-                if let Some(location) = self.location.as_ref().filter(|l| l.filesystem) {
-                    shell::terminal(&location.path)?;
+                let folder = (self.selection.items.len() == 1)
+                    .then(|| {
+                        self.selection
+                            .items
+                            .first()
+                            .and_then(|i| self.shown.get(*i))
+                    })
+                    .flatten()
+                    .filter(|entry| entry.directory)
+                    .map(|entry| entry.path.as_str())
+                    .or_else(|| {
+                        self.location
+                            .as_ref()
+                            .filter(|l| l.filesystem)
+                            .map(|l| l.path.as_str())
+                    });
+                if let Some(folder) = folder {
+                    shell::terminal(folder)?;
                 }
             }
             Command::CopyPath => {
@@ -900,7 +940,9 @@ impl App {
     fn run_search(&mut self) {
         let text = self.search.text().unwrap_or_default();
         self.query_text = text.clone();
-        self.query = self.backend.search(text, self.entries.clone(), self.sort);
+        self.query = self
+            .backend
+            .search(text, self.entries.clone(), self.sort, self.sizes.clone());
         self.selection.clear();
         self.scroll.reset();
     }
@@ -994,7 +1036,7 @@ impl App {
                     .as_ref()
                     .map_or_else(|| "shell:profile".into(), |l| l.path.clone()),
             )?,
-            PREVIEW => self.command(Command::Preview)?,
+            PREVIEW | PREVIEW_CLOSE => self.command(Command::Preview)?,
             id if (TAB..TAB + 32).contains(&id) => self.switch_tab((id - TAB) as usize)?,
             id if (TAB_CLOSE..TAB_CLOSE + 32).contains(&id) => {
                 self.close_tab((id - TAB_CLOSE) as usize)?
@@ -1317,6 +1359,11 @@ impl App {
                         width: widths[index] / self.surface.scale(),
                     });
                 } else if let Some(id) = target.filter(|id| (TAB..TAB + 32).contains(id)) {
+                    // Keep the release when a tab is dragged outside this window.
+                    // SAFETY: this UI thread captures the pointer for its own live surface.
+                    unsafe {
+                        SetCapture(self.surface.hwnd());
+                    }
                     self.drag = Some(Drag::Tab {
                         index: (id - TAB) as usize,
                         start: pointer.at,
@@ -1415,6 +1462,8 @@ impl App {
                 let target = hit(self, pointer.at);
                 let drag = self.drag.take();
                 if let Some(Drag::Tab { index, start }) = drag {
+                    // SAFETY: balances this tab's pointer capture before opening another window.
+                    let _ = unsafe { ReleaseCapture() };
                     if !self
                         .geometry
                         .tabs
@@ -1559,7 +1608,6 @@ impl App {
                             self.backend.watch(location.path.clone())?,
                         ));
                     }
-                    let selected: HashSet<_> = self.selected_paths().into_iter().collect();
                     if self.pending_history {
                         self.history.visit(location.path.clone());
                         self.pending_history = false;
@@ -1589,27 +1637,24 @@ impl App {
                     }
                     self.loading = !complete;
                     if complete {
-                        self.remember_folder();
                         self.save_session()?;
                         self.refreshing = false;
                     }
                     self.elapsed_ms = elapsed_ms;
                     self.entries = entries.clone();
+                    if complete {
+                        self.remember_folder();
+                    }
                     if self.query_text.is_empty() {
-                        self.shown = entries;
+                        self.replace_shown(entries)?;
                     } else {
                         self.query = self.backend.search(
                             self.query_text.clone(),
                             self.entries.clone(),
                             self.sort,
+                            self.sizes.clone(),
                         );
                     }
-                    self.selection.items = self
-                        .shown
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, e)| selected.contains(&e.path).then_some(i))
-                        .collect();
                     if complete {
                         log::info!("folder: {} entries in {elapsed_ms} ms", self.entries.len());
                     } else {
@@ -1625,26 +1670,26 @@ impl App {
                     entries,
                     indexed,
                 } if epoch == self.epoch && query == self.query => {
-                    let selected: HashSet<_> = self.selected_paths().into_iter().collect();
-                    self.shown = entries;
+                    self.replace_shown(entries)?;
                     self.indexed = indexed;
-                    self.selection.clear();
-                    self.selection.items = self
-                        .shown
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, e)| selected.contains(&e.path).then_some(i))
-                        .collect();
-                    self.selection.focus = self.selection.items.first().copied();
                     if self.query_text.is_empty() {
                         self.entries = self.shown.clone();
                     }
                 }
                 Reply::Sizes { epoch, sizes } if epoch == self.epoch => {
                     self.sizes = sizes;
-                    if self.sort.column == Column::Size && self.query_text.is_empty() {
-                        self.backend
-                            .sort(self.entries.clone(), self.sort, self.sizes.clone());
+                    if self.sort.column == Column::Size {
+                        if self.query_text.is_empty() {
+                            self.backend
+                                .sort(self.entries.clone(), self.sort, self.sizes.clone());
+                        } else {
+                            self.query = self.backend.search(
+                                self.query_text.clone(),
+                                self.entries.clone(),
+                                self.sort,
+                                self.sizes.clone(),
+                            );
+                        }
                     }
                 }
                 Reply::Image {

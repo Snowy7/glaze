@@ -1,4 +1,4 @@
-//! Opt-in fullscreen/presentation hint, not a game classifier. No polling or injection.
+//! Fullscreen/presentation hint, not a game classifier. No idle polling or injection.
 //! Install on a message-pumping thread; drop removes hooks/window and publication.
 //! Cross-process clients watch `game-activity.json` and wait on the publisher's
 //! process handle as well, so a crash cannot leave them paused indefinitely.
@@ -9,7 +9,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use anyhow::{Context, Result, bail, ensure};
-use notify::Watcher;
 use serde::{Deserialize, Serialize};
 use windows::Win32::Foundation::{
     CloseHandle, FILETIME, HANDLE, HWND, LPARAM, LRESULT, RECT, WAIT_ABANDONED, WAIT_OBJECT_0,
@@ -34,13 +33,16 @@ use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, EVENT_OBJECT_LOCATIONCHANGE,
     EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND,
     EVENT_SYSTEM_MINIMIZESTART, GetClassNameW, GetForegroundWindow, GetWindowRect,
-    GetWindowThreadProcessId, IsIconic, IsWindowVisible, OBJID_WINDOW, RegisterClassW,
-    WINEVENT_OUTOFCONTEXT, WM_DISPLAYCHANGE, WM_SETTINGCHANGE, WNDCLASSW, WS_EX_TOOLWINDOW,
-    WS_POPUP,
+    GetWindowThreadProcessId, IsIconic, IsWindowVisible, KillTimer, OBJID_WINDOW, RegisterClassW,
+    SetTimer, WINEVENT_OUTOFCONTEXT, WM_DISPLAYCHANGE, WM_SETTINGCHANGE, WM_TIMER, WNDCLASSW,
+    WS_EX_TOOLWINDOW, WS_POPUP,
 };
 use windows::core::w;
 
 const FILE: &str = "game-activity.json";
+const RECHECK: usize = 1;
+/// Only while paused: recover from a missed foreground/geometry event or delayed shell hint.
+const RECHECK_MS: u32 = 1000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -69,7 +71,7 @@ pub fn classify(
     let reason = match notification_state {
         Some(n) if n == QUNS_RUNNING_D3D_FULL_SCREEN.0 => Reason::Direct3d,
         Some(n) if n == QUNS_PRESENTATION_MODE.0 => Reason::Presentation,
-        Some(n) if n == QUNS_BUSY.0 => Reason::Busy,
+        Some(n) if n == QUNS_BUSY.0 && foreground_covers_monitor => Reason::Busy,
         _ if foreground_covers_monitor => Reason::Fullscreen,
         _ => Reason::Idle,
     };
@@ -163,23 +165,18 @@ pub fn read() -> Option<(Snapshot, Owner)> {
 }
 
 /// Watches atomic replacement/removal. Dropping releases the directory watcher.
-pub fn watch(changed: impl Fn() + Send + 'static) -> Result<notify::RecommendedWatcher> {
+pub fn watch(changed: impl Fn() + Send + 'static) -> Result<mypaper_fswatch::Watch> {
     let file = path()?;
     let parent = file.parent().context("game signal path has no parent")?;
     std::fs::create_dir_all(parent)?;
-    let target = file.clone();
-    let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-        if event.is_ok_and(|event| event.paths.iter().any(|p| p == &target)) {
-            changed();
-        }
-    })?;
-    watcher.watch(parent, notify::RecursiveMode::NonRecursive)?;
-    Ok(watcher)
+    mypaper_fswatch::Watch::files(parent, &[FILE], changed)
 }
 
 struct State {
     snapshot: Snapshot,
     file: PathBuf,
+    window: HWND,
+    recheck: bool,
 }
 
 struct Lease(HANDLE);
@@ -213,7 +210,7 @@ thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
 }
 
-/// Only constructed when `system.game_activity` is true. Owns no worker thread/timer.
+/// Only constructed while game activity is enabled. No worker; one 1 Hz timer only while paused.
 /// One publisher per desktop session (core owns it); bound to the installing thread.
 pub struct GameWatcher {
     hooks: Vec<HWINEVENTHOOK>,
@@ -236,11 +233,18 @@ impl GameWatcher {
         let snapshot = Snapshot {
             publisher_pid: std::process::id(),
             publisher_started: started(owner.0)?,
-            activity: sample(),
+            activity: sample(None),
         };
         let file = path()?;
         publish(&file, &snapshot)?;
-        STATE.with_borrow_mut(|state| *state = Some(State { snapshot, file }));
+        STATE.with_borrow_mut(|state| {
+            *state = Some(State {
+                snapshot,
+                file,
+                window: HWND::default(),
+                recheck: false,
+            })
+        });
         let mut watcher = Self {
             hooks: Vec::new(),
             window: HWND::default(),
@@ -277,6 +281,9 @@ impl GameWatcher {
                 None,
             )?
         };
+        STATE.with_borrow_mut(|state| {
+            state.as_mut().expect("initialized above").window = watcher.window
+        });
         for event in [
             EVENT_SYSTEM_FOREGROUND,
             EVENT_SYSTEM_DESKTOPSWITCH,
@@ -301,13 +308,17 @@ impl GameWatcher {
             }
             watcher.hooks.push(hook);
         }
-        refresh();
+        refresh(None);
         Ok(watcher)
     }
 }
 
 impl Drop for GameWatcher {
     fn drop(&mut self) {
+        if !self.window.is_invalid() {
+            // SAFETY: our hidden window and timer; removes the paused-only fallback.
+            let _ = unsafe { KillTimer(Some(self.window), RECHECK) };
+        }
         for hook in self.hooks.drain(..) {
             // SAFETY: this watcher owns each hook on its installing thread.
             let _ = unsafe { UnhookWinEvent(hook) };
@@ -333,8 +344,8 @@ fn publish(path: &std::path::Path, snapshot: &Snapshot) -> Result<()> {
     Ok(())
 }
 
-fn refresh() {
-    let activity = sample();
+fn refresh(foreground: Option<HWND>) {
+    let activity = sample(foreground);
     STATE.with(|state| {
         // Win32 calls can reenter; the outer callback publishes the current observation.
         let Ok(mut state) = state.try_borrow_mut() else {
@@ -351,15 +362,32 @@ fn refresh() {
                 Err(error) => log::warn!("publishing game activity: {error:#}"),
             }
         }
+        let paused = state.snapshot.activity.pause_background;
+        if !state.window.is_invalid() && paused != state.recheck {
+            // SAFETY: timer posts to our existing message-pumping hidden window. It is
+            // armed only at a pause edge, never reset by frequent WinEvents, and removed
+            // on resume/drop. No worker or idle polling loop is added.
+            unsafe {
+                if paused {
+                    state.recheck = SetTimer(Some(state.window), RECHECK, RECHECK_MS, None) != 0;
+                    if !state.recheck {
+                        log::warn!("could not arm game activity recheck");
+                    }
+                } else {
+                    let _ = KillTimer(Some(state.window), RECHECK);
+                    state.recheck = false;
+                }
+            }
+        }
     });
 }
 
-fn sample() -> Activity {
+fn sample(foreground: Option<HWND>) -> Activity {
     // SAFETY: query APIs only, all out buffers valid locals.
     unsafe {
         // Core also hosts legacy windows; scope physical-coordinate queries to this sample.
         let previous_dpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        let foreground = GetForegroundWindow();
+        let foreground = foreground.unwrap_or_else(|| GetForegroundWindow());
         let mut pid = 0;
         GetWindowThreadProcessId(foreground, Some(&mut pid));
         let mut class = [0u16; 128];
@@ -420,7 +448,10 @@ unsafe extern "system" fn on_event(
             return;
         }
     }
-    refresh();
+    // EVENT_SYSTEM_FOREGROUND supplies the new foreground HWND. GetForegroundWindow
+    // can still return the previous window here, even in an immediately posted message.
+    // Other events and the paused-only recheck query the current foreground normally.
+    refresh((event == EVENT_SYSTEM_FOREGROUND).then_some(window));
 }
 
 unsafe extern "system" fn window_proc(
@@ -429,8 +460,10 @@ unsafe extern "system" fn window_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    if matches!(message, WM_SETTINGCHANGE | WM_DISPLAYCHANGE) {
-        refresh();
+    if matches!(message, WM_SETTINGCHANGE | WM_DISPLAYCHANGE)
+        || message == WM_TIMER && wparam.0 == RECHECK
+    {
+        refresh(None);
     }
     // SAFETY: forwarding the window procedure's unchanged arguments.
     unsafe { DefWindowProcW(window, message, wparam, lparam) }
@@ -442,9 +475,20 @@ mod tests {
     use windows::Win32::UI::Shell::{QUNS_ACCEPTS_NOTIFICATIONS, QUNS_QUIET_TIME};
 
     #[test]
+    fn busy_does_not_latch_a_game_after_exit_minimize_or_focus_away() {
+        assert!(classify(Some(QUNS_BUSY.0), true, 42).pause_background);
+        // A vanished/minimized game, or a different foreground window, no longer covers
+        // a monitor even when Windows keeps its notification-suppression hint set.
+        for foreground in [0, 42, 99] {
+            let state = classify(Some(QUNS_BUSY.0), false, foreground);
+            assert!(!state.pause_background, "Busy without coverage: {state:?}");
+            assert_eq!(state.reason, Reason::Idle);
+        }
+    }
+
+    #[test]
     fn conservative_policy_is_explicit_about_its_hints() {
         for (hint, reason) in [
-            (QUNS_BUSY, Reason::Busy),
             (QUNS_PRESENTATION_MODE, Reason::Presentation),
             (QUNS_RUNNING_D3D_FULL_SCREEN, Reason::Direct3d),
         ] {
@@ -452,6 +496,7 @@ mod tests {
             assert!(state.pause_background);
             assert_eq!(state.reason, reason);
         }
+        assert_eq!(classify(Some(QUNS_BUSY.0), true, 42).reason, Reason::Busy);
         for hint in [
             Some(QUNS_ACCEPTS_NOTIFICATIONS.0),
             Some(QUNS_QUIET_TIME.0),

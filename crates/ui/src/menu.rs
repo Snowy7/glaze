@@ -427,12 +427,24 @@ pub fn view_animated<C>(
         });
         let ink = if selectable { c.text } else { c.text_dim };
         let center_y = top + row.height / 2.0;
-        let glyph = |at_x: f32, glyph: char, size: (f32, f32)| Op::Text {
+        let glyph = |at_x: f32, glyph: char, size: (f32, f32)| {
+            if tokens.icon_set == Some(icons::IconSet::Vector)
+                && let Some(icon) = icons::from_system_glyph(glyph)
+            {
+                let px = tokens.menu.glyph * s;
+                return Op::Icon {
+                    rect: Rect::new(at_x - px / 2.0, center_y - px / 2.0, px, px),
+                    icon,
+                    weight: (1.75 * px / 24.0).max(1.35 * s.min(1.5)),
+                    color: ink,
+                };
+            }
+            Op::Text {
             rect: Rect::new(at_x - size.0 / 2.0, center_y - size.1 / 2.0, size.0, size.1),
             text: glyph.to_string().into(),
             style: glyph_style.clone(),
             color: ink,
-        };
+        }};
         let checked = match item.plain() {
             Entry::Action { checked, .. } => *checked,
             _ => None,
@@ -450,6 +462,13 @@ pub fn view_animated<C>(
         match item.icon() {
             // A check item's icon is its mark: shown only while on.
             Some(_) if checked == Some(false) => {}
+            Some(MenuIcon::Glyph(g)) if tokens.icon_set == Some(icons::IconSet::Vector)
+                && icons::from_system_glyph(*g).is_some() => ops.push(Op::Icon {
+                rect: square,
+                icon: icons::from_system_glyph(*g).expect("checked above"),
+                weight: (1.75 * square.width() / 24.0).max(1.35 * s.min(1.5)),
+                color: ink,
+            }),
             Some(MenuIcon::Glyph(g)) => ops.push(Op::Text {
                 rect: square,
                 text: g.to_string().into(),
@@ -499,7 +518,9 @@ pub fn view_animated<C>(
     let focus = hover
         .map(|i| i as HitId)
         .filter(|id| hits.iter().any(|h| h.id == *id));
-    DisplayList { ops, hits, focus }
+    let mut list = DisplayList { ops, hits, focus };
+    crate::geom::continuous::surface(&mut list, body, tokens.glass_style.smoothing);
+    list
 }
 
 /// What a menu event came to.
@@ -1138,6 +1159,7 @@ impl<C: Clone> Menu<C> {
         );
         let at = (p.origin.0 - edge, p.origin.1 - edge);
         let size = ((w + 2 * edge) as u32, (h + 2 * edge) as u32);
+        p.surface.set_glass_style(self.tokens.glass_style);
         p.surface
             .set_glass(self.tokens.glass.map(|material| crate::glass::Glass {
                 body: Rect::new(edge as f32, edge as f32, w as f32, h as f32),

@@ -1,0 +1,9 @@
+﻿{
+    "publisher_pid":  53744,
+    "publisher_started":  134384178794728328,
+    "activity":  {
+                     "pause_background":  false,
+                     "reason":  "idle",
+                     "foreground_pid":  27116
+                 }
+}

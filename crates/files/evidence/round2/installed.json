@@ -1,0 +1,10 @@
+{
+    "installed_files_sha256":  "3A20F8782D755FAB19E0C88BA20582DBD56D9784CFDFAB5353C15B53721D4642",
+    "source_sha256":  "3A20F8782D755FAB19E0C88BA20582DBD56D9784CFDFAB5353C15B53721D4642",
+    "core_unchanged":  true,
+    "index_unchanged":  true,
+    "core_pid":  56856,
+    "index_pid":  83816,
+    "at":  "2026-11-06T06:10:17",
+    "deployment":  "Only the closed on-demand Files executable was copied; no deploy-local and no core/index restart during the hold"
+}

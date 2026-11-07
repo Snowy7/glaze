@@ -10,7 +10,7 @@ mod engine;
 mod system;
 pub mod look;
 mod windows;
-pub use engine::{EngineConfig, GpuPreference, RenderOptions, RenderSettings};
+pub use engine::{DuringGames, EngineConfig, GpuPreference, RenderOptions, RenderSettings};
 pub use system::{PowerMode, SystemConfig};
 pub use apps::{AppRules, AppsStyle};
 pub use look::Look;
@@ -31,6 +31,9 @@ pub struct Config {
     pub system: SystemConfig,
     /// Optional native services. Every experiment is off until explicitly enabled.
     pub experimental: Experimental,
+    /// File-name index rules layered over its built-in cache/build exclusions.
+    #[serde(skip_serializing_if = "IndexConfig::is_empty")]
+    pub index: IndexConfig,
     /// Wallpaper GPU preference and frame cap, with optional overrides keyed by theme folder ID.
     pub engine: EngineConfig,
     /// Theme name (looked up like `mypaper_theme::locate`) or folder path.
@@ -64,6 +67,7 @@ impl Default for Config {
         Self {
             system: SystemConfig::default(),
             experimental: Experimental::default(),
+            index: IndexConfig::default(),
             engine: EngineConfig::default(),
             theme: "aurora".into(),
             paused: false,
@@ -74,6 +78,34 @@ impl Default for Config {
             static_snapshot: true,
             look: Look::default(),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct IndexConfig {
+    pub exclude: Vec<String>,
+    pub include: Vec<String>,
+    /// Minimum age of a volume's last complete reconciliation, in seconds.
+    pub startup_rescan_after: u64,
+    /// Give login/deployment foreground work time to settle before offline catch-up.
+    pub startup_rescan_delay: u64,
+}
+
+impl Default for IndexConfig {
+    fn default() -> Self {
+        Self {
+            exclude: Vec::new(),
+            include: Vec::new(),
+            startup_rescan_after: 6 * 60 * 60,
+            startup_rescan_delay: 120,
+        }
+    }
+}
+
+impl IndexConfig {
+    pub fn is_empty(&self) -> bool {
+        self == &Self::default()
     }
 }
 
@@ -140,6 +172,17 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn index_startup_policy_defaults_and_explicit_seconds_round_trip() {
+        let config = super::Config::parse("{}").unwrap();
+        assert_eq!(config.index.startup_rescan_after, 21_600);
+        assert_eq!(config.index.startup_rescan_delay, 120);
+        assert!(config.index.is_empty());
+        let config = super::Config::parse(r#"{"index":{"startup_rescan_after":0,"startup_rescan_delay":3}}"#).unwrap();
+        assert!(!config.index.is_empty());
+        assert_eq!(config, super::Config::parse(&serde_json::to_string(&config).unwrap()).unwrap());
+        assert!(super::Config::parse(r#"{"index":{"startup_rescan_after":-1}}"#).is_err());
+    }
     use super::*;
 
     #[test]

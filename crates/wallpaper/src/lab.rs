@@ -18,7 +18,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use mypaper_desktop::Rect;
-use mypaper_glass_ipc::{Material, Plate};
+use mypaper_glass_ipc::{Material, Plate, Style};
 
 use crate::glass_pass::GlassPass;
 use crate::gpu::{Gpu, KeptFrame};
@@ -78,16 +78,22 @@ fn plates_file(path: &Path) -> Vec<Plate> {
         .collect()
 }
 
-/// The shell's live plates on the screen at the origin, in [`plates_file`]'s form (a passive
-/// read of the shared snapshot).
+/// The shell's live plates on the screen at the origin (or monitor `MYPAPER_LAB_SCREEN`, moved to
+/// the origin), in [`plates_file`]'s form (a passive read of the shared snapshot).
 #[test]
 #[ignore = "dev tool: needs a running shell"]
 fn live_plates() {
     let mut reader = mypaper_glass_ipc::Reader::open().unwrap();
     let snapshot = reader.read_changed().unwrap().expect("a snapshot");
-    eprintln!("{} plates; screens: {:?}", snapshot.plates.len(), mypaper_desktop::monitor_infos());
+    let monitors = mypaper_desktop::monitor_infos();
+    eprintln!("{} plates; screens: {monitors:?}", snapshot.plates.len());
+    let origin = std::env::var("MYPAPER_LAB_SCREEN")
+        .ok()
+        .and_then(|n| monitors.get(n.parse::<usize>().ok()?))
+        .map_or((0.0, 0.0), |m| (m.rect.x as f32, m.rect.y as f32));
     for p in snapshot.plates {
         let ([x, y, w, h], m) = (p.rect, p.material);
+        let (x, y) = (x - origin.0, y - origin.1);
         if x >= 0.0 && y >= 0.0 && x < SIZE.0 as f32 && y < SIZE.1 as f32 {
             let [r, g, b, a] = m.tint;
             println!(
@@ -228,7 +234,13 @@ impl Lab {
                 let labels = p.labels();
                 let n = labels.len() as u32 + 1;
                 encoder.resolve_query_set(p.queries(), 0..n, &self.pass_resolve, 0);
-                encoder.copy_buffer_to_buffer(&self.pass_resolve, 0, &self.pass_read, 0, u64::from(n) * 8);
+                encoder.copy_buffer_to_buffer(
+                    &self.pass_resolve,
+                    0,
+                    &self.pass_read,
+                    0,
+                    u64::from(n) * 8,
+                );
                 labels
             })
             .unwrap_or_default();
@@ -250,7 +262,11 @@ impl Lab {
             let s = self.map(&self.pass_read, ticks);
             labels.iter().enumerate().map(|(i, l)| (*l, ms(&s, i, i + 1))).collect()
         };
-        ([ms(&stamps, 0, 1), ms(&stamps, 1, 2), ms(&stamps, 2, 3)], cpu, passes)
+        (
+            [ms(&stamps, 0, 1), ms(&stamps, 1, 2), ms(&stamps, 2, 3)],
+            cpu,
+            passes,
+        )
     }
 
     /// Times the glass renderer's passes from the next frame on.
@@ -359,8 +375,31 @@ fn lab() {
     let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
     let mut lab = Lab::new(&root.join(parts[0]));
     let custom = std::env::var_os("MYPAPER_LAB_PLATES").map(|p| plates_file(Path::new(&p)));
-    lab.glass
-        .set_plates(custom.clone().unwrap_or_else(|| fixture(0.0)));
+    // Optional optics fixture: brightness,saturation,smoothing,sheen,depth,inner-shadow.
+    // Negative sheen/depth retain the highlight-derived defaults, just like the overlay wire.
+    let style = std::env::var("MYPAPER_LAB_STYLE")
+        .ok()
+        .map(|line| {
+            let v: Vec<f32> = line.split(',').map(|x| x.trim().parse().unwrap()).collect();
+            assert_eq!(v.len(), 6);
+            Style {
+                brightness: v[0],
+                saturation: v[1],
+                smoothing: v[2],
+                sheen: (v[3] >= 0.0).then_some(v[3]),
+                depth: (v[4] >= 0.0).then_some(v[4]),
+                inner_shadow: v[5],
+            }
+        })
+        .unwrap_or_default();
+    lab.glass.set_styled(
+        custom
+            .clone()
+            .unwrap_or_else(|| fixture(0.0))
+            .into_iter()
+            .map(|p| (p, style))
+            .collect(),
+    );
     lab.glass.settle();
     if custom.is_some() {
         // Captures only: the timed runs move the fixture's dock.
@@ -410,8 +449,12 @@ fn lab() {
     let mut glass = [vec![], vec![], vec![], vec![]];
     let mut glass_passes = Passes::default();
     for f in 0..frames {
-        lab.glass
-            .set_plates(fixture(160.0 * (f as f32 * 0.05).sin()));
+        lab.glass.set_styled(
+            fixture(160.0 * (f as f32 * 0.05).sin())
+                .into_iter()
+                .map(|p| (p, style))
+                .collect(),
+        );
         let (ms, cpu, passes) = lab.timed(Duration::from_secs(5), f, false);
         glass[0].push(ms[1]);
         glass[1].push(ms[2]);
@@ -445,6 +488,141 @@ fn lab() {
 }
 
 use crate::trim::private_mib;
+
+/// Transparent overlay fixture: proves the continuous edge keeps its own coverage and that
+/// the independent shadow darkens the bottom without changing the top. Dumps inspectable BGRA.
+#[test]
+#[ignore = "dev tool: MYPAPER_PARITY_OUT=<output directory>"]
+fn glass_parity() {
+    use liquid_rust as lr;
+    let out = PathBuf::from(std::env::var_os("MYPAPER_PARITY_OUT").expect("output directory"));
+    std::fs::create_dir_all(&out).unwrap();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let lab = Lab::new(&root.join("themes/rain-city"));
+    let gpu = &lab.gpu;
+    let size = (512, 320);
+    let format = gpu.format.add_srgb_suffix();
+    let content = gpu.texture(
+        "parity backdrop",
+        size,
+        format,
+        wgpu::TextureUsages::TEXTURE_BINDING,
+        None,
+    );
+    gpu.write_texture(
+        &content,
+        &[140, 160, 180, 255].repeat((size.0 * size.1) as usize),
+    );
+    let content = content.create_view(&Default::default());
+    let target = gpu.texture(
+        "parity glass",
+        size,
+        format,
+        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        None,
+    );
+    let view = target.create_view(&Default::default());
+    let mut renderer = lr::Renderer::new(&gpu.device, format);
+    let mut render = |clip, shadow| {
+        let mut scene = lr::Scene::new();
+        scene.physics = false;
+        scene.add(
+            lr::Glass::new(lr::Rect::new(48.0, 48.0, 416.0, 224.0))
+                .shape(crate::material::shape(48.0, 0.6))
+                .material(lr::Material {
+                    refraction: 0.0,
+                    dispersion: 0.0,
+                    frost: 0.0,
+                    specular: 0.0,
+                    rim: 0.0,
+                    rim_shade: 0.0,
+                    inner_shadow: shadow,
+                    clip_to_shape: clip,
+                    adaptive: false,
+                    ..lr::Material::regular()
+                })
+                .appearance(lr::Appearance {
+                    adapt_to_content: false,
+                    ..Default::default()
+                }),
+        );
+        scene.update(0.0);
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            ..Default::default()
+        }));
+        renderer.render(
+            &gpu.device,
+            &gpu.queue,
+            &mut encoder,
+            &lr::Frame {
+                content: &content,
+                target: &view,
+                size,
+                scale: 1.0,
+                content_changed: true,
+                copy_content: false,
+            },
+            &scene,
+        );
+        gpu.queue.submit([encoder.finish()]);
+        lab.pixels(&target)
+    };
+    let uncut = render(false, 0.0);
+    let clipped = render(true, 0.0);
+    let shadow = render(true, 1.0);
+    let pixel = |data: &[u8], x, y| data[((y * size.0 + x) * 4) as usize..][..4].to_vec();
+    assert_eq!(
+        pixel(&clipped, 48, 48)[3],
+        0,
+        "corner outside the contour stays transparent"
+    );
+    assert_eq!(
+        pixel(&clipped, 256, 48)[3],
+        255,
+        "straight edge stays covered"
+    );
+    assert!(
+        uncut
+            .as_chunks::<4>().0.iter()
+            .zip(clipped.as_chunks::<4>().0)
+            .any(|(a, b)| a[3] > 0 && b[3] == 0),
+        "the shader clip removes the outer shadow/hairline"
+    );
+    assert_eq!(
+        pixel(&clipped, 256, 50),
+        pixel(&shadow, 256, 50),
+        "top rim is unchanged"
+    );
+    assert!(
+        pixel(&shadow, 256, 269)[0] < pixel(&clipped, 256, 269)[0],
+        "bottom darkens"
+    );
+    assert!(
+        clipped
+            .as_chunks::<4>().0.iter()
+            .zip(shadow.as_chunks::<4>().0)
+            .all(|(a, b)| a[3] == b[3]),
+        "inner shadow cannot change the shape"
+    );
+    for (name, bytes) in [
+        ("continuous", clipped),
+        ("bottom-shadow", shadow),
+        ("unclipped", uncut),
+    ] {
+        std::fs::write(out.join(format!("{name}.bgra")), bytes).unwrap();
+    }
+    eprintln!("512x320 overlay fixtures: {}", out.display());
+}
 
 /// Private bytes after each step of a two-screen engine's allocations (no swapchains).
 /// `MYPAPER_LAB_THEME=themes\rain-city cargo test -p mypaper-wallpaper lab::memory -- --ignored --nocapture`
@@ -628,7 +806,9 @@ fn release() {
 
     step("start", Instant::now());
     let t = Instant::now();
-    let mut gpu = Gpu::opened(crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto));
+    let mut gpu = Gpu::opened(crate::gpu::Opening::start(
+        mypaper_config::GpuPreference::Auto,
+    ));
     eprintln!("GPU: {}", gpu.adapter.get_info().name);
     step("cold: device opened", t);
     for round in 1..=3 {
@@ -660,9 +840,82 @@ fn release() {
         drop(reopened);
         step(&format!("{round}: everything released"), t);
         let t = Instant::now();
-        gpu = Gpu::opened(crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto));
+        gpu = Gpu::opened(crate::gpu::Opening::start(
+            mypaper_config::GpuPreference::Auto,
+        ));
         step(&format!("{round}: warm: device opened"), t);
     }
+}
+
+/// Private bytes over release/resume cycles on one device (what `Engine::release` drops and
+/// `resume` makes again: the source, a kept frame, two screen-sized targets, glass), on the
+/// integrated GPU, or the discrete one with `MYPAPER_LAB_GPU=high`. Does the memory come back,
+/// and does it grow per cycle? `MYPAPER_LAB_THEME=themes\rain-city cargo test -p
+/// mypaper-wallpaper --release lab::release_cycles -- --ignored --exact --nocapture`
+#[test]
+#[ignore = "dev tool: MYPAPER_LAB_THEME=<theme>"]
+fn release_cycles() {
+    let theme = std::env::var("MYPAPER_LAB_THEME").expect("set MYPAPER_LAB_THEME");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let theme = mypaper_theme::LoadedTheme::load(root.join(theme)).unwrap();
+    let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
+    let gpu = Gpu::headless().expect("a DX12 GPU");
+    let monitor = Rect {
+        x: 0,
+        y: 0,
+        width: SIZE.0 as i32,
+        height: SIZE.1 as i32,
+    };
+    let wait = || {
+        for _ in 0..2 {
+            gpu.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        }
+    };
+    let mut line = format!("start {:.0}", private_mib());
+    for _ in 0..6 {
+        let mut source = sources::load(&gpu, &theme, &[]).unwrap();
+        let kept = KeptFrame::new(&gpu, source.render_size(SIZE));
+        let targets: Vec<_> = (0..2)
+            .map(|_| {
+                gpu.texture(
+                    "screen stand-in",
+                    SIZE,
+                    gpu.format,
+                    wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                    None,
+                )
+            })
+            .collect();
+        let mut glass = GlassPass::new(Some(&[monitor, monitor])).unwrap();
+        glass.set_plates(fixture(0.0));
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        source.render(
+            &gpu,
+            Frame {
+                screen: 0,
+                size: kept.size(),
+                mouse: [0.0, 0.0],
+                clock: Duration::from_secs(5),
+                frame: 1,
+                view: &kept.view,
+                encoder: &mut encoder,
+            },
+        );
+        kept.drawn.set(Some(1));
+        for (i, target) in targets.iter().enumerate() {
+            let view = target.create_view(&Default::default());
+            kept.restore(&gpu, target, &view, &mut encoder);
+            glass.encode(&gpu, i, &kept, target, &mut encoder);
+        }
+        gpu.queue.submit([encoder.finish()]);
+        wait();
+        line += &format!(" | drawn {:.0}", private_mib());
+        drop((source, kept, targets, glass));
+        wait();
+        std::thread::sleep(Duration::from_secs(4));
+        line += &format!(" released {:.0}", private_mib());
+    }
+    eprintln!("{line}");
 }
 
 /// Idles 12 s in each of three states, for a wake sampler run alongside on this process: the
@@ -677,7 +930,9 @@ fn idle() {
         eprintln!("PHASE {name} pid {} at {:?}", std::process::id(), std::time::SystemTime::now());
         std::thread::sleep(Duration::from_secs(12));
     };
-    let gpu = Gpu::opened(crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto));
+    let gpu = Gpu::opened(crate::gpu::Opening::start(
+        mypaper_config::GpuPreference::Auto,
+    ));
     let mut source = sources::load(&gpu, &theme, &[]).unwrap();
     let kept = KeptFrame::new(&gpu, source.render_size(SIZE));
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
@@ -699,6 +954,65 @@ fn idle() {
     drop((source, kept));
     gpu.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
     phase("device only");
+    drop(gpu);
+    phase("no device");
+}
+
+/// Like [`idle`], with a swapchain: which driver threads presenting adds and whether they outlive
+/// the swapchain (the engine releases it while every screen is covered, keeping the device). A
+/// hidden window of the engine's class, a few presented frames, then 12 s each: presented,
+/// swapchain released, no device.
+/// `cargo test -p mypaper-wallpaper --release lab::idle_present -- --ignored --exact --nocapture`
+#[test]
+#[ignore = "dev tool: sample this process's thread wakes while it runs"]
+fn idle_present() {
+    use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, WS_POPUP};
+    let phase = |name: &str| {
+        eprintln!("PHASE {name} pid {} at {:?}", std::process::id(), std::time::SystemTime::now());
+        std::thread::sleep(Duration::from_secs(12));
+    };
+    let _ = crate::window::register_class();
+    // SAFETY: the engine's registered class; a hidden popup this test owns (`Window` drops it).
+    let hwnd = unsafe {
+        CreateWindowExW(
+            Default::default(),
+            windows::core::w!("mypaper.wallpaper"),
+            windows::core::w!("lab present"),
+            WS_POPUP,
+            0,
+            0,
+            640,
+            360,
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+    .unwrap();
+    let windows = vec![crate::window::Window(hwnd)];
+    let opening = crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto);
+    let (gpu, surfaces) = Gpu::new(opening, &windows).unwrap();
+    let window = windows.into_iter().next().unwrap();
+    let surface = surfaces.into_iter().next().unwrap();
+    let mut screen = crate::gpu::Screen::new(&gpu, surface, window).unwrap();
+    for _ in 0..3 {
+        if let Some(texture) = screen.acquire(&gpu) {
+            let view = texture.texture.create_view(&Default::default());
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            drop(sources::begin(&mut encoder, &view, wgpu::LoadOp::Clear(wgpu::Color::BLACK)));
+            gpu.queue.submit([encoder.finish()]);
+            gpu.queue.present(texture);
+        }
+    }
+    gpu.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    phase("presented");
+    screen.release();
+    for _ in 0..2 {
+        gpu.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    }
+    phase("swapchain released");
+    drop(screen);
     drop(gpu);
     phase("no device");
 }

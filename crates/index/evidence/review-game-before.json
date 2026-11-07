@@ -1,0 +1,264 @@
+{
+    "index_pid":  67152,
+    "fixture_pid":  81024,
+    "seconds":  30.3585446,
+    "burst_files":  20000,
+    "burst_ms":  15069.1393,
+    "entries_before_game":  5988611,
+    "warmup_queries":  22,
+    "before_private_bytes":  18968576,
+    "before_working_set_bytes":  67026944,
+    "cpu_core_pct":  0,
+    "context_switches_per_second":  0,
+    "max_private_bytes":  18968576,
+    "max_working_set_bytes":  1146880,
+    "final_private_bytes":  18968576,
+    "final_working_set_bytes":  1146880,
+    "threads":  [
+                    {
+                        "tid":  92772,
+                        "name":  "main",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  48916,
+                        "name":  "index-parent",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  62584,
+                        "name":  "fswatch-mypaper",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  86260,
+                        "name":  "index-game",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  36744,
+                        "name":  "index-pipe-0",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  85920,
+                        "name":  "index-pipe-1",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  76296,
+                        "name":  "index-pipe-2",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  3368,
+                        "name":  "index-pipe-3",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  56280,
+                        "name":  "index-delivery-C:\\",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  12788,
+                        "name":  "index-watch-C:\\",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  92864,
+                        "name":  "index-delivery-D:\\",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  17080,
+                        "name":  "index-watch-D:\\",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  51652,
+                        "name":  "index-delivery-E:\\",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  70504,
+                        "name":  "index-watch-E:\\",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  26336,
+                        "name":  "fswatch-mypaper",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  69348,
+                        "name":  "index-search-0",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  60624,
+                        "name":  "index-search-1",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  43132,
+                        "name":  "index-search-2",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  47960,
+                        "name":  "index-search-3",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  93772,
+                        "name":  "index-search-4",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  73660,
+                        "name":  "index-search-5",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  38304,
+                        "name":  "index-search-6",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    },
+                    {
+                        "tid":  84416,
+                        "name":  "index-search-7",
+                        "context_switches":  0,
+                        "switches_per_second":  0
+                    }
+                ],
+    "samples":  [
+                    {
+                        "second":  1,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  2,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  3,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  4,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  5,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  6,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  7,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  8,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  9,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  10,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  11,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  12,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  13,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  14,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    },
+                    {
+                        "second":  15,
+                        "private_bytes":  18968576,
+                        "working_set_bytes":  1146880,
+                        "pause_background":  true,
+                        "foreground_pid":  81024
+                    }
+                ]
+}

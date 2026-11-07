@@ -247,6 +247,7 @@ pub struct Surface {
     /// The engine glass wanted under the body, and whether it is open (only while shown).
     glass: Cell<Option<crate::glass::Glass>>,
     glass_open: Cell<bool>,
+    glass_style: Cell<crate::glass::GlassStyle>,
 }
 
 impl Surface {
@@ -417,6 +418,7 @@ impl Surface {
             alpha: 255,
             glass: Cell::new(None),
             glass_open: Cell::new(false),
+            glass_style: Cell::new(crate::glass::GlassStyle::default()),
         }
     }
 
@@ -459,6 +461,16 @@ impl Surface {
         }
     }
 
+    /// Sets cached optics before showing a surface; changing them updates an open backdrop.
+    pub fn set_glass_style(&self, style: crate::glass::GlassStyle) {
+        if self.glass_style.replace(style) != style
+            && self.glass_open.get()
+            && let Some(backdrop) = crate::glass::backdrop()
+        {
+            backdrop.style(self.hwnd, &style);
+        }
+    }
+
     /// Whether engine glass is open under the surface.
     pub fn has_glass(&self) -> bool {
         self.glass_open.get()
@@ -467,7 +479,13 @@ impl Surface {
     fn open_glass(&self) {
         if let (Some(glass), Some(backdrop)) = (self.glass.get(), crate::glass::backdrop()) {
             let shape = glass.shape(self.origin);
-            let opened = backdrop.open(self.hwnd, shape, glass.radius, &glass.material);
+            let opened = backdrop.open_styled(
+                self.hwnd,
+                shape,
+                glass.radius,
+                &glass.material,
+                &self.glass_style.get(),
+            );
             self.glass_open.set(opened);
         }
     }

@@ -200,6 +200,10 @@ fn serve_one(handle: HANDLE, state: &RwLock<State>) -> Result<()> {
             Request::Search { query: text, limit } => query::search(&state.store, &text, limit),
             Request::Sizes { path, limit } => state.store.sizes(&path, limit),
             Request::Status => Vec::new(),
+            Request::Rescan => {
+                state.rescan()?;
+                Vec::new()
+            }
         };
         if queried {
             state.queried();
@@ -228,6 +232,13 @@ fn serve_one(handle: HANDLE, state: &RwLock<State>) -> Result<()> {
     Ok(())
 }
 
+/// Isolate an individual transaction when the binary is built with unwinding. A request
+/// panic releases its read guard and the listener still disconnects/reuses its pipe.
+fn transaction(serve: impl FnOnce() -> Result<()>) -> Result<()> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(serve))
+        .map_err(|_| anyhow::anyhow!("index pipe transaction panicked"))?
+}
+
 pub fn start(state: Arc<RwLock<State>>) -> Result<()> {
     // Create all listeners before starting workers. The first-instance check rejects squatting.
     let listeners = [
@@ -254,8 +265,10 @@ pub fn start(state: Arc<RwLock<State>>) -> Result<()> {
                         .as_ref()
                         .err()
                         .is_some_and(|e| e.code() == ERROR_PIPE_CONNECTED.to_hresult());
-                    if connected || complete(handle.0, &mut operation, connect, INFINITE).is_ok() {
-                        let _ = serve_one(handle.0, &state);
+                    if (connected || complete(handle.0, &mut operation, connect, INFINITE).is_ok())
+                        && let Err(error) = transaction(|| serve_one(handle.0, &state))
+                    {
+                        eprintln!("index pipe client: {error:#}");
                     }
                     // SAFETY: disconnect only this worker's completed client transaction.
                     let _ = unsafe { DisconnectNamedPipe(handle.0) };
@@ -263,4 +276,29 @@ pub fn start(state: Arc<RwLock<State>>) -> Result<()> {
             })?;
     }
     Ok(())
+}
+
+// This workspace's Windows Cranelift debug backend cannot unwind. Exercise containment
+// under the same LLVM backend as deployment: cargo test --release -p mypaper-index.
+#[cfg(all(test, not(debug_assertions)))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn panicked_client_releases_read_guard_and_listener_serves_next_transaction() {
+        let store = RwLock::new(0);
+        assert!(
+            transaction(|| {
+                let _read = store.read().unwrap();
+                panic!("injected client panic");
+            })
+            .is_err()
+        );
+        transaction(|| {
+            *store.write().unwrap() += 1;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(*store.read().unwrap(), 1);
+    }
 }

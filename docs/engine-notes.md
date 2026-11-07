@@ -15,6 +15,15 @@ costs as much as one kept forever. Reproduce with the ignored dev tests in `src/
 `lab::memory` (private bytes after each allocation step of a two-screen engine) and
 `lab::memory_hints` (screen-sized textures allocated, freed and allocated again).
 
+*Correction (6 November 2026).* Freed memory does come back, on both GPUs, a few seconds late:
+the driver frees a released resource's heap after a delay, so a reading taken right after the
+drop still shows the peak. `lab::release_cycles` (the source, a kept frame, two 2560x1440
+targets and glass made and dropped six times on one device, read 4 s after each drop): AMD iGPU
+drawn 179 -> released 77 MiB, RTX 188 -> 110 MiB; over the six cycles the released figure creeps
+up for a few cycles and then stays (iGPU 77 -> 112, RTX 110 -> 125 MiB). Textures on the RTX are
+process memory too. This is what lets the engine release its drawing while every screen is
+covered (docs/performance.md, "Hidden = free").
+
 | Allocation | Before | After | Change |
 |---|---:|---:|---|
 | wgpu device | +188 MiB | **+97 MiB** | `max_non_sampler_bindings` 1,000,000 -> 16,384: wgpu's DX12 backend allocates its shader-visible view descriptor heap at that size up front (`gpu.rs`, `DESCRIPTORS`) |
@@ -367,6 +376,34 @@ it. Invalid live config keeps the last valid settings. Studio controls are defer
 The shared schema types are `mypaper_config::{GpuPreference, RenderOptions, EngineConfig,
 RenderSettings}`; theme `engine` uses `RenderOptions`. See their exact fields in
 `crates/config/src/engine.rs`.
+
+**During games** (`"engine": { "during_games": "pause" }`, the default; `"keep"` turns it off;
+written to the file only when kept). While core's game signal is on (docs/system.md, "Games":
+a fullscreen or Direct3D app in front), the engine reveals the installed theme still immediately
+on screens that remain visible. That same still stays on screen when, after 10 s, the engine
+releases its drawing exactly as when every screen is covered (docs/performance.md, "Hidden
+= free"): the swapchains, kept frames, pyramids and releasable source go. When the signal clears,
+the windows stay hidden over the still until a fresh live frame is presented, including holds
+shorter than 10 s. Without an installed snapshot (`static_snapshot` off, or an unsupported source),
+the current frame stays held and drawing is kept. The engine follows the signal with a directory
+notification and the publisher's process handle in its wait set: no timer, and nothing at all
+with `"keep"`. A game on one monitor no longer leaves the other one animating or the drawing held.
+
+Live, a borderless topmost window of our own covering only the primary monitor
+(`examples/game_primary.rs`, foreground, so the signal reads `Fullscreen`), DISPLAY2 uncovered,
+rain-city, 20 s sampled from 14-16 s into the "game":
+
+| | Engine CPU, one core | Engine private | Engine wakes/s |
+|---|---:|---:|---:|
+| Before (held by the fullscreen check, not released) | 0.078 % | 208.7 MiB | 93.2 |
+| After (`pause`: released 10 s in) | **0.000 %** | **124.7 MiB** | 90.9 |
+
+What wakes is the NVIDIA driver's two device threads (docs/performance.md, round 3). When the game
+ended, the first frame came 73.9 ms later (private 171 MiB). Those measurements preceded the
+still-at-hold change: the old path visibly swapped the held animated frame for the theme's still
+at release. The engine now reveals that still at hold start, so release cannot change the image.
+Snapshot completion wakes the engine once to re-evaluate this policy even if it is already held;
+there is no readiness timer. Live capture evidence is in `crates/wallpaper/evidence/watch-merge`.
 
 ### Shader image inputs
 

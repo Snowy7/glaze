@@ -1,0 +1,31 @@
+﻿{
+    "cached_ready_ms":  221.23950000000002,
+    "live_during_delay_ms":  224.14520000000002,
+    "offline_catchup_ms":  5300.2588000000005,
+    "offline_creation":  true,
+    "offline_deletion":  true,
+    "offline_resize_bytes":  21,
+    "unchanged_ancestor_fallback":  true,
+    "recent_volume_skipped":  true,
+    "recent_run_cpu_ms":  62.5,
+    "manual_rescan_ms":  138.4685,
+    "log":  [
+                "1793957633005 82792 start; panic=abort",
+                "1793957633047 82792 startup catch-up: 1 stale, 0 recent volumes; delay=1s",
+                "1793957634059 82792 catch-up C:\\mypaper-targets\\index\\startup-fixture-19deb60036da4b25be0abd566a3d22c3\\root: 1 changed top-level markers; recursive drift unverified, full fallback",
+                "1793957634078 82792 scan C:\\mypaper-targets\\index\\startup-fixture-19deb60036da4b25be0abd566a3d22c3\\root: 5 entries, 0.000s, 0 inaccessible directories",
+                "1793957634100 82792 initial reconciliation and notification replay complete",
+                "1793957634261 3328 start; panic=abort",
+                "1793957634290 3328 startup catch-up: 1 stale, 0 recent volumes; delay=5s",
+                "1793957639317 3328 catch-up C:\\mypaper-targets\\index\\startup-fixture-19deb60036da4b25be0abd566a3d22c3\\root: 0 changed top-level markers; recursive drift unverified, full fallback",
+                "1793957639339 3328 scan C:\\mypaper-targets\\index\\startup-fixture-19deb60036da4b25be0abd566a3d22c3\\root: 6 entries, 0.000s, 0 inaccessible directories",
+                "1793957639386 3328 initial reconciliation and notification replay complete",
+                "1793957639634 87972 start; panic=abort",
+                "1793957639667 87972 startup catch-up: 0 stale, 1 recent volumes; delay=1s",
+                "1793957642678 87972 manual full rescan requested",
+                "1793957642705 87972 catch-up C:\\mypaper-targets\\index\\startup-fixture-19deb60036da4b25be0abd566a3d22c3\\root: 0 changed top-level markers; recursive drift unverified, full fallback",
+                "1793957642725 87972 scan C:\\mypaper-targets\\index\\startup-fixture-19deb60036da4b25be0abd566a3d22c3\\root: 6 entries, 0.000s, 0 inaccessible directories",
+                "1793957642748 87972 initial reconciliation and notification replay complete"
+            ],
+    "exe_sha256":  "185A8FF0134A0389BEECD8048DD52BE749C9555189975A631DE9FD1789B00642"
+}

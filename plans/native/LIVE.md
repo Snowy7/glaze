@@ -18,6 +18,12 @@ lock, leave the desktop restored, kill headless browsers) still applies.
 - Keep every saved state compiling. Change shared APIs additively first, migrate callers, then
   remove the old API in the same commit series. If `cargo check` fails in files you don't own,
   wait a minute and retry; don't fix them.
+- Deploy only with `scripts/deploy-local.ps1` from `C:\mypaper-targets\main` built from the shared
+  checkout. Never copy exes from a snapshot or private target into `target\release`: it puts other
+  agents' work back to an older build (2026-11-06 07:18).
+- A multi-step refactor that can't compile midway happens in a copy (`git archive` snapshot), not
+  in the shared files. If someone else's crate is broken when you need to deploy, build with
+  `--workspace --exclude <their crate>`; their last built exe ships unchanged.
 - `cargo check -p <crate>` / `cargo test -p <crate>` for the crates you touch. Cargo serializes on
   the target lock; that's expected.
 

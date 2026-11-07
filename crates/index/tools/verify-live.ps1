@@ -1,7 +1,7 @@
 # Verify the real watch -> store -> pipe path using files owned by this fixture only.
 param([string]$Exe = 'C:\mypaper-targets\index\release\mypaper-index.exe', [int]$Files = 2000)
 $ErrorActionPreference = 'Stop'
-$scratchBase = 'C:\mypaper-targets\index\scratch'
+$scratchBase = Join-Path $env:USERPROFILE 'mypaper-index-fixtures'
 $tag = 'mypaper-index-live-' + [Guid]::NewGuid().ToString('N').Substring(0,12)
 $scratch = [IO.Path]::GetFullPath((Join-Path $scratchBase $tag))
 if (-not $scratch.StartsWith($scratchBase + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid fixture path' }

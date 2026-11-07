@@ -1,0 +1,24 @@
+11:07:52 settings rounds start (10); styler 68212: 2.5 MB priv
+11:07:52 [start] shell 76024: 1,123.6 MB priv, 7729 handles
+11:08:04 round 1: settings 45424 at 103.9 MB priv with two pages open; exited 0.5 s after closing; focus kept False/True; styler 68212: 3.2 MB priv
+11:08:04 [after round 1] shell 76024: 1,124.3 MB priv, 7806 handles
+11:08:30 round 2: settings 81536 at 99.8 MB priv with two pages open; exited 0.5 s after closing; focus kept False/True; styler 68212: 3.2 MB priv
+11:08:30 [after round 2] shell 76024: 1,124.6 MB priv, 7811 handles
+11:09:25   (waited 39 s for the user to be idle)
+11:09:36 round 3: settings 60888 at 87.4 MB priv with two pages open; exited 0.5 s after closing; focus kept True/True; styler 68212: 3.1 MB priv
+11:09:36 [after round 3] shell 76024: 1,122.4 MB priv, 7793 handles
+11:10:02 round 4: settings 30936 at 95.3 MB priv with two pages open; exited 0.5 s after closing; focus kept True/True; styler 68212: 3.0 MB priv
+11:10:02 [after round 4] shell 76024: 1,122.6 MB priv, 7798 handles
+11:10:30 round 5: settings 16064 at 98.9 MB priv with two pages open; exited 1.1 s after closing; focus kept True/True; styler 68212: 3.0 MB priv
+11:10:30 [after round 5] shell 76024: 1,133.7 MB priv, 8240 handles
+11:10:59 round 6: settings 38776 at 94.8 MB priv with two pages open; exited 0.5 s after closing; focus kept True/True; styler 68212: 3.0 MB priv
+11:10:59 [after round 6] shell 76024: 1,133.7 MB priv, 8231 handles
+11:11:28 round 7: settings 54312 at 41.5 MB priv with two pages open; exited 1.5 s after closing; focus kept True/True; styler 68212: 3.0 MB priv
+11:11:28 [after round 7] shell 76024: 1,134.1 MB priv, 8237 handles
+11:11:55 round 8: settings 89820 at 90.8 MB priv with two pages open; exited 0.5 s after closing; focus kept True/True; styler 68212: 3.0 MB priv
+11:11:55 [after round 8] shell 76024: 1,133.6 MB priv, 8180 handles
+11:12:21 round 9: settings 11276 at 95.8 MB priv with two pages open; exited 0.5 s after closing; focus kept True/True; styler 68212: 3.0 MB priv
+11:12:21 [after round 9] shell 76024: 1,134.1 MB priv, 8309 handles
+11:12:48 round 10: settings 15248 at 91.1 MB priv with two pages open; exited 0.5 s after closing; focus kept True/True; styler 68212: 3.1 MB priv
+11:12:48 [after round 10] shell 76024: 1,134.0 MB priv, 8292 handles
+11:12:48 settings rounds done

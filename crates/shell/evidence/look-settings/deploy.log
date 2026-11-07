@@ -1,0 +1,57 @@
+Microsoft (R) MakeAppx Tool
+
+Copyright (C) 2013 Microsoft.  All rights reserved.
+
+
+
+The path (/p) parameter is: "\\?\D:\Coding\projects\desktop\wallpaper\target\package\mypaper.Desktop.msix"
+
+The content directory (/d) parameter is: "\\?\D:\Coding\projects\desktop\wallpaper\target\package\66d994f698194cec971630ec99f20397"
+
+Enumerating files from directory "\\?\D:\Coding\projects\desktop\wallpaper\target\package\66d994f698194cec971630ec99f20397"
+
+Packing 4 file(s) in "\\?\D:\Coding\projects\desktop\wallpaper\target\package\66d994f698194cec971630ec99f20397" (content directory) to "\\?\D:\Coding\projects\desktop\wallpaper\target\package\mypaper.Desktop.msix" (output file name).
+
+Memory limit defaulting to 16705343488 bytes.
+
+Using "\\?\D:\Coding\projects\desktop\wallpaper\target\package\66d994f698194cec971630ec99f20397\AppxManifest.xml" as the manifest for the package.
+
+Processing "\\?\D:\Coding\projects\desktop\wallpaper\target\package\66d994f698194cec971630ec99f20397\Assets\StoreLogo.png" as a payload file.  Its path in the package will be "Assets\StoreLogo.png".
+
+Processing "\\?\D:\Coding\projects\desktop\wallpaper\target\package\66d994f698194cec971630ec99f20397\Assets\Square44x44Logo.png" as a payload file.  Its path in the package will be "Assets\Square44x44Logo.png".
+
+Processing "\\?\D:\Coding\projects\desktop\wallpaper\target\package\66d994f698194cec971630ec99f20397\Assets\Square150x150Logo.png" as a payload file.  Its path in the package will be "Assets\Square150x150Logo.png".
+
+Package creation succeeded.
+
+Done Adding Additional Store
+Successfully signed: D:\Coding\projects\desktop\wallpaper\target\package\mypaper.Desktop.msix
+
+Signed with FDD93C684102679B22AA837EE54E9326B96D4BED (CurrentUser\My).
+
+ProcessName          Id Path                                                                     
+-----------          -- ----                                                                     
+mypaper-core      22844 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-core.exe     
+mypaper-files     68900 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-files.exe    
+mypaper-index     56056 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-index.exe    
+mypaper-plugins   54116 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-plugins.exe  
+mypaper-shell     27612 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-shell.exe    
+mypaper-studio    61588 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-studio.exe   
+mypaper-wallpaper 12276 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-wallpaper.exe
+
+
+WARNING: Studio is open; leaving it running (its exe is swapped below)
+WARNING: Studio is open on the old build; restart it to update (the new exe is in place)
+Identity already registered at D:\Coding\projects\desktop\wallpaper\target\release; keeping consent and registration.
+
+ProcessName          Id MB
+-----------          -- --
+mypaper-core      46740 15
+mypaper-files     68900 86
+mypaper-index     81524 21
+mypaper-plugins   71384 20
+mypaper-shell     70788 90
+mypaper-studio    61588 43
+mypaper-wallpaper 79824 15
+
+

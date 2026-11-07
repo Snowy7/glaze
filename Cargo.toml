@@ -14,6 +14,7 @@ license = "MIT"
 mypaper-glass-ipc = { path = "crates/glass-ipc" }
 mypaper-theme = { path = "crates/theme" }
 mypaper-config = { path = "crates/config" }
+mypaper-fswatch = { path = "crates/fswatch" }
 mypaper-index = { path = "crates/index" }
 mypaper-desktop = { path = "crates/desktop" }
 mypaper-inject = { path = "crates/inject" }

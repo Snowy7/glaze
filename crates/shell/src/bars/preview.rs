@@ -49,7 +49,12 @@ const TITLE: f32 = 30.0;
 /// dock: a common width), capped for very wide (tall) windows, and each cell exactly as wide as
 /// its thumbnail unless the title bar needs more room. Rows fit `room` with even padding; returns
 /// the cells that fit (at least one) and the popup's size.
-fn layout(aspects: &[f32], room: (f32, f32), scale: f32, vertical: bool) -> (Vec<Cell>, (u32, u32)) {
+fn layout(
+    aspects: &[f32],
+    room: (f32, f32),
+    scale: f32,
+    vertical: bool,
+) -> (Vec<Cell>, (u32, u32)) {
     let px = |v: f32| (v * scale).round();
     let (pad, gap, title) = (px(8.0), px(8.0), px(TITLE));
     let (mut x, mut y, mut row, mut right) = (pad, pad, 0.0_f32, pad);
@@ -140,7 +145,7 @@ fn glass(tokens: &Tokens, scale: f32, size: (u32, u32)) -> Option<mypaper_ui::Gl
         .filter(|_| mypaper_ui::glass::available())
         .map(|m| mypaper_ui::Glass {
             body: Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32),
-            radius: tokens.radius * scale,
+            radius: (tokens.radius * scale).round(),
             material: mypaper_ui::GlassMaterial {
                 clarity: m.clarity,
                 blur: m.blur * scale,
@@ -173,7 +178,11 @@ fn view(
     let body = Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32);
     let radius = f.px(tokens.radius);
     f.fill(body, radius, Rgba::HIT);
-    f.surface_shaped(body, radius, glass(tokens, scale, size).is_some());
+    let has_glass = glass(tokens, scale, size).is_some();
+    f.surface_shaped(body, radius, has_glass);
+    if has_glass && let Some(color) = tokens.theme.border {
+        f.push(Op::Stroke {rect:body.inflate(-0.5), radius:(radius-0.5).max(0.0), width:1.0, color});
+    }
     let c = tokens.theme.color;
     let corner = corner(tokens, scale);
     for (k, cell) in cells.iter().enumerate() {
@@ -236,6 +245,7 @@ fn view(
             );
         }
     }
+    mypaper_ui::geom::continuous::surface(&mut f.list, body, tokens.glass_style.smoothing);
     f.list
 }
 
@@ -306,7 +316,13 @@ impl Preview {
     /// Registers the thumbnails from window `start` on, lays their cells out at their windows'
     /// aspect ratios, presents the popup over the anchor and places the thumbnails.
     fn lay_out(&mut self, ui: &mut Ui) -> Result<()> {
-        let hwnds: Vec<_> = self.item.windows.iter().skip(self.start).map(|w| w.hwnd).collect();
+        let hwnds: Vec<_> = self
+            .item
+            .windows
+            .iter()
+            .skip(self.start)
+            .map(|w| w.hwnd)
+            .collect();
         self.sizes = self.thumbnails.open(self.surface.hwnd(), &hwnds);
         let screen = mypaper_ui::screen_at(self.anchor.left as i32, self.anchor.top as i32);
         let room = (
@@ -339,10 +355,18 @@ impl Preview {
         // Wholly on the anchor's monitor, inside its work area.
         let (work, margin) = (screen.work, 8);
         self.origin = (
-            x.clamp(work.0 + margin, (work.2 - margin - size.0 as i32).max(work.0)),
-            y.clamp(work.1 + margin, (work.3 - margin - size.1 as i32).max(work.1)),
+            x.clamp(
+                work.0 + margin,
+                (work.2 - margin - size.0 as i32).max(work.0),
+            ),
+            y.clamp(
+                work.1 + margin,
+                (work.3 - margin - size.1 as i32).max(work.1),
+            ),
         );
-        self.surface.set_glass(glass(&self.tokens, self.scale, size));
+        self.surface.set_glass_style(self.tokens.glass_style);
+        self.surface
+            .set_glass(glass(&self.tokens, self.scale, size));
         self.present(ui)?;
         let placements: Vec<_> = self
             .sizes
@@ -419,7 +443,12 @@ mod tests {
     #[test]
     fn cells_keep_their_windows_aspect_between_the_width_limits_and_fit_the_room() {
         for scale in [1.0, 1.5, 2.0] {
-            let (cells, size) = layout(&[16.0 / 9.0, 0.5, 4.0], (2000.0 * scale, 800.0), scale, false);
+            let (cells, size) = layout(
+                &[16.0 / 9.0, 0.5, 4.0],
+                (2000.0 * scale, 800.0),
+                scale,
+                false,
+            );
             let [wide, tall, ultra] = [cells[0], cells[1], cells[2]].map(|c| c.thumb);
             assert!((wide.width() / wide.height() - 16.0 / 9.0).abs() < 0.02);
             // A common thumbnail height; the tall one's cell is only as wide as its title bar.
@@ -434,7 +463,9 @@ mod tests {
             for c in &cells {
                 assert_eq!(c.thumb.bottom, c.rect.bottom);
                 assert!(c.rect.left >= pad && c.rect.top >= pad);
-                assert!(c.rect.right <= size.0 as f32 - pad && c.rect.bottom <= size.1 as f32 - pad);
+                assert!(
+                    c.rect.right <= size.0 as f32 - pad && c.rect.bottom <= size.1 as f32 - pad
+                );
             }
             for vertical in [false, true] {
                 let (cells, size) = layout(&[1.6; 75], (640.0, 480.0), scale, vertical);

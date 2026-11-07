@@ -253,9 +253,33 @@ fn decode(bytes: &[u8]) -> Option<String> {
     )
 }
 
+/// Soft-wrap without splitting UTF-8 code points, retaining blank lines and indentation.
+pub fn wrapped(lines: &[String], columns: usize) -> Vec<String> {
+    let columns = columns.max(1);
+    let mut rows = Vec::new();
+    for line in lines {
+        let mut chars = line.chars().peekable();
+        if chars.peek().is_none() {
+            rows.push(String::new());
+        }
+        while chars.peek().is_some() {
+            rows.push(chars.by_ref().take(columns).collect());
+        }
+    }
+    rows
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn wrapping_preserves_unicode_indentation_and_blank_lines() {
+        assert_eq!(
+            wrapped(&["  abcé".into(), "".into()], 3),
+            ["  a", "bcé", ""]
+        );
+        assert_eq!(wrapped(&["é界".into()], 0), ["é", "界"]);
+    }
     #[test]
     fn text_is_bounded_and_encodings_do_not_execute_content() {
         assert_eq!(decode(b"\xef\xbb\xbfhello").as_deref(), Some("hello"));

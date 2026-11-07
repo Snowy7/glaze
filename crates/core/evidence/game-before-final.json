@@ -1,0 +1,598 @@
+﻿{
+    "label":  "before-final",
+    "seconds":  60.0136623,
+    "signal_before":  {
+                          "publisher_pid":  86448,
+                          "publisher_started":  134384129259067643,
+                          "activity":  {
+                                           "pause_background":  false,
+                                           "reason":  "idle",
+                                           "foreground_pid":  27116
+                                       }
+                      },
+    "processes":  [
+                      {
+                          "name":  "mypaper-core",
+                          "pid":  86448,
+                          "cpu_ms":  0,
+                          "cpu_core_pct":  0,
+                          "private_before_mib":  2.92,
+                          "private_after_mib":  2.92,
+                          "switches_per_second":  38.625,
+                          "threads":  [
+                                          {
+                                              "tid":  50912,
+                                              "switches":  585
+                                          },
+                                          {
+                                              "tid":  79940,
+                                              "switches":  580
+                                          },
+                                          {
+                                              "tid":  65248,
+                                              "switches":  558
+                                          },
+                                          {
+                                              "tid":  22464,
+                                              "switches":  556
+                                          },
+                                          {
+                                              "tid":  64100,
+                                              "switches":  39
+                                          },
+                                          {
+                                              "tid":  29868,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  28548,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  41652,
+                                              "switches":  0
+                                          }
+                                      ]
+                      },
+                      {
+                          "name":  "mypaper-index",
+                          "pid":  80760,
+                          "cpu_ms":  38203.125,
+                          "cpu_core_pct":  63.6574,
+                          "private_before_mib":  105.15,
+                          "private_after_mib":  91.01,
+                          "switches_per_second":  702.573,
+                          "threads":  [
+                                          {
+                                              "tid":  17268,
+                                              "switches":  10127
+                                          },
+                                          {
+                                              "tid":  45332,
+                                              "switches":  8443
+                                          },
+                                          {
+                                              "tid":  54340,
+                                              "switches":  6622
+                                          },
+                                          {
+                                              "tid":  68908,
+                                              "switches":  6589
+                                          },
+                                          {
+                                              "tid":  48120,
+                                              "switches":  1952
+                                          },
+                                          {
+                                              "tid":  61460,
+                                              "switches":  1866
+                                          },
+                                          {
+                                              "tid":  44660,
+                                              "switches":  1360
+                                          },
+                                          {
+                                              "tid":  45616,
+                                              "switches":  1306
+                                          },
+                                          {
+                                              "tid":  60756,
+                                              "switches":  1305
+                                          },
+                                          {
+                                              "tid":  32100,
+                                              "switches":  1286
+                                          },
+                                          {
+                                              "tid":  25012,
+                                              "switches":  573
+                                          },
+                                          {
+                                              "tid":  41084,
+                                              "switches":  555
+                                          },
+                                          {
+                                              "tid":  25040,
+                                              "switches":  94
+                                          },
+                                          {
+                                              "tid":  88608,
+                                              "switches":  86
+                                          },
+                                          {
+                                              "tid":  30632,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  57596,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  68552,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  86536,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  59692,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  77492,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  92496,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  43488,
+                                              "switches":  0
+                                          }
+                                      ]
+                      },
+                      {
+                          "name":  "mypaper-plugins",
+                          "pid":  50028,
+                          "cpu_ms":  15.625,
+                          "cpu_core_pct":  0.026,
+                          "private_before_mib":  12.89,
+                          "private_after_mib":  12.77,
+                          "switches_per_second":  2.933,
+                          "threads":  [
+                                          {
+                                              "tid":  92980,
+                                              "switches":  52
+                                          },
+                                          {
+                                              "tid":  9128,
+                                              "switches":  35
+                                          },
+                                          {
+                                              "tid":  70264,
+                                              "switches":  29
+                                          },
+                                          {
+                                              "tid":  25136,
+                                              "switches":  25
+                                          },
+                                          {
+                                              "tid":  42904,
+                                              "switches":  23
+                                          },
+                                          {
+                                              "tid":  14052,
+                                              "switches":  11
+                                          },
+                                          {
+                                              "tid":  77548,
+                                              "switches":  1
+                                          },
+                                          {
+                                              "tid":  71244,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  52752,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  37208,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  31072,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  71920,
+                                              "switches":  0
+                                          }
+                                      ]
+                      },
+                      {
+                          "name":  "mypaper-shell",
+                          "pid":  26616,
+                          "cpu_ms":  156.25,
+                          "cpu_core_pct":  0.2604,
+                          "private_before_mib":  35.88,
+                          "private_after_mib":  34.7,
+                          "switches_per_second":  115.04,
+                          "threads":  [
+                                          {
+                                              "tid":  66468,
+                                              "switches":  1465
+                                          },
+                                          {
+                                              "tid":  54000,
+                                              "switches":  589
+                                          },
+                                          {
+                                              "tid":  68252,
+                                              "switches":  574
+                                          },
+                                          {
+                                              "tid":  13836,
+                                              "switches":  568
+                                          },
+                                          {
+                                              "tid":  40940,
+                                              "switches":  567
+                                          },
+                                          {
+                                              "tid":  12708,
+                                              "switches":  566
+                                          },
+                                          {
+                                              "tid":  67040,
+                                              "switches":  561
+                                          },
+                                          {
+                                              "tid":  52352,
+                                              "switches":  557
+                                          },
+                                          {
+                                              "tid":  13820,
+                                              "switches":  241
+                                          },
+                                          {
+                                              "tid":  66168,
+                                              "switches":  157
+                                          },
+                                          {
+                                              "tid":  92192,
+                                              "switches":  140
+                                          },
+                                          {
+                                              "tid":  38308,
+                                              "switches":  127
+                                          },
+                                          {
+                                              "tid":  90976,
+                                              "switches":  117
+                                          },
+                                          {
+                                              "tid":  92648,
+                                              "switches":  107
+                                          },
+                                          {
+                                              "tid":  76500,
+                                              "switches":  97
+                                          },
+                                          {
+                                              "tid":  63568,
+                                              "switches":  88
+                                          },
+                                          {
+                                              "tid":  7616,
+                                              "switches":  75
+                                          },
+                                          {
+                                              "tid":  78216,
+                                              "switches":  61
+                                          },
+                                          {
+                                              "tid":  78348,
+                                              "switches":  49
+                                          },
+                                          {
+                                              "tid":  22320,
+                                              "switches":  41
+                                          },
+                                          {
+                                              "tid":  23480,
+                                              "switches":  36
+                                          },
+                                          {
+                                              "tid":  45428,
+                                              "switches":  32
+                                          },
+                                          {
+                                              "tid":  68268,
+                                              "switches":  24
+                                          },
+                                          {
+                                              "tid":  67972,
+                                              "switches":  20
+                                          },
+                                          {
+                                              "tid":  40832,
+                                              "switches":  17
+                                          },
+                                          {
+                                              "tid":  51308,
+                                              "switches":  15
+                                          },
+                                          {
+                                              "tid":  89272,
+                                              "switches":  7
+                                          },
+                                          {
+                                              "tid":  67836,
+                                              "switches":  2
+                                          },
+                                          {
+                                              "tid":  49772,
+                                              "switches":  2
+                                          },
+                                          {
+                                              "tid":  40608,
+                                              "switches":  2
+                                          },
+                                          {
+                                              "tid":  62904,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  49628,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  55668,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  73424,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  86640,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  58948,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  30936,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  53344,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  90120,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  89720,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  28628,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  83916,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  40596,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  59876,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  22048,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  21300,
+                                              "switches":  0
+                                          }
+                                      ]
+                      },
+                      {
+                          "name":  "mypaper-studio",
+                          "pid":  32732,
+                          "cpu_ms":  0,
+                          "cpu_core_pct":  0,
+                          "private_before_mib":  68.83,
+                          "private_after_mib":  68.8,
+                          "switches_per_second":  9.448,
+                          "threads":  [
+                                          {
+                                              "tid":  22608,
+                                              "switches":  567
+                                          },
+                                          {
+                                              "tid":  54724,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  60240,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  83632,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  20892,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  20840,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  42240,
+                                              "switches":  0
+                                          }
+                                      ]
+                      },
+                      {
+                          "name":  "mypaper-styler",
+                          "pid":  65832,
+                          "cpu_ms":  15.625,
+                          "cpu_core_pct":  0.026,
+                          "private_before_mib":  3.3,
+                          "private_after_mib":  3.21,
+                          "switches_per_second":  19.012,
+                          "threads":  [
+                                          {
+                                              "tid":  66776,
+                                              "switches":  572
+                                          },
+                                          {
+                                              "tid":  37376,
+                                              "switches":  563
+                                          },
+                                          {
+                                              "tid":  59112,
+                                              "switches":  5
+                                          },
+                                          {
+                                              "tid":  49424,
+                                              "switches":  1
+                                          },
+                                          {
+                                              "tid":  58032,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  61072,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  23804,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  55020,
+                                              "switches":  0
+                                          }
+                                      ]
+                      },
+                      {
+                          "name":  "mypaper-wallpaper",
+                          "pid":  80764,
+                          "cpu_ms":  1593.75,
+                          "cpu_core_pct":  2.6556,
+                          "private_before_mib":  164.29,
+                          "private_after_mib":  164.29,
+                          "switches_per_second":  316.428,
+                          "threads":  [
+                                          {
+                                              "tid":  65360,
+                                              "switches":  7201
+                                          },
+                                          {
+                                              "tid":  34788,
+                                              "switches":  3960
+                                          },
+                                          {
+                                              "tid":  67464,
+                                              "switches":  3490
+                                          },
+                                          {
+                                              "tid":  56252,
+                                              "switches":  1404
+                                          },
+                                          {
+                                              "tid":  82344,
+                                              "switches":  1096
+                                          },
+                                          {
+                                              "tid":  74472,
+                                              "switches":  715
+                                          },
+                                          {
+                                              "tid":  17212,
+                                              "switches":  567
+                                          },
+                                          {
+                                              "tid":  49256,
+                                              "switches":  555
+                                          },
+                                          {
+                                              "tid":  88252,
+                                              "switches":  2
+                                          },
+                                          {
+                                              "tid":  55688,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  43992,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  44176,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  18392,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  81976,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  17804,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  76284,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  68768,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  76972,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  60296,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  65220,
+                                              "switches":  0
+                                          },
+                                          {
+                                              "tid":  93476,
+                                              "switches":  0
+                                          }
+                                      ]
+                      }
+                  ],
+    "signal_after":  {
+                         "publisher_pid":  86448,
+                         "publisher_started":  134384129259067643,
+                         "activity":  {
+                                          "pause_background":  false,
+                                          "reason":  "idle",
+                                          "foreground_pid":  27116
+                                      }
+                     },
+    "local_time":  "2026-11-06T07:30:47.8138417+03:00"
+}

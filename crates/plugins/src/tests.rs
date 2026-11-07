@@ -347,6 +347,65 @@ fn window_events_reach_a_subscribed_plugin() {
     assert_eq!(caption.as_deref(), Some("Focused: notepad.exe"));
 }
 
+#[test]
+fn game_pause_has_no_deadline_and_resumes_one_timer_and_latest_system_state() {
+    let root = root("game-pause", &["hello"]);
+    let mut host = host(&root);
+    host.on_host(HostMsg::Open { plugin: "hello".into(), dir: root.join("plugins/hello").to_string_lossy().into_owned(), instance: "h1".into(), face: "details".into(), size: SizeClass::Large, settings: "{}".into() }, Instant::now());
+    frames(&mut host);
+    let now = Instant::now();
+    host.on_host(HostMsg::GameActivity(true), now);
+    assert!(host.topics().is_empty());
+    frames(&mut host);
+    for process in ["first.exe", "latest.exe"] {
+        host.on_host(HostMsg::System(wire::SystemEvent::Window {
+            change: wire::WindowChange::Focused, id: 7, title: "Test".into(), process: process.into(),
+        }), now);
+    }
+    let later = now + Duration::from_secs(600);
+    host.tick(later);
+    assert!(host.deadline().is_none(), "timers, retries, moves and unloads cannot wake the loop");
+    assert!(frames(&mut host).is_empty(), "no guest event or repaint during a game");
+    assert_eq!(host.loaded(), 1, "connections and state survive long games");
+    host.on_host(HostMsg::GameActivity(false), later);
+    let out = frames(&mut host);
+    assert_eq!(out.iter().filter(|m| matches!(m, HelperMsg::View { .. })).count(), 1, "only the latest window event");
+    assert!(host.topics().iter().any(|topic| topic == "windows"));
+    host.tick(later);
+    assert!(footer(&frames(&mut host), "h1").is_some_and(|f| f.contains("1 s awake")), "overdue periodic timer fires once");
+    host.tick(later);
+    assert!(frames(&mut host).is_empty(), "no catch-up burst");
+    assert!(host.deadline().is_some_and(|due| due > later));
+}
+
+#[test]
+fn game_pause_defers_initial_load_and_remove_discards_pending_open() {
+    let root = root("game-open", &["hello"]);
+    let mut host = host(&root);
+    host.on_host(HostMsg::GameActivity(true), Instant::now());
+    open(&mut host, &root, "hello", "h1");
+    assert_eq!(host.loaded(), 0);
+    host.on_host(HostMsg::Remove { plugin: "hello".into(), acknowledge: true }, Instant::now());
+    host.on_host(HostMsg::GameActivity(false), Instant::now());
+    assert_eq!(host.loaded(), 0, "removal cannot resurrect a deferred plugin");
+    open(&mut host, &root, "hello", "h1");
+    assert_eq!(host.loaded(), 1);
+}
+
+#[test]
+fn game_pause_preserves_an_independent_desktop_hold() {
+    let root = root("game-independent", &["hello"]);
+    let mut host = host(&root);
+    open(&mut host, &root, "hello", "h1");
+    let now = Instant::now();
+    host.on_host(HostMsg::GameActivity(true), now);
+    host.on_host(HostMsg::Held(true), now);
+    host.on_host(HostMsg::GameActivity(false), now);
+    assert!(host.topics().is_empty(), "game exit cannot undo user/session pause");
+    host.on_host(HostMsg::Held(false), now);
+    assert_eq!(host.topics(), vec!["windows"]);
+}
+
 /// `cargo test --release -p mypaper-plugins live_t3_event_costs -- --ignored --nocapture`, with
 /// T3 Code running: the real `plugins/t3` against the local server (read-only: it subscribes and
 /// redraws), printing what each event cost, the baseline decode included, and a click-style

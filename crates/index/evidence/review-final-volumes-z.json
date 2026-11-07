@@ -1,0 +1,64 @@
+{
+    "index_pid":  78592,
+    "fixture_drive":  "Z:\\",
+    "arrival_ms":  10812.957900000001,
+    "watch_failure_hide_ms":  65.9781,
+    "return_ms":  20491.5439,
+    "removal_hide_ms":  1.7627000000000002,
+    "arrived_sizes":  {
+                          "hits":  [
+                                       {
+                                           "name":  "Z:",
+                                           "path":  "Z:\\",
+                                           "directory":  true,
+                                           "size":  123,
+                                           "files":  1,
+                                           "modified":  0,
+                                           "size_unknown":  false,
+                                           "excluded":  false
+                                       },
+                                       {
+                                           "name":  "mypaper-volume-bf4260b09d124161bafd7431ffcf2a79.txt",
+                                           "path":  "Z:\\mypaper-volume-bf4260b09d124161bafd7431ffcf2a79.txt",
+                                           "directory":  false,
+                                           "size":  123,
+                                           "files":  1,
+                                           "modified":  1793951961,
+                                           "size_unknown":  false,
+                                           "excluded":  false
+                                       }
+                                   ],
+                          "entries":  6008482,
+                          "scanning":  false,
+                          "elapsed_us":  23
+                      },
+    "returned_sizes":  {
+                           "hits":  [
+                                        {
+                                            "name":  "Z:",
+                                            "path":  "Z:\\",
+                                            "directory":  true,
+                                            "size":  456,
+                                            "files":  1,
+                                            "modified":  0,
+                                            "size_unknown":  false,
+                                            "excluded":  false
+                                        },
+                                        {
+                                            "name":  "mypaper-volume-bf4260b09d124161bafd7431ffcf2a79.txt",
+                                            "path":  "Z:\\mypaper-volume-bf4260b09d124161bafd7431ffcf2a79.txt",
+                                            "directory":  false,
+                                            "size":  456,
+                                            "files":  1,
+                                            "modified":  1793951972,
+                                            "size_unknown":  false,
+                                            "excluded":  false
+                                        }
+                                    ],
+                           "entries":  6008483,
+                           "scanning":  false,
+                           "elapsed_us":  110
+                       },
+    "other_volume_available":  true,
+    "peak_working_set_bytes":  205172736
+}

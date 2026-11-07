@@ -1,4 +1,5 @@
-//! Flat item and surface states, resolved once per look. Glass owns its edge and shadow.
+//! Flat item and surface states, resolved once per look. Explicit surface hairlines may draw
+//! over glass; the engine owns its specular rim and shadow.
 use mypaper_bars::style::{BorderStyle, ColorRef, ItemStyle, Look, Paint, ShadowStyle};
 use mypaper_ui::{Rgba, Theme};
 

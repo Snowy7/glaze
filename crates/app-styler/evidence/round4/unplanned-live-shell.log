@@ -1,0 +1,30 @@
+[tap 73468] 4 rule(s), 4 resource(s)
+[tap 73468] 4 resource override(s) on thread 68748
+[tap 73468] watching the visual tree: HRESULT(0x00000000)
+[tap 76024] attached (WinUI 3)
+[tap 76024] 8 rule(s), 3 resource(s)
+[tap 76024] 3 resource override(s) on thread 8332
+[tap 76024] 3 resource override(s) on thread 76480
+[tap 76024] watching the visual tree: HRESULT(0x00000000)
+[tap 73468] 5 rule(s), 4 resource(s)
+[tap 73468] 4 resource override(s) on thread 68748
+[tap 73468] restyling 14 element(s) on thread 68748 (1135 known in all)
+[tap 76024] handing over 16 element(s) on 2 thread(s) (2140 known; 0 removal(s) of elements never seen)
+[tap 76024] thread 8332: handed over (0 gone)
+[tap 76024] thread 76480: handed over (0 gone)
+[tap 76024] detached (Carry): HRESULT(0x00000000); letting go of XAML Diagnostics (0 other reference(s), 0 job(s) running)
+[tap 76024] attached (WinUI 3)
+[tap 76024] watching the visual tree: HRESULT(0x00000000) (taking over the last session's look)
+[tap 76024] thread 76480: took over 8 element(s), 0 of them gone
+[tap 76024] thread 8332: took over 8 element(s), 0 of them gone
+[tap 76024] 3 resource override(s) on thread 31296
+[tap 76024] handing over 15 element(s) on 3 thread(s) (2912 known; 0 removal(s) of elements never seen)
+[tap 76024] thread 8332: handed over (0 gone)
+[tap 76024] thread 76480: handed over (0 gone)
+[tap 76024] thread 31296: handed over (0 gone)
+[tap 76024] detached (Carry): HRESULT(0x00000000); letting go of XAML Diagnostics (0 other reference(s), 0 job(s) running)
+[tap 76024] attached (WinUI 3)
+[tap 76024] watching the visual tree: HRESULT(0x00000000) (taking over the last session's look)
+[tap 76024] thread 76480: took over 8 element(s), 0 of them gone
+[tap 76024] thread 31296: took over 7 element(s), 0 of them gone
+[tap 76024] thread 8332: put back 0 element(s) (its window closed)

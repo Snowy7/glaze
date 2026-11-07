@@ -1,0 +1,87 @@
+﻿{
+    "monitor":  "\\\\.\\DISPLAY2",
+    "bounds":  {
+                   "y":  9,
+                   "width":  2560,
+                   "height":  1440,
+                   "x":  -2560
+               },
+    "dpi_awareness":  "PER_MONITOR_AWARE_V2",
+    "fixture":  "C:\\mypaper-targets\\watch-merge\\debug\\examples\\game_primary.exe",
+    "seconds":  18,
+    "fixture_exit":  0,
+    "captures":  [
+                     {
+                         "file":  "before.png",
+                         "utc":  "2026-11-06T07:42:44.1029442Z",
+                         "elapsed_ms":  178
+                     },
+                     {
+                         "file":  "hold-start.png",
+                         "utc":  "2026-11-06T07:42:45.4367457Z",
+                         "elapsed_ms":  1127
+                     },
+                     {
+                         "file":  "before-release.png",
+                         "utc":  "2026-11-06T07:42:53.5020014Z",
+                         "elapsed_ms":  9192
+                     },
+                     {
+                         "file":  "released.png",
+                         "utc":  "2026-11-06T07:42:56.5116040Z",
+                         "elapsed_ms":  12201
+                     },
+                     {
+                         "file":  "resume-0.png",
+                         "utc":  "2026-11-06T07:43:02.7774879Z",
+                         "elapsed_ms":  18467
+                     },
+                     {
+                         "file":  "resume-1.png",
+                         "utc":  "2026-11-06T07:43:03.0556412Z",
+                         "elapsed_ms":  18745
+                     },
+                     {
+                         "file":  "resume-2.png",
+                         "utc":  "2026-11-06T07:43:03.3156282Z",
+                         "elapsed_ms":  19006
+                     },
+                     {
+                         "file":  "resume-3.png",
+                         "utc":  "2026-11-06T07:43:03.5765445Z",
+                         "elapsed_ms":  19267
+                     },
+                     {
+                         "file":  "resume-4.png",
+                         "utc":  "2026-11-06T07:43:03.8271303Z",
+                         "elapsed_ms":  19517
+                     },
+                     {
+                         "file":  "resume-5.png",
+                         "utc":  "2026-11-06T07:43:04.0852726Z",
+                         "elapsed_ms":  19775
+                     },
+                     {
+                         "file":  "resumed.png",
+                         "utc":  "2026-11-06T07:43:05.3825156Z",
+                         "elapsed_ms":  21072
+                     }
+                 ],
+    "processes":  [
+                      {
+                          "ProcessName":  "mypaper-core",
+                          "Id":  67296,
+                          "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-core.exe"
+                      },
+                      {
+                          "ProcessName":  "mypaper-shell",
+                          "Id":  48596,
+                          "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-shell.exe"
+                      },
+                      {
+                          "ProcessName":  "mypaper-wallpaper",
+                          "Id":  19340,
+                          "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-wallpaper.exe"
+                      }
+                  ]
+}

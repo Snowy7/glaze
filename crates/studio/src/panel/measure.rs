@@ -65,6 +65,12 @@ pub fn scale_picture(ops: &mut [mypaper_ui::Op], scale: f32) {
                 radius,
                 width,
                 ..
+            }
+            | Op::Continuous {
+                rect: r,
+                radius,
+                width,
+                ..
             } => {
                 rect(r);
                 *radius *= scale;

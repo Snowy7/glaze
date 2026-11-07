@@ -44,6 +44,9 @@ pub mod wire {
         /// A placed instance's options changed (`settings` as JSON, all of them); delivered as
         /// `event::options` without reopening the face.
         Options { instance: String, settings: String },
+        /// Core's conservative game/fullscreen hint, relayed by the shell. Pauses background
+        /// deadlines and coalesces incoming state until false; connections remain open.
+        GameActivity(bool),
     }
 
     /// How a plugin is doing, shown in its faces' footer.

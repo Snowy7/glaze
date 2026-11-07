@@ -142,6 +142,17 @@ starter is not frozen mid-start.
   (a launcher stub), nothing is embedded. Point `command` at the real executable.
 - No input: like every wallpaper, the app sits behind the icons and gets no clicks.
 
+## Glass over them
+
+Widgets and bars get the same Liquid Glass over a web or app wallpaper as over any other. The
+engine has no frame of its own to draw their plates into here, so it draws each plate as a glass
+overlay instead (the flyouts' machinery: a capture of the screen without our windows, and a
+click-through window directly under the surface), with the plate's own material, style and
+corners. The capture follows the wallpaper: a still page costs nothing, an animated one redraws the
+glass at most 30 times a second (fewer under the theme's `fps`), and a covered or held screen keeps
+its glass as last drawn without capturing. Details and measurements:
+[glass.md](glass.md#glass-over-web-and-app-wallpapers-p14-6-november-2026).
+
 ## How it plugs into the engine
 
 Two small generic hooks on the `Source` trait (in `crates/wallpaper/src/sources/mod.rs`) serve every

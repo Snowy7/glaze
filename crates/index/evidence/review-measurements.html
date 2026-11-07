@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}body{font-family:var(--font-sans);color:var(--foreground);font-size:13px;line-height:1.5;margin:0}figure{margin:0 0 22px}figcaption{font-weight:650;margin-bottom:10px}p{color:var(--foreground);opacity:.7;font-size:12px;margin:8px 0 0}.row{display:grid;grid-template-columns:164px 1fr 80px;align-items:center;gap:10px;margin:9px 0}.track{height:18px;background:var(--secondary);border-radius:3px;position:relative}.bar{height:100%;border-radius:3px;background:var(--chart-1)}.bad{background:var(--destructive)}.fix{background:var(--chart-2)}.value{text-align:right;font-variant-numeric:tabular-nums}.ram .track:after{content:"";position:absolute;left:32%;top:-5px;bottom:-5px;border-left:1px dashed var(--warning)}.key{color:var(--warning);font-size:11px}small{display:block;color:var(--foreground);opacity:.7;font-size:11px}
+</style></head><body>
+<figure class="ram" aria-label="Measured index working set by phase"><figcaption>Working-set peak by measured phase <span class="key">· dashed line: 256 MiB limit</span></figcaption>
+<div class="row"><span>Deployed initial rebuild</span><div class="track"><div class="bar" style="width:17.125%"></div></div><span class="value">137.0 MiB</span></div>
+<div class="row"><span>Deployed broad replay</span><div class="track"><div class="bar bad" style="width:90.52%"></div></div><span class="value">724.15 MiB</span></div>
+<div class="row"><span>Corrected private replay<small>6ebad2c · not deployed</small></span><div class="track"><div class="bar fix" style="width:16.71%"></div></div><span class="value">133.7 MiB</span></div>
+<p>The initial rebuild passed. The later broad replay failed. The correction was verified in an isolated process using the full snapshot; live certification remains pending under the one-deployment limit.</p></figure>
+<figure aria-label="E volume Basic scan before and after marker caching"><figcaption>E: Basic scan · before / after directory marker caching</figcaption>
+<div class="row"><span>First sample · before</span><div class="track"><div class="bar" style="width:90.83%"></div></div><span class="value">25.43 s</span></div>
+<div class="row"><span>First sample · after</span><div class="track"><div class="bar fix" style="width:77.30%"></div></div><span class="value">21.64 s</span></div>
+<div class="row"><span>Warm sample · before</span><div class="track"><div class="bar" style="width:46.14%"></div></div><span class="value">12.92 s</span></div>
+<div class="row"><span>Warm sample · after</span><div class="track"><div class="bar fix" style="width:6.82%"></div></div><span class="value">1.91 s</span></div>
+<p>364,157 → 364,160 entries. Concurrent activity and cache state varied; these are observed timings, not a controlled causal estimate.</p></figure>
+</body></html>

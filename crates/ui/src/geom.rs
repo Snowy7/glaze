@@ -142,10 +142,7 @@ impl Rect {
     pub fn take_left(self, width: f32, gap: f32) -> (Self, Self) {
         let cut = (self.left + width).min(self.right);
         (
-            Self {
-                right: cut,
-                ..self
-            },
+            Self { right: cut, ..self },
             Self {
                 left: (cut + gap).min(self.right),
                 ..self
@@ -281,3 +278,5 @@ mod tests {
         assert_eq!(Rect::new(2.0, 2.0, 0.0, 5.0).pixels(8, 8), None);
     }
 }
+#[path = "continuous.rs"]
+pub mod continuous;

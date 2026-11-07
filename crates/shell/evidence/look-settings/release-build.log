@@ -1,0 +1,175 @@
+cargo :    Compiling mypaper-ui v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\ui)
+At line:2 char:192
++ ... gets\main'; cargo build --release --workspace *> crates/shell/evidenc ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling my...aper\crates\ui):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   Compiling mypaper-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
+   Compiling mypaper-files v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\files)
+warning: struct `Layout` is never constructed
+  --> crates\shell\src\widgets\views\integrations\mod.rs:19:19
+   |
+19 | pub(super) struct Layout {
+   |                   ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `layout` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:26:15
+   |
+26 | pub(super) fn layout(
+   |               ^^^^^^
+
+warning: function `footer` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:65:15
+   |
+65 | pub(super) fn footer(f: &mut Frame<'_>, m: &Model, area: Rect, default: &str) {
+   |               ^^^^^^
+
+warning: function `setup` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:85:15
+   |
+85 | pub(super) fn setup(
+   |               ^^^^^
+
+warning: function `metric` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:127:15
+    |
+127 | pub(super) fn metric(f: &mut Frame<'_>, rect: Rect, value: &str, caption: &str, color: Rgba) {
+    |               ^^^^^^
+
+warning: function `pill` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:139:15
+    |
+139 | pub(super) fn pill(f: &mut Frame<'_>, rect: Rect, text: &str, color: Rgba) {
+    |               ^^^^
+
+warning: function `icon_action` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:144:15
+    |
+144 | pub(super) fn icon_action(
+    |               ^^^^^^^^^^^
+
+warning: `mypaper-shell` (lib) generated 7 warnings
+   Compiling mypaper-studio v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\studio)
+warning: constant `PULSE` is never used
+   --> crates\studio\src\theme.rs:232:15
+    |
+232 |     pub const PULSE: Glyph = i(Icon::Activity);
+    |               ^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `edit_theme` is never used
+   --> crates\studio\src\library.rs:339:8
+    |
+339 | pub fn edit_theme(dir: &Path, pointer: &str, value: Option<serde_json::Value>) -> Result<()> {
+    |        ^^^^^^^^^^
+
+warning: function `panel_starter_tile` is never used
+  --> crates\studio\src\pages\first_run.rs:31:15
+   |
+31 | pub(crate) fn panel_starter_tile(app: &App, b: &mut B, index: usize, rect: Rect) {
+   |               ^^^^^^^^^^^^^^^^^^
+
+warning: struct `ColorDrag` is never constructed
+   --> crates\studio\src\panel\..\pick_client.rs:296:8
+    |
+296 | struct ColorDrag {
+    |        ^^^^^^^^^
+
+warning: function `picture` is never used
+   --> crates\studio\src\panel\history.rs:809:8
+    |
+809 | pub fn picture(
+    |        ^^^^^^^
+
+warning: variant `ShowThemeFolder` is never constructed
+   --> crates\studio\src\panel\mod.rs:217:5
+    |
+177 | pub enum Command {
+    |          ------- variant in this enum
+...
+217 |     ShowThemeFolder(std::path::PathBuf),
+    |     ^^^^^^^^^^^^^^^
+    |
+    = note: `Command` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during 
+dead code analysis
+
+warning: associated function `look` is never used
+   --> crates\studio\src\panel\specimens.rs:544:12
+    |
+528 | impl MaterialSample {
+    | ------------------- associated function in this implementation
+...
+544 |     pub fn look(app: &App, style: Style, applied: bool) -> Self {
+    |            ^^^^
+
+warning: constant `COLOR_SAMPLE` is never used
+   --> crates\studio\src\panel\..\pick_client.rs:304:7
+    |
+304 | const COLOR_SAMPLE: &str = "#010203";
+    |       ^^^^^^^^^^^^
+
+warning: function `window` is never used
+   --> crates\studio\src\panel\specimens.rs:705:8
+    |
+705 | pub fn window(app: &App, b: &mut B, r: Rect, look: usize) {
+    |        ^^^^^^
+
+warning: function `desktop_bars` is never used
+   --> crates\studio\src\panel\specimens.rs:993:8
+    |
+993 | pub fn desktop_bars(app: &App, b: &mut B, rect: Rect, raw: &serde_json::Value) {
+    |        ^^^^^^^^^^^^
+
+warning: function `color_ops` is never used
+   --> crates\studio\src\panel\..\pick_client.rs:307:4
+    |
+307 | fn color_ops(app: &App, edit: &crate::actions::Edit, color: &str) -> Vec<Op> {
+    |    ^^^^^^^^^
+
+warning: associated items `new` and `values` are never used
+   --> crates\studio\src\panel\..\pick_client.rs:334:8
+    |
+333 | impl ColorDrag {
+    | -------------- associated items in this implementation
+334 |     fn new(app: &App, edit: &crate::actions::Edit, initial: u32) -> Option<Self> {
+    |        ^^^
+...
+383 |     fn values(&self, color: &str) -> Vec<wire::PreviewDocument> {
+    |        ^^^^^^
+
+warning: function `color_hex` is never used
+   --> crates\studio\src\panel\..\pick_client.rs:400:4
+    |
+400 | fn color_hex(color: u32) -> String {
+    |    ^^^^^^^^^
+
+warning: function `publish_color` is never used
+   --> crates\studio\src\panel\..\pick_client.rs:404:4
+    |
+404 | fn publish_color(color: u32) {
+    |    ^^^^^^^^^^^^^
+
+warning: struct `ColorSession` is never constructed
+   --> crates\studio\src\panel\..\pick_client.rs:441:8
+    |
+441 | struct ColorSession {
+    |        ^^^^^^^^^^^^
+
+warning: function `choose_color` is never used
+   --> crates\studio\src\panel\..\pick_client.rs:472:8
+    |
+472 | pub fn choose_color(
+    |        ^^^^^^^^^^^^
+
+warning: function `color_hook` is never used
+   --> crates\studio\src\panel\..\pick_client.rs:503:27
+    |
+503 | unsafe extern "system" fn color_hook(
+    |                           ^^^^^^^^^^
+
+warning: `mypaper-studio` (bin "mypaper-studio") generated 17 warnings
+    Finished `release` profile [optimized] target(s) in 1m 13s

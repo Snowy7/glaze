@@ -67,14 +67,18 @@ impl Session {
             (picked, state.threads.clone())
         };
         for (thread, elements) in picked {
-            let Some(&window) = windows.get(&thread) else {
+            let Some(&ui) = windows.get(&thread) else {
                 continue;
             };
             let session = self.clone();
             let path = path.to_path_buf();
-            post(thread, window, move || {
+            post(thread, ui, move || {
                 let mut out = String::new();
                 for (handle, label) in elements.into_iter().take(LIMIT) {
+                    // Only what is still in the tree: a handle that left may name another object.
+                    if !session.lock().nodes.contains_key(&handle) {
+                        continue;
+                    }
                     let _ = writeln!(out, "\n== {label} ({handle})");
                     session.describe(handle, "  ", &mut out);
                 }

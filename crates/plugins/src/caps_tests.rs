@@ -285,6 +285,44 @@ fn websockets_round_trip_with_headers_and_subprotocols() {
     assert!(rig.lines["probe"].last().unwrap().contains("at most 8"), "{:?}", rig.lines["probe"].last());
 }
 
+#[test]
+fn game_pause_keeps_socket_connected_and_delivers_replies_in_order() {
+    let (port, heads) = ws_server(true);
+    let origin = format!("ws://127.0.0.1:{port}");
+    let mut rig = Rig::new("game-socket");
+    rig.install("probe", &[&format!("network:{origin}")], &[]);
+    rig.act("probe", "ws", &origin);
+    rig.wait("probe", "ws opened");
+    rig.act("probe", "ws-send", "first");
+    rig.act("probe", "ws-send", "latest");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    // Let the peer finish both sends first: a game may freeze the writer before it sends
+    // the second request. These real in-flight replies are delivered to the loop held.
+    let mut incoming = Vec::new();
+    for _ in 0..2 {
+        let input = rig.rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).unwrap();
+        assert!(matches!(input, Input::Socket { event: crate::runtime::mypaper::plugin::websocket::SocketEvent::Message(_), .. }));
+        incoming.push(input);
+    }
+    rig.host.on_host(HostMsg::GameActivity(true), Instant::now());
+    rig.read();
+    let before = rig.lines["probe"].clone();
+    for input in incoming {
+        rig.host.on_input(input, Instant::now());
+    }
+    rig.host.tick(Instant::now() + Duration::from_secs(600));
+    assert!(rig.host.deadline().is_none());
+    rig.read();
+    assert_eq!(rig.lines["probe"], before);
+    rig.host.on_host(HostMsg::GameActivity(false), Instant::now());
+    rig.read();
+    let replies: Vec<_> = rig.lines["probe"].iter().filter(|line| line.starts_with("ws text")).map(String::as_str).collect();
+    assert_eq!(replies, ["ws text echo:first", "ws text echo:latest"]);
+    rig.act("probe", "ws-send", "after");
+    rig.wait("probe", "ws text echo:after");
+    assert_eq!(heads.lock().unwrap().len(), 1, "same connection after resume");
+}
+
 // ---------------------------------------------------------------------------------------------
 // Named-pipe servers
 
@@ -356,6 +394,36 @@ fn pipes_round_trip_and_refuse_undeclared_names() {
     assert!(rig.wait("probe", "pipe err").contains("Denied"));
     rig.act("probe", "pipe-http", "other-pipe|http://x/");
     assert!(rig.wait("probe", "pipe-http err").contains("Denied"));
+}
+
+#[test]
+fn game_pause_pipe_writes_resume_without_peer_traffic() {
+    use crate::runtime::mypaper::plugin::{pipes::PipeEvent, websocket::Message};
+    let name = format!("mypaper-game-pipe-{}", std::process::id());
+    let server = pipe_server::listen(&name);
+    let (seen, received) = mpsc::channel();
+    std::thread::spawn(move || {
+        server.accept();
+        while let Some(bytes) = server.read() { if seen.send(bytes).is_err() { break; } }
+    });
+    let conn = crate::io::pipe().unwrap();
+    let (tx, rx) = mpsc::channel();
+    conn.set_game_activity(true);
+    crate::io::start_pipe(&conn, 1, "game-pipe".into(), name, tx);
+    conn.send(Message::Binary(b"held".to_vec())).unwrap();
+    assert!(received.recv_timeout(Duration::from_millis(100)).is_err(), "a paused polling write stays queued");
+    conn.set_game_activity(false);
+    assert_eq!(received.recv_timeout(Duration::from_secs(2)).unwrap(), b"held");
+    // No peer read completion can wake the client here. Resume must reliably signal its
+    // event even when it races the worker's queue inspection and next blocking wait.
+    for n in 0..32u8 {
+        conn.set_game_activity(true);
+        conn.send(Message::Binary(vec![n])).unwrap();
+        conn.set_game_activity(false);
+        assert_eq!(received.recv_timeout(Duration::from_secs(2)).unwrap(), vec![n]);
+    }
+    drop(conn);
+    assert!(matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Input::Pipe { event: PipeEvent::Closed(1), .. }));
 }
 
 #[test]

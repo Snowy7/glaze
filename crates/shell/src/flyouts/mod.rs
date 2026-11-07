@@ -472,7 +472,7 @@ pub struct Flyouts {
     foreground: HWND,
     menu: Option<mypaper_ui::Menu<PanelCommand>>,
     index_due: Option<Instant>,
-    _index_watch: Option<notify::RecommendedWatcher>,
+    _index_watch: Vec<mypaper_fswatch::Watch>,
     /// The flyout a deactivation just closed, and when: a click on its own bar module
     /// deactivates it before that click's request arrives, and the request must close it (it
     /// did), not open it again.
@@ -523,23 +523,17 @@ impl Flyouts {
             foreground: HWND::default(),
             menu: Some(mypaper_ui::Menu::new("App commands")?),
             index_due: Some(Instant::now() + Duration::from_secs(8)),
-            _index_watch: None,
+            _index_watch: Vec::new(),
             dismissed: None,
         };
         flyouts.follow_win_key(main);
-        use notify::Watcher;
-        let waker = flyouts.lanes.waker.clone();
-        if let Ok(mut watcher) =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                if event.is_ok_and(|e| !matches!(e.kind, notify::EventKind::Access(_))) {
-                    waker.send(Msg::Flyout(Done::Changed(Watched::Apps)));
-                }
-            })
-        {
-            for dir in providers::index::start_menu_dirs() {
-                let _ = watcher.watch(&dir, notify::RecursiveMode::Recursive);
+        for dir in providers::index::start_menu_dirs() {
+            let waker = flyouts.lanes.waker.clone();
+            if let Ok(watcher) = mypaper_fswatch::Watch::directory(&dir, true, move |_| {
+                waker.send(Msg::Flyout(Done::Changed(Watched::Apps)));
+            }) {
+                flyouts._index_watch.push(watcher);
             }
-            flyouts._index_watch = Some(watcher);
         }
         Ok(flyouts)
     }
@@ -1122,6 +1116,7 @@ impl Flyouts {
             open.below,
         );
         // The look's blur is in DIPs; the engine takes physical px, as the bars' and widgets'.
+        self.surface.set_glass_style(self.look.glass_style);
         self.surface.set_glass(glass.map(|material| Glass {
             body: Rect::new(0.0, 0.0, width, height),
             radius,
@@ -1176,7 +1171,7 @@ impl Flyouts {
                     .filter(|_| mypaper_ui::glass::available())
                     .map(|material| Glass {
                         body,
-                        radius: self.look.radius * open.scale * body.width() / full.width(),
+                        radius: (self.look.radius * open.scale).round() * body.width() / full.width(),
                         material: mypaper_ui::GlassMaterial {
                             blur: material.blur * open.scale,
                             ..material
@@ -1554,6 +1549,7 @@ fn build_animated(
     } = kit;
     list.focus = state.2;
     Kit::body(&mut list, (width, height), radius, &theme, glass);
+    mypaper_ui::geom::continuous::surface(&mut list, Rect::new(0.0, 0.0, width, height), look.glass_style.smoothing);
     (list, (width as u32, height as u32))
 }
 

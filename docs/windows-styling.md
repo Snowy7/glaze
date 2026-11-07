@@ -4,9 +4,10 @@ A native look can restyle Windows itself while it is active: window borders, tit
 backdrop (Mica and friends), the system accent color, light/dark mode and accent visibility.
 Selecting `config.json` > `look.style` supplies Windows defaults as well as the native shell's.
 A wallpaper can refine those defaults with its `windows` section. Everything uses supported public
-APIs (`DwmSetWindowAttribute` and the same per-user registry values the Settings app writes). No code
-runs inside any other process, and everything is undone when the theme changes, mypaper quits, the
-panic hotkey fires, or core restarts after a crash.
+APIs (`DwmSetWindowAttribute` and the same per-user registry values the Settings app writes). Frame
+styling runs in core; the separate [experimental App styler](#app-styler-experimental) is opt-in.
+Style changes transition directly to the next values. Releasing fields restores only those
+fields; quitting, the panic hotkey and crash recovery restore all remaining changes.
 
 ```json
 {
@@ -22,7 +23,7 @@ panic hotkey fires, or core restarts after a crash.
 }
 ```
 
-[`themes/midnight`](../themes/midnight) is a working example.
+[`themes/examples/midnight`](../themes/examples/midnight) is a working example.
 
 **Your look wins.** A theme's `windows` section is a suggestion: `config.json` › `look.windows`
 (edited in Studio › Look › Windows) is your layer over it, field by field. A field absent there
@@ -68,8 +69,10 @@ Both accent-visibility fields accept absent, null, true and false independently.
 supports a coloured Start/taskbar in dark system mode, so light/automatic-light defaults keep
 that switch off. Explicit overrides are still honoured.
 
-Resolution runs only on the existing config/theme/palette events: no extra process, hook,
-thread, timer or polling. The experimental app styler uses the same resolved `$accent` (including
+Resolution runs only on the existing config/theme/palette events. A message-pumping styling
+worker coalesces pending requests for 35 ms, then applies the latest one; core's supervisor and
+panic hotkey do not wait on registry IO, signature verification or settings receivers. The worker
+waits indefinitely when idle, with no polling or idle timer. The experimental app styler uses the same resolved `$accent` (including
 explicit Windows accent overrides) and wallpaper `$dominant`. If Windows accent is explicitly
 unmanaged with null, app tokens fall back to the shared look/wallpaper accent. Without a matching
 palette, automatic colours wait; fixed colours and mono's neutral defaults work immediately.
@@ -112,12 +115,17 @@ A window is styled only if all of this holds:
   `WinVerifyTrust` on the file, falling back to the catalog (`CryptCATAdmin*`) lookup that covers most
   Windows binaries. The signer chain must also be Microsoft's (leaf `Microsoft…`, root
   `Microsoft Root…`), so a validly signed third-party file doesn't pass. It works offline, and
-  verdicts are cached per path.
+  the styling allowlist verdict (including a rejection) is cached per PID and process creation
+  time. Multiple windows, repeated show events and style changes do not hash that process again;
+  a reused PID gets a new verdict.
 - The expensive signature check only runs for processes the allowlist would accept anyway, so a game
   opening a window never gets its executable hashed.
 
 Existing windows are styled when the theme activates (`EnumWindows`). New windows are caught by an
-out-of-context `EVENT_OBJECT_SHOW` WinEvent hook on core's main thread, so nothing polls.
+out-of-context `EVENT_OBJECT_SHOW` WinEvent hook on the styling worker, so nothing polls.
+Destroy events retire remembered HWNDs before they can be reused. Each window keeps its first
+dark-mode value and its successfully applied attributes. Updates write only changed attributes;
+only released attributes receive defaults. No restore/reapply sweep runs during a style change.
 
 ## System accent and dark mode
 
@@ -167,11 +175,16 @@ Nothing is changed without a way back.
 - **Registry**: before the first write, the original of every value (including "absent", and its
   exact type: `REG_DWORD`, `REG_BINARY`, `REG_SZ`, `REG_EXPAND_SZ`) is saved to
   `%LOCALAPPDATA%\mypaper\undo.json`, written atomically. Registry keys the styling had to create are
-  recorded too and removed again. Later palette updates keep the first
-  originals. Restoring writes the originals back (deleting what was absent), announces the change,
+  recorded too and removed again. Later style and palette updates keep the first originals for
+  fields that remain managed. Transitions diff against the registry, restore originals only of
+  released values, and send one broadcast if anything changed (none for an unchanged registry).
+  Released entries remain journaled through the broadcast and settle passes; a partial write or
+  interrupted release keeps enough information for crash recovery, including the committed and
+  pending ownership added in commit `7234e88`. Reacquiring a released field journals its then-current
+  original. Restoring writes the originals back (deleting what was absent), announces the change,
   then re-checks and rewrites any value Windows changed in reaction (it keeps the DWM accent in sync
   with `AccentColorMenu`), so the registry ends up as it was. The journal is deleted after that.
-- **When it runs**: before applying a different resolved style, when all Windows styling is
+- **When it runs**: when all Windows styling is
   released (no selected native style, theme styling or explicit Windows fields), Quit, the
   panic hotkey, Ctrl+C and normal exit. Core's own drop does it too, so error exits are covered.
   A theme without a `windows` section still follows a selected native style's defaults.
@@ -189,10 +202,55 @@ Nothing is changed without a way back.
 - While a theme with `accent` or `dark_mode` is active, changing those in Settings by hand is
   overwritten the next time the theme changes colors, and undone at restore.
 - Apps that set their own title bar color or backdrop may override ours on their next paint.
+- Corners are a DWM **preference**, not a guaranteed shape. On this machine, cross-process writes
+  to Explorer and Settings returned `S_OK` and read back square/round/small correctly, without
+  injection. Production checks the corner HRESULT and reads successful writes back; failures or
+  mismatches are logged and are not remembered as successful applications. Actual visible rounding
+  remains unverified in this check because another window covered both target windows. Microsoft
+  also excludes maximized/snapped windows and some custom frames from rounding; see
+  [rounded-corner guidance](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-rounded-corners).
+  Suggested Studio wording: **Corner preference** — “Supported Windows frames only. Apps may
+  override this; maximized and snapped windows stay square.” No Studio files were changed.
 - Restyling the *inside* of File Explorer and Settings is the experimental [app styler](#app-styler-experimental)
   below; everything above is DWM and registry only.
 
-## Verification (2026-11-06)
+## Direct-transition verification (2026-11-06)
+
+The isolated [timing fixture](../crates/tweaks/examples/measure_style_transitions.rs) uses the real
+style resolver, transition plans, on-disk undo journal and latest-request worker. Its registry is
+in memory; it models two windows and two 20 ms settings receivers. The legacy path preserves the
+old deactivate/activate ordering and 100 ms restore settle. Medians of three samples:
+
+| Case | Config write → last fixture window settled, before → after | Main-thread blocked, before → after | Broadcasts | Attribute writes per window | Registry mutations |
+|---|---:|---:|---:|---:|---:|
+| Light → dark | 185.78 → 89.56 ms | 185.49 → 0.67 ms | 2 → 1 | 12 → 3 | 16 → 3 |
+| Dark → light | 185.81 → 88.97 ms | 185.53 → 0.61 ms | 2 → 1 | 12 → 3 | 16 → 3 |
+| One palette update | 43.74 → 88.33 ms | 43.44 → 0.70 ms | 1 → 1 | 6 → 1 | 4 → 4 |
+| 20 palette events, 2 ms apart | 935.04 → 153.61 ms | 876.73 → 13.57 ms total | 20 → 1 | 120 → 1 | 80 → 4 |
+
+Raw samples: [before](../crates/tweaks/evidence/style-sync/transition-before.json),
+[after](../crates/tweaks/evidence/style-sync/transition-after.json). These measure fixture completion,
+not Explorer/Settings paint latency, file-watcher scheduling or real signature IO. Main-thread time
+includes reading/parsing fixture config and submitting the request. One isolated palette change
+takes longer to settle because of the 35 ms debounce and Windows timer granularity; a drag avoids
+replaying intermediate palettes. An already-running transition finishes, then only the newest
+pending request runs. Shutdown joins the worker so final restoration finishes before core exits;
+startup waits for crash recovery. Those waits are outside ordinary config-event handling.
+
+64 tweaks tests pass, including A→B/B→A write/reset plans, palette-only diffs, identical no-ops,
+each interrupted write/delete boundary, a Windows reaction during release, PID reuse, and requests
+arriving while a receiver is blocked. Core's 19 tests pass with four existing desktop/Task Scheduler
+tests ignored. Core checks and strict all-target tweaks Clippy pass.
+
+The [corner probe](../crates/tweaks/evidence/style-sync/probe-corners.ps1) checks HRESULT/readback and
+restores each HWND in `finally`; [results](../crates/tweaks/evidence/style-sync/corner-probe.json)
+show both originals restored. Config SHA-256 stayed
+`924298ABF9167B58970BFD18FDE315822CE6BD6D72B813026BBC265C1C086E6A`; focus did not change. No real
+config or light/dark preference was written. Screen crops were inspected but showed the covering
+window, so they are not presented as evidence of the target corners. Deployment and an uncovered
+pixel-level corner check remain for the parent after the shared Studio merge.
+
+## Earlier style-sync verification (2026-11-06)
 
 `CARGO_TARGET_DIR=C:\mypaper-targets\style-sync`. Config 21, theme 21 and tweaks 43 library tests
 passed; core 16 passed with four existing Task Scheduler/tray tests ignored. Strict Clippy passed
@@ -288,12 +346,28 @@ sizes, any dependency property, by rules. It runs our own code inside those two 
 opt-in and off by default:
 
 ```json
-{ "experimental": { "app_styler": true } }
+{ "experimental": { "app_styler": true }, "system": { "separate_process": true } }
 ```
 
-Off costs nothing: no process, no hook, nothing loaded anywhere. On, core runs `mypaper-styler`;
-turning the flag off, quitting mypaper, the panic hotkey or the helper dying for any reason puts
-both apps back as they were. Studio has no switch for it yet (Experimental section, later).
+Explorer is styled only with `system.separate_process` ([system.md](system.md)): folder windows
+then open in their own Explorer process, which exits about a minute after its last window
+closes (the helper lets go of it then, or it wouldn't). The shell's Explorer (desktop, taskbar, and any folder window that lives in it) is never
+attached; see "Only processes that exit" below for why. Without `separate_process` the helper
+logs one line (`not styling explorer: it needs system.separate_process = true ...`) and leaves
+Explorer alone.
+
+Settings is **off unless asked for** with `"look": { "apps": { "settings": { "enabled": true } } }`:
+on Windows 11 26100, Settings ends itself on Personalization › Background (and Lock screen)
+whenever XAML Diagnostics is attached, with or without rules (see "Settings and Personalization ›
+Background" below). `"enabled": false` under `look.apps.explorer` switches Explorer off the same way. A
+theme's `apps` can set `enabled` too; the user's wins. A switched-off app's live sessions put it
+back and detach, and it comes back when the switch does.
+
+Off costs nothing: no process, no hook, nothing loaded anywhere. On, core runs `mypaper-styler`
+(`--parent <core's pid>`); turning the flag off, quitting mypaper, the panic hotkey, core ending
+for any reason (a crash included: the helper exits with it) or the helper dying for any reason
+puts both apps back as they were. A helper started while the previous one is still exiting waits
+up to 10 s for it. Studio has no switch for it yet (Experimental section, later).
 
 ### How it works
 
@@ -305,9 +379,17 @@ both apps back as they were. Studio has no switch for it yet (Experimental secti
   and styled there. No polling.
 - **Which processes**: only `explorer.exe` and `ImmersiveControlPanel\SystemSettings.exe`, and
   only if the injection allowlist ([`crates/inject`](../crates/inject/src/lib.rs), with the
-  Microsoft-signature check) also accepts the process. That check runs again right before every
-  attach. Settings runs with the inbox package identity
-  `windows.immersivecontrolpanel_cw5n1h2txyewy`, which the allowlist names.
+  Microsoft-signature check) also accepts the process. The helper opens the process first and
+  checks that very process, then keeps the handle open through the attach: a pid can't be given
+  to another process while a handle to it is open, so the attach can't reach a different app.
+  Its exit is watched from before the TAP loads (a crash while it loads counts). The TAP copy is
+  used only if its bytes are still this build's. Settings runs with the inbox package identity
+  `windows.immersivecontrolpanel_cw5n1h2txyewy`, which the allowlist names. Of Explorer's
+  processes only a folder process is attached, never the shell's: the one that owns the shell
+  window (`GetShellWindow`, the desktop's `Progman`) or a taskbar (`Shell_TrayWnd`,
+  `Shell_SecondaryTrayWnd`). The helper logs the pid it refuses (`explorer (PID) is the shell's
+  Explorer: never styled`), and while there is no shell window at all (Explorer restarting) it
+  attaches to no Explorer. `--attach` and `--dump` refuse the shell's Explorer too.
 - **Which framework**: Settings is system XAML (`Windows.UI.Xaml`). Explorer's folder windows are
   WinUI 3 (`Microsoft.UI.Xaml` from the Windows App SDK). The helper attaches through that SDK's
   `Microsoft.Internal.FrameworkUdk.dll`, loaded from the same folder Explorer uses, when the
@@ -412,13 +494,35 @@ window behind the XAML, so they stay solid in `glass`.
   element) and asks for a fresh handle right before using one, keeps a value type's original as
   text and makes it again right before putting it back, and releases what it holds on the
   object's own UI thread (a thread that is gone leaks it instead).
+- **Work for a UI thread carries no handles.** A restyle or clean-up is posted to the thread's
+  message window as a job that finds its elements in the TAP's map when it runs, on that thread,
+  where the tree callbacks keep the map true; an element is held while it is styled or put back.
+  A job that arrives while the thread is inside our own work (XAML calls can pump messages) waits
+  until that work is done. Each message window has a generation, checked before posting and when
+  the job runs, so a closed window whose handle or thread id comes back never runs an old job;
+  and a job only goes to a window whose procedure is this TAP build's (every build an app has
+  loaded registers the same class name, so the class alone doesn't say whose window it is).
+- **Closing**: when the helper goes, styling stops and each UI thread gets a clean-up job, queued
+  behind whatever it is doing; it puts back every value and brush on that thread and lets go of
+  what the TAP holds there. The TAP stops following the tree only after every thread has cleaned
+  up (at most 10 s; a thread that doesn't answer leaks what is held there instead).
+- **Nothing piles up**: the element strings each tree callback is handed are freed (XAML gives
+  them to the callback), rule values no element uses any more are released after each restyle,
+  and a UI thread whose window closed (its last element left) is retired: its overrides go back
+  and its values and message window go. Explorer often closes a window but keeps its thread, and
+  that tree goes without a removal: when the next window or popup opens on the thread, its old
+  roots that no longer resolve are forgotten (there is nothing left to put back).
 - **Crash guard**: if a styled app exits with an NTSTATUS-style code (`>= 0x80000000`: a crash, or
   being ended with `TerminateProcess(-1)` as `Stop-Process` and Task Manager's *End task* do)
   within 60 s of being attached, that counts once. Deaths of one app within 5 s of each other are
   one incident (an Explorer restart ends every Explorer process at once). After two incidents, the
   helper stops styling that app for the session and logs it (`not styling settings again this
-  session`); a fresh helper session starts clean. Exercised 2026-11-06 with Settings. A process
-  the allowlist rejects is never attached.
+  session`): it stops writing that app's rules and writes a stop marker (`<app>.off`) beside
+  them, and every TAP session of that app still running (Explorer can have several processes)
+  puts it back and detaches. A fresh helper session removes the markers and starts clean.
+  Exercised 2026-11-06 with Settings, and (round 3) with two separate Explorer folder processes:
+  the shell's Explorer, which survived, put its look back and detached. A process the allowlist
+  rejects is never attached.
 - The helper exits on its own only if `experimental.app_styler` reads off twice, a second apart:
   a config writer that replaces the file non-atomically briefly shows no file (defaults, off).
   Core stops the helper when the flag really goes off.
@@ -427,6 +531,64 @@ window behind the XAML, so they stay solid in `glass`.
   two Explorer restarts, several mypaper redeploys and flag off/on cycles. No Explorer or Settings
   crash, no guard trip, bars and wallpaper back after each restart. Helper: 2.9–3.3 MB private,
   47 ms CPU in 120 s idle (0.04 % of one core; it wakes only for window-show events).
+- **Known issue (round 3, 2026-11-06): Explorer keeps memory while attached.** With a session
+  subscribed, each burst of two folder windows opened, navigated and closed (plus Settings pages)
+  left 120–410 MB in Explorer's private bytes (754 MB to 2.4 GB over 7 bursts; handles 6.2k to
+  14.6k). It is the subscription itself: with the TAP attached and **no rules** (no styling, no
+  property reads) a burst still added 127–151 MB; with the flag off, 8–17 MB (3 bursts each way).
+  Ending the session doesn't reliably give it back (once 2.5 to 1.3 GB within 10 s, once
+  nothing); restarting Explorer does. The TAP's own map stays flat (it follows removals and drops
+  trees that went without one). Evidence: `crates/app-styler/evidence/round3`.
+- **What holds it (round 4, from WinUI's source).** XAML Diagnostics' `RuntimeObjectCache` keeps a
+  strong reference to every parentless object it has seen, until that object is closed: every
+  tree root, and every object outside the tree we ask a handle for. Explorer's island hosts
+  (`DesktopWindowXamlSource`) add themselves as roots but on close only their inner `XamlIsland`
+  signals the removal, so a closed window's root, and its tree, is never let go of. Only
+  destroying XAML Diagnostics empties the cache; unadvising doesn't.
+- **Recycling doesn't work (round 4).** Ending XAML Diagnostics after windows close and attaching
+  a new session (handing the look over) kept Explorer's memory at the flag-off control, but
+  **hung Explorer** after 13-14 recycles in all three runs: its UI thread spun in a corrupted
+  property map (`DependencyObject::GetValue`). The teardown releases the UI threads' XAML
+  objects from whichever thread lets go last, and in the shell Explorer every window has its own
+  UI thread, so no thread can do it safely. Visual Studio never lets go of XAML Diagnostics; the
+  code was reverted. The fix belongs in WinUI (close the root a `DesktopWindowXamlSource` added);
+  the TAP can drop the per-handle part (no handles for objects outside the tree). Evidence and
+  the burst table: `crates/app-styler/evidence/round4`.
+- **Only processes that exit (round 5).** Since an attached process keeps every tree until it
+  exits, the styler only attaches to processes that exit on their own: Settings
+  (`SystemSettings.exe` exits when its window closes) and Explorer's separate folder process
+  (exits after its last folder window). The shell's Explorer runs all session, so it is never
+  attached. A subscribed folder process doesn't exit on its own, though: the trees XAML
+  Diagnostics keeps hold the process too (styled, 3 of 3 lived on without a window; unstyled
+  ones exit 45–57 s after their last window). So the helper **lets go of a folder process when
+  its last folder window closes**: a destroy hook per attached process spots it, a per-process
+  stop marker (`explorer.<pid>.off`) makes that process's TAP put everything back and detach, and
+  the process then exits like an unstyled one (50–52 s; log: `explorer (PID) has no folder
+  window left: letting go so it can exit`). That pid is never attached again: a window that
+  still opens in it before it exits stays stock. Unlike round 4's recycling, no live XAML is left
+  in the process to disturb. On this build every `explorer.exe <folder>` launch gets its own
+  folder process (two windows opened a second apart: two processes). With that, styled folder
+  processes exited 49.5–52.1 s after their windows closed (6 of 6), and the shell Explorer moved
+  as much as with nothing attached (+11 MB over 3 bursts, control +10 MB).
+- **Known issue (round 5): styled folder windows can hang.** Two of 15 styled folder processes
+  in the bursts hung within seconds of attaching, their UI thread spinning at a full core in
+  WinUI's `ItemsView::GetElementIndex` (a walk up the tree that never ends) from a `GettingFocus`
+  raised by `FileExplorerFolderViewController::SetInnerFocus`; one was on Gallery. No TAP code on
+  the stack; none of 13 unstyled ones hung. Windows opened straight on Gallery didn't reproduce
+  it (glass 0 of 5, attached with no rules 0 of 5, nothing attached 0 of 5), so whether it needs
+  a rule or only XAML Diagnostics is still open. The flag stays **off** until that is understood:
+  a hung folder window has to be ended from Task Manager.
+- **Settings and Personalization › Background (round 5).** With XAML Diagnostics attached,
+  Settings fails fast when that page opens: a stowed `E_INVALIDARG` ("The parameter is
+  incorrect") from `CDependencyObject::SetEffectiveValue` while a control template applies a
+  `TemplateBinding` to a `Border` during layout (`Windows.UI.Xaml.dll` 10.0.26100.9711,
+  `propertysystem.cpp` line 1625; no TAP code on the stack). It happens attached with **no
+  rules** too (3 of 3), and never without the styler (2 of 2), so it is XAML Diagnostics on that
+  page, not a style. Nothing the TAP can do avoids it, so Settings is off unless
+  `look.apps.settings.enabled` is `true`; the crash guard stops styling Settings after two such
+  exits. Personalization › Lock screen does the same; Themes, Start, Fonts, Colours, Display,
+  About, Network, Bluetooth, Sound, Taskbar and Privacy don't. Evidence:
+  `crates/app-styler/evidence/round5`.
 - Missing elements across Windows builds are not errors: a selector that matches nothing does
   nothing.
 - Nothing is persisted in the apps. If anything is ever stuck, closing and reopening the window

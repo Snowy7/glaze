@@ -12,7 +12,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use mypaper_theme::Color;
-use notify::Watcher;
 use serde::{Deserialize, Serialize};
 
 use crate::color::hex;
@@ -100,7 +99,7 @@ pub fn read() -> Option<Snapshot> {
 
 /// Keeps the palette file watch alive; dropping it stops the watch.
 pub struct PaletteWatcher {
-    _watcher: notify::RecommendedWatcher,
+    _watcher: mypaper_fswatch::Watch,
 }
 
 /// Calls `on_change` (on the watcher's thread) whenever `palette.json` is
@@ -108,14 +107,7 @@ pub struct PaletteWatcher {
 pub fn watch(on_change: impl Fn() + Send + 'static) -> Result<PaletteWatcher> {
     let dir = local_dir()?;
     std::fs::create_dir_all(&dir)?;
-    let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-        if event.is_ok_and(|e| {
-            !e.kind.is_access() && e.paths.iter().any(|p| p.file_name() == Some(FILE.as_ref()))
-        }) {
-            on_change();
-        }
-    })?;
-    watcher.watch(&dir, notify::RecursiveMode::NonRecursive)?;
+    let watcher = mypaper_fswatch::Watch::files(&dir, &[FILE], on_change)?;
     Ok(PaletteWatcher { _watcher: watcher })
 }
 

@@ -1,0 +1,436 @@
+{
+    "pid":  78592,
+    "cold":  false,
+    "elapsed_ms":  516.77,
+    "index_cpu_ms":  546.875,
+    "max_sampled_working_set_bytes":  73949184,
+    "os_peak_working_set_bytes":  759324672,
+    "max_private_bytes":  26783744,
+    "benchmark":  {
+                      "cold_after_quiet_trim":  false,
+                      "max_ms":  23.8566,
+                      "p50_ms":  0.7028,
+                      "p50_server_ms":  0.436,
+                      "p95_ms":  22.6091,
+                      "p95_server_ms":  22.34,
+                      "queries":  55,
+                      "samples":  [
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  22.6091,
+                                          "query":  "cargo",
+                                          "server_ms":  22.34
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6579999999999999,
+                                          "query":  "readme",
+                                          "server_ms":  0.397
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  5.8445,
+                                          "query":  "ext:rs",
+                                          "server_ms":  5.579
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.5431,
+                                          "query":  "folder:src",
+                                          "server_ms":  0.249
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  1.421,
+                                          "query":  "wallpaper",
+                                          "server_ms":  1.132
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  4.6185,
+                                          "query":  "path:projects ext:toml",
+                                          "server_ms":  4.332
+                                      },
+                                      {
+                                          "hits":  0,
+                                          "pipe_ms":  0.759,
+                                          "query":  "unlikely-no-match-8932",
+                                          "server_ms":  0.533
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6816,
+                                          "query":  "c",
+                                          "server_ms":  0.372
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6278,
+                                          "query":  "ca",
+                                          "server_ms":  0.379
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.5256,
+                                          "query":  "ra",
+                                          "server_ms":  0.294
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.5535,
+                                          "query":  "e",
+                                          "server_ms":  0.324
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  23.8566,
+                                          "query":  "cargo",
+                                          "server_ms":  23.562
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.9495,
+                                          "query":  "readme",
+                                          "server_ms":  0.58
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  5.6146,
+                                          "query":  "ext:rs",
+                                          "server_ms":  5.329
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.5206,
+                                          "query":  "folder:src",
+                                          "server_ms":  0.25
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  1.5968,
+                                          "query":  "wallpaper",
+                                          "server_ms":  1.324
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  3.8196,
+                                          "query":  "path:projects ext:toml",
+                                          "server_ms":  3.541
+                                      },
+                                      {
+                                          "hits":  0,
+                                          "pipe_ms":  0.6952,
+                                          "query":  "unlikely-no-match-8932",
+                                          "server_ms":  0.47
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.5951,
+                                          "query":  "c",
+                                          "server_ms":  0.323
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.5647,
+                                          "query":  "ca",
+                                          "server_ms":  0.325
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.5365,
+                                          "query":  "ra",
+                                          "server_ms":  0.291
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.5694,
+                                          "query":  "e",
+                                          "server_ms":  0.324
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  22.4972,
+                                          "query":  "cargo",
+                                          "server_ms":  22.215
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6995,
+                                          "query":  "readme",
+                                          "server_ms":  0.388
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  5.353400000000001,
+                                          "query":  "ext:rs",
+                                          "server_ms":  5.037
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6076,
+                                          "query":  "folder:src",
+                                          "server_ms":  0.306
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  1.4605,
+                                          "query":  "wallpaper",
+                                          "server_ms":  1.171
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  3.5055,
+                                          "query":  "path:projects ext:toml",
+                                          "server_ms":  3.221
+                                      },
+                                      {
+                                          "hits":  0,
+                                          "pipe_ms":  0.7028,
+                                          "query":  "unlikely-no-match-8932",
+                                          "server_ms":  0.477
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6239,
+                                          "query":  "c",
+                                          "server_ms":  0.308
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6034,
+                                          "query":  "ca",
+                                          "server_ms":  0.349
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.5781000000000001,
+                                          "query":  "ra",
+                                          "server_ms":  0.301
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6566000000000001,
+                                          "query":  "e",
+                                          "server_ms":  0.319
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  23.156699999999997,
+                                          "query":  "cargo",
+                                          "server_ms":  22.872
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.7628999999999999,
+                                          "query":  "readme",
+                                          "server_ms":  0.445
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  5.2845,
+                                          "query":  "ext:rs",
+                                          "server_ms":  4.933
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6137,
+                                          "query":  "folder:src",
+                                          "server_ms":  0.29
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  1.4196,
+                                          "query":  "wallpaper",
+                                          "server_ms":  1.13
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  3.6003,
+                                          "query":  "path:projects ext:toml",
+                                          "server_ms":  3.3
+                                      },
+                                      {
+                                          "hits":  0,
+                                          "pipe_ms":  0.8491,
+                                          "query":  "unlikely-no-match-8932",
+                                          "server_ms":  0.573
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6572,
+                                          "query":  "c",
+                                          "server_ms":  0.354
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6095999999999999,
+                                          "query":  "ca",
+                                          "server_ms":  0.335
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6848,
+                                          "query":  "ra",
+                                          "server_ms":  0.37
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.7573000000000001,
+                                          "query":  "e",
+                                          "server_ms":  0.327
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  22.4607,
+                                          "query":  "cargo",
+                                          "server_ms":  22.151
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.7348,
+                                          "query":  "readme",
+                                          "server_ms":  0.436
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  7.639,
+                                          "query":  "ext:rs",
+                                          "server_ms":  7.326
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6182,
+                                          "query":  "folder:src",
+                                          "server_ms":  0.302
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  1.4493,
+                                          "query":  "wallpaper",
+                                          "server_ms":  1.152
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  3.7545,
+                                          "query":  "path:projects ext:toml",
+                                          "server_ms":  3.451
+                                      },
+                                      {
+                                          "hits":  0,
+                                          "pipe_ms":  0.8811,
+                                          "query":  "unlikely-no-match-8932",
+                                          "server_ms":  0.632
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.5954,
+                                          "query":  "c",
+                                          "server_ms":  0.328
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.5571,
+                                          "query":  "ca",
+                                          "server_ms":  0.327
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.5421999999999999,
+                                          "query":  "ra",
+                                          "server_ms":  0.288
+                                      },
+                                      {
+                                          "hits":  50,
+                                          "pipe_ms":  0.6196,
+                                          "query":  "e",
+                                          "server_ms":  0.342
+                                      }
+                                  ]
+                  },
+    "residency":  [
+                      {
+                          "ms":  15.37,
+                          "working_set_bytes":  10067968,
+                          "private_bytes":  26656768,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  65.63,
+                          "working_set_bytes":  10035200,
+                          "private_bytes":  26656768,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  105.15,
+                          "working_set_bytes":  10084352,
+                          "private_bytes":  26656768,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  135.59,
+                          "working_set_bytes":  24182784,
+                          "private_bytes":  26656768,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  166.04,
+                          "working_set_bytes":  51322880,
+                          "private_bytes":  26656768,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  197,
+                          "working_set_bytes":  62590976,
+                          "private_bytes":  26656768,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  228.25,
+                          "working_set_bytes":  66838528,
+                          "private_bytes":  26693632,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  258.86,
+                          "working_set_bytes":  73949184,
+                          "private_bytes":  26755072,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  290.46,
+                          "working_set_bytes":  70746112,
+                          "private_bytes":  26783744,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  321.06,
+                          "working_set_bytes":  71008256,
+                          "private_bytes":  26783744,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  354.54,
+                          "working_set_bytes":  72699904,
+                          "private_bytes":  26783744,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  384.08,
+                          "working_set_bytes":  72712192,
+                          "private_bytes":  26783744,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  415,
+                          "working_set_bytes":  72720384,
+                          "private_bytes":  26783744,
+                          "peak_working_set_bytes":  759324672
+                      },
+                      {
+                          "ms":  446.67,
+                          "working_set_bytes":  71184384,
+                          "private_bytes":  26783744,
+                          "peak_working_set_bytes":  759324672
+                      }
+                  ]
+}

@@ -1,0 +1,26 @@
+{
+    "finding":  "Background refresh remapped highlighted items but left focus and anchor at old indexes",
+    "regression":  "model::tests::selection_replacement_preserves_focus_and_range_by_path",
+    "before":  {
+                   "expected":  "c.txt",
+                   "actual":  "b.exe",
+                   "result":  "failed"
+               },
+    "after":  {
+                  "result":  "passed",
+                  "cases":  [
+                                "insertion preserves highlighted and focused path",
+                                "Shift range keeps its path anchor",
+                                "sort preserves focus independently of selected order",
+                                "filter removes missing focus and anchor"
+                            ]
+              },
+    "crate_tests":  {
+                        "passed":  20,
+                        "failed":  0,
+                        "seconds":  1.81,
+                        "isolated_profile":  "C:\\mypaper-targets\\files\\scratch\\regression-profile"
+                    },
+    "cargo_check":  "passed",
+    "clippy":  "passed with existing warnings in plugin I/O/runtime"
+}

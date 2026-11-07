@@ -123,7 +123,7 @@ fn personal_widgets_dense_sizes_and_size_sheets() {
                         m.integration.custom.image = Some(Arc::new(mypaper_ui::Image {
                             width: 2,
                             height: 2,
-                            pixels: vec![80, 120, 220, 255].repeat(4),
+                            pixels: [80, 120, 220, 255].repeat(4),
                         }));
                         let scale = 1.5;
                         let pixels = (

@@ -1,0 +1,7 @@
+{
+    "skipped":  true,
+    "reason":  "User app is foreground; no fixture launched and no synthetic input sent",
+    "foreground_pid":  28080,
+    "foreground_process":  "T3 Code (Nightly)",
+    "recorded_at":  "2026-11-06T10:59:08.1234103+03:00"
+}

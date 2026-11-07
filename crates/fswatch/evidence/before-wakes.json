@@ -1,0 +1,826 @@
+﻿[
+    {
+        "process":  "mypaper-core",
+        "pid":  83056,
+        "tid":  10244,
+        "thread":  "main",
+        "switches_per_sec":  8.08,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-core",
+        "pid":  83056,
+        "tid":  25496,
+        "thread":  "notify-rs windows loop",
+        "switches_per_sec":  9.579,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-core",
+        "pid":  83056,
+        "tid":  28316,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-core",
+        "pid":  83056,
+        "tid":  62116,
+        "thread":  "dir-watch",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-core",
+        "pid":  83056,
+        "tid":  74120,
+        "thread":  "dir-watch",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-core",
+        "pid":  83056,
+        "tid":  89228,
+        "thread":  "",
+        "switches_per_sec":  0.639,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  2824,
+        "thread":  "index-search-2",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  16000,
+        "thread":  "index-watch-D:\\",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  21148,
+        "thread":  "index-watch-C:\\",
+        "switches_per_sec":  12.134,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  22320,
+        "thread":  "index-search-3",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  25532,
+        "thread":  "notify-rs windows loop",
+        "switches_per_sec":  9.246,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  33012,
+        "thread":  "index-watch-E:\\",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  47956,
+        "thread":  "notify-rs windows loop",
+        "switches_per_sec":  9.329,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  51588,
+        "thread":  "index-parent",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  56468,
+        "thread":  "index-search-0",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  66208,
+        "thread":  "index-pipe-1",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  66352,
+        "thread":  "index-game",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  66956,
+        "thread":  "main",
+        "switches_per_sec":  13.772,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  67036,
+        "thread":  "index-search-4",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  69356,
+        "thread":  "index-pipe-2",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  80540,
+        "thread":  "index-pipe-0",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  81908,
+        "thread":  "index-search-6",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  85352,
+        "thread":  "index-search-7",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  87192,
+        "thread":  "index-delivery-D:\\",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  88296,
+        "thread":  "index-delivery-E:\\",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  90496,
+        "thread":  "index-pipe-3",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  90720,
+        "thread":  "index-search-1",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  91312,
+        "thread":  "index-search-5",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-index",
+        "pid":  75068,
+        "tid":  93976,
+        "thread":  "index-delivery-C:\\",
+        "switches_per_sec":  13.355,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-plugins",
+        "pid":  20296,
+        "tid":  8116,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-plugins",
+        "pid":  20296,
+        "tid":  50788,
+        "thread":  "stdin",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-plugins",
+        "pid":  20296,
+        "tid":  52004,
+        "thread":  "ws send",
+        "switches_per_sec":  0.028,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-plugins",
+        "pid":  20296,
+        "tid":  56176,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-plugins",
+        "pid":  20296,
+        "tid":  58272,
+        "thread":  "ws",
+        "switches_per_sec":  0.028,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-plugins",
+        "pid":  20296,
+        "tid":  70312,
+        "thread":  "epoch",
+        "switches_per_sec":  0.111,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-plugins",
+        "pid":  20296,
+        "tid":  70556,
+        "thread":  "main",
+        "switches_per_sec":  0.083,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-plugins",
+        "pid":  20296,
+        "tid":  81712,
+        "thread":  "",
+        "switches_per_sec":  0.333,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-plugins",
+        "pid":  20296,
+        "tid":  89788,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  2612,
+        "thread":  "winkey",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  6232,
+        "thread":  "",
+        "switches_per_sec":  0.361,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  6796,
+        "thread":  "notify-rs windows loop",
+        "switches_per_sec":  9.218,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  8852,
+        "thread":  "integration-Notifications",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  11376,
+        "thread":  "ui-file-change",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  12708,
+        "thread":  "desktop-menu-shell",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  12864,
+        "thread":  "icons",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  17696,
+        "thread":  "ui-file-change",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  27124,
+        "thread":  "integration-Calendar",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  27156,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  27800,
+        "thread":  "integration-Media",
+        "switches_per_sec":  0.278,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  31860,
+        "thread":  "",
+        "switches_per_sec":  2.888,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  32104,
+        "thread":  "plugins out",
+        "switches_per_sec":  0.056,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  32136,
+        "thread":  "notify-rs windows loop",
+        "switches_per_sec":  9.385,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  32756,
+        "thread":  "",
+        "switches_per_sec":  2.943,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  34916,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  37300,
+        "thread":  "",
+        "switches_per_sec":  1.805,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  39932,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  40132,
+        "thread":  "notify-rs windows loop",
+        "switches_per_sec":  9.218,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  40656,
+        "thread":  "plugins err",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  44824,
+        "thread":  "",
+        "switches_per_sec":  1.277,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  45644,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  46340,
+        "thread":  "plugins in",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  48540,
+        "thread":  "",
+        "switches_per_sec":  1.305,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  50228,
+        "thread":  "widget-data",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  50824,
+        "thread":  "notify-rs windows loop",
+        "switches_per_sec":  9.274,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  53120,
+        "thread":  "win-events",
+        "switches_per_sec":  1.166,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  57680,
+        "thread":  "dir-watch",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  60392,
+        "thread":  "",
+        "switches_per_sec":  0.028,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  67080,
+        "thread":  "desktop-menu-hook",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  72932,
+        "thread":  "notify-rs windows loop",
+        "switches_per_sec":  9.329,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  73988,
+        "thread":  "",
+        "switches_per_sec":  3.859,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  77480,
+        "thread":  "main",
+        "switches_per_sec":  10.273,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  78528,
+        "thread":  "tray-host",
+        "switches_per_sec":  0.639,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  79128,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  86848,
+        "thread":  "",
+        "switches_per_sec":  2.332,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  86936,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  89400,
+        "thread":  "",
+        "switches_per_sec":  2.832,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  90124,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  93760,
+        "thread":  "ui-file-change",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  93800,
+        "thread":  "ui-file-change",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-shell",
+        "pid":  94016,
+        "tid":  93868,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-studio",
+        "pid":  32732,
+        "tid":  20840,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-studio",
+        "pid":  32732,
+        "tid":  20892,
+        "thread":  "main",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-studio",
+        "pid":  32732,
+        "tid":  22608,
+        "thread":  "notify-rs windows loop",
+        "switches_per_sec":  9.274,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-studio",
+        "pid":  32732,
+        "tid":  42240,
+        "thread":  "ui-file-change",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-studio",
+        "pid":  32732,
+        "tid":  54724,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-studio",
+        "pid":  32732,
+        "tid":  60240,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-studio",
+        "pid":  32732,
+        "tid":  83632,
+        "thread":  "icons",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  12612,
+        "thread":  "D3D Background Thread 3",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  17416,
+        "thread":  "D3D Background Thread 1",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  37340,
+        "thread":  "dir-watch",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  40312,
+        "thread":  "D3D Background Thread 0",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  48924,
+        "thread":  "",
+        "switches_per_sec":  119.894,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  51684,
+        "thread":  "",
+        "switches_per_sec":  65.361,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  52288,
+        "thread":  "main",
+        "switches_per_sec":  37.845,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  53504,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  54016,
+        "thread":  "D3D Background Thread 2",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  58084,
+        "thread":  "dir-watch",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  61376,
+        "thread":  "",
+        "switches_per_sec":  22.518,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  63292,
+        "thread":  "snapshot",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  70216,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  81620,
+        "thread":  "",
+        "switches_per_sec":  0,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  81696,
+        "thread":  "window-events",
+        "switches_per_sec":  7.33,
+        "elapsed_sec":  36.015
+    },
+    {
+        "process":  "mypaper-wallpaper",
+        "pid":  83820,
+        "tid":  92504,
+        "thread":  "",
+        "switches_per_sec":  9.746,
+        "elapsed_sec":  36.015
+    }
+]

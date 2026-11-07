@@ -1,0 +1,10 @@
+{
+  "completed": false,
+  "files_attempted": 30000,
+  "bytes_expected": 3840000,
+  "error": "Sizes did not converge within the fixture deadline. A real independent game pause overlapped this attempt; no fullscreen fixture/input was sent by this test.",
+  "fixture_cleaned": true,
+  "live_index_pid": 78592,
+  "peak_working_set_bytes": 759324672,
+  "note": "This is failure evidence, not a successful 30,000-file convergence measurement."
+}

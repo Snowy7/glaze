@@ -1,0 +1,36 @@
+﻿09:15:56 soak start (0 min)
+09:15:56 [start] explorer 76024: 1,305.0 MB priv, 9310 handles, 621.73 s cpu | SystemSettings 73468: 214.8 MB priv, 1938 handles, 102.41 s cpu
+09:15:56   opened window 11207074
+09:15:56   rules -> changed
+09:15:57   opened window 20777786
+09:15:57   rules -> none
+09:15:58   rules -> styled (navigated)
+09:15:59   rules -> changed (navigated)
+09:16:00   rules -> none (navigated)
+09:16:00   rules -> styled (navigated)
+09:16:01   rules -> changed (navigated)
+09:16:02   rules -> none (navigated)
+09:16:02   rules -> styled
+09:16:02   closed one during a change
+09:16:03   burst 1: 7 s with the lock; rules back to styled
+09:16:06 [after burst 1] explorer 76024: 1,321.7 MB priv, 9953 handles, 632.73 s cpu | SystemSettings 73468: 217.0 MB priv, 2006 handles, 104.92 s cpu
+09:16:16 [end] explorer 76024: 1,321.3 MB priv, 9906 handles, 632.75 s cpu | SystemSettings 73468: 217.0 MB priv, 2006 handles, 104.92 s cpu
+09:16:16 soak done
+09:16:53 soak start (0 min)
+09:16:53 [start] explorer 76024: 1,321.2 MB priv, 9828 handles, 632.81 s cpu | SystemSettings 73468: 216.6 MB priv, 1961 handles, 104.94 s cpu
+09:16:55   opened window 8524774
+09:16:55   rules -> changed
+09:16:58   opened window 120458346
+09:16:58   rules -> none
+09:16:59   rules -> styled (navigated)
+09:17:00   rules -> changed (navigated)
+09:17:01   rules -> none (navigated)
+09:17:02   rules -> styled (navigated)
+09:17:03   rules -> changed (navigated)
+09:17:03   rules -> none (navigated)
+09:17:03   rules -> styled
+09:17:04   closed one during a change
+09:17:04   burst 1: 11 s with the lock; rules back to styled
+09:17:07 [after burst 1] explorer 76024: 1,329.3 MB priv, 9924 handles, 641.78 s cpu | SystemSettings 73468: 218.3 MB priv, 2004 handles, 107.67 s cpu
+09:17:17 [end] explorer 76024: 1,329.3 MB priv, 9922 handles, 641.80 s cpu | SystemSettings 73468: 218.3 MB priv, 2004 handles, 107.67 s cpu
+09:17:18 soak done

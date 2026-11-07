@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use mypaper_config::Config;
 use mypaper_desktop::{ConfigWatcher, watch_config};
-use notify::Watcher;
+use mypaper_fswatch::Watch;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
@@ -38,9 +38,17 @@ fn actions(old: &Config, new: &Config) -> Vec<Action> {
     if old.theme != new.theme {
         actions.push(Action::SwitchTheme(new.theme.clone()));
     }
-    if (old.paused, old.pause_on_battery, old.pause_on_fullscreen)
-        != (new.paused, new.pause_on_battery, new.pause_on_fullscreen)
-    {
+    if (
+        old.paused,
+        old.pause_on_battery,
+        old.pause_on_fullscreen,
+        old.engine.during_games,
+    ) != (
+        new.paused,
+        new.pause_on_battery,
+        new.pause_on_fullscreen,
+        new.engine.during_games,
+    ) {
         actions.push(Action::UpdateHold);
     }
     if old.static_snapshot != new.static_snapshot {
@@ -55,7 +63,7 @@ pub struct Live {
     /// effect until the config's theme changes from what it was at startup.
     config: Config,
     apply_at: Option<Instant>,
-    theme_watch: Option<notify::RecommendedWatcher>,
+    theme_watch: Option<Watch>,
     _config_watch: ConfigWatcher,
 }
 
@@ -120,22 +128,13 @@ impl Live {
     }
 }
 
-/// Wakes the main thread with `WM_RELOAD` whenever a theme file changes.
-fn watch_theme(dir: &Path) -> Option<notify::RecommendedWatcher> {
+/// Wakes the main thread with `WM_RELOAD` whenever a theme file changes, including descendants
+/// and recovery after a folder replacement. No wakes while idle.
+fn watch_theme(dir: &Path) -> Option<Watch> {
     // SAFETY: no preconditions.
     let thread = unsafe { GetCurrentThreadId() };
-    let watch = || -> notify::Result<_> {
-        let mut watcher =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                if event.is_ok_and(|e| !e.kind.is_access()) {
-                    post(thread, WM_RELOAD);
-                }
-            })?;
-        watcher.watch(dir, notify::RecursiveMode::Recursive)?;
-        Ok(watcher)
-    };
-    watch()
-        .inspect_err(|e| log::warn!("not watching {} for changes: {e}", dir.display()))
+    Watch::directory(dir, true, move |_| post(thread, WM_RELOAD))
+        .inspect_err(|e| log::warn!("not watching {} for changes: {e:#}", dir.display()))
         .ok()
 }
 

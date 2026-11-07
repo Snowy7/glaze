@@ -43,6 +43,47 @@ pub enum IconSet {
     Font(Arc<str>),
 }
 
+/// Named counterparts of legacy menu glyphs. Custom glyphs keep their font rendering.
+pub fn from_system_glyph(glyph: char) -> Option<Icon> {
+    Some(match glyph {
+        '\u{E73E}' => Icon::Check,
+        '\u{E76C}' => Icon::ChevronRight,
+        '\u{E713}' => Icon::Settings,
+        '\u{E721}' => Icon::Search,
+        '\u{E70F}' => Icon::Edit,
+        '\u{E74D}' => Icon::Delete,
+        '\u{E8C8}' => Icon::Copy,
+        '\u{E72C}' => Icon::Refresh,
+        '\u{E718}' => Icon::Pin,
+        '\u{E8A7}' => Icon::Folder,
+        '\u{E7F4}' => Icon::Desktop,
+        '\u{E8A5}' => Icon::File,
+        '\u{E710}' => Icon::Add,
+        '\u{E7E8}' => Icon::Power,
+        '\u{E777}' => Icon::Restart,
+        '\u{E748}' => Icon::SignOut,
+        '\u{E72E}' => Icon::Lock,
+        '\u{E711}' => Icon::Close,
+        '\u{ECA5}' => Icon::Apps,
+        '\u{E8A9}' => Icon::Layers,
+        '\u{E8CB}' => Icon::ArrowDown,
+        '\u{ECC8}' => Icon::Add,
+        '\u{E77F}' => Icon::Clipboard,
+        '\u{E771}' => Icon::Controls,
+        '\u{E756}' | '\u{E943}' => Icon::Terminal,
+        '\u{E8B7}' => Icon::Folder,
+        '\u{ECAA}' => Icon::Window,
+        '\u{EB9F}' => Icon::Photo,
+        '\u{E790}' => Icon::Settings,
+        '\u{E734}' => Icon::Star,
+        '\u{E753}' => Icon::Cloud,
+        '\u{E774}' => Icon::Globe,
+        '\u{E8D6}' => Icon::Music,
+        '\u{E8BD}' => Icon::Message,
+        _ => return None,
+    })
+}
+
 /// A named icon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Icon {

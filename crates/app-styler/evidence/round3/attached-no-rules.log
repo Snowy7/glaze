@@ -1,0 +1,36 @@
+﻿09:13:33 soak start (0 min)
+09:13:33 [start] explorer 76024: 1,029.1 MB priv, 7379 handles, 597.31 s cpu | mypaper-styler 21724: 3.3 MB priv, 300 handles, 0.09 s cpu | SystemSettings 73468: 208.6 MB priv, 1923 handles, 88.22 s cpu
+09:13:33   opened window 7937810
+09:13:33   rules -> changed
+09:13:34   opened window 119868522
+09:13:34   rules -> none
+09:13:35   rules -> styled (navigated)
+09:13:36   rules -> changed (navigated)
+09:13:37   rules -> none (navigated)
+09:13:38   rules -> styled (navigated)
+09:13:40   rules -> changed (navigated)
+09:13:41   rules -> none (navigated)
+09:13:41   rules -> styled
+09:13:41   closed one during a change
+09:13:42   burst 1: 9 s with the lock; rules back to styled
+09:13:45 [after burst 1] explorer 76024: 1,180.1 MB priv, 9201 handles, 609.73 s cpu | mypaper-styler 21724: 3.3 MB priv, 300 handles, 0.14 s cpu | SystemSettings 73468: 212.2 MB priv, 1993 handles, 94.89 s cpu
+09:13:55 [end] explorer 76024: 1,180.2 MB priv, 9203 handles, 609.73 s cpu | mypaper-styler 21724: 3.3 MB priv, 300 handles, 0.14 s cpu | SystemSettings 73468: 211.8 MB priv, 1969 handles, 94.89 s cpu
+09:13:55 soak done
+09:14:30 soak start (0 min)
+09:14:30 [start] explorer 76024: 1,178.1 MB priv, 8926 handles, 609.80 s cpu | mypaper-styler 21724: 3.3 MB priv, 300 handles, 0.14 s cpu | SystemSettings 73468: 211.5 MB priv, 1939 handles, 94.91 s cpu
+09:14:31   opened window 30738810
+09:14:31   rules -> changed
+09:14:31   opened window 6882634
+09:14:31   rules -> none
+09:14:33   rules -> styled (navigated)
+09:14:34   rules -> changed (navigated)
+09:14:35   rules -> none (navigated)
+09:14:36   rules -> styled (navigated)
+09:14:38   rules -> changed (navigated)
+09:14:38   rules -> none (navigated)
+09:14:38   rules -> styled
+09:14:39   closed one during a change
+09:14:39   burst 1: 9 s with the lock; rules back to styled
+09:14:42 [after burst 1] explorer 76024: 1,304.8 MB priv, 10017 handles, 621.09 s cpu | mypaper-styler 21724: 3.0 MB priv, 294 handles, 0.14 s cpu | SystemSettings 73468: 216.3 MB priv, 2006 handles, 102.33 s cpu
+09:14:52 [end] explorer 76024: 1,304.8 MB priv, 10013 handles, 621.11 s cpu | mypaper-styler 21724: 3.0 MB priv, 294 handles, 0.14 s cpu | SystemSettings 73468: 216.3 MB priv, 2006 handles, 102.33 s cpu
+09:14:52 soak done

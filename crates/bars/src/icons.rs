@@ -505,6 +505,13 @@ fn encode_png(
     Ok(())
 }
 
+
+impl Default for AppIconResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -531,11 +538,5 @@ mod tests {
         let mut pixels = vec![200, 10, 10, 100];
         fix_alpha(&mut pixels);
         assert_eq!(pixels, [200, 10, 10, 100]);
-    }
-}
-
-impl Default for AppIconResolver {
-    fn default() -> Self {
-        Self::new()
     }
 }

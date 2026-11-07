@@ -204,6 +204,9 @@ pub struct Model {
     pub last_clock: Option<Stamp>,
     pub previous_clock: Option<Stamp>,
     pub placed: Placed,
+    /// An explicit radius beats variant shapes such as the media pill.
+    pub corner_override: Option<f32>,
+    pub edge_override: Option<bool>,
     pub kind: Widget,
     pub data: Value,
     pub error: Option<String>,
@@ -306,6 +309,8 @@ impl Model {
             data["coins"] = json!(coins);
         }
         Ok(Self {
+            corner_override: None,
+            edge_override: None,
             integration: Default::default(),
             scroll: 0.0,
             scroll_max: Cell::new(0.0),

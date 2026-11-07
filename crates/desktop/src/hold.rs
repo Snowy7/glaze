@@ -17,15 +17,19 @@ pub enum Reason {
     Locked,
     /// A fullscreen app or game is in front; it gets the whole GPU.
     Fullscreen,
+    /// Core's game signal is on (`engine.during_games: pause`, docs/system.md "Games"). Unlike the
+    /// others it also releases the drawing after a while, covered or not.
+    Game,
 }
 
 impl Reason {
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::User,
         Self::Battery,
         Self::DisplayOff,
         Self::Locked,
         Self::Fullscreen,
+        Self::Game,
     ];
 
     fn label(self) -> &'static str {
@@ -35,6 +39,7 @@ impl Reason {
             Self::DisplayOff => "display off",
             Self::Locked => "session locked",
             Self::Fullscreen => "fullscreen app in front",
+            Self::Game => "game running",
         }
     }
 }
@@ -105,10 +110,12 @@ pub struct Holds {
     paused: bool,
     pause_on_battery: bool,
     pause_on_fullscreen: bool,
+    pause_during_games: bool,
     on_battery: bool,
     display_off: bool,
     locked: bool,
     fullscreen: bool,
+    game: bool,
 }
 
 impl Holds {
@@ -117,6 +124,7 @@ impl Holds {
         self.paused = config.paused;
         self.pause_on_battery = config.pause_on_battery;
         self.pause_on_fullscreen = config.pause_on_fullscreen;
+        self.pause_during_games = config.engine.during_games == mypaper_config::DuringGames::Pause;
     }
 
     pub fn set(&mut self, fact: Fact, value: bool) {
@@ -129,6 +137,16 @@ impl Holds {
 
     pub fn set_fullscreen(&mut self, value: bool) {
         self.fullscreen = value;
+    }
+
+    /// Core's game signal (docs/system.md, "Games").
+    pub fn set_game(&mut self, value: bool) {
+        self.game = value;
+    }
+
+    /// Whether core's game signal is worth following at all.
+    pub fn wants_game(&self) -> bool {
+        self.pause_during_games
     }
 
     /// Whether fullscreen detection is worth running at all.
@@ -146,6 +164,7 @@ impl Holds {
                 Reason::Fullscreen,
                 self.pause_on_fullscreen && self.fullscreen,
             )
+            .with(Reason::Game, self.pause_during_games && self.game)
     }
 }
 
@@ -207,6 +226,18 @@ mod tests {
             ..Config::default()
         });
         assert_eq!(holds.reasons().to_string(), "paused by user");
+    }
+
+    #[test]
+    fn a_game_holds_unless_kept() {
+        let mut holds = holds(Config::default());
+        assert!(holds.wants_game());
+        holds.set_game(true);
+        assert_eq!(holds.reasons().to_string(), "game running");
+        let mut keep = Config::default();
+        keep.engine.during_games = mypaper_config::DuringGames::Keep;
+        holds.apply(&keep);
+        assert!(!holds.wants_game() && holds.reasons().is_empty());
     }
 
     #[test]

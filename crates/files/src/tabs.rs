@@ -22,7 +22,7 @@ pub struct Tab {
     pub scroll: Scroll,
     pub query_text: String,
     pub indexed: bool,
-    pub sizes: HashMap<String, u64>,
+    pub sizes: HashMap<String, crate::model::Size>,
     pub loaded: bool,
 }
 
@@ -51,7 +51,7 @@ pub struct Folder {
     pub location: Location,
     pub entries: Arc<Vec<Entry>>,
     pub sort: Sort,
-    pub sizes: HashMap<String, u64>,
+    pub sizes: HashMap<String, crate::model::Size>,
 }
 
 /// A bounded LRU by entries as well as folder count. No folder scan on a cache hit.

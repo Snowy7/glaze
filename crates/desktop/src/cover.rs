@@ -1,21 +1,22 @@
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 
 use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
-use windows::Win32::System::Threading::{GetCurrentThreadId, INFINITE};
 use windows::Win32::Graphics::Dwm::{
     DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute,
 };
+use windows::Win32::System::Threading::{GetCurrentThreadId, INFINITE};
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
     CHILDID_SELF, DispatchMessageW, EVENT_OBJECT_CLOAKED, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
     EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_UNCLOAKED, EVENT_SYSTEM_FOREGROUND,
-    EVENT_SYSTEM_MINIMIZEEND, EnumWindows, GA_PARENT, GWL_EXSTYLE, GetAncestor, GetClassNameW,
-    GetDesktopWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsIconic,
-    IsWindowVisible, IsZoomed, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx,
-    OBJID_WINDOW, PM_NOREMOVE, PM_REMOVE, PeekMessageW, PostThreadMessageW, QS_ALLINPUT,
-    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_NULL, WM_QUIT, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+    EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZESTART, EnumWindows, GA_PARENT, GWL_EXSTYLE,
+    GetAncestor, GetClassNameW, GetDesktopWindow, GetWindowLongPtrW, GetWindowRect,
+    GetWindowThreadProcessId, IsIconic, IsWindowVisible, IsZoomed, MSG, MWMO_INPUTAVAILABLE,
+    MsgWaitForMultipleObjectsEx, OBJID_WINDOW, PM_NOREMOVE, PM_REMOVE, PeekMessageW,
+    PostThreadMessageW, QS_ALLINPUT, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_NULL,
+    WM_QUIT, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 use windows::core::BOOL;
 
@@ -24,6 +25,20 @@ use crate::Rect;
 static CHANGED: AtomicBool = AtomicBool::new(true);
 /// The thread [`WindowEvents::install`] ran on, woken when `CHANGED` turns true (0: none).
 static CONSUMER: AtomicU32 = AtomicU32::new(0);
+/// The windows that covered something at the last scan of each kind (monitors, regions). Coverage
+/// is always one window's, so only these can uncover anything by closing: any other window's
+/// `EVENT_OBJECT_DESTROY` (every closing console, tooltip or helper window, ~1 a second on a
+/// quiet desktop) is no news and wakes nobody.
+static COVERING: Mutex<[Vec<isize>; 2]> = Mutex::new([Vec::new(), Vec::new()]);
+
+fn was_covering(hwnd: HWND) -> bool {
+    COVERING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .iter()
+        .flatten()
+        .any(|&w| w == hwnd.0 as isize)
+}
 
 /// How long the hook thread lets events gather after taking a batch. Every cursor move anywhere
 /// is a LOCATIONCHANGE, about 900 a second from a fast mouse; taken one by one on the engine's
@@ -81,8 +96,13 @@ impl Drop for WindowEvents {
 /// Hooks the window events, sends its thread id once its queue exists, then takes events in
 /// batches until `WM_QUIT`, and unhooks.
 fn hook_thread(started: std::sync::mpsc::Sender<u32>) {
+    // Only what can change coverage. The system events between FOREGROUND and MINIMIZESTART
+    // (mouse capture, menus, move/size loops, dialogs, scrolling, alt-tab) fire on top-level
+    // windows with every click; each one made the engine and the widgets rescan (2026-11-06:
+    // 10 clicks a second added ~80 wakes a second to the engine's main thread).
     let ranges = [
-        (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND),
+        (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
+        (EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND),
         (EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE),
         (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE),
         (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
@@ -144,11 +164,16 @@ unsafe extern "system" fn on_event(
         let top = unsafe { GetAncestor(hwnd, GA_PARENT) == GetDesktopWindow() };
         // Use the same overlay exclusion as opaque_frame: wallpaper/glass/HUD windows cannot
         // cover widgets, so their location updates must not repeatedly scan/restack the desktop.
-        // SAFETY: read-only style query; a stale handle returns zero and its destroy wake is kept.
+        // SAFETY: read-only style query; a stale handle returns zero.
         let overlay = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 }
             & (WS_EX_TOOLWINDOW.0 | WS_EX_TRANSPARENT.0 | WS_EX_NOACTIVATE.0)
             != 0;
-        if (top && !overlay) || event == EVENT_OBJECT_DESTROY || event == EVENT_SYSTEM_FOREGROUND {
+        // A destroyed window can't be classified any more: it matters if it covered something.
+        let destroyed = event == EVENT_OBJECT_DESTROY;
+        if (top && !overlay && !destroyed)
+            || (destroyed && was_covering(hwnd))
+            || event == EVENT_SYSTEM_FOREGROUND
+        {
             changed();
         }
     }
@@ -166,11 +191,15 @@ fn covered(monitors: &[Rect], maximized: bool) -> Vec<bool> {
         covered: vec![false; monitors.len()],
         pid: std::process::id(),
         maximized,
+        covering: Vec::new(),
     };
     // SAFETY: the callback only runs during this call, while `scan` is alive.
     unsafe {
         let _ = EnumWindows(Some(scan_window), LPARAM(&raw mut scan as isize));
     }
+    COVERING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)[usize::from(maximized)] = scan.covering;
     scan.covered
 }
 
@@ -179,6 +208,8 @@ struct Scan<'a> {
     covered: Vec<bool>,
     pid: u32,
     maximized: bool,
+    /// The windows that cover something ([`COVERING`]).
+    covering: Vec<isize>,
 }
 
 const SHELL_CLASSES: &[&str] = &[
@@ -198,11 +229,16 @@ unsafe extern "system" fn scan_window(hwnd: HWND, data: LPARAM) -> BOOL {
     // SAFETY: as above.
     let zoomed = unsafe { IsZoomed(hwnd) }.as_bool();
     let (cx, cy) = frame.center();
+    let mut covers = false;
     for (monitor, covered) in scan.monitors.iter().zip(scan.covered.iter_mut()) {
         // Maximized windows stop at the taskbar, so match them by center.
         if (scan.maximized && zoomed && monitor.contains_point(cx, cy)) || frame.contains(monitor) {
             *covered = true;
+            covers = true;
         }
+    }
+    if covers {
+        scan.covering.push(hwnd.0 as isize);
     }
     true.into()
 }
@@ -344,19 +380,30 @@ mod tests {
             DestroyWindow(overlay).unwrap();
             DestroyWindow(child).unwrap();
             DestroyWindow(root).unwrap();
-            on_event(
-                Default::default(),
-                EVENT_OBJECT_DESTROY,
-                root,
-                OBJID_WINDOW.0,
-                CHILDID_SELF as i32,
-                0,
-                0,
+            let destroy = |window: HWND| {
+                on_event(
+                    Default::default(),
+                    EVENT_OBJECT_DESTROY,
+                    window,
+                    OBJID_WINDOW.0,
+                    CHILDID_SELF as i32,
+                    0,
+                    0,
+                );
+            };
+            destroy(overlay);
+            assert!(
+                !CHANGED.load(Ordering::Relaxed),
+                "a window that covered nothing closing is no news"
             );
+            // The last scan found `root` covering a monitor.
+            COVERING.lock().unwrap()[1] = vec![root.0 as isize];
+            destroy(root);
             assert!(
                 CHANGED.swap(false, Ordering::Relaxed),
-                "closing a covered app still resumes its monitor"
+                "closing a covering app still resumes its monitor"
             );
+            COVERING.lock().unwrap()[1].clear();
         }
     }
 }

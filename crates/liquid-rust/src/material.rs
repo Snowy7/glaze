@@ -139,6 +139,10 @@ pub struct Material {
     pub brightness: f32,
     /// mypaper: saturation of what's behind (1: as is, 0: grey), with brightness.
     pub saturation: f32,
+    /// mypaper: independent bottom inner-shadow strength; zero skips its shader work.
+    pub inner_shadow: f32,
+    /// mypaper: the shape's own coverage clips overlays, with no outer shadow/hairline.
+    pub clip_to_shape: bool,
 }
 
 impl Material {
@@ -163,6 +167,8 @@ impl Material {
             dim: 0.0,
             brightness: 1.0,
             saturation: 1.0,
+            inner_shadow: 0.0,
+            clip_to_shape: false,
         }
     }
 
@@ -189,6 +195,8 @@ impl Material {
             dim: 0.0,
             brightness: 1.0,
             saturation: 1.0,
+            inner_shadow: 0.0,
+            clip_to_shape: false,
         }
     }
 
@@ -233,6 +241,8 @@ impl Material {
             dim: 0.0,
             brightness: 1.0,
             saturation: 1.0,
+            inner_shadow: 0.0,
+            clip_to_shape: false,
         }
     }
 
@@ -289,6 +299,8 @@ impl Material {
             dim: f(self.dim, to.dim),
             brightness: f(self.brightness, to.brightness),
             saturation: f(self.saturation, to.saturation),
+            inner_shadow: f(self.inner_shadow, to.inner_shadow),
+            clip_to_shape: if t < 0.5 { self.clip_to_shape } else { to.clip_to_shape },
         }
     }
 }

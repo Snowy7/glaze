@@ -4,7 +4,8 @@
 //! Everything is drawn with [`kit::Frame`] from the bar's [`Theme`](mypaper_ui::Theme)
 //! (`look.rs`): the body is the kit's surface (an invisible hit fill over engine glass, or the
 //! style's own fill), items are washes, the kit's icons and the theme's type, and hover, press
-//! and keyboard focus come from the kit's [`Interaction`]. Nothing draws an outline on glass.
+//! and keyboard focus come from the kit's [`Interaction`]. An explicit edge draws a hairline
+//! on glass too; its specular rim remains the material's own effect.
 //! Items sit on whole device pixels, so text, icons and tray bitmaps stay crisp at every DPI.
 use super::{look::Tokens, services::Model};
 use mypaper_bars::{
@@ -113,10 +114,8 @@ impl Out {
 /// and Solid's hairline, without) or the config's own background colour.
 fn panel(f: &mut kit::Frame, out: &mut Out, rect: Rect, radius: f32, tokens: &Tokens) {
     out.shapes.push((rect, radius));
-    f.fill(rect, radius, Rgba::HIT);
-    if tokens.material.is_some() {
-        return;
-    }
+    f.fill_continuous(rect, radius, tokens.glass_style.smoothing, Rgba::HIT);
+    let glass = tokens.material.is_some();
     let state = if f.input.pressed.is_some() {
         2
     } else if f.input.hover.is_some() {
@@ -124,7 +123,7 @@ fn panel(f: &mut kit::Frame, out: &mut Out, rect: Rect, radius: f32, tokens: &To
     } else {
         0
     };
-    if let Some(shadow) = tokens.styles.shadows[state].filter(|_| tokens.shadow) {
+    if let Some(shadow) = tokens.styles.shadows[state].filter(|_| tokens.shadow && !glass) {
         f.push(Op::Shadow {
             rect: rect
                 .offset(shadow.x * f.s, 0.0)
@@ -135,19 +134,30 @@ fn panel(f: &mut kit::Frame, out: &mut Out, rect: Rect, radius: f32, tokens: &To
             color: shadow.color,
         });
     }
-    f.fill(
+    if !glass { f.fill_continuous(
         rect,
         radius,
+        tokens.glass_style.smoothing,
         tokens.fill.unwrap_or(tokens.theme.color.surface),
-    );
+    ); }
     let edge = tokens.styles.edges[state];
     let width = edge.width * f.s;
     if width > 0.0 {
-        f.push(Op::Stroke {
-            rect: rect.inflate(-width / 2.0),
-            radius: (radius - width / 2.0).max(0.0),
-            width,
-            color: edge.color,
+        f.push(if tokens.glass_style.smoothing > 0.0 {
+            Op::Continuous {
+                rect: rect.inflate(-width / 2.0),
+                radius: (radius - width / 2.0).max(0.0),
+                smoothing: tokens.glass_style.smoothing,
+                width,
+                color: edge.color,
+            }
+        } else {
+            Op::Stroke {
+                rect: rect.inflate(-width / 2.0),
+                radius: (radius - width / 2.0).max(0.0),
+                width,
+                color: edge.color,
+            }
         });
     }
 }
@@ -861,7 +871,7 @@ pub fn top(
     let m = px(t.margin() as f32);
     let h = px(t.height as f32);
     // A rounded bar or island keeps its first and last item off the curve of its corners.
-    let corner = if t.layout == TopLayout::Strip {
+    let corner = if t.layout == TopLayout::Strip && !tokens.explicit_radius {
         0.0
     } else {
         (px(tokens.radius) * 0.4).round()
@@ -906,7 +916,7 @@ pub fn top(
     let mut f = kit::Frame::new(&mut ui.text, &tokens.theme, scale, &input);
     let radius = px(tokens.radius);
     if t.layout != TopLayout::Islands && !minimal {
-        let r = if t.layout == TopLayout::Strip {
+        let r = if t.layout == TopLayout::Strip && !tokens.explicit_radius {
             0.0
         } else {
             radius

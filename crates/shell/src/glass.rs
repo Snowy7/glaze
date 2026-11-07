@@ -47,6 +47,7 @@ pub struct Plate {
     pub rect: Rect,
     pub radius: f32,
     pub material: Material,
+    pub style: ipc::Style,
 }
 
 /// Who owns a set of plates; each source replaces only its own per monitor.
@@ -63,9 +64,11 @@ pub enum Source {
 #[derive(Default)]
 struct Merger {
     sets: BTreeMap<(Source, String), Vec<ipc::Plate>>,
+    styles: BTreeMap<(Source, String), Vec<ipc::Style>>,
     writer: Option<ipc::Writer>,
     failed: bool,
     published: Vec<ipc::Plate>,
+    published_styles: Vec<ipc::Style>,
 }
 
 thread_local! {
@@ -89,7 +92,7 @@ pub fn publish(source: Source, monitor: &Monitor, plates: &[Plate]) {
             radius: p.radius,
             material: ipc::Material {
                 clarity: p.material.clarity,
-                blur: p.material.blur,
+                blur: p.material.blur.clamp(0.0, 256.0),
                 refraction: p.material.refraction,
                 highlight: p.material.highlight,
                 tint: [
@@ -102,6 +105,10 @@ pub fn publish(source: Source, monitor: &Monitor, plates: &[Plate]) {
         })
         .collect();
     MERGER.with_borrow_mut(|m| {
+        m.styles.insert(
+            (source, monitor.device.clone()),
+            plates.iter().map(|p| p.style).collect(),
+        );
         m.sets.insert((source, monitor.device.clone()), converted);
         m.flush();
     });
@@ -122,6 +129,7 @@ impl Merger {
             return;
         };
         let all = merged(&self.sets);
+        let styles: Vec<_> = self.styles.values().flatten().copied().collect();
         if all.len() > ipc::MAX_PLATES {
             log::error!(
                 "{} plates exceeds the whole-desktop limit of {}",
@@ -130,13 +138,14 @@ impl Merger {
             );
             return;
         }
-        if all == self.published {
+        if all == self.published && styles == self.published_styles {
             return;
         }
-        if let Err(e) = writer.publish(&all) {
+        if let Err(e) = writer.publish_styled(&all, &styles) {
             log::error!("glass publish: {e:#}");
         } else {
             self.published = all;
+            self.published_styles = styles;
         }
     }
 }

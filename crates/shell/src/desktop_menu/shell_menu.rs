@@ -45,7 +45,7 @@ const ODA_DRAWENTIRE: u32 = 1;
 #[repr(C)]
 #[derive(Default)]
 #[allow(non_snake_case)]
-struct MEASUREITEMSTRUCT {
+struct MeasureItemStruct {
     CtlType: u32,
     CtlID: u32,
     itemID: u32,
@@ -57,7 +57,7 @@ struct MEASUREITEMSTRUCT {
 #[repr(C)]
 #[derive(Default)]
 #[allow(non_snake_case)]
-struct DRAWITEMSTRUCT {
+struct DrawItemStruct {
     CtlType: u32,
     CtlID: u32,
     itemID: u32,
@@ -355,6 +355,7 @@ impl Walker<'_> {
                 cch: text.len() as u32 - 1,
                 ..Default::default()
             };
+            // SAFETY: the live menu and writable text buffer belong to this walk.
             if unsafe { GetMenuItemInfoW(hmenu, index, true, &mut info) }.is_err() {
                 continue;
             }
@@ -365,8 +366,10 @@ impl Walker<'_> {
             let label = String::from_utf16_lossy(&text[..info.cch as usize]);
             let label = clean(&label);
             if !info.hSubMenu.is_invalid() && depth < 3 {
+                // SAFETY: `info` was read from this live menu; its submenu remains owned by it.
                 let icon = unsafe { self.icon(hmenu, &info, "") };
                 self.init_popup(info.hSubMenu, index);
+                // SAFETY: the initialized submenu remains live throughout this recursive walk.
                 let items = unsafe { self.walk(info.hSubMenu, depth + 1) };
                 if !label.is_empty() && !items.is_empty() {
                     out.push(ShellItem::Submenu { label, icon, items });
@@ -381,6 +384,7 @@ impl Walker<'_> {
                 continue;
             }
             let verb = self.verb(info.wID - FIRST);
+            // SAFETY: `info` is this live menu item's metadata and the verb is an owned string.
             let icon = unsafe { self.icon(hmenu, &info, &verb) };
             out.push(ShellItem::Action {
                 verb,
@@ -448,16 +452,17 @@ impl Walker<'_> {
             return Some(icon);
         }
         let key = verb_key(verb);
-        if let Some(icon) = key.as_deref().and_then(|k| reg_string(k, "Icon")) {
-            if let Some(icon) = found(extract(&icon, size), IconFrom::Registry) {
-                return Some(icon);
-            }
+        if let Some(icon) = key.as_deref().and_then(|k| reg_string(k, "Icon"))
+            && let Some(icon) = found(extract(&icon, size), IconFrom::Registry)
+        {
+            return Some(icon);
         }
         if let Some(icon) = found(bitmap(info.hbmpItem), IconFrom::Bitmap) {
             return Some(icon);
         }
         // HBMMENU_CALLBACK: the extension draws it.
         if info.hbmpItem.0 as isize == -1
+            // SAFETY: the callback item belongs to the live menu retained by this walker.
             && let Some(icon) = found(unsafe { self.draw(hmenu, info) }, IconFrom::Callback)
         {
             return Some(icon);
@@ -489,7 +494,7 @@ impl Walker<'_> {
                 }
             }
         };
-        let mut measure = MEASUREITEMSTRUCT {
+        let mut measure = MeasureItemStruct {
             CtlType: ODT_MENU,
             itemID: info.wID,
             itemData: info.dwItemData,
@@ -516,7 +521,7 @@ impl Walker<'_> {
                 let old = SelectObject(dc, HGDIOBJ(dib.0));
                 let len = (w * h * 4) as usize;
                 std::ptr::write_bytes(bits.cast::<u8>(), background, len);
-                let draw = DRAWITEMSTRUCT {
+                let draw = DrawItemStruct {
                     CtlType: ODT_MENU,
                     itemID: info.wID,
                     itemAction: ODA_DRAWENTIRE,
@@ -555,9 +560,9 @@ fn from_black_and_white(black: &[u8], white: &[u8]) -> Option<Vec<u8>> {
     let mut out = vec![0u8; black.len()];
     let mut any = false;
     for ((o, b), w) in out
-        .chunks_exact_mut(4)
-        .zip(black.chunks_exact(4))
-        .zip(white.chunks_exact(4))
+        .as_chunks_mut::<4>().0.iter_mut()
+        .zip(black.as_chunks::<4>().0.iter())
+        .zip(white.as_chunks::<4>().0.iter())
     {
         let through = (0..3).map(|c| w[c].saturating_sub(b[c])).max().unwrap_or(0);
         let alpha = 255 - through;
@@ -671,7 +676,7 @@ fn icon_image(icon: HICON) -> Option<Image> {
                 && mask.width == image.width
                 && mask.height >= image.height
             {
-                for (p, m) in image.pixels.chunks_exact_mut(4).zip(mask.pixels.chunks_exact(4)) {
+                for (p, m) in image.pixels.as_chunks_mut::<4>().0.iter_mut().zip(mask.pixels.as_chunks::<4>().0.iter()) {
                     if m[0] != 0 {
                         p.copy_from_slice(&[0, 0, 0, 0]);
                     }
@@ -689,7 +694,7 @@ fn icon_image(icon: HICON) -> Option<Image> {
 /// Does a 32-bit bitmap carry any alpha at all?
 fn has_alpha(hbm: HBITMAP) -> bool {
     dib_pixels(hbm).is_some_and(|(_, _, bits, pixels)| {
-        bits == 32 && pixels.chunks_exact(4).any(|p| p[3] != 0)
+        bits == 32 && pixels.as_chunks::<4>().0.iter().any(|p| p[3] != 0)
     })
 }
 
@@ -734,7 +739,7 @@ fn invoke(menu: &IContextMenu, id: u32, at: (i32, i32)) -> Result<()> {
         .map(|d| HSTRING::from(d.as_os_str()));
     let info = CMINVOKECOMMANDINFOEX {
         cbSize: size_of::<CMINVOKECOMMANDINFOEX>() as u32,
-        fMask: CMIC_MASK_UNICODE | CMIC_MASK_PTINVOKE as u32,
+        fMask: CMIC_MASK_UNICODE | CMIC_MASK_PTINVOKE,
         hwnd: HWND::default(),
         // MAKEINTRESOURCE: the command's offset from FIRST.
         lpVerb: PCSTR((id - FIRST) as usize as *const u8),
@@ -920,18 +925,18 @@ fn bitmap_image(hbm: HBITMAP) -> Option<Image> {
 /// Makes BGRA `pixels` premultiplied: no alpha at all (or a bitmap that has none) means
 /// opaque; any colour channel above its alpha means straight alpha.
 fn premultiply(pixels: &mut [u8], has_alpha: bool) {
-    let any_alpha = has_alpha && pixels.chunks_exact(4).any(|p| p[3] != 0);
+    let any_alpha = has_alpha && pixels.as_chunks::<4>().0.iter().any(|p| p[3] != 0);
     if !any_alpha {
-        for p in pixels.chunks_exact_mut(4) {
+        for p in pixels.as_chunks_mut::<4>().0.iter_mut() {
             p[3] = 255;
         }
         return;
     }
     let straight = pixels
-        .chunks_exact(4)
+        .as_chunks::<4>().0.iter()
         .any(|p| p[0] > p[3] || p[1] > p[3] || p[2] > p[3]);
     if straight {
-        for p in pixels.chunks_exact_mut(4) {
+        for p in pixels.as_chunks_mut::<4>().0.iter_mut() {
             let a = u16::from(p[3]);
             for c in &mut p[..3] {
                 *c = ((u16::from(*c) * a + 127) / 255) as u8;

@@ -18,7 +18,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use mypaper_desktop::Rect;
-use mypaper_ui::glass::{Backdrop, GlassMaterial, Shape};
+use mypaper_ui::glass::{Backdrop, GlassMaterial, GlassStyle, Shape};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
     IsWindow, SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE,
@@ -51,6 +51,13 @@ pub fn warm(client: HWND, shape: Shape) {
                     rect: rect(shape),
                     radius: 0.0,
                     material: Material::CLEAR,
+                },
+            );
+            let _ = request::send(
+                engine,
+                &Request::Style {
+                    client,
+                    style: request::Style::DEFAULT,
                 },
             );
             let _ = request::send(engine, &Request::Close { client });
@@ -130,6 +137,17 @@ impl Backdrop for Client {
     }
 
     fn open(&self, client: HWND, shape: Shape, radius: f32, material: &GlassMaterial) -> bool {
+        self.open_styled(client, shape, radius, material, &GlassStyle::default())
+    }
+
+    fn open_styled(
+        &self,
+        client: HWND,
+        shape: Shape,
+        radius: f32,
+        material: &GlassMaterial,
+        style: &GlassStyle,
+    ) -> bool {
         let Ok(channel) = Channel::open(client, true) else {
             return false;
         };
@@ -145,10 +163,27 @@ impl Backdrop for Client {
         if !self.send(&request) {
             return false;
         }
+        self.style(client, style);
         let mut plates = self.plates.borrow_mut();
         plates.retain(|p| p.client != client);
         plates.push(plate);
         true
+    }
+
+    fn style(&self, client: HWND, style: &GlassStyle) {
+        self.send(&Request::Style {
+            client,
+            style: request::Style {
+                brightness: style.brightness,
+                saturation: style.saturation,
+                smoothing: style.smoothing,
+                sheen: style.sheen.unwrap_or(-1.0),
+                depth: style.depth.unwrap_or(-1.0),
+                fade_ms: style.fade_ms,
+                inner_shadow: style.inner_shadow,
+                fade_curve: fade_curve(style),
+            },
+        });
     }
 
     fn place(&self, client: HWND, shape: Shape, radius: f32) {
@@ -197,6 +232,22 @@ impl Backdrop for Client {
     }
 }
 
+/// Translate the already-resolved kit curve once per style request; names and motion policy
+/// have been resolved with the surface's configuration, never in an animation frame.
+fn fade_curve(style: &GlassStyle) -> request::FadeCurve {
+    use mypaper_ui::transition::Easing;
+    match style.fade_curve {
+        None => request::FadeCurve::DEFAULT,
+        Some(Easing::Bezier(points)) => request::FadeCurve::bezier(points),
+        Some(Easing::Spring(s)) => {
+            request::FadeCurve::spring(s.mass, s.stiffness, s.damping, style.fade_ms / 1000.0)
+        }
+        Some(Easing::TimedSpring { spring: s, settle }) => {
+            request::FadeCurve::spring(s.mass, s.stiffness, s.damping, settle)
+        }
+    }
+}
+
 fn rect(shape: Shape) -> Rect {
     Rect {
         x: shape.x,
@@ -212,9 +263,59 @@ fn wire(material: &GlassMaterial) -> Material {
     let t = material.tint;
     Material {
         clarity: material.clarity.clamp(0.0, 1.0),
-        blur: material.blur.max(0.0),
+        blur: material.blur.clamp(0.0, 256.0),
         refraction: material.refraction.clamp(0.0, 1.0),
         highlight: material.highlight.clamp(0.0, 1.0),
         tint: [byte(t.r), byte(t.g), byte(t.b), 0],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wire_curves_follow_the_resolved_content_transition() {
+        use crate::bars::{look::glass_fade, motion};
+        use mypaper_bars::style::{Curve, Motion, MotionStyle};
+        use std::time::{Duration, Instant};
+        let curves = mypaper_bars::style::NAMED_CURVES
+            .iter()
+            .map(|name| Curve::Named((*name).into()))
+            .chain([
+                Curve::Bezier([0.13, -0.4, 0.8, 1.7]),
+                Curve::Spring(mypaper_bars::style::Spring {
+                    mass: 1.0,
+                    stiffness: 80.0,
+                    damping: 25.0,
+                }),
+            ]);
+        for curve in curves {
+            let root = Motion {
+                duration: Some(5000.0),
+                curve: Some(curve.clone()),
+                ..Default::default()
+            };
+            let timing = motion::resolve(&root, false, motion::Leaf::Open, true, false);
+            let mut style = GlassStyle::default();
+            glass_fade(&mut style, timing, MotionStyle::Fade);
+            let wire = fade_curve(&style);
+            assert!(wire.valid(), "{curve:?}");
+            let now = Instant::now();
+            let content = timing.start(0.0, 1.0, now);
+            for i in 0..=100 {
+                let x = i as f32 / 100.0;
+                let at = Duration::from_secs_f32(x * timing.duration.as_secs_f32());
+                assert!(
+                    (wire.at(x) - content.value(now + at).clamp(0.0, 1.0)).abs() < 0.001,
+                    "{curve:?} at {x}"
+                );
+            }
+        }
+        let timing = motion::resolve(&Motion::default(), false, motion::Leaf::Open, false, false);
+        let mut style = GlassStyle::default();
+        glass_fade(&mut style, timing, MotionStyle::Fade);
+        assert_eq!(style.fade_ms, 0.0);
+        assert_eq!(style.fade_curve, None);
     }
 }

@@ -11,7 +11,7 @@ while ($clock.Elapsed.TotalSeconds -lt $Seconds) {
   if ($service) {
     if ($previousPid -and $previousPid -ne $service.Id) { $interrupted = $true; break }
     $service.Refresh()
-    $rows += [pscustomobject]@{seconds=[Math]::Round($clock.Elapsed.TotalSeconds,2); pid=$service.Id; private_bytes=$service.PrivateMemorySize64; peak_private_bytes=$service.PeakPagedMemorySize64; working_set_bytes=$service.WorkingSet64; cpu_ms=$service.TotalProcessorTime.TotalMilliseconds}
+    $rows += [pscustomobject]@{seconds=[Math]::Round($clock.Elapsed.TotalSeconds,2); pid=$service.Id; private_bytes=$service.PrivateMemorySize64; peak_private_bytes=$service.PeakPagedMemorySize64; working_set_bytes=$service.WorkingSet64; peak_working_set_bytes=$service.PeakWorkingSet64; cpu_ms=$service.TotalProcessorTime.TotalMilliseconds}
     $previousPid = $service.Id
     if ($rows.Count % 10 -eq 0) {
       $status = (& $Exe --status) | ConvertFrom-Json
@@ -32,7 +32,8 @@ $last = $rows[-1]
   entries = $status.entries
   peak_private_bytes = ($rows | Measure-Object peak_private_bytes -Maximum).Maximum
   max_sampled_private_bytes = ($rows | Measure-Object private_bytes -Maximum).Maximum
-  peak_working_set_bytes = ($rows | Measure-Object working_set_bytes -Maximum).Maximum
+  peak_working_set_bytes = ($rows | Measure-Object peak_working_set_bytes -Maximum).Maximum
+  max_sampled_working_set_bytes = ($rows | Measure-Object working_set_bytes -Maximum).Maximum
   final_private_bytes = $last.private_bytes
   final_working_set_bytes = $last.working_set_bytes
   rows = $rows

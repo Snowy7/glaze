@@ -92,9 +92,16 @@ fn word_start(name: &[u8], at: usize) -> bool {
     at == 0 || (name[at - 1].is_ascii() && !name[at - 1].is_ascii_alphanumeric())
 }
 
-type Candidate = (u8, u32, std::cmp::Reverse<u32>);
+type Candidate = crate::names::Candidate;
 
-fn shard(store: &Store, query: &Query, start: usize, end: usize, limit: usize) -> Vec<Candidate> {
+fn shard(
+    store: &Store,
+    query: &Query,
+    start: usize,
+    end: usize,
+    limit: usize,
+    lane: usize,
+) -> Vec<Candidate> {
     // A min-heap keeps common suffix queries bounded without shifting 50 records for every
     // match (notably when enumeration is already ordered by modification time).
     let mut top = std::collections::BinaryHeap::with_capacity(limit);
@@ -111,85 +118,136 @@ fn shard(store: &Store, query: &Query, start: usize, end: usize, limit: usize) -
     let mut last_parent = crate::store::NONE;
     let mut parent_path = String::new();
     let mut missing_filters = Vec::new();
-    for (id, record) in store.reverse_range(start, end) {
-        if id == 0 || !record.live() || query.directory.is_some_and(|d| d != record.directory()) {
-            continue;
-        }
-        let name = store.folded(record);
-        if !query.extensions.is_empty() {
-            if record.directory() {
-                continue;
-            }
-            let Some(dot) = memchr::memrchr(b'.', name) else {
-                continue;
-            };
-            if !query
-                .extensions
-                .iter()
-                .any(|ext| ext.as_bytes() == &name[dot + 1..])
+    let mut visibility_parent = crate::store::NONE;
+    let mut parent_online = true;
+    let filter = crate::names::Filter::new(&query.terms, &query.extensions, query.directory);
+    let path_masks: Vec<_> = query
+        .paths
+        .iter()
+        .map(|path| crate::names::bloom::<2>(path.as_bytes()))
+        .collect();
+    store.visit_names(
+        start,
+        end,
+        &filter,
+        lane,
+        |id, parent, attributes, modified, name, base| {
+            let directory = attributes & crate::store::DIRECTORY != 0;
+            if id == 0
+                || attributes == 0
+                || attributes & crate::store::EXCLUDED != 0
+                || query.directory.is_some_and(|d| d != directory)
             {
-                continue;
+                return;
             }
-        }
-        let Some(score) = query.score(name, &finders) else {
-            continue;
-        };
-        let candidate = (score, record.modified, std::cmp::Reverse(id));
-        if top.len() == limit
-            && top
-                .peek()
-                .is_some_and(|worst: &std::cmp::Reverse<Candidate>| candidate <= worst.0)
-        {
-            continue;
-        }
-        if !query.paths.is_empty() {
-            // Reuse adjacent siblings' parent, not one allocated full path per file. A match lies in
-            // the parent, in the name, or spans their one separator. This also makes a
-            // nonmatching path filter cheap across a million siblings.
-            if last_parent != record.parent {
-                last_parent = record.parent;
-                parent_path = fold(&store.path(record.parent));
-                missing_filters.clear();
-                missing_filters.extend(
-                    query
-                        .paths
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, part)| (!parent_path.contains(part)).then_some(i)),
-                );
+            if !query.extensions.is_empty() {
+                if directory {
+                    return;
+                }
+                let Some(dot) = memchr::memrchr(b'.', name) else {
+                    return;
+                };
+                if !query
+                    .extensions
+                    .iter()
+                    .any(|ext| ext.as_bytes() == &name[dot + 1..])
+                {
+                    return;
+                }
             }
-            if !missing_filters.iter().all(|i| {
-                let part = &query.paths[*i];
-                path_finders[*i].find(name).is_some()
-                    || (record.parent != 0
-                        && part.rsplit_once('\\').is_some_and(|(before, after)| {
-                            parent_path.trim_end_matches('\\').ends_with(before)
-                                && name.starts_with(after.as_bytes())
-                        }))
-            }) {
-                continue;
+            let Some(score) = query.score(name, &finders) else {
+                return;
+            };
+            if base && store.overridden(id) {
+                return;
             }
-        }
-        if top.len() < limit {
-            top.push(std::cmp::Reverse(candidate));
-        } else {
-            *top.peek_mut().expect("full heap") = std::cmp::Reverse(candidate);
-        }
-    }
+            let candidate = (score, modified, std::cmp::Reverse(id));
+            if top.len() == limit
+                && top
+                    .peek()
+                    .is_some_and(|worst: &std::cmp::Reverse<Candidate>| candidate <= worst.0)
+            {
+                return;
+            }
+            // Only candidates that can enter top-k need ancestry reads. Adjacent siblings
+            // share their volume status, including when an offline volume is retained.
+            if parent == 0 {
+                if !store.online(id) {
+                    return;
+                }
+            } else {
+                if visibility_parent != parent {
+                    visibility_parent = parent;
+                    parent_online = store.online(parent);
+                }
+                if !parent_online {
+                    return;
+                }
+            }
+            if !query.paths.is_empty() {
+                if !store.path_possible(parent, name, &path_masks) {
+                    return;
+                }
+                // Reuse adjacent siblings' parent, not one allocated full path per file. A match lies in
+                // the parent, in the name, or spans their one separator. This also makes a
+                // nonmatching path filter cheap across a million siblings.
+                if last_parent != parent {
+                    last_parent = parent;
+                    parent_path = fold(&store.path(parent));
+                    missing_filters.clear();
+                    missing_filters.extend(
+                        query
+                            .paths
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(i, part)| (!parent_path.contains(part)).then_some(i)),
+                    );
+                }
+                if !missing_filters.iter().all(|i| {
+                    let part = &query.paths[*i];
+                    path_finders[*i].find(name).is_some()
+                        || (parent != 0
+                            && part.rsplit_once('\\').is_some_and(|(before, after)| {
+                                parent_path.trim_end_matches('\\').ends_with(before)
+                                    && name.starts_with(after.as_bytes())
+                            }))
+                }) {
+                    return;
+                }
+            }
+            if top.len() < limit {
+                top.push(std::cmp::Reverse(candidate));
+            } else {
+                *top.peek_mut().expect("full heap") = std::cmp::Reverse(candidate);
+            }
+        },
+    );
     top.into_iter().map(|c| c.0).collect()
 }
 
 pub fn search(store: &Store, input: &str, limit: usize) -> Vec<Hit> {
     let query = Query::parse(input);
     let limit = limit.clamp(1, 100);
-    let count = store.len();
-    let workers = if count >= 250_000 {
+    let count = store.search_blocks();
+    let workers = if store.len() >= 250_000 {
         std::thread::available_parallelism().map_or(2, |n| n.get().min(8))
     } else {
         1
     };
-    let mut candidates = if workers == 1 {
-        shard(store, &query, 0, count, limit)
+    let prefix = if query.terms.len() == 1
+        && query.terms[0].len() <= 6
+        && query.extensions.is_empty()
+        && query.paths.is_empty()
+    {
+        let extra = shard(store, &query, count, count, limit, 0);
+        store.short_prefix(query.terms[0].as_bytes(), query.directory, limit, &extra)
+    } else {
+        None
+    };
+    let mut candidates = if let Some(prefix) = prefix {
+        prefix
+    } else if workers == 1 {
+        shard(store, &query, 0, count, limit, 0)
     } else {
         // Created only by a large query in the enabled helper. Workers park between requests;
         // repeated keystrokes pay neither native thread creation nor a periodic wakeup.
@@ -211,6 +269,7 @@ pub fn search(store: &Store, input: &str, limit: usize) -> Vec<Hit> {
                         count * worker / workers,
                         count * (worker + 1) / workers,
                         limit,
+                        worker,
                     )
                 })
                 .collect::<Vec<_>>()
@@ -228,6 +287,103 @@ pub fn search(store: &Store, input: &str, limit: usize) -> Vec<Hit> {
 mod tests {
     use super::*;
     use crate::store::DIRECTORY;
+
+    #[test]
+    fn short_prefix_cache_cannot_hide_better_rows_after_deletions() {
+        let path =
+            std::env::temp_dir().join(format!("mypaper-index-short-{}.bin", std::process::id()));
+        let mut store = Store::new();
+        let root = store.insert(0, "X:", DIRECTORY, 0, 0);
+        for i in 0..400 {
+            store.insert(root, &format!("r-file-{i}"), 128, 1, 10_000 + i);
+            store.insert(root, &format!("r-dir-{i}"), DIRECTORY, 0, i);
+        }
+        store.save(&path).unwrap();
+        let mut mapped = Store::open(&path).unwrap();
+        for s in [&mut store, &mut mapped] {
+            for i in 300..400 {
+                let id = s.child(root, &format!("r-file-{i}")).unwrap();
+                s.remove(id);
+            }
+        }
+        for text in ["r", "r-", "folder:r", "file:r"] {
+            let expected = search(&store, text, 50)
+                .into_iter()
+                .map(|h| h.path)
+                .collect::<Vec<_>>();
+            let actual = search(&mapped, text, 50)
+                .into_iter()
+                .map(|h| h.path)
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected, "{text}");
+        }
+        drop(mapped);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn persisted_prefilter_and_overlay_match_unfiltered_search() {
+        let path =
+            std::env::temp_dir().join(format!("mypaper-index-column-{}.bin", std::process::id()));
+        let mut store = Store::new();
+        let root = store.insert(0, "X:", DIRECTORY, 0, 0);
+        let folder = store.insert(root, "Project 東京", DIRECTORY, 0, 0);
+        for i in 0..4200 {
+            store.insert(folder, &format!("Report-{i}-İstanbul.rs"), 128, 7, i);
+        }
+        let mut seed = 17u32;
+        for i in 0..256 {
+            let mut name = String::new();
+            for _ in 0..180 {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                name.push(char::from(b'a' + ((seed >> 24) % 26) as u8));
+            }
+            name.push_str("-needle.rs");
+            store.insert(folder, &name, 128, 1, 10_000 + i);
+        }
+        store.roll_up();
+        store.save(&path).unwrap();
+        let mut mapped = Store::open(&path).unwrap();
+        for s in [&mut store, &mut mapped] {
+            let old = s.child(folder, "Report-200-İstanbul.rs").unwrap();
+            s.remove(old);
+            s.upsert(folder, "new report.md", 128, 9, 9000);
+            s.upsert(folder, "REPORT-10-İSTANBUL.RS", 128, 9, 8000);
+        }
+        for query in [
+            "report",
+            "東京",
+            "report 2",
+            "İSTANBUL",
+            "ext:rs",
+            "ext:rs,md report",
+            "folder:project",
+            "file:r",
+            "path:project report",
+            "path:missing report",
+            "new",
+            "200-",
+            "r",
+            "",
+            "🦀",
+            "needle",
+            "needle ext:rs",
+            "path:東京 needle",
+            "path:project/ needle",
+        ] {
+            let expected = search(&store, query, 100)
+                .into_iter()
+                .map(|h| (h.path, h.modified))
+                .collect::<Vec<_>>();
+            let actual = search(&mapped, query, 100)
+                .into_iter()
+                .map(|h| (h.path, h.modified))
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected, "{query}");
+        }
+        drop(mapped);
+        std::fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn parser_quotes_filters_and_ranking() {

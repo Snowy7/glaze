@@ -4,8 +4,8 @@
 //!   a view never installs a timer or fetches anything, and the same inputs give the same list,
 //!   so an unchanged widget draws nothing (the surface compares lists).
 //! - **Glass.** The engine draws the plate and its one edge; a view fills the plate's shape
-//!   with `Rgba::HIT` (clicks land on it) and draws content only: no card under the whole
-//!   widget and no outline.
+//!   with `Rgba::HIT` (clicks land on it) and draws content, plus a hairline when explicitly
+//!   enabled. The engine's specular rim is a separate material effect.
 //! - **Kit only.** Text through [`TextRole`]s (and [`Ctx::display`] for hero numerals), colour
 //!   through [`Palette`] roles, icons through `Icon`, controls through the kit's components, and
 //!   layout through `take_*`/`place`/`Stack`.
@@ -41,7 +41,7 @@ use super::time::Stamp;
 use mypaper_theme::Paint;
 use mypaper_ui::icons::Icon;
 use mypaper_ui::{
-    Align, DisplayList, HitId, Interaction, Op, Palette, Point, Rect, Rgba, Role, Scheme, Style,
+    Align, DisplayList, HitId, Interaction, Op, Palette, Point, Rect, Rgba, Role, Scheme,
     Text, TextRole, TextStyle, Theme, Tokens,
 };
 use serde_json::Value;
@@ -120,6 +120,9 @@ pub fn resize_edges(hit: HitId) -> Option<[bool; 4]> {
 
 /// The plate's corner radius in device px: the engine's glass uses the same shape.
 pub fn plate_radius(model: &Model, rect: Rect, scale: f32) -> f32 {
+    if let Some(radius) = model.corner_override {
+        return radius * scale;
+    }
     if model.placed.widget == "media-pill" {
         match model.str("variant", "pill").as_str() {
             "pill" | "mini" => rect.height() / 2.0,
@@ -132,10 +135,9 @@ pub fn plate_radius(model: &Model, rect: Rect, scale: f32) -> f32 {
             .get("radius")
             .and_then(Value::as_f64)
             .unwrap_or(22.0) as f32;
-        // The style shapes the corners: Windows 11's widgets are 8 px, One UI's rounder.
         let radius = match mypaper_ui::theme::active() {
-            Style::Fluent => radius.min(8.0),
-            Style::OneUi => radius.max(26.0),
+            mypaper_ui::Style::Fluent => radius.min(8.0),
+            mypaper_ui::Style::OneUi => radius.max(26.0),
             _ => radius,
         };
         radius * scale
@@ -201,6 +203,9 @@ pub fn theme(model: &Model, tokens: &Tokens) -> Theme {
     if family.as_ref() != DEFAULT_FAMILY {
         theme.font.family = family;
     }
+    if let Some(set) = &tokens.icon_set { theme.icons = set.clone(); }
+    if let Some(radius) = model.corner_override { theme = theme.with_surface_radius(radius); }
+    if let Some(edge) = model.edge_override { theme.border = edge.then_some(theme.color.separator); }
     theme
 }
 
@@ -246,6 +251,11 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
         // A glass widget in a style without glass (Solid, Mono) draws the style's own body.
         _ if theme.glass.is_none() => c.f.fill(rect, radius, theme.color.surface),
         _ => {}
+    }
+    if let Some(border) = theme.border.filter(|_| surface != "none" && model.edge_override == Some(true)) {
+        c.f.push(Op::Stroke {
+            rect: rect.inflate(-0.5), radius: (radius - 0.5).max(0.0), width: 1.0, color: border,
+        });
     }
     c.f.hit(BODY, rect, Role::Pane, &model.placed.widget, true, None);
     let body = c.body();
@@ -545,6 +555,7 @@ pub fn field(c: &mut Ctx, rect: Rect, hint: &str, icon: Option<Icon>) {
     let open = c.m.field.as_ref();
     let mut inner = c.f.field_frame(rect, hint, open.is_none(), open.is_some(), icon);
     if let Some(field) = open {
+        field.set_style(&c.f.font(TextRole::Body), c.f.theme.color.label);
         // RichEdit draws its line at the top of its rect: a one-line field gets a rect one line
         // tall, centred like the icon and the placeholder (as the launcher's search field).
         if !field.multiline() {

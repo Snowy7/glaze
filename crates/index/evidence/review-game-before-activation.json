@@ -1,0 +1,14 @@
+{
+    "fixture_pid":  81024,
+    "foreground_pid":  81024,
+    "foreground_process":  "index_game",
+    "signal":  {
+                   "publisher_pid":  16024,
+                   "publisher_started":  134384230782691646,
+                   "activity":  {
+                                    "pause_background":  true,
+                                    "reason":  "busy",
+                                    "foreground_pid":  81024
+                                }
+               }
+}

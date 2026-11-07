@@ -242,7 +242,14 @@ mod tests {
     #[test]
     fn every_builtin_schema_and_replacement_survives_without_html() {
         let registry = builtins();
-        assert!(registry.widgets.len() >= 23);
+        // Plugin faces and user widgets are optional; only the native catalog is guaranteed.
+        for id in [
+            "calendar", "clock", "countdown", "crypto", "heatmap", "launcher", "media-pill",
+            "notes", "now-playing", "photo", "quick-toggles", "quote", "rss", "system-monitor",
+            "timer", "todo", "weather",
+        ] {
+            assert!(registry.get(id).is_some(), "missing native widget: {id}");
+        }
         assert_eq!(registry.replacement("analog-clock").unwrap().0, "clock");
         assert_eq!(
             registry

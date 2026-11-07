@@ -19,7 +19,8 @@ Unknown fields/choices fail config validation. Studio controls are a follow-up; 
 
 These are preferences, with no preset or universal speed/FPS claim. None needs elevation under
 normal user permissions; device policy or unsupported Windows APIs can reject a change. All are
-off/unmanaged by default. The example above is illustrative; it is not installed on the machine.
+unmanaged by default. The read-only game observer is enabled by default; `game_activity: false`
+removes it. The example above is illustrative; it is not installed on the machine.
 
 ## Settings and evidence
 
@@ -32,7 +33,7 @@ Registry paths below are under `HKEY_CURRENT_USER`.
 | `show_hidden` | Boolean; same Explorer Advanced key, `Hidden`, DWORD 1 when shown, 2 when hidden | Corresponds to `SSF_SHOWALLOBJECTS` / `fShowAllObjects`. Protected operating-system files keep their own separate preference. [Shell state contract](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/ns-shlobj_core-shellstatea). |
 | `separate_process` | Boolean; same key, `SeparateProcess`, DWORD 0/1 | Folder-window process isolation (`SSF_SEPPROCESS` / `fSepProcess`), not one process per tab and not a measured speed optimization. New folder windows use the preference; existing Explorer processes are never restarted. [Documented flag](https://learn.microsoft.com/en-us/windows/win32/shell/ssf-constants), [documented behavior](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/ns-shlobj_core-shellstatea). |
 | `power_mode` | `"efficiency"`, `"balanced"`, `"performance"`; Windows 11 `PowerGet/SetUserConfiguredACPowerMode` and DC counterparts | Windows' own power-mode vote for AC and battery, saving/restoring the two originals independently. No power plan is imported or replaced. [Getter](https://learn.microsoft.com/en-us/windows/win32/api/powrprof/nf-powrprof-powergetuserconfiguredacpowermode), [setter and mode GUIDs](https://learn.microsoft.com/en-us/windows/win32/api/powrprof/nf-powrprof-powersetuserconfiguredacpowermode), [DC setter](https://learn.microsoft.com/en-us/windows/win32/api/powrprof/nf-powrprof-powersetuserconfigureddcpowermode). Windows may override the effective mode; an accepted user vote is not a performance guarantee. DLL exports are looked up only on use; missing APIs produce an error and roll back the transaction. |
-| `game_activity` | Boolean; enables the watcher below | Only observes/publishes. It does not change Windows or pause another mypaper process in this slice. |
+| `game_activity` | Boolean; default on, explicit false disables | Observes/publishes the background-pause hint below. It changes no Windows preference. |
 
 The Explorer flag semantics are public API contracts. Their registry backing is validated by
 `SHGetSetSettings(..., false)` readback on this machine; it is not presented as a permanent registry
@@ -100,19 +101,20 @@ explain the tradeoffs and evidence limits.
 
 - `classify(notification_state: Option<i32>, foreground_covers_monitor: bool, foreground_pid: u32) -> Activity`:
   pure policy, prioritizing `QUNS_RUNNING_D3D_FULL_SCREEN`, `QUNS_PRESENTATION_MODE`, `QUNS_BUSY`, then
-  monitor coverage. Quiet time alone does not pause anything.
+  monitor coverage. **Busy requires actual foreground monitor coverage**; it cannot latch a
+  pause after exit, minimize or focus-away. Quiet time alone does not pause anything.
 - `covers_monitor(window: [i32; 4], monitor: [i32; 4]) -> bool`: physical screen rectangles
   `[left, top, right, bottom]`, including negative monitor coordinates and one-pixel tolerance.
 - `Activity { pause_background: bool, reason: Reason, foreground_pid: u32 }`, with
   `Reason::{Idle, Fullscreen, Direct3d, Busy, Presentation}`.
 - `GameWatcher::start() -> Result<GameWatcher>`: one session publisher, on a thread that pumps
   Win32 messages. It is bound to that thread. Drop removes every hook, hidden window, file and
-  publisher lease. `system.game_activity` absent/false creates none of these resources.
+  publisher lease. `system.game_activity: false` creates none of these resources; absent/null enables it.
 - `path() -> Result<PathBuf>`: `%LOCALAPPDATA%\mypaper\game-activity.json`.
 - `read() -> Option<(Snapshot, Owner)>`, where `Snapshot { publisher_pid, publisher_started,
   activity }` identifies the publisher by PID **and process creation time**. Missing/corrupt data,
   dead publisher or reused PID returns `None`. `Snapshot::open_owner()` also validates identity.
-- `watch(changed) -> Result<notify::RecommendedWatcher>`: directory notifications for atomic
+- `watch(changed) -> Result<mypaper_fswatch::Watch>`: native directory notifications for atomic
   replacement/removal, released on drop. Callback should post to the consumer's loop.
 - `Owner::handle() -> HANDLE`: add this process handle to the consumer's wait set while holding
   `Owner`. A signaled handle invalidates the signal immediately after a crash. Re-read/replace the
@@ -120,20 +122,83 @@ explain the tradeoffs and evidence limits.
 
 The watcher has out-of-context foreground, foreground location, minimize and desktop-switch
 WinEvent hooks, plus a hidden top-level window for presentation/display settings broadcasts. It
-queries `SHQueryUserNotificationState` when those events occur. It publishes only when the sampled
-activity changes, by atomic file replacement. It creates no worker thread, periodic timer or
-polling loop and injects nothing. The optional consumer's filesystem watch is also event-driven.
+uses the HWND supplied by `EVENT_SYSTEM_FOREGROUND` for that transition: querying
+`GetForegroundWindow` inside the callback can still return the previous window. Geometry events
+and the paused-only fallback query the current foreground normally. No idle recheck is added.
+It queries `SHQueryUserNotificationState` when those events occur. It publishes only when the sampled
+activity changes, by atomic file replacement. It creates no worker thread and injects nothing.
+Idle has no timer. While paused, one **1 Hz** timer on the existing hidden window rechecks the
+hint/geometry in case Windows misses an event; resume/drop removes it. Consumers use event-driven
+filesystem watches, with no polling timer.
 [WinEvent contract](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwineventhook),
 [notification-state limitations](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shqueryusernotificationstate).
 
 This is a conservative background-pause **hint**, not identification of a running game. Fullscreen
 video, editors and presentations can match. Windowed games may not match. Notification state has
 no fullscreen start/stop notification of its own; foreground/geometry events are the trigger, so
-internal state changes without one can remain unseen until the next relevant event. The foreground
+idle-to-active internal changes without one can remain unseen until the next relevant event.
+An existing pause is rechecked once a second so missed exit events cannot strand it. The foreground
 geometry check excludes Explorer's desktop/taskbars and the publishing process. It uses a scoped
 per-monitor-DPI-aware thread context for physical coordinates. The observer retains memory while
-enabled: zero rendering/jobs and literal zero product footprint are different policies. Shell/plugins/index/engine consumption
-is intentionally left for the next round.
+enabled: zero rendering/jobs and literal zero product footprint are different policies.
+
+## Games
+
+Core enables the event-driven observer unless `system.game_activity` is explicitly false. Absent
+or null inherits on. Windows preferences remain opt-in. The original observer measurement was
+0% of one core over 30 s (1.35 MiB for the entire debug probe, one thread, no timer/worker).
+
+The shared **core → child control message** is the existing atomic `game-activity.json`
+`Snapshot { publisher_pid, publisher_started, activity: Activity { pause_background, reason,
+foreground_pid } }`. Start watching before the initial read, re-read on `watch` notifications,
+retain `Owner`, and include `Owner::handle()` in the normal blocking wait. Missing/corrupt/dead
+publisher means resume. Never add a polling timer. Index consumers pause background scans and
+reconciliation, keep a single pending reconciliation, and resume after the hint clears. Explicit
+file operations are not cancelled by this hint. See [index.md](index.md).
+
+**Pause during games:** `engine.during_games` defaults to `"pause"`: the wallpaper stops on
+every screen while the hint is active. With the installed theme still available, it is revealed
+immediately; after 10 s the engine releases its drawing resources, retaining the GPU device for
+fast resume. Without a usable still, drawing pauses on the held frame and resources remain.
+Choose `"keep"` to keep uncovered screens animating; ordinary coverage, tray, battery and lock
+holds still apply. Changing this setting does not disable background quiescence in the shell,
+plugins or index. To remove the observer itself, use `system.game_activity: false`.
+
+The shell drops game-time clock/stats/custom-command deadlines and provider subscriptions on
+all screens. Covered screens keep their existing visibility behavior; visible secondary bars
+keep their cached content until resume. Widgets hold fetchers, stats, media/audio and motion.
+The game hold is independent of tray pause, battery, lock and display-off holds.
+The shared shell WinEvent source, including its 25 ms event-batching sleep, is released during
+the hold. Resume recreates it and takes fresh bar/widget window snapshots before reconciliation.
+The desktop menu's mouse hook and the tray-host worker also leave during games, returning
+notification-area ownership to Explorer until resume. This avoids handling a game's mouse
+input or third-party tray updates while the shell is quiescent.
+
+The shell relays `mypaper_plugin_api::wire::HostMsg::GameActivity(bool)` to its helper (appended
+to the wire enum, preserving existing discriminants). It precedes opens after a helper restart.
+While true, the helper has **no background deadline**: timers, retries, move flushes and idle
+unloads stop. Plugin code receives no background I/O/system events. Queued state coalesces to
+the latest per system source/window; open/close and distinct request completions retain their
+identity. Websocket messages and raw pipe chunks retain arrival order and their read credit
+under the existing 64-event cap (pipes use 16 KiB chunks). Replies sharing one socket cannot
+replace one another. A paused socket that fills its 64-message backlog is closed; resume delivers
+the retained messages followed by a close event explaining the game-pause backlog limit, so
+the plugin can reconnect. Later transport closure cannot overwrite that reason. Other
+connections stay open, with pipes applying read backpressure. Queued connection writes
+wait too. WinHTTP transport keepalives remain: the documented default is 30 s, with
+[a 15 s minimum and no documented disable value](https://learn.microsoft.com/en-us/windows/win32/winhttp/option-flags#winhttp_option_web_socket_keepalive_interval).
+Live probing rejected changing this option on an already upgraded socket with
+`ERROR_WINHTTP_INCORRECT_HANDLE_STATE`. Preserving the connection therefore does not promise
+zero transport timer wakes. Incoming peer traffic can also wake its reader.
+On false, retained events resume and an overdue periodic timer fires once,
+then schedules from now. There is no catch-up timer burst. Coalesced system state may lose
+intermediate updates during the hold; transport-level incoming traffic still wakes its reader.
+
+This is background quiescence, not process exit. Processes retain private memory, incoming OS/
+network events still run, and the wallpaper's existing covered policy retains the GPU device
+(see [Hidden = free](performance.md#hidden--free-6-november-2026-round-2)). It therefore cannot
+promise literal zero memory or zero driver wakes. No injection, game setting, priority, timer
+resolution, active copy job or other application's process is changed.
 
 ## Verification (2026-11-06)
 
@@ -173,10 +238,11 @@ and a fresh watcher acquired the abandoned lease and removed the stale publicati
 | Disabled preferences | No retained controller allocation, hook, timer or worker; crash recovery still runs at startup |
 
 The [idle measurement](../crates/tweaks/evidence/game-activity-idle.json) excludes startup. The
-[lifecycle probe](../crates/tweaks/evidence/game-activity-live.txt) received a Busy notification-state
-change, but Windows did not grant its child foreground focus. **A real foreground fullscreen
-enter/resize/exit sequence remains unverified live.** Geometry and policy unit tests pass; the
-probe did not inject input to force focus. There was no game/PresentMon performance benchmark.
+[initial lifecycle probe](../crates/tweaks/evidence/game-activity-live.txt) received a Busy hint,
+but Windows did not grant its child foreground focus. The later
+[owned game lifecycle](../crates/core/evidence/game-lifecycle.json) now verifies focus-away,
+minimize and exit. [Consumer assertions](../crates/core/evidence/game-lifecycle-consumers.json)
+verify three shell/helper resumes with unchanged PIDs. There was no game/PresentMon frame-time benchmark.
 No performance improvement is inferred from preference readback.
 
 Config tests: 20 passed. Tweaks tests: 41 passed. Core: 16 passed, four ignored. Shell: 140 passed,
@@ -196,5 +262,5 @@ agents' package changes; it is left for the orchestrator to commit together.
 ## Studio follow-ups
 
 Add optional controls for the five managed preferences, with an explicit “Leave Windows alone”
-choice, and an opt-in activity-observer switch. Link unsupported/admin actions to their native
+choice, and a default-on activity-observer switch. Link unsupported/admin actions to their native
 pages with the limits above. Do not add a “boost” preset. No `crates/studio` files were edited.

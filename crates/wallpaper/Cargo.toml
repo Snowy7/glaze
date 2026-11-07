@@ -13,6 +13,7 @@ hotpatch = ["dep:subsecond", "dep:dioxus-devtools"]
 mypaper-glass-ipc.workspace = true
 mypaper-config.workspace = true
 mypaper-desktop.workspace = true
+mypaper-fswatch.workspace = true
 mypaper-theme.workspace = true
 mypaper-tweaks.workspace = true
 # All Liquid Glass (plates and overlays): a vendored copy of al1h3n/liquid-rust.
@@ -21,7 +22,6 @@ liquid-rust = { path = "../liquid-rust" }
 anyhow.workspace = true
 bytemuck.workspace = true
 log.workspace = true
-notify.workspace = true
 pollster.workspace = true
 raw-window-handle.workspace = true
 wgpu.workspace = true

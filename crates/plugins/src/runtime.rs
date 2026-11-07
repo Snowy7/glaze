@@ -106,7 +106,7 @@ impl Manifest {
         let defaults = crate::settings_permissions::settings(&manifest.settings, "{}")?;
         for permission in crate::settings_permissions::resolve_all(&manifest.permissions, &defaults)? {
             let known = WORDS.contains(&permission.as_str())
-                || permission.strip_prefix("network:").is_some_and(|o| caps::origin_allowed(&[permission.clone()], o))
+                || permission.strip_prefix("network:").is_some_and(|o| caps::origin_allowed(std::slice::from_ref(&permission), o))
                 || permission.strip_prefix("pipe:").is_some_and(io::pipe_name_ok)
                 || permission.strip_prefix("process:").is_some_and(caps::process_name_ok)
                 || permission.strip_prefix("file:").is_some_and(caps::file_path_ok);
@@ -267,6 +267,11 @@ impl State {
     /// The open websocket or pipe `id`, to start its thread or return delivery credit.
     pub fn conn(&self, id: u64) -> Option<&io::Conn> {
         self.sockets.get(&id).or_else(|| self.pipes.get(&id))
+    }
+    pub fn set_game_activity(&self, active: bool) {
+        for conn in self.sockets.values().chain(self.pipes.values()) {
+            conn.set_game_activity(active);
+        }
     }
     /// Forgets a connection whose thread ended; `false` if this instance never opened it (it
     /// belonged to an instance that trapped or unloaded).

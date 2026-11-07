@@ -31,8 +31,15 @@ pub struct Tokens {
     pub fill: Option<Rgba>,
     /// Corner radius of the bar, its islands and the dock plate, design px.
     pub radius: f32,
+    /// An explicit corner setting overrides the strip layout's square fallback.
+    pub explicit_radius: bool,
     /// Engine glass under the body (blur in DIPs); `None` draws the theme's surface.
     pub material: Option<Material>,
+    /// Optics resolved once with the look, copied to both plates and overlays.
+    pub glass_style: mypaper_ui::glass::GlassStyle,
+    pub plate_style: mypaper_glass_ipc::Style,
+    /// Dock command menus resolve alongside the bar, never while publishing or opening.
+    pub popup: Option<mypaper_ui::Tokens>,
     /// `look.transparent` (or `background: none`): no body at all, the items straight on the
     /// wallpaper with a soft shadow.
     pub bare: bool,
@@ -102,6 +109,11 @@ pub fn material(look: &Look, style: Style, tint: Rgba, opacity: Option<f32>) -> 
     m.refraction *= intensity;
     m.highlight *= intensity;
     m.blur *= intensity;
+    m.blur += match &look.background {
+        Some(Fill::Wallpaper(fill)) => fill.blur,
+        Some(Fill::Blur(fill)) => fill.blur,
+        _ => 0.0,
+    };
     if look.glass.style == Some(GlassKind::Frosted) {
         m.refraction = 0.0;
         m.highlight = 0.0;
@@ -110,6 +122,28 @@ pub fn material(look: &Look, style: Style, tint: Rgba, opacity: Option<f32>) -> 
 }
 
 impl Tokens {
+    /// Production resolution under config.json's Look; previews may keep using `resolve`.
+    pub fn resolve_settings(look: &Look, appearance: &Appearance, system: &accent::System, desktop: &mypaper_config::Look, text: &mypaper_ui::Text) -> Self {
+        let mut tokens = Self::resolve(look, appearance, system);
+        if let Some(name) = look.font.family.as_deref().or(appearance.font.as_deref()) {
+            tokens.font.family = crate::look::settings::font(name, |f| text.has_family(f)).into();
+            tokens.theme.font.family = tokens.font.family.clone();
+        }
+        if let Some(set) = crate::look::settings::icons(desktop, text) {
+            tokens.theme.icons = set;
+        }
+        if let Some(edge) = desktop.shape.edge {
+            tokens.border = edge;
+            tokens.theme.border = edge.then_some(tokens.theme.color.separator);
+            tokens.styles = super::styling::Styles::resolve(look, &tokens.theme, |c| {
+                color_with_system(c, &tokens.theme, &tokens.system_colors)
+            });
+        }
+        tokens.theme = tokens.theme.with_surface_radius(tokens.radius);
+        tokens.explicit_radius = desktop.shape.corners.is_some();
+        tokens
+    }
+
     pub fn resolve(look: &Look, appearance: &Appearance, system: &accent::System) -> Self {
         let native = look.native_style();
         let family = look.family.unwrap_or_default();
@@ -226,12 +260,17 @@ impl Tokens {
             &theme,
             &system_colors,
         );
+        let glass_style = glass_style(look);
         Self {
             family,
             font,
             fill,
             radius,
+            explicit_radius: false,
             material,
+            glass_style,
+            plate_style: plate_style(glass_style),
+            popup: None,
             bare,
             theme,
             scale: appearance.scale.unwrap_or(1.0),
@@ -256,6 +295,7 @@ impl Tokens {
             shadow: self.shadow,
             border: self.border && self.material.is_none(),
             glass: self.material,
+            glass_style: self.glass_style,
             ..self.theme.tokens()
         }
     }
@@ -320,6 +360,65 @@ impl Tokens {
             item.scale *= 1.0 - 0.03 * press.clamp(0.0, 1.0);
         }
         item
+    }
+}
+
+/// Optional optics shared by a bar and the popups it opens. Legacy `depth` means a bottom
+/// inner shadow, independently of the renderer's broad shade under the lit top rim.
+pub fn glass_style(look: &Look) -> mypaper_ui::glass::GlassStyle {
+    mypaper_ui::glass::GlassStyle {
+        brightness: match &look.background {
+            Some(Fill::Wallpaper(fill)) => fill.brightness,
+            Some(Fill::Blur(fill)) => fill.brightness,
+            _ => 1.0,
+        },
+        saturation: look.saturation.unwrap_or(1.0),
+        smoothing: if look.corners == Some(mypaper_bars::style::Corners::Squircle) {
+            0.6
+        } else {
+            0.0
+        },
+        sheen: look
+            .glass
+            .sheen
+            .map(|v| v * look.glass.intensity.unwrap_or(1.0)),
+        inner_shadow: look
+            .glass
+            .depth
+            .map_or(0.0, |v| v * look.glass.intensity.unwrap_or(1.0)),
+        ..Default::default()
+    }
+}
+
+pub fn fade_ms(
+    timing: mypaper_ui::transition::Timing,
+    style: mypaper_bars::style::MotionStyle,
+) -> f32 {
+    if timing.enabled && style != mypaper_bars::style::MotionStyle::None {
+        (timing.duration.as_secs_f32() * 1000.0).min(5000.0)
+    } else {
+        0.0
+    }
+}
+
+/// Attach the resolved show/open timing to glass alongside the content's transition.
+pub fn glass_fade(
+    glass: &mut mypaper_ui::glass::GlassStyle,
+    timing: mypaper_ui::transition::Timing,
+    style: mypaper_bars::style::MotionStyle,
+) {
+    glass.fade_ms = fade_ms(timing, style);
+    glass.fade_curve = (glass.fade_ms > 0.0).then_some(timing.easing);
+}
+
+pub fn plate_style(style: mypaper_ui::glass::GlassStyle) -> mypaper_glass_ipc::Style {
+    mypaper_glass_ipc::Style {
+        brightness: style.brightness,
+        saturation: style.saturation,
+        smoothing: style.smoothing,
+        sheen: style.sheen,
+        depth: style.depth,
+        inner_shadow: style.inner_shadow,
     }
 }
 
@@ -412,9 +511,13 @@ pub fn menu_tokens(text: &mypaper_ui::Text) -> mypaper_ui::Tokens {
     let mut colors =
         super::plugin_style::patch_look("top-bar", "top", bars.raw(), &mut look, &mut appearance);
     colors.extend(super::plugin_style::tokens("menu"));
-    let mut tokens = Tokens::resolve(&look, &appearance, &accent::read());
-    super::plugin_style::colors(&colors, bars.raw(), &mut tokens.theme.color);
-    tokens.menu(text)
+    let desktop = mypaper_config::Config::load().unwrap_or_default().look;
+    let system = accent::read();
+    popup_font(&bars, "top", &mut look);
+    crate::look::settings::bar(&desktop, crate::glass::Family::Menus, &bars, "top", &mut look, &mut appearance, &system, text);
+    let mut resolved = crate::flyouts::look::Look::resolve_settings(&look, &appearance, &system, &crate::glass::knobs(&desktop, crate::glass::Family::Menus), &desktop, text);
+    resolved.patch_colors(&colors);
+    resolved.menu_tokens()
 }
 
 /// The theme's `bars` appearance, its `auto` accent taken from the wallpaper's palette.
@@ -471,7 +574,7 @@ pub fn appearance_layer(
     }
 }
 
-fn explicit_look(config: &mypaper_bars::BarsConfig, bar: &str, path: &str) -> bool {
+pub(crate) fn explicit_look(config: &mypaper_bars::BarsConfig, bar: &str, path: &str) -> bool {
     config
         .raw()
         .get(bar)
@@ -563,7 +666,7 @@ pub fn warn_dropped(value: &serde_json::Value) {
         static ONCE: std::sync::Once = std::sync::Once::new();
         ONCE.call_once(|| {
             log::warn!(
-                "native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners"
+                "native bars ignore CSS, gradient/image fills, noise, glow, neon and bevel/scoop/notch corners"
             )
         });
     }
@@ -594,6 +697,106 @@ fn custom_family(list: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn glass_optics_and_background_frost_resolve_into_cached_plate_and_popup_styles() {
+        let look: Look = serde_json::from_value(serde_json::json!({
+            "background": { "type": "wallpaper", "brightness": 0.65, "blur": 48 },
+            "saturation": 0.0, "corners": "squircle",
+            "glass": { "blur": 32, "sheen": 0.7, "depth": 0.2 }
+        }))
+        .unwrap();
+        let tokens = Tokens::resolve(
+            &look,
+            &Appearance::default(),
+            &crate::flyouts::look::fixed_system(),
+        );
+        assert_eq!(tokens.material.unwrap().blur, 80.0);
+        assert_eq!(
+            tokens.plate_style,
+            mypaper_glass_ipc::Style {
+                brightness: 0.65,
+                saturation: 0.0,
+                smoothing: 0.6,
+                sheen: Some(0.7),
+                depth: None,
+                inner_shadow: 0.2,
+            }
+        );
+        let popup = crate::flyouts::look::Look::resolve(
+            &look,
+            &Appearance::default(),
+            &crate::flyouts::look::fixed_system(),
+        );
+        assert_eq!(popup.glass_style, tokens.glass_style);
+        assert_eq!(popup.menu_tokens().glass_style, tokens.glass_style);
+        assert_eq!(popup.glass.unwrap().blur, 80.0);
+        let reset = Tokens::resolve(
+            &Look::default(),
+            &Appearance::default(),
+            &crate::flyouts::look::fixed_system(),
+        );
+        assert_eq!(reset.plate_style, Default::default());
+    }
+
+    #[test]
+    fn overlay_fade_obeys_resolved_motion_policy_and_duration() {
+        use super::super::motion::{self, Leaf};
+        use mypaper_bars::style::{Motion, MotionStyle};
+        for (value, system, performance, expected) in [
+            (
+                serde_json::json!({"duration": 5000, "curve": "linear"}),
+                true,
+                false,
+                5000.0,
+            ),
+            (
+                serde_json::json!({"duration": 640, "curve": "linear"}),
+                true,
+                false,
+                640.0,
+            ),
+            (serde_json::json!({"enabled": false}), true, false, 0.0),
+            (
+                serde_json::json!({"reduceMotion": "always"}),
+                true,
+                false,
+                0.0,
+            ),
+            (
+                serde_json::json!({"reduceMotion": "system"}),
+                false,
+                false,
+                0.0,
+            ),
+            (
+                serde_json::json!({"reduceMotion": "never", "duration": 640, "curve": "linear"}),
+                false,
+                false,
+                640.0,
+            ),
+            (
+                serde_json::json!({"reduceMotion": "never"}),
+                true,
+                true,
+                0.0,
+            ),
+            (
+                serde_json::json!({"open": {"style": "none"}}),
+                true,
+                false,
+                0.0,
+            ),
+        ] {
+            let animation: Motion = serde_json::from_value(value).unwrap();
+            let timing = motion::resolve(&animation, false, Leaf::Open, system, performance);
+            assert_eq!(
+                fade_ms(timing, motion::presentation(&animation, false, Leaf::Open)),
+                expected
+            );
+            assert_eq!(fade_ms(timing, MotionStyle::None), 0.0);
+        }
+    }
 
     #[test]
     fn every_bar_style_maps_to_a_kit_style() {

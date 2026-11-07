@@ -327,6 +327,37 @@ pub static SETTINGS: &[Setting] = &[
         GENERAL,
     )
     .words("theme dark light mode"),
+    // Experimental features (`config.json` › `experimental`): new or unproven, each its own switch.
+    sw(
+        "experimental_file_index",
+        "File index",
+        "Instant file search and folder sizes in the launcher",
+        C,
+        "/experimental/file_index",
+        false,
+        GENERAL,
+    )
+    .words("experimental search files index folder size"),
+    sw(
+        "experimental_files_default",
+        "Open folders in mypaper Files",
+        "Folders and Win+E open in Files instead of Explorer",
+        C,
+        "/experimental/files_default",
+        false,
+        GENERAL,
+    )
+    .words("experimental explorer files win+e default"),
+    sw(
+        "experimental_app_styler",
+        "Restyle inside Explorer and Settings",
+        "Can crash some Settings pages and grow Explorer's memory",
+        C,
+        "/experimental/app_styler",
+        false,
+        GENERAL,
+    )
+    .words("experimental explorer settings styler restyle theme"),
     // --- Settings › Performance and power ----------------------------------------------------
     custom("gpu", "Graphics card", "Draws on the card your screens use", PERF)
         .words("gpu integrated discrete nvidia amd intel high performance"),

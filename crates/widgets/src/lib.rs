@@ -6,6 +6,7 @@ pub mod display;
 pub mod custom;
 pub mod faces;
 pub mod files;
+mod handoff;
 pub mod layout;
 pub mod look;
 pub mod manifest;

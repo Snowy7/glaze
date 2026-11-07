@@ -16,6 +16,7 @@
 //! that thread takes it (holding the only buffer pauses delivery, which is what we want).
 
 use std::sync::{Arc, Mutex, Once};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use mypaper_desktop::Rect;
@@ -32,7 +33,8 @@ use windows::Security::Authorization::AppCapabilityAccess::AppCapabilityAccessSt
 use windows::Win32::Foundation::{CloseHandle, HMODULE, HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_UNKNOWN;
 use windows::Win32::Graphics::Direct3D11::{
-    D3D11_BOX, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_QUERY_DATA_TIMESTAMP_DISJOINT,
+    D3D11_BOX, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+    D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS, D3D11_QUERY_DATA_TIMESTAMP_DISJOINT,
     D3D11_QUERY_DESC, D3D11_QUERY_TIMESTAMP, D3D11_QUERY_TIMESTAMP_DISJOINT, D3D11_SDK_VERSION,
     D3D11CreateDevice, ID3D11Device, ID3D11Device1, ID3D11Device5, ID3D11DeviceContext,
     ID3D11DeviceContext4, ID3D11Fence, ID3D11Query, ID3D11Texture2D,
@@ -60,12 +62,23 @@ use super::geometry;
 
 /// `GENERIC_ALL` for shared handles.
 const SHARE_ALL: u32 = 0x1000_0000;
-/// The shortest time between two captured frames: 1/30 s, in 100 ns units. At 60 updates a
-/// second a video behind a popup cost ~3.4% of a core (N0.2), over the 3% gate; 30 halves it,
-/// and the glass of a still popup over a video needs no more (its window still moves at once).
-const MIN_INTERVAL: windows::Foundation::TimeSpan = windows::Foundation::TimeSpan {
-    Duration: 10_000_000 / 30,
-};
+/// The shortest time between two captured frames: 1/30 s. At 60 updates a second a video behind
+/// a popup cost ~3.4% of a core (N0.2), over the 3% gate; 30 halves it, and the glass of a still
+/// popup over a video needs no more (its window still moves at once).
+pub const MIN_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / 30);
+
+/// The shortest time between two captured frames under a frame-rate cap (`engine.fps`): the
+/// cap's frame time, never shorter than [`MIN_INTERVAL`].
+pub fn interval(fps: Option<u32>) -> Duration {
+    fps.filter(|&fps| fps > 0)
+        .map_or(MIN_INTERVAL, |fps| (Duration::from_secs(1) / fps).max(MIN_INTERVAL))
+}
+
+fn time_span(interval: Duration) -> windows::Foundation::TimeSpan {
+    windows::Foundation::TimeSpan {
+        Duration: (interval.as_nanos() / 100) as i64,
+    }
+}
 
 /// The D3D11 device frames are captured with, and its fence shared with wgpu's queue.
 pub struct CaptureDevice {
@@ -106,13 +119,18 @@ impl CaptureDevice {
         };
         let mut d3d11 = None;
         let mut context = None;
+        // No driver threads of its own: this device only copies crops and fills DirectComposition
+        // surfaces. Without the flag NVIDIA's D3D11 driver starts ~56 worker threads with the
+        // first overlay, +40 MiB private that stay until the engine exits.
+        let flags =
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS;
         // SAFETY: a live adapter; the out pointers outlive the call.
         unsafe {
             D3D11CreateDevice(
                 &dxgi_adapter,
                 D3D_DRIVER_TYPE_UNKNOWN,
                 HMODULE::default(),
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                flags,
                 None,
                 D3D11_SDK_VERSION,
                 Some(&mut d3d11),
@@ -455,11 +473,13 @@ pub struct Session {
 }
 
 impl Session {
-    /// Starts capturing `monitor`; each frame that matters posts `message` to `notify`.
+    /// Starts capturing `monitor`, at most one frame per `interval`; each frame that matters
+    /// posts `message` to `notify`.
     pub fn start(
         device: &CaptureDevice,
         monitor: HMONITOR,
         bounds: Rect,
+        interval: Duration,
         notify: HWND,
         message: u32,
     ) -> Result<Self> {
@@ -476,9 +496,9 @@ impl Session {
         let session = pool.CreateCaptureSession(&item)?;
         session.SetIsCursorCaptureEnabled(false)?;
         session.SetDirtyRegionMode(GraphicsCaptureDirtyRegionMode::ReportOnly)?;
-        // At most 30 updates a second, however fast what is behind changes (the monitors here run
-        // at 239 Hz).
-        session.SetMinUpdateInterval(MIN_INTERVAL)?;
+        // At most 30 updates a second (fewer under the theme's fps cap), however fast what is
+        // behind changes (the monitors here run at 239 Hz).
+        session.SetMinUpdateInterval(time_span(interval))?;
         if let Err(e) = session.SetIsBorderRequired(false) {
             log::error!("glass overlays: capture border can't be turned off: {e}");
         }
@@ -515,6 +535,13 @@ impl Session {
             watch,
             token,
         })
+    }
+
+    /// Changes the shortest time between two captured frames.
+    pub fn set_interval(&self, interval: Duration) {
+        if let Err(e) = self.session.SetMinUpdateInterval(time_span(interval)) {
+            log::warn!("glass overlays: capture interval: {e}");
+        }
     }
 
     /// Whether this Windows has the per-session exclusion list.

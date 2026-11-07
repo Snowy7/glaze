@@ -18,6 +18,7 @@
 mod autostart;
 mod bars;
 mod child;
+mod clean_env;
 mod desktop_extras;
 mod restart;
 mod styling;
@@ -57,6 +58,8 @@ fn main() -> ExitCode {
     if let Some(code) = autostart::cli(std::env::args().skip(1)) {
         return code;
     }
+    // Before any thread: everything mypaper launches inherits this environment (clean_env.rs).
+    clean_env::reset();
     mypaper_desktop::init_logging();
     mypaper_desktop::quit_on_ctrl_c();
     match run() {
@@ -109,11 +112,16 @@ fn run() -> Result<()> {
     // The wallpaper is essential: when it stops for good, so does mypaper. It reads the config
     // itself and exits with EXIT_CONFIG on a bad one, which stops core too. Only an explicit
     // theme override is forwarded, as an absolute path.
+    // `--parent` makes it exit with core however core ends (a crash or a kill too), so no
+    // orphaned engine keeps drawing on the desktop; the shell watches its parent on its own.
     let theme_override = std::env::args().nth(1);
-    let wallpaper_args = match &theme_override {
-        Some(name) => vec![mypaper_theme::locate(Some(name)).context("theme to start with")?],
-        None => Vec::new(),
-    };
+    let mut wallpaper_args = vec![
+        PathBuf::from("--parent"),
+        PathBuf::from(std::process::id().to_string()),
+    ];
+    if let Some(name) = &theme_override {
+        wallpaper_args.push(mypaper_theme::locate(Some(name)).context("theme to start with")?);
+    }
     let mut wallpaper = Supervised::new("wallpaper", wallpaper_exe, wallpaper_args);
     wallpaper.start()?;
     startup::ready("core", "spawn_ms");
@@ -337,12 +345,13 @@ fn run() -> Result<()> {
 }
 
 /// Starts an optional child when its executable is there. `None` when it's missing or didn't
-/// start.
+/// start. The index and the app styler get `--parent <core's pid>` and exit with core, however
+/// core ends (the styler's exit is what puts Explorer and Settings back).
 fn start_optional(name: &'static str, exe: PathBuf) -> Option<Supervised> {
     if !exe.exists() {
         return None;
     }
-    let args = if name == "index" {
+    let args = if matches!(name, "index" | "styler") {
         vec![
             PathBuf::from("--parent"),
             PathBuf::from(std::process::id().to_string()),

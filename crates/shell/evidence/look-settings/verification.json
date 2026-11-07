@@ -1,0 +1,1147 @@
+﻿{
+    "fixture_sha256":  "1F2C0139CBA0FEC4A6A3525675E24DFD47B6A33D1391E4C5AE9BF4D6F22CD43A",
+    "head":  "ff4bbd3f7cf5b25bc3efcf0e5e1ac39a1408aa92",
+    "foreground_after":  22548618,
+    "foreground_owner_before":  "PickerHost",
+    "config_unchanged":  true,
+    "foreground_owner_after":  "PickerHost",
+    "visual_changes":  {
+                           "tone":  true,
+                           "input_font":  true,
+                           "size":  true,
+                           "icons":  true,
+                           "edge":  true,
+                           "font":  true,
+                           "bars_style":  true,
+                           "menus_style":  true,
+                           "shadow":  true,
+                           "corners":  true
+                       },
+    "synthetic_input":  false,
+    "same_windows_all_revisions":  true,
+    "foreground_before":  22548618,
+    "observations":  [
+                         {
+                             "revision":  {
+                                              "look":  {
+                                                           "shape":  {
+                                                                         "corners":  0.0,
+                                                                         "edge":  false
+                                                                     },
+                                                           "style":  "solid",
+                                                           "text":  {
+                                                                        "font":  "Segoe UI",
+                                                                        "icons":  "lucide",
+                                                                        "shadow":  false,
+                                                                        "size":  1.0,
+                                                                        "tone":  "light"
+                                                                    }
+                                                       },
+                                              "pid":  28456,
+                                              "revision":  1,
+                                              "surfaces":  [
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              94
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  145230818,
+                                                                   "name":  "top",
+                                                                   "size":  [
+                                                                                620,
+                                                                                32
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              204
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  122750970,
+                                                                   "name":  "dock",
+                                                                   "size":  [
+                                                                                164,
+                                                                                110
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              324
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  28116164,
+                                                                   "name":  "widget",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              494
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  19596064,
+                                                                   "name":  "bare",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              674
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  13436130,
+                                                                   "name":  "menu",
+                                                                   "size":  [
+                                                                                252,
+                                                                                104
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              839
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  31066572,
+                                                                   "name":  "field",
+                                                                   "size":  [
+                                                                                620,
+                                                                                40
+                                                                            ]
+                                                               }
+                                                           ]
+                                          },
+                             "name":  "square"
+                         },
+                         {
+                             "revision":  {
+                                              "look":  {
+                                                           "shape":  {
+                                                                         "corners":  24.0,
+                                                                         "edge":  false
+                                                                     },
+                                                           "style":  "solid",
+                                                           "text":  {
+                                                                        "font":  "Segoe UI",
+                                                                        "icons":  "lucide",
+                                                                        "shadow":  false,
+                                                                        "size":  1.0,
+                                                                        "tone":  "light"
+                                                                    }
+                                                       },
+                                              "pid":  28456,
+                                              "revision":  2,
+                                              "surfaces":  [
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              94
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  145230818,
+                                                                   "name":  "top",
+                                                                   "size":  [
+                                                                                620,
+                                                                                32
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              204
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  122750970,
+                                                                   "name":  "dock",
+                                                                   "size":  [
+                                                                                164,
+                                                                                110
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              324
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  28116164,
+                                                                   "name":  "widget",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              494
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  19596064,
+                                                                   "name":  "bare",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              674
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  13436130,
+                                                                   "name":  "menu",
+                                                                   "size":  [
+                                                                                252,
+                                                                                104
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              839
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  31066572,
+                                                                   "name":  "field",
+                                                                   "size":  [
+                                                                                620,
+                                                                                40
+                                                                            ]
+                                                               }
+                                                           ]
+                                          },
+                             "name":  "corners"
+                         },
+                         {
+                             "revision":  {
+                                              "look":  {
+                                                           "shape":  {
+                                                                         "corners":  24.0,
+                                                                         "edge":  true
+                                                                     },
+                                                           "style":  "solid",
+                                                           "text":  {
+                                                                        "font":  "Segoe UI",
+                                                                        "icons":  "lucide",
+                                                                        "shadow":  false,
+                                                                        "size":  1.0,
+                                                                        "tone":  "light"
+                                                                    }
+                                                       },
+                                              "pid":  28456,
+                                              "revision":  3,
+                                              "surfaces":  [
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              94
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  145230818,
+                                                                   "name":  "top",
+                                                                   "size":  [
+                                                                                620,
+                                                                                32
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              204
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  122750970,
+                                                                   "name":  "dock",
+                                                                   "size":  [
+                                                                                164,
+                                                                                110
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              324
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  28116164,
+                                                                   "name":  "widget",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              494
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  19596064,
+                                                                   "name":  "bare",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              674
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  13436130,
+                                                                   "name":  "menu",
+                                                                   "size":  [
+                                                                                252,
+                                                                                104
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              839
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  31066572,
+                                                                   "name":  "field",
+                                                                   "size":  [
+                                                                                620,
+                                                                                40
+                                                                            ]
+                                                               }
+                                                           ]
+                                          },
+                             "name":  "edge"
+                         },
+                         {
+                             "revision":  {
+                                              "look":  {
+                                                           "shape":  {
+                                                                         "corners":  24.0,
+                                                                         "edge":  true
+                                                                     },
+                                                           "style":  "solid",
+                                                           "text":  {
+                                                                        "font":  "Consolas",
+                                                                        "icons":  "lucide",
+                                                                        "shadow":  false,
+                                                                        "size":  1.0,
+                                                                        "tone":  "light"
+                                                                    }
+                                                       },
+                                              "pid":  28456,
+                                              "revision":  4,
+                                              "surfaces":  [
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              94
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  145230818,
+                                                                   "name":  "top",
+                                                                   "size":  [
+                                                                                620,
+                                                                                32
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              204
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  122750970,
+                                                                   "name":  "dock",
+                                                                   "size":  [
+                                                                                164,
+                                                                                110
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              324
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  28116164,
+                                                                   "name":  "widget",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              494
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  19596064,
+                                                                   "name":  "bare",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              674
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  13436130,
+                                                                   "name":  "menu",
+                                                                   "size":  [
+                                                                                252,
+                                                                                104
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              839
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  31066572,
+                                                                   "name":  "field",
+                                                                   "size":  [
+                                                                                620,
+                                                                                40
+                                                                            ]
+                                                               }
+                                                           ]
+                                          },
+                             "name":  "font"
+                         },
+                         {
+                             "revision":  {
+                                              "look":  {
+                                                           "shape":  {
+                                                                         "corners":  24.0,
+                                                                         "edge":  true
+                                                                     },
+                                                           "style":  "solid",
+                                                           "text":  {
+                                                                        "font":  "Consolas",
+                                                                        "icons":  "lucide",
+                                                                        "shadow":  false,
+                                                                        "size":  1.5,
+                                                                        "tone":  "light"
+                                                                    }
+                                                       },
+                                              "pid":  28456,
+                                              "revision":  5,
+                                              "surfaces":  [
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              94
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  145230818,
+                                                                   "name":  "top",
+                                                                   "size":  [
+                                                                                620,
+                                                                                48
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              204
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  122750970,
+                                                                   "name":  "dock",
+                                                                   "size":  [
+                                                                                247,
+                                                                                166
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              324
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  28116164,
+                                                                   "name":  "widget",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              494
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  19596064,
+                                                                   "name":  "bare",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              674
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  13436130,
+                                                                   "name":  "menu",
+                                                                   "size":  [
+                                                                                378,
+                                                                                156
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              839
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  31066572,
+                                                                   "name":  "field",
+                                                                   "size":  [
+                                                                                620,
+                                                                                40
+                                                                            ]
+                                                               }
+                                                           ]
+                                          },
+                             "name":  "size"
+                         },
+                         {
+                             "revision":  {
+                                              "look":  {
+                                                           "shape":  {
+                                                                         "corners":  24.0,
+                                                                         "edge":  true
+                                                                     },
+                                                           "style":  "solid",
+                                                           "text":  {
+                                                                        "font":  "Consolas",
+                                                                        "icons":  "lucide",
+                                                                        "shadow":  false,
+                                                                        "size":  1.5,
+                                                                        "tone":  "dark"
+                                                                    }
+                                                       },
+                                              "pid":  28456,
+                                              "revision":  6,
+                                              "surfaces":  [
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              94
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  145230818,
+                                                                   "name":  "top",
+                                                                   "size":  [
+                                                                                620,
+                                                                                48
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              204
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  122750970,
+                                                                   "name":  "dock",
+                                                                   "size":  [
+                                                                                247,
+                                                                                166
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              324
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  28116164,
+                                                                   "name":  "widget",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              494
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  19596064,
+                                                                   "name":  "bare",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              674
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  13436130,
+                                                                   "name":  "menu",
+                                                                   "size":  [
+                                                                                378,
+                                                                                156
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              839
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  31066572,
+                                                                   "name":  "field",
+                                                                   "size":  [
+                                                                                620,
+                                                                                40
+                                                                            ]
+                                                               }
+                                                           ]
+                                          },
+                             "name":  "tone"
+                         },
+                         {
+                             "revision":  {
+                                              "look":  {
+                                                           "shape":  {
+                                                                         "corners":  24.0,
+                                                                         "edge":  true
+                                                                     },
+                                                           "style":  "solid",
+                                                           "text":  {
+                                                                        "font":  "Consolas",
+                                                                        "icons":  "lucide",
+                                                                        "shadow":  true,
+                                                                        "size":  1.5,
+                                                                        "tone":  "dark"
+                                                                    }
+                                                       },
+                                              "pid":  28456,
+                                              "revision":  7,
+                                              "surfaces":  [
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              94
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  145230818,
+                                                                   "name":  "top",
+                                                                   "size":  [
+                                                                                620,
+                                                                                48
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              204
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  122750970,
+                                                                   "name":  "dock",
+                                                                   "size":  [
+                                                                                247,
+                                                                                166
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              324
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  28116164,
+                                                                   "name":  "widget",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              494
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  19596064,
+                                                                   "name":  "bare",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              674
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  13436130,
+                                                                   "name":  "menu",
+                                                                   "size":  [
+                                                                                378,
+                                                                                156
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              839
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  31066572,
+                                                                   "name":  "field",
+                                                                   "size":  [
+                                                                                620,
+                                                                                40
+                                                                            ]
+                                                               }
+                                                           ]
+                                          },
+                             "name":  "shadow"
+                         },
+                         {
+                             "revision":  {
+                                              "look":  {
+                                                           "shape":  {
+                                                                         "corners":  24.0,
+                                                                         "edge":  true
+                                                                     },
+                                                           "style":  "solid",
+                                                           "text":  {
+                                                                        "font":  "Consolas",
+                                                                        "icons":  "fluent",
+                                                                        "shadow":  true,
+                                                                        "size":  1.5,
+                                                                        "tone":  "dark"
+                                                                    }
+                                                       },
+                                              "pid":  28456,
+                                              "revision":  8,
+                                              "surfaces":  [
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              94
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  145230818,
+                                                                   "name":  "top",
+                                                                   "size":  [
+                                                                                620,
+                                                                                48
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              204
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  122750970,
+                                                                   "name":  "dock",
+                                                                   "size":  [
+                                                                                247,
+                                                                                166
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              324
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  28116164,
+                                                                   "name":  "widget",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              494
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  19596064,
+                                                                   "name":  "bare",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              674
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  13436130,
+                                                                   "name":  "menu",
+                                                                   "size":  [
+                                                                                378,
+                                                                                156
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              839
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  31066572,
+                                                                   "name":  "field",
+                                                                   "size":  [
+                                                                                620,
+                                                                                40
+                                                                            ]
+                                                               }
+                                                           ]
+                                          },
+                             "name":  "icons"
+                         },
+                         {
+                             "revision":  {
+                                              "look":  {
+                                                           "shape":  {
+                                                                         "corners":  24.0,
+                                                                         "edge":  true
+                                                                     },
+                                                           "style":  "liquid",
+                                                           "text":  {
+                                                                        "font":  "Consolas",
+                                                                        "icons":  "fluent",
+                                                                        "shadow":  true,
+                                                                        "size":  1.5,
+                                                                        "tone":  "dark"
+                                                                    }
+                                                       },
+                                              "pid":  28456,
+                                              "revision":  9,
+                                              "surfaces":  [
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              94
+                                                                          ],
+                                                                   "glass_radius":  36.0,
+                                                                   "hwnd":  145230818,
+                                                                   "name":  "top",
+                                                                   "size":  [
+                                                                                620,
+                                                                                48
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              204
+                                                                          ],
+                                                                   "glass_radius":  36.0,
+                                                                   "hwnd":  122750970,
+                                                                   "name":  "dock",
+                                                                   "size":  [
+                                                                                205,
+                                                                                124
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              324
+                                                                          ],
+                                                                   "glass_radius":  36.0,
+                                                                   "hwnd":  28116164,
+                                                                   "name":  "widget",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              494
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  19596064,
+                                                                   "name":  "bare",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              674
+                                                                          ],
+                                                                   "glass_radius":  36.0,
+                                                                   "hwnd":  13436130,
+                                                                   "name":  "menu",
+                                                                   "size":  [
+                                                                                378,
+                                                                                156
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              839
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  31066572,
+                                                                   "name":  "field",
+                                                                   "size":  [
+                                                                                620,
+                                                                                40
+                                                                            ]
+                                                               }
+                                                           ]
+                                          },
+                             "name":  "style"
+                         },
+                         {
+                             "revision":  {
+                                              "look":  {
+                                                           "bars":  {
+                                                                        "style":  "solid"
+                                                                    },
+                                                           "shape":  {
+                                                                         "corners":  24.0,
+                                                                         "edge":  true
+                                                                     },
+                                                           "style":  "liquid",
+                                                           "text":  {
+                                                                        "font":  "Consolas",
+                                                                        "icons":  "fluent",
+                                                                        "shadow":  true,
+                                                                        "size":  1.5,
+                                                                        "tone":  "dark"
+                                                                    }
+                                                       },
+                                              "pid":  28456,
+                                              "revision":  10,
+                                              "surfaces":  [
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              94
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  145230818,
+                                                                   "name":  "top",
+                                                                   "size":  [
+                                                                                620,
+                                                                                48
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              204
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  122750970,
+                                                                   "name":  "dock",
+                                                                   "size":  [
+                                                                                247,
+                                                                                166
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              324
+                                                                          ],
+                                                                   "glass_radius":  36.0,
+                                                                   "hwnd":  28116164,
+                                                                   "name":  "widget",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              494
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  19596064,
+                                                                   "name":  "bare",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              674
+                                                                          ],
+                                                                   "glass_radius":  36.0,
+                                                                   "hwnd":  13436130,
+                                                                   "name":  "menu",
+                                                                   "size":  [
+                                                                                378,
+                                                                                156
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              839
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  31066572,
+                                                                   "name":  "field",
+                                                                   "size":  [
+                                                                                620,
+                                                                                40
+                                                                            ]
+                                                               }
+                                                           ]
+                                          },
+                             "name":  "bars_style"
+                         },
+                         {
+                             "revision":  {
+                                              "look":  {
+                                                           "bars":  {
+                                                                        "style":  "solid"
+                                                                    },
+                                                           "menus":  {
+                                                                         "style":  "solid"
+                                                                     },
+                                                           "shape":  {
+                                                                         "corners":  24.0,
+                                                                         "edge":  true
+                                                                     },
+                                                           "style":  "liquid",
+                                                           "text":  {
+                                                                        "font":  "Consolas",
+                                                                        "icons":  "fluent",
+                                                                        "shadow":  true,
+                                                                        "size":  1.5,
+                                                                        "tone":  "dark"
+                                                                    }
+                                                       },
+                                              "pid":  28456,
+                                              "revision":  11,
+                                              "surfaces":  [
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              94
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  145230818,
+                                                                   "name":  "top",
+                                                                   "size":  [
+                                                                                620,
+                                                                                48
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              204
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  122750970,
+                                                                   "name":  "dock",
+                                                                   "size":  [
+                                                                                247,
+                                                                                166
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              324
+                                                                          ],
+                                                                   "glass_radius":  36.0,
+                                                                   "hwnd":  28116164,
+                                                                   "name":  "widget",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              494
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  19596064,
+                                                                   "name":  "bare",
+                                                                   "size":  [
+                                                                                620,
+                                                                                150
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              674
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  13436130,
+                                                                   "name":  "menu",
+                                                                   "size":  [
+                                                                                378,
+                                                                                156
+                                                                            ]
+                                                               },
+                                                               {
+                                                                   "at":  [
+                                                                              1910,
+                                                                              839
+                                                                          ],
+                                                                   "glass_radius":  null,
+                                                                   "hwnd":  31066572,
+                                                                   "name":  "field",
+                                                                   "size":  [
+                                                                                620,
+                                                                                40
+                                                                            ]
+                                                               }
+                                                           ]
+                                          },
+                             "name":  "menus_style"
+                         }
+                     ],
+    "fixture_pid":  28456,
+    "deployed_shell_sha256":  "9C1E3EF029683DB6D32851E2FC89ECBEF101237A59F325FDF64EE6A078DCE468"
+}

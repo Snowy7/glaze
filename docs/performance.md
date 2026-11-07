@@ -61,6 +61,44 @@ pacing, so it is excluded from idle CPU samples. `--window <sample.json>` on the
 selects the exact CPU window and excludes startup/teardown publications. The async slots may omit a
 sample if all are still mapping, and no timestamp work runs when telemetry is disabled.
 
+### Shell idle hill-climb (6 November 2026)
+
+On the user's live desktop (two 2560x1440 screens, the left one with bars, dock and widgets, the
+right one covered by a maximized app; a seconds desk clock, a stats module and a now-playing
+widget visible), with other agents building and deploying throughout, so whole-process samples
+swing. The wake report is the measure: create `%LOCALAPPDATA%\mypaper\wakes.on` (or deploy with
+`MYPAPER_WAKES=1`) and every minute `mypaper.log` gets a `wakes in 60 s:` line with causes, each loop
+part's wall time and CPU cycles (`cpu Mcycles`, about 4.5 per ms here), and `bars.tick ms/Mcycles`
+by part. Delete the file to stop it; reading the switch costs one file check a minute.
+
+What woke the shell, and what each fix did (quiet minutes, UI thread):
+
+| Source | Before | After |
+|---|---|---|
+| Every data change (the clock each second) marked all four bars dirty, rebuilt dock items and re-read every app window's rectangle | items 15.3, windows 26.7, paint 62.2 ms/min | 1.0, 2.1, 51.9 ms/min (only bars showing the topic) |
+| Top bar clock `HH:mm` (macOS preset) with `seconds: true` ticked every second | bars.tick 270 Mcycles/min | 126-139 (ticks when the format shows seconds) |
+| Bars clock (+5 ms), stats (every 2 s from start) and widget clocks (+0 ms) woke separately | 41 bar clock/stats wakes/min | 13-16; the rest share the widgets' wake |
+| WinEvent hooks on the UI thread: every cursor move over the foreground app delivered there | UI thread 1,533 Mcycles in 15 s of mouse motion (146 still) | 89 (96 still); a `win-events` thread takes 173 in 25 ms batches |
+| Each window event read all 341 top-level windows' class, pid and cloak state (35 visible), up to three times | 0.46 ms per pass | hidden windows answered by one visibility check; the z-order stops at each bar monitor's front app |
+| Any `WM_SETTINGCHANGE` reloaded every setting (a tweak burst: 120-199/min, pump 4.9-7.2 s/min) | full reload each | only when accent, scheme or animation changed |
+| Media timeline updates (13/min) repainted every bar | 13 full repaints/min | none (only notifications changes repaint) |
+
+Whole UI thread in a quiet minute: 582 -> 444-478 Mcycles (about 0.1 s of CPU a minute). What is left
+is visible change: the seconds desk clock's repaint (~4 Mcycles each, about 260 a minute) and the
+stats module (every 2 s). No frame-ticker wakes at rest.
+
+Mouse motion still costs the desktop menu's `WH_MOUSE_LL` thread about 930 Mcycles per 15 s of fast
+motion (~33 µs a move, in the kernel round trip): the hook must see every mouse event to swallow
+right-clicks on the bare desktop, and is already off while a fullscreen app is in front.
+
+Memory: resting 35-37 MiB private. The first launcher open keeps about 2.5 MiB (text field, shell
+and icon state); further opens, the dock menu, hover and flyouts stay within it (39-40 MiB), and
+handles and GDI/USER objects return to their resting counts.
+
+Exit: the shell no longer crashes on every exit (0xc0000409, or 0xe06d7363 in unwinding debug
+builds): the integrations' thread-local state joined its workers after `ExitProcess` had killed
+them; `integrations::shutdown()` now joins them before `main` returns.
+
 ### Live engine hillclimb (6 November 2026)
 
 On the user's live desktop, not the fixture: rain-city at 30 fps and 0.65 scale on the RTX
@@ -92,19 +130,16 @@ submit and one present per frame, the minimum for this design. GPU: 0.2 ms per f
 **What stays open, and the trade-offs.**
 - *Covered screens: 0.31% of a core, not 0.* With every screen covered the engine draws nothing,
   but three NVIDIA driver threads still wake about 65 times a second each while the D3D12 device
-  exists (197 wakes/s in all). Reaching 0 (and ~10 MB instead of ~170 MB) means releasing the
-  device after some seconds fully covered and hiding our windows, so Windows shows the theme's
-  static snapshot; the cost is that rain would resume a few hundred ms after a screen is
-  uncovered, with the still showing meanwhile. That is a behaviour change for the user to decide.
+  exists (197 wakes/s in all). Round 2 (below, "Hidden = free") releases everything but the
+  device after 10 s fully covered and measured the device itself.
 - *Still image.* Not measured live (it would switch the user's theme). It draws nothing; what
   remains is the covered case's driver wakes plus window events, now batched off the frame loop.
 - *Memory: 169 MB private steady on the RTX.* A wgpu device here is 92-112 MiB of it (a bare D3D12
   device alone is 57 MiB). wgpu creates a D3D12 device on all five adapters DXGI lists (the RTX
   three times, the AMD iGPU, WARP) before choosing; exposing only the screens' adapter saves
   about 13 MiB (lab, two runs each), which needs a patched wgpu-hal (`Adapter::expose` is
-  private): not done. After a shader misses NVIDIA's disk cache (a new theme, or a new build), the
-  driver keeps a compile pool of ~60 threads and about +40 MB until the engine restarts (seen
-  as 205-212 MB / 80 threads; the same build later started at 169 MB / 24 threads).
+  private): not done. The ~60 extra threads and ~+40 MB seen some runs (205-212 MB / 80 threads)
+  are not a shader-cache miss: round 2 traced them to the first glass overlay's D3D11 device.
 - *Studio (not engine code).* It asks again right after a refusal, and waits forever on an
   engine that restarted mid-request (its done event never comes); the engine now copes with
   both, but Studio should stop re-asking an unchanged refused request and time out a request.
@@ -112,6 +147,242 @@ submit and one present per frame, the minimum for this design. GPU: 0.2 ms per f
 Tools (`C:\mypaper-targets\engine-perf\tools`): per-thread CPU and wakes, the preview request
 rate and round trip, plate publication rate, cursor-motion and covered-screen probes, and an
 engine A/B swapper (`swap-engine.ps1`) that puts another exe live and restarts only the engine.
+
+### Hidden = free (6 November 2026, round 2)
+
+Same live desktop and caveats as above. The decision (made for the user, who counts RAM as much
+as CPU): once every screen has been covered by maximized or fullscreen apps for 10 s, let go of
+what drawing holds, keep the theme's still on the desktop, and come back the moment a screen is
+uncovered, with the still covering the way back so nothing goes blank or flashes.
+
+**What each level frees and what coming back costs** (`lab::release` and `lab::idle`: the
+engine's own device path, `engine.gpu: auto` = the RTX 4070 SUPER, rain-city, three cycles):
+
+| Released | Frees (private) | Back to a first frame |
+|---|---:|---:|
+| Drawing: swapchains, kept frames, blur and backdrop pyramids, the source; the device stays | live **-46 MiB** (one screen's swapchain 28, kept frame 6, baked rain 6, glass and backdrop pyramids); textures on this driver are process memory too | **33-62 ms** live (the source again on the warm device: 19-30 ms) |
+| + the wgpu device, its adapter kept | +4 MiB more (the adapter holds the D3D12 device) | +48 ms |
+| + device and adapter (no wgpu at all) | +38-40 MiB more; the driver's one ~66 wakes/s thread stops (`lab::idle`: 66 -> 0 wakes/s) | ~1.6 s: open 0.4-0.5 s, rain 0.16 s, liquid-rust's glass 1.0 s (a new device compiles every shader again with FXC) |
+
+So the engine releases the drawing and keeps the device. Releasing the device too was over the
+~500 ms budget, and glass overlays (flyouts and menus over apps) draw with that device: the first
+flyout after it would wait ~1.6 s for its glass. It would also free less than it looks: with no
+wgpu object left, the process still held 143-287 MiB in the lab (driver and compiler memory a
+process never gets back), so only a process exit returns the rest.
+
+**What it does** (`Engine::release`, `Engine::resume`). After 10 s with every screen covered,
+and only while Windows shows this theme's still on every screen (`static_snapshot`, confirmed by
+the snapshot worker; with it off the user's own wallpaper would flash by on the way back, so
+nothing is released): the windows hide, so the still shows in their place; every swapchain,
+kept frame, glass pyramid and backdrop pyramid is dropped, and so is the source when loading it
+again draws the same frame (`Source::releasable`: shaders and still images; a video, slideshow
+or scene would restart from its first frame, so it stays loaded). When a screen is uncovered the
+source loads again, the windows show (empty, the still shows through) and the next frame makes
+the swapchain. Quick alt-tabs inside the 10 s change nothing. Glass overlays keep working while
+released: a notifications flyout opened over a maximized window then got its glass 44 ms after
+opening (`flyout-released.ps1`).
+
+| Live (`release-check.ps1`: DISPLAY1 covered, a window of our own maximized over DISPLAY2) | Covered, inside the 10 s | Released |
+|---|---:|---:|
+| Private | 171, 173 MiB | **123, 124, 127, 132 MiB** |
+| Wakes, CPU | 135/s, ~0% | 139/s, ~0% |
+| Releasing | | 4.4-13.3 ms on the main thread (14 releases) |
+| First frame after the uncover was seen | | **33-62 ms**, median 47 (14 resumes) |
+
+The memory comes back about 3 s after the release (the driver frees the swapchain late:
+`release-course.ps1`). Five release/resume cycles in a row resumed at 182, 184, 184, 184, 182
+MiB: nothing grows per cycle. 101 captures of DISPLAY2 through two uncovers show the still, then
+rain: never black, never another wallpaper.
+
+**Also found on the way**
+
+| Commit | Change | Before | After |
+|---|---|---:|---:|
+| `ef7ad19` | A glass spring caught mid-flight by a window maximizing over its screen kept waking the engine every 4 ms while the screen stayed covered (springs only advance as a screen is drawn); only drawn screens count now | main thread 305 and 278 wakes/s, 0.78% of a core (2 of 3 covers) | **15-28 wakes/s**, 0-0.2% (3 of 3) |
+| `67d1c8e` | The overlays' D3D11 capture device is created with `PREVENT_INTERNAL_THREADING_OPTIMIZATIONS`: NVIDIA's D3D11 driver started ~56 worker threads with the first overlay of a process | 80, 81 threads with a flyout open; 212, 194 MiB | **42, 45 threads**; 192, 192 MiB; CPU no worse (3.5, 5.1% vs 5.6, 6.6%) |
+
+The first overlay of a process still adds ~+20-40 MiB (the D3D11 device on NVIDIA); in 3 of 4
+runs it went back to ~176 MiB once the capture went cold, 3 s after the last overlay closed.
+
+**Memory while visible, item by item** (rain-city, one visible screen, RTX; `lab::memory` and
+the live numbers above; private, MiB):
+
+| Item | MiB | |
+|---|---:|---|
+| wgpu device and driver | ~98-100 | needs the patched wgpu-hal (adapter probing) to shrink |
+| shader compilation (FXC, driver) | ~17 | per process, kept |
+| city.jpg with its mips (2560x1111) | 15 | the look depends on its trilinear mips |
+| swapchain, 2 x 2560x1440 | 28 | the minimum two buffers |
+| glass blur pyramid (half size, Rgba16Float, 7 levels) | 9.4 | per kept frame; 8-bit would band |
+| kept frame (1664x936) and baked rain | 6 + 6 | |
+| backdrop pyramid between publishes | ~5 -> 0 | dropped after each publish since round 2: settled private 165.7, 169.5, 169.7 MiB against 170.6, 171.1, 173.2 interleaved (its smaller levels share 4 MiB allocator blocks, so 1.6-4.9 MiB comes back) |
+
+What stays open: the driver's device thread (~66 wakes/s, ~0% CPU) while released, which only
+releasing the device removes (above: 1.6 s back and slower first flyouts); rain at 2.3-3.3% of a
+core visible, of which the main thread's frame is ~0.8 ms and recording plus submitting it
+0.22 ms (lab, RTX): the rest is acquire, present and the driver (round 1's profile), one of each
+per frame; and the device's ~100 MiB, which needs the patched wgpu-hal.
+
+### Covered and released: only real events wake the engine (6 November 2026, round 3)
+
+Round 2 left the engine waking ~139 times a second with every screen covered (its main thread
+15-28 of them), and 0.13-0.16 % of a core during a game. Each thread's wakes, named
+(`GetThreadDescription`) and dated (creation time against the engine's log), live in the released
+state: a window of our own maximized over DISPLAY2 (DISPLAY1 is covered by the user's windows),
+sampled for 20 s after the 10 s release (`cover-named.ps1`). Before is the build deployed at 08:20,
+after is the same desktop on the 08:36 build, three minutes apart.
+
+| Thread | Before, wakes/s | After | What it is |
+|---|---:|---:|---|
+| NVIDIA driver, made with the device | 65.5 | 66.0 | the D3D12 device's own thread |
+| NVIDIA driver, made at the first present | 24.1 | 24.7 | made by the first swapchain; outlives it |
+| `main` | 17.5 | **0** | see below |
+| `window-events` (coverage hook thread) | 15.7 | 9.5 | WinEvents of every process, filtered there, in 50 ms batches |
+| `notify-rs windows loop` x2 (config, theme) | 9.35 + 9.2 | **gone** | notify 8 polls every 100 ms |
+| `dir-watch` x2 (their replacement) | | **0** | |
+| **Total** | **141.5, 0.156 % of a core** | **100.5, 0.078 %** | |
+
+| Commit | Change |
+|---|---|
+| `c500fc3` | `mypaper_desktop::dir_watch::DirWatch`: one thread per watched folder blocks in an overlapped `ReadDirectoryChangesW` (plus a stop event), so it wakes only when the folder changes. notify 8's Windows backend waits with a 100 ms timeout forever (`WaitForSingleObjectEx(wakeup_sem, 100, TRUE)`): 9.2-9.4 wakes a second per watch, in every state. `watch_file` (the engine's, core's and the styler's config watches) and the engine's theme watch use it; the engine no longer depends on notify. |
+| `fd33733` | `DesktopEvents` (Explorer restart detection, on the engine's and the widgets' main thread) hooked window creation, destruction and showing in *every* process: 1.1-2.4 callbacks a second on a quiet desktop (agents' consoles, headless browsers). It now hooks only the desktop's Explorer while one is known, and every process again once it is lost. |
+| `d35f6ff` | The coverage hook woke its consumers for every window destroyed anywhere (a destroyed window can't be classified): 1.25 of 1.4 coverage wakes a second on a quiet desktop. Coverage is always one window's, so each scan now records the windows that covered something, and only those closing wake anyone. |
+
+| `1f2a508` | The coverage hook also took every system event between `EVENT_SYSTEM_FOREGROUND` and `MINIMIZEEND`: mouse capture (every click in any app), menus, move/size loops, dialogs, scrolling, alt-tab. A hidden window of ours taking and releasing the capture 10 times a second (`capture-churn.ps1`, no input) took the engine's main thread from 56 to 138 wakes a second, all of them rescans. It now takes focus, minimize/restore, move, show/hide/destroy and cloak only: 52.6, **64.7** and 37.9 wakes a second (quiet, captures, quiet; the screen visible with rain, whose frames vary it 38-56). |
+
+With these, the main thread had no wake in the 20 s sample: it now wakes only for a coverage
+change, a config or theme file change, a display or power change, the shell's plates or Studio.
+
+**What stays, and why.** The two NVIDIA threads (~90 wakes/s, ~0 % CPU) belong to the device.
+`lab::idle_present` (a hidden window of the engine's class, three presented frames): device and
+presented swapchain 66.0 + 24.3 wakes/s, swapchain released 63.3 + 22.1, device dropped **0**;
+`lab::idle`: a bare device has only the first (65-66), none has 0. Releasing the device costs
+~1.6 s back to a first frame and slower first flyouts ("Hidden = free" above), so it stays. The
+`window-events` thread takes every process's raw WinEvents (window moves, captures, the cursor) and
+filters them there; it is bounded at 20 batches a second and follows the desktop's activity (2-36
+a second tonight, 7 with the desktop quiet). Scoping its location hook to the foreground and
+covering windows' processes (as the shell's `win_events` does) would cut it further; that is left
+as a follow-up.
+
+The other processes' notify watches (each a 10 Hz thread; then shell 5, index 2,
+core 1 via tweaks, Studio 1) moved to `mypaper_fswatch` later the same morning (`3a3a29e` and
+the commits after it). `31b51d2` then consolidated `watch_file` and the engine's theme watch
+onto that same crate and removed `mypaper_desktop::dir_watch`. It blocks on overlapped directory
+I/O while idle, debounces only actual changes, and rearms replaced directories. The table above
+records the earlier build, not a new measurement of the consolidated watcher.
+
+### Games (6 November 2026)
+
+Core now publishes the conservative fullscreen/game hint by default; explicit
+`system.game_activity: false` drops the publisher and the shell's signal subscription. The
+[Games contract](system.md#games) defines the lifetime-checked core → child snapshot and
+`HostMsg::GameActivity(bool)` relay. Index background work uses the same snapshot.
+
+During a game the shell releases background provider subscriptions and freezes widget work;
+clock alignment, stats and custom-command deadlines are absent on every bar. The helper blocks
+with no background deadline: plugin timers, retries, move coalescing and idle unloads wait.
+Incoming state coalesces, ordered pipe data uses its existing read-credit bound, and polling
+writes wait without closing connections. Resume delivers retained state and fires an overdue
+periodic timer once, without a catch-up burst. Independent user/session holds remain in force.
+
+The focused tests cover a 10-minute logical hold without events/deadlines, latest state on
+resume, one overdue timer, deferred opens/removal, independent holds, an unchanged real
+websocket connection, and 32 pipe pause/resume cycles with no incoming peer traffic. All five
+pass. Core/config/wire tests pass; shell has 147 passing tests. Widgets has 146 passing tests
+with one unrelated registry-count assertion excluded (`registry.widgets.len() >= 23`).
+
+The production helper was also measured in an isolated profile with Hello's one-second timer
+(`crates/plugins/examples/quiet_helper.rs`), two 60 s samples. CPU was below the process-time
+counter's resolution in both samples; pausing removed timer deliveries rather than claiming
+a CPU improvement from two rounded zeros. [Raw result](../crates/core/evidence/game-helper.json).
+
+| Isolated helper, 60 s each | Active | Game-paused |
+|---|---:|---:|
+| Plugin view updates | 48 | **0** |
+| CPU / one-core % | 0 ms / 0% | **0 ms / 0%** |
+| Private at end | 4.39 MiB | **4.39 MiB** |
+
+Resume and clean shutdown passed; the temporary profile and both probe processes were removed.
+
+**Final live result, including the resume guard.** Two owned borderless windows covered both
+2560x1440 monitors, with rain-city and the user's existing weather/T3 widgets. Each sample was
+60 s, after settling. The foreground hint stayed active for the entire game sample. The user's
+open Studio stayed running. [Final process/thread evidence](../crates/core/evidence/game-resume-guard.json),
+[GPU harness evidence](../crates/core/evidence/game-gpu-resume-guard.json),
+[preceding paired baseline](../crates/core/evidence/game-before-source.json).
+The baseline had an active index scan and is not an idle-desktop comparison.
+
+| Process | Game CPU, % of one core | Private MiB | Context switches/s |
+|---|---:|---:|---:|
+| Core | 0 | 2.88 | 36.6 |
+| Index | 0 | 99.77 | 18.7 |
+| Plugins | 0 | 12.58 | 0.4 |
+| Shell | 0.0260 | 22.95 | 79.7 |
+| Studio (left open) | 0 | 79.77 | 9.3 |
+| App styler | 0 | 3.54 | 18.5 |
+| Wallpaper | 0.1302 | 171.72 | 132.3 |
+| **Total** | **0.1562** | **393.21** | **295.4** |
+
+The standard harness measured **0.18% of one core / 0.011% of the machine**, GPU **0%**.
+Its window differs slightly from the thread sampler; process CPU advances in ~15.6 ms ticks
+(~0.026% per 60 s). Context switches are a wake proxy, including external events and preemption;
+they do not identify timer origin. Removing the shell's shared event source reduced its game
+sample from 0.156% / 210.6 switches/s to 0.026% / 73.1 switches/s in the preceding run.
+
+**The strict 0.0x% total one-core gate is still unmet.** Remaining measured CPU is chiefly in
+the wallpaper process, outside this slice. Earlier covered runs retained ~66/s driver wakes;
+the final thread data contains a 62.3/s context-switch thread and another 22.1/s thread. These
+unnamed thread counts are not proof of which timer owns them. Memory remains resident; the
+final engine retained 172 MiB, versus 127 MiB in a previous covered run. No engine code, render
+quality or FPS policy was changed here.
+
+**Resume is verified without restarting.** A regression test first reproduced `QUNS_BUSY`
+holding a non-covering foreground window, then passed after requiring coverage. Foreground/
+location events still react immediately. One core **1 Hz recheck exists only while paused**,
+and is killed on resume/drop; idle has no timer. It covers missing/delayed Windows events.
+The owned fixture exercised focus-away, minimize and exit: all returned to Idle within 60 ms
+in the recorded run, with three shell and three helper resume logs and unchanged
+core/shell/helper PIDs. [Lifecycle](../crates/core/evidence/game-lifecycle.json),
+[consumer assertions](../crates/core/evidence/game-lifecycle-consumers.json).
+The last 60 s fixture also cleared its original Busy-after-exit case automatically with the
+same publisher PID. Widgets, bars and the clock were visually checked after restore, and no
+fixture remains. Tweaks: **56 tests passed**; release workspace build and scoped Clippy passed.
+
+**Foreground entry was rechecked against the index agent's exact fixture.** A plain topmost
+`WS_POPUP` covering the primary monitor reproduced a stale published PID for ten seconds,
+despite real foreground activation. The foreground callback arrived, but an immediate
+`GetForegroundWindow` query still returned the previous window; posting an immediate refresh
+also ran too early. A later forced sample correctly recognized coverage. The publisher now
+samples the HWND supplied by `EVENT_SYSTEM_FOREGROUND`, as specified by Windows, while other
+events and the paused-only fallback query the current foreground. This adds no timer or thread.
+[Original failure](../crates/core/evidence/game-foreground-before.json),
+[delayed-sample diagnosis](../crates/core/evidence/game-foreground-delayed.json).
+
+The [repeatable cross-process probe](../crates/core/evidence/game-foreground.ps1) starts from
+Idle, independently checks actual foreground ownership, samples the real publication, verifies
+the publisher stays alive and requires resume on exit. On the final workspace deployment,
+the fixture's correct PID and pause were present at the first one-second sample and remained
+through the ten-second run; exit returned to Idle. The lifecycle/consumer assertions above also
+passed on this deployment. [Final foreground evidence](../crates/core/evidence/game-foreground-fixed.json),
+[exit](../crates/core/evidence/game-foreground-fixed-restored.json),
+[deployed binary identity](../crates/core/evidence/game-foreground-build.json).
+Both covering and restored desktops were visually checked; core/tweaks tests (16/56) and
+scoped all-target Clippy passed. No index code was changed here.
+
+**Limits:** no application background deadline is different from no OS/driver wake. The engine
+keeps its GPU device when covered (the ~66 wakes/s driver thread described above). WinHTTP's
+transport keepalives and external incoming events remain while sockets stay connected; changing
+keepalive on an upgraded live socket was rejected with `ERROR_WINHTTP_INCORRECT_HANDLE_STATE`.
+Processes retain memory. No FPS or game frame-time improvement is inferred from quiescence.
+
+**Later engine pass (10:25).** The [night log](../plans/night/2026-11-06.md) records the separate
+`engine.during_games: "pause"` check: a game covering one screen paused both, measured engine CPU
+was **0.000% of one core**, private memory **208.7 → 124.7 MiB**, and resume **74 ms**. This is a later
+engine-only sample, not a repeat of the whole-product table above. The device still remains;
+no new whole-product zero-wake claim follows from the rounded CPU result. Live glass over web/app
+wallpapers measured **5.83%** engine CPU for the 30 fps demo, **0.31%** for a still page, and
+**1.41%** with a 10 fps cap; the fixture, GPU/memory figures and captures are in
+[glass.md](glass.md#glass-over-web-and-app-wallpapers-p14-6-november-2026).
 
 ### Engine hillclimb (5 November 2026)
 

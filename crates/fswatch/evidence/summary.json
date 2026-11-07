@@ -1,0 +1,29 @@
+﻿[
+    {
+        "part":  "mypaper-shell",
+        "before_threads":  5,
+        "before_switches_s":  46.175,
+        "after_threads":  6,
+        "after_switches_s":  0.592,
+        "cpu_core_pct_before":  0.21,
+        "cpu_core_pct_after":  0.36
+    },
+    {
+        "part":  "mypaper-core",
+        "before_threads":  1,
+        "before_switches_s":  9.597,
+        "after_threads":  1,
+        "after_switches_s":  0.394,
+        "cpu_core_pct_before":  0,
+        "cpu_core_pct_after":  0
+    },
+    {
+        "part":  "mypaper-index",
+        "before_threads":  2,
+        "before_switches_s":  18.673,
+        "after_threads":  2,
+        "after_switches_s":  0.282,
+        "cpu_core_pct_before":  1.25,
+        "cpu_core_pct_after":  1.15
+    }
+]

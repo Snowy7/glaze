@@ -156,6 +156,8 @@ pub struct Probe {
 /// Owned by the shell's UI thread. Call `poll` after dispatch, route queued UI events with
 /// `on_event`, and include `timeout_ms` in the message wait. All methods are non-reentrant.
 pub struct Widgets {
+    desktop_look: mypaper_config::Look,
+    look_chrome_dirty: bool,
     layout: Layout,
     layout_error: Option<String>,
     theme_path: Option<PathBuf>,
@@ -210,6 +212,7 @@ pub struct Widgets {
     worker: data::Worker,
     holds: Holds,
     held: bool,
+    game_active: bool,
     hidden: bool,
     reconcile_needed: bool,
     order_due: Option<Instant>,
@@ -308,6 +311,8 @@ impl Widgets {
             studio_applied: Instant::now(),
             studio_pending: false,
             studio_resize: None,
+            desktop_look: config.look.clone(),
+            look_chrome_dirty: false,
             layout,
             layout_error,
             theme_path: None,
@@ -348,6 +353,7 @@ impl Widgets {
             worker: data::Worker::new(window),
             holds,
             held: false,
+            game_active: false,
             hidden: false,
             reconcile_needed: true,
             order_due: None,
@@ -480,6 +486,14 @@ impl Widgets {
         if let Ok(config) = Config::load() {
             self.studio_stamp.0 = None;
             if let Ok(path) = mypaper_config::path() { self.studio_config_raw = studio_raw(&path); }
+            if self.desktop_look != config.look {
+                self.look_chrome_dirty = true;
+                self.desktop_look = config.look.clone();
+                for entry in self.entries.values_mut() {
+                    entry.model.dirty = true;
+                    entry.painted = false;
+                }
+            }
             self.holds.apply(&config);
             if apply_style(&config) {
                 for entry in self.entries.values_mut() {
@@ -718,6 +732,15 @@ impl Widgets {
         }
     }
 
+    pub fn set_game_activity(&mut self, active: bool) {
+        self.game_active = active;
+        if !active {
+            self.windows = WindowEvents::install();
+            self.reconcile_needed = true;
+        }
+        self.plugins.set_game_activity(active);
+    }
+
     pub fn poll(&mut self, ui: &mut Ui) {
         self.costs.polls += 1;
         let instant = Instant::now();
@@ -792,7 +815,7 @@ impl Widgets {
         self.costs.coverage_us += measured.elapsed().as_micros() as u64;
         let reasons = self.holds.reasons();
         let hidden = reasons.contains(Reason::Locked) || reasons.contains(Reason::DisplayOff);
-        let held = !reasons.is_empty();
+        let held = self.game_active || !reasons.is_empty();
         if held != self.held || hidden != self.hidden {
             if held && self.editing {
                 self.cancel_drag();
@@ -808,7 +831,9 @@ impl Widgets {
             self.media.set_held(held);
             self.audio.set_held(held);
             self.stats.set_held(held, instant);
-            self.plugins.set_held(held);
+            // Game quiescence has its own helper frame and must not trigger a delayed
+            // suspend/unload when the game ends. Preserve independent user/session holds.
+            self.plugins.set_held(!reasons.is_empty());
             for entry in self.entries.values_mut() {
                 // Services may not have subscribed when the shell started paused. Resume
                 // through the visibility path without discarding cached widget content.
@@ -832,6 +857,10 @@ impl Widgets {
         }
         if stats_visibility_changed {
             self.subscribe_stats(instant);
+        }
+        if std::mem::take(&mut self.look_chrome_dirty) {
+            self.repaint_palette(ui);
+            self.repaint_picker(ui, None);
         }
         if self.order_due.is_some_and(|at| at <= instant) {
             let measured = Instant::now();
@@ -1124,6 +1153,7 @@ impl Widgets {
             self.forget(&id);
             self.entries.remove(&id);
         }
+        let system = mypaper_bars::accent::read();
         for instance in &effective.instances {
             let Some(manifest) = self.registry.get(&instance.widget).map(|i| &i.manifest) else {
                 continue;
@@ -1134,10 +1164,18 @@ impl Widgets {
             let monitor = devices.iter().position(|d| d == device).unwrap();
             let screen = &self.monitors[monitor];
             let grid = grid_for_bars(&effective, screen, self.studio_bars.as_ref().unwrap_or(&self.bars));
+            let base = effective
+                .appearance
+                .over(&look::base(self.studio_skin.as_ref().unwrap_or(&self.skin)));
+            let bare = instance.appearance.surface.or(base.surface) == Some(mypaper_theme::Surface::None);
+            let mut global = crate::look::settings::appearance(&self.desktop_look, glass::Family::Widgets, &base, bare, &system);
+            if let Some(font) = global.font.as_mut() {
+                *font = crate::look::settings::font(font, |f| ui.text.has_family(f));
+            }
             let appearance = look::resolve(
                 &instance.appearance,
-                &effective.appearance,
-                &look::base(self.studio_skin.as_ref().unwrap_or(&self.skin)),
+                &mypaper_theme::Appearance::default(),
+                &global,
                 self.accent,
             );
             let placed = layout::place(instance, manifest, &grid, &appearance);
@@ -1213,6 +1251,9 @@ impl Widgets {
                 entry.model.dirty = true;
             }
             entry.tokens = tokens(&placed.appearance);
+            entry.tokens.icon_set = crate::look::settings::icons(&self.desktop_look, &ui.text);
+            entry.model.corner_override = instance.appearance.radius.or(self.desktop_look.shape.corners).or(effective.appearance.radius).or(self.studio_skin.as_ref().unwrap_or(&self.skin).appearance.radius);
+            entry.model.edge_override = instance.appearance.border.or(self.desktop_look.shape.edge).or(effective.appearance.border);
             entry.model.placed = placed;
             if !self.settling.contains_key(&instance.instance)
                 && !self
@@ -1653,13 +1694,13 @@ impl Widgets {
             }
             return;
         }
-        if let Some(menu) = &mut self.plugin_menu {
-            if menu.owns(surface) {
-                if let Some(mypaper_ui::menu::Outcome::Chosen((instance, action, value))) = menu.handle(ui, surface, event) {
-                    self.plugins.face_action(&instance, &action, Some(value));
-                }
-                return;
+        if let Some(menu) = &mut self.plugin_menu
+            && menu.owns(surface)
+        {
+            if let Some(mypaper_ui::menu::Outcome::Chosen((instance, action, value))) = menu.handle(ui, surface, event) {
+                self.plugins.face_action(&instance, &action, Some(value));
             }
+            return;
         }
         if matches!(event, Event::DpiChanged(_)) {
             self.monitors = monitor_infos();
@@ -2545,9 +2586,9 @@ impl Widgets {
             }
         }
         if let Some((index, monitor)) = self.monitors.iter().enumerate().find(|(_, m)| m.primary) {
-            let scale = monitor.dpi as f32 / 96.0;
+            let scale = monitor.dpi as f32 / 96.0 * self.desktop_look.text.size.unwrap_or(1.0);
             let (list, size) =
-                edit::pill(&edit::chrome_theme(), scale, &Default::default(), &mut ui.text);
+                edit::pill(&edit::chrome_look(&self.desktop_look, &ui.text), scale, &Default::default(), &mut ui.text, self.desktop_look.shape.corners);
             let widgets: Vec<_> = self
                 .entries
                 .values()
@@ -2587,10 +2628,11 @@ impl Widgets {
             return;
         };
         let (list, size) = edit::pill(
-            &edit::chrome_theme(),
-            monitor.dpi as f32 / 96.0,
+            &edit::chrome_look(&self.desktop_look, &ui.text),
+            monitor.dpi as f32 / 96.0 * self.desktop_look.text.size.unwrap_or(1.0),
             &palette.hot,
             &mut ui.text,
+            self.desktop_look.shape.corners,
         );
         let origin = palette.surface.origin();
         if let Err(e) = palette.surface.present(ui, origin, size, list) {
@@ -2629,8 +2671,8 @@ impl Widgets {
         let (Some(host), Some(screen)) = (self.host, self.monitors.get(monitor)) else {
             return;
         };
-        let theme = edit::chrome_theme();
-        let s = screen.dpi as f32 / 96.0;
+        let theme = edit::chrome_look(&self.desktop_look, &ui.text);
+        let s = screen.dpi as f32 / 96.0 * self.desktop_look.text.size.unwrap_or(1.0);
         let size = edit::picker_size(s);
         let bounds = usable_screen(screen, &self.bars).inflate(-8.0 * s);
         let (x, y) = anchor.unwrap_or((
@@ -2730,17 +2772,18 @@ impl Widgets {
             settings: Default::default(),
             appearance: Default::default(),
         };
-        let appearance = look::resolve(
-            &instance.appearance,
-            &self.layout.appearance,
-            &look::base(&self.skin),
-            self.accent,
-        );
+        let base = self.layout.appearance.over(&look::base(&self.skin));
+        let mut global = crate::look::settings::appearance(&self.desktop_look, glass::Family::Widgets, &base, base.surface == Some(mypaper_theme::Surface::None), &mypaper_bars::accent::read());
+        if let Some(font) = global.font.as_mut() { *font = crate::look::settings::font(font, |f| ui.text.has_family(f)); }
+        let appearance = look::resolve(&instance.appearance, &Default::default(), &global, self.accent);
         let placed = layout::place(&instance, manifest, &grid, &appearance);
         let span = grid.rect(placed.cell, placed.size);
         let mut model = Model::new(placed, &mut self.storage, Stamp::now()).ok()?;
+        model.corner_override = self.desktop_look.shape.corners;
+        model.edge_override = self.desktop_look.shape.edge;
         model.visible = true;
-        let tokens = tokens(&model.placed.appearance);
+        let mut tokens = tokens(&model.placed.appearance);
+        tokens.icon_set = crate::look::settings::icons(&self.desktop_look, &ui.text);
         // Fit the pane (310 × 220 design px), never above life size.
         let k = (310.0 / span.width as f32)
             .min(220.0 / span.height as f32)
@@ -2778,13 +2821,13 @@ impl Widgets {
         let Some(screen) = self.monitors.get(picker.monitor) else {
             return;
         };
-        let s = screen.dpi as f32 / 96.0;
+        let s = screen.dpi as f32 / 96.0 * self.desktop_look.text.size.unwrap_or(1.0);
         let selected = edit::filter(&picker.choices, &picker.query)
             .get(picker.selected)
             .map(|c| c.id.clone());
         let preview = selected.and_then(|id| self.picker_preview(ui, &id, s));
         let Some(picker) = &mut self.picker else { return };
-        let theme = edit::chrome_theme();
+        let theme = edit::chrome_look(&self.desktop_look, &ui.text);
         let shown = edit::filter(&picker.choices, &picker.query);
         let list = edit::picker(
             &theme,
@@ -3431,6 +3474,7 @@ impl Widgets {
                             .offset(-monitor.rect.x as f32, -monitor.rect.y as f32),
                         radius: view::plate_radius(&e.model, e.rect, e.dpi_scale * e.tokens.scale),
                         material,
+                        style: Default::default(),
                     })
                 })
                 .collect();
@@ -3509,33 +3553,6 @@ fn left_button(pressed: &mut Option<HitId>, event: &Event, over: Option<HitId>, 
     None
 }
 
-#[cfg(test)]
-mod left_button_tests {
-    use super::left_button;
-    use mypaper_ui::{Button, Event, HitId, Point, Pointer};
-
-    /// Runs `events` over hit `row` and counts the clicks that fire.
-    fn clicks(events: &[Event], single: bool) -> usize {
-        let row: HitId = 800_002;
-        let mut pressed = None;
-        events.iter().filter(|e| left_button(&mut pressed, e, Some(row), single) == Some(row)).count()
-    }
-
-    #[test]
-    fn one_click_one_action() {
-        let p = Pointer { at: Point::new(10.0, 10.0), screen: (10, 10) };
-        let (press, release, double) = (Event::Press(p, Button::Left), Event::Release(p, Button::Left), Event::DoubleClick(p, Button::Left));
-        assert_eq!(clicks(&[press, release], true), 1);
-        assert_eq!(clicks(&[release, press, release, release], true), 1, "button-ups with no press of ours");
-        // What a double-click delivers: down, up, then WM_LBUTTONDBLCLK (a press and a double-click), up.
-        let double_click = [press, release, press, double, release];
-        assert_eq!(clicks(&double_click, true), 1, "a plugin widget's double-click is one action");
-        assert_eq!(clicks(&double_click, false), 2, "built-in widgets keep two");
-        let mut pressed = None;
-        left_button(&mut pressed, &press, Some(1), true);
-        assert_eq!(left_button(&mut pressed, &release, Some(2), true), None, "released over another hit");
-    }
-}
 
 /// Edit guides are visual only. A monitor-sized layered window must never take a widget's drag.
 fn click_through(surface: &Surface) {
@@ -3891,6 +3908,7 @@ pub(crate) fn tokens(appearance: &serde_json::Map<String, Value>) -> Tokens {
             ),
         },
         radius: layer.radius.unwrap_or(22.0),
+        border: layer.border.unwrap_or(false),
         scale: layer.scale.unwrap_or(1.0),
         ..Tokens::default()
     }
@@ -4089,4 +4107,32 @@ fn moved_faces(layout: &mut Layout, path: &std::path::Path) -> bool {
         let _ = files::backup_tagged(path, "faces", &bytes);
     }
     moved
+}
+
+#[cfg(test)]
+mod left_button_tests {
+    use super::left_button;
+    use mypaper_ui::{Button, Event, HitId, Point, Pointer};
+
+    /// Runs `events` over hit `row` and counts the clicks that fire.
+    fn clicks(events: &[Event], single: bool) -> usize {
+        let row: HitId = 800_002;
+        let mut pressed = None;
+        events.iter().filter(|e| left_button(&mut pressed, e, Some(row), single) == Some(row)).count()
+    }
+
+    #[test]
+    fn one_click_one_action() {
+        let p = Pointer { at: Point::new(10.0, 10.0), screen: (10, 10) };
+        let (press, release, double) = (Event::Press(p, Button::Left), Event::Release(p, Button::Left), Event::DoubleClick(p, Button::Left));
+        assert_eq!(clicks(&[press, release], true), 1);
+        assert_eq!(clicks(&[release, press, release, release], true), 1, "button-ups with no press of ours");
+        // What a double-click delivers: down, up, then WM_LBUTTONDBLCLK (a press and a double-click), up.
+        let double_click = [press, release, press, double, release];
+        assert_eq!(clicks(&double_click, true), 1, "a plugin widget's double-click is one action");
+        assert_eq!(clicks(&double_click, false), 2, "built-in widgets keep two");
+        let mut pressed = None;
+        left_button(&mut pressed, &press, Some(1), true);
+        assert_eq!(left_button(&mut pressed, &release, Some(2), true), None, "released over another hit");
+    }
 }

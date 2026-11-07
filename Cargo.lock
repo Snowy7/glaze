@@ -227,6 +227,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bstr"
+version = "1.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bb31b46c14244e20ee9984b11bf5c992b91fb6939fea616e3512c8baecdbe5f"
+dependencies = [
+ "memchr",
+ "serde_core",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1070,6 +1080,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "globset"
+version = "0.4.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f98b0d85522dc0a824cfebbc9594ff4a9b289c568bea0370319dfbdf20ccdd2d"
+dependencies = [
+ "aho-corasick",
+ "bstr",
+ "log",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
 name = "gltf"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1701,7 +1724,6 @@ dependencies = [
  "mypaper-config",
  "mypaper-desktop",
  "mypaper-theme",
- "notify",
  "serde",
  "serde_json",
  "windows",
@@ -1742,7 +1764,7 @@ dependencies = [
  "env_logger",
  "log",
  "mypaper-config",
- "notify",
+ "mypaper-fswatch",
  "serde",
  "serde_json",
  "windows",
@@ -1770,6 +1792,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mypaper-fswatch"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "windows",
+]
+
+[[package]]
 name = "mypaper-glass-ipc"
 version = "0.1.0"
 dependencies = [
@@ -1783,8 +1814,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytemuck",
+ "globset",
  "memchr",
  "memmap2",
+ "mypaper-config",
+ "mypaper-fswatch",
+ "mypaper-tweaks",
  "rayon",
  "serde",
  "serde_json",
@@ -1899,6 +1934,7 @@ dependencies = [
  "mypaper-bars",
  "mypaper-config",
  "mypaper-desktop",
+ "mypaper-fswatch",
  "mypaper-glass-ipc",
  "mypaper-index",
  "mypaper-integrations",
@@ -1909,7 +1945,6 @@ dependencies = [
  "mypaper-tweaks",
  "mypaper-ui",
  "mypaper-widgets",
- "notify",
  "resvg",
  "serde",
  "serde_json",
@@ -1955,9 +1990,9 @@ dependencies = [
  "anyhow",
  "log",
  "mypaper-config",
+ "mypaper-fswatch",
  "mypaper-inject",
  "mypaper-theme",
- "notify",
  "serde",
  "serde_json",
  "windows",
@@ -1990,10 +2025,10 @@ dependencies = [
  "log",
  "mypaper-config",
  "mypaper-desktop",
+ "mypaper-fswatch",
  "mypaper-glass-ipc",
  "mypaper-theme",
  "mypaper-tweaks",
- "notify",
  "pollster",
  "raw-window-handle",
  "subsecond",

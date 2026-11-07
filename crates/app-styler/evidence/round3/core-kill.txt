@@ -1,0 +1,23 @@
+08:11:09.684 core 77640, styler 89160 ("D:\Coding\projects\desktop\wallpaper\target\release\mypaper-styler.exe" --parent 77640)
+08:11:09.709 running: mypaper-core 77640, mypaper-index 30028, mypaper-plugins 23700, mypaper-shell 71712, mypaper-studio 32732, mypaper-styler 89160, mypaper-wallpaper 43780
+08:11:09.814 styler exited 84 ms after core was ended
+08:11:11.837 after: mypaper-studio 32732, mypaper-wallpaper 43780
+08:11:11.839 --- TAP log since
+08:11:11.858   [tap 73468] restoring 24 element(s) on 1 thread(s) (1180 known; 0 removal(s) of elements never seen)
+08:11:11.859   [tap 76024] restoring 16 element(s) on 2 thread(s) (2710 known; 0 removal(s) of elements never seen)
+08:11:11.863   [tap 76024] thread 13420: put back 8 element(s)
+08:11:11.867   [tap 76024] thread 76480: put back 8 element(s)
+08:11:11.871   [tap 76024] detached: HRESULT(0x00000000)
+08:11:11.874   [tap 73468] thread 68748: put back 24 element(s)
+08:11:11.878   [tap 73468] detached: HRESULT(0x00000000)
+08:11:11.882 --- starting mypaper again (as deploy-local does)
+08:11:23.015 new styler 93016 ("D:\Coding\projects\desktop\wallpaper\target\release\mypaper-styler.exe" --parent 62864)
+08:11:23.028 running: mypaper-core 62864, mypaper-index 13756, mypaper-plugins 65904, mypaper-shell 94052, mypaper-studio 32732, mypaper-styler 93016, mypaper-wallpaper 43780, mypaper-wallpaper 80768
+08:11:23.042   [tap 73468] 4 resource override(s) on thread 68748
+08:11:23.044   [tap 76024] 3 resource override(s) on thread 76480
+08:11:23.049   [tap 73468] watching the visual tree: HRESULT(0x00000000)
+08:11:23.053   [tap 76024] watching the visual tree: HRESULT(0x00000000)
+08:11:23.057   [tap 73468] 4 rule(s), 4 resource(s)
+08:11:23.062   [tap 73468] 4 resource override(s) on thread 68748
+08:11:23.067   [tap 73468] restyling 24 element(s) on thread 68748 (1180 known in all)
+08:11:23.071   [tap 73468] let go of 1 unused value(s) on thread 68748

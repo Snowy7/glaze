@@ -367,6 +367,13 @@ impl Sampler {
     }
 }
 
+
+impl Default for Sampler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -401,11 +408,5 @@ mod tests {
     fn cpu_is_the_busy_share() {
         assert_eq!(cpu_percent((1_000, 2_000), (1_750, 3_000)), 25.0);
         assert_eq!(cpu_percent((5, 5), (5, 5)), 0.0);
-    }
-}
-
-impl Default for Sampler {
-    fn default() -> Self {
-        Self::new()
     }
 }

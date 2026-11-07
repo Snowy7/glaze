@@ -14,6 +14,8 @@ pub struct Tokens {
     pub font: TextStyle,
     /// The icon font family (glyphs from [`crate::icons`]).
     pub icons: Arc<str>,
+    /// Opt into named kit icons in menus; `None` keeps the caller's legacy font glyphs.
+    pub icon_set: Option<crate::icons::IconSet>,
     pub colors: Colors,
     pub material: Material,
     /// Corner radius of a surface.
@@ -28,6 +30,8 @@ pub struct Tokens {
     /// Engine glass under the body instead of the tint (`crate::glass`); `None` draws the tint.
     /// Popups fall back to the thread's style ([`crate::glass::style`]) when this is `None`.
     pub glass: Option<crate::glass::GlassMaterial>,
+    /// Optional optics of this menu's material, resolved alongside the tokens.
+    pub glass_style: crate::glass::GlassStyle,
 }
 
 impl Default for Tokens {
@@ -36,6 +40,7 @@ impl Default for Tokens {
         Self {
             font: TextStyle::new("Segoe UI Variable Text", 14.0),
             icons: crate::icons::SYSTEM_FAMILY.into(),
+            icon_set: None,
             colors: Colors::neutral(true),
             material: Material {
                 tint: Rgba::rgb8([0x16, 0x18, 0x1d], 0.94),
@@ -46,6 +51,7 @@ impl Default for Tokens {
             scale: 1.0,
             menu: MenuMetrics::default(),
             glass: None,
+            glass_style: crate::glass::GlassStyle::default(),
         }
     }
 }

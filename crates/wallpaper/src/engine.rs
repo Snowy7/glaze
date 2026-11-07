@@ -4,7 +4,7 @@
 //! same as the last one: covered screens are skipped, static sources draw
 //! once, animated ones are paced by their own fps cap, and the clock that
 //! drives animation stops while everything is hidden. Once every screen has
-//! been covered for [`RELEASE_AFTER`], it also lets go of what drawing holds
+//! been covered (or held for a game) for [`RELEASE_AFTER`], it also lets go of what drawing holds
 //! (swapchains, kept frames, pyramids, the source; see [`Engine::release`]).
 
 use std::path::Path;
@@ -24,7 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use crate::backdrop::{Backdrop, Draw};
 use crate::glass_pass::GlassPass;
 use crate::gpu::{Gpu, KeptFrame, Opening, Screen};
-use crate::hold::{Fact, HoldReasons, Holds};
+use crate::hold::{Fact, HoldReasons, Holds, Reason};
 use crate::palette;
 use crate::snapshot::{Snapshot, Target};
 use crate::sources::{self, Frame, Redraw, Source, Visibility};
@@ -87,14 +87,19 @@ pub struct Engine {
     renderer_config: EngineConfig,
     render_settings: RenderSettings,
     restart_due: bool,
-    /// Since when every screen has been covered (desktop mode).
+    /// Since every screen was covered or a game held the wallpaper (desktop mode).
     covered_since: Option<Instant>,
     /// The drawing is released ([`release`](Self::release)): our windows are hidden.
     released: bool,
+    /// Game hold reveals the installed theme still immediately, before the drawing is released.
+    /// Cleared only after a fresh frame is presented, so a short hold never exposes a stale frame.
+    game_still: bool,
     /// ... and so is the source, which [`resume`](Self::resume) loads again.
     source_released: bool,
     /// When the last resume began, until its first frame is presented (logged).
     resuming: Option<Instant>,
+    /// Core's game signal, followed while `engine.during_games` is `pause` (desktop mode).
+    game: crate::game::GameSignal,
 }
 
 impl Engine {
@@ -167,8 +172,10 @@ impl Engine {
             restart_due: false,
             covered_since: None,
             released: false,
+            game_still: false,
             source_released: false,
             resuming: None,
+            game: crate::game::GameSignal::default(),
         })
     }
 
@@ -183,10 +190,47 @@ impl Engine {
         }
     }
 
+    /// The shell's plates over screens whose wallpaper draws with windows of its own (web, app),
+    /// which this engine has no frame to draw them into: the overlays draw them instead (P14,
+    /// `overlay::Overlays::sync_plates`). Live on a visible screen; frozen (last glass kept,
+    /// nothing captured) while it is covered or held; none once released. A plate across two
+    /// screens belongs to the one holding its centre. Empty, at no cost, for every other source.
+    pub fn native_plates(&self) -> Vec<crate::overlay::PlateOverlay> {
+        let Some(monitors) = &self.monitors else {
+            return Vec::new();
+        };
+        if self.released {
+            return Vec::new();
+        }
+        let writer = self.glass.writer_pid();
+        let mut plates = Vec::new();
+        for (index, (screen, monitor)) in self.screens.iter().zip(monitors).enumerate() {
+            if !self.source.native(index) {
+                continue;
+            }
+            let live = !self.held && !screen.paused;
+            for (plate, style) in self.glass.plates(index) {
+                let [x, y, w, h] = plate.rect;
+                let (cx, cy) = ((x + w / 2.0) as i32, (y + h / 2.0) as i32);
+                if !monitor.contains_point(cx, cy) {
+                    continue;
+                }
+                plates.extend(crate::overlay::PlateOverlay::of(plate, style, writer, live));
+            }
+        }
+        plates
+    }
+
+    /// The frame-rate cap (`engine.fps`) for this theme, if any.
+    pub fn fps(&self) -> Option<u32> {
+        self.render_settings.fps
+    }
+
     /// Named plate event plus the current writer's exit handle, both owned by GlassPass.
     pub fn glass_handles(&self) -> Vec<windows::Win32::Foundation::HANDLE> {
         let mut handles = self.glass.wait_handles();
         handles.extend(self.preview.handle());
+        handles.extend(self.game.handle());
         handles
     }
 
@@ -212,6 +256,8 @@ impl Engine {
     pub fn apply_config(&mut self, config: &Config) {
         self.apply_renderer_config(&config.engine);
         self.holds.apply(config);
+        self.game
+            .set_enabled(self.monitors.is_some() && self.holds.wants_game());
         self.refresh_fullscreen();
         self.sync_hold();
     }
@@ -253,6 +299,12 @@ impl Engine {
         let fullscreen =
             self.monitors.is_some() && self.holds.wants_fullscreen() && fullscreen_app_in_front();
         self.holds.set_fullscreen(fullscreen);
+    }
+
+    /// Follows core's game signal into the holds (cheap unless it changed).
+    fn refresh_game(&mut self) {
+        let game = self.game.refresh();
+        self.holds.set_game(game);
     }
 
     /// Combines every hold reason into [`hold`](Self::hold), logging changes.
@@ -299,6 +351,8 @@ impl Engine {
             return Flow::Exit(EXIT_RESTART);
         }
         let now = Instant::now();
+        self.refresh_game();
+        self.sync_hold();
         if let Some(timing) = &mut self.timing {
             timing.collect(&self.gpu);
         }
@@ -341,6 +395,21 @@ impl Engine {
         }
         self.follow_cover(now);
 
+        if self.game_still && !self.can_release() {
+            self.game_still = false;
+            for screen in &self.screens {
+                screen.window.show(true);
+            }
+            self.mark_dirty();
+        }
+        if !self.game_still && self.reasons.contains(Reason::Game) && self.can_release() {
+            for screen in &self.screens {
+                screen.window.show(false);
+            }
+            self.game_still = true;
+            log::info!("game hold: showing the theme still");
+        }
+
         self.sync_visibility();
         self.glass.reload();
         for (index, screen) in self.screens.iter_mut().enumerate() {
@@ -350,6 +419,11 @@ impl Engine {
         let active = !self.held && self.screens.iter().any(|s| !s.paused);
         if !active {
             self.last_tick = None; // the clock stops while nothing is visible
+            // The same Windows still stays visible through the ten-second release. Do not
+            // redraw hidden swapchains (or recreate drawing that has already been released).
+            if self.game_still || self.released {
+                return Flow::Wait(self.deadline(None));
+            }
             // Held, but an uncovered screen is still seen (e.g. the second
             // monitor while a game is fullscreen): give it one still frame of
             // the current wallpaper rather than whatever was there before.
@@ -398,13 +472,17 @@ impl Engine {
         Flow::Wait(self.deadline(frame_deadline))
     }
 
-    /// Releases the drawing once every screen has been covered for [`RELEASE_AFTER`], and
-    /// resumes it as soon as one is not.
+    /// Releases the drawing once every screen has been covered, or a game held the wallpaper,
+    /// for [`RELEASE_AFTER`], and resumes it as soon as neither is true.
     fn follow_cover(&mut self, now: Instant) {
         if self.monitors.is_none() {
             return;
         }
-        if self.screens.iter().any(|s| !s.paused) {
+        if self.released && !self.can_release() {
+            self.resume(); // Snapshot was disabled while held: keep the wallpaper visible.
+        }
+        let game = self.reasons.contains(Reason::Game);
+        if !game && self.screens.iter().any(|s| !s.paused) {
             self.covered_since = None;
             if self.released {
                 self.resume();
@@ -455,8 +533,8 @@ impl Engine {
             let _ = self.gpu.device.poll(wgpu::PollType::wait_indefinitely());
         }
         log::info!(
-            "every screen covered for {RELEASE_AFTER:?}: drawing released in {:.1?} \
-             (source too: {}), private {before:.0} -> {:.0} MiB",
+            "every screen covered or a game held for {RELEASE_AFTER:?}: drawing released in \
+             {:.1?} (source too: {}), private {before:.0} -> {:.0} MiB",
             started.elapsed(),
             self.source_released,
             crate::trim::private_mib()
@@ -477,7 +555,9 @@ impl Engine {
             self.shown.fill(Visibility::Live);
         }
         for screen in &mut self.screens {
-            screen.window.show(true);
+            if !self.game_still {
+                screen.window.show(true);
+            }
             screen.dirty = true;
         }
     }
@@ -503,7 +583,9 @@ impl Engine {
             self.screens
                 .iter()
                 .enumerate()
-                .any(|(i, s)| !s.paused && self.glass.animating(i))
+                .any(|(i, s)| {
+                    !self.game_still && !self.released && !s.paused && self.glass.animating(i)
+                })
                 .then(|| Instant::now() + Duration::from_millis(4)),
             self.reload_at,
             self.recheck_at,
@@ -640,6 +722,14 @@ impl Engine {
             drew = true;
         }
 
+        if drew && std::mem::take(&mut self.game_still) {
+            // Present before showing: a short hold kept the old swapchain, and a released
+            // hold just rebuilt it. Neither may flash the old contents on the way back.
+            for screen in &self.screens {
+                screen.window.show(true);
+            }
+            log::info!("game hold: fresh frame shown");
+        }
         if drew && let Some(timing) = &mut self.timing {
             timing.presented(self.frame);
         }
@@ -737,6 +827,12 @@ impl Engine {
         // screens as it would have, windows shown, and isn't released until it has one.
         if std::mem::take(&mut self.released) {
             self.source_released = false;
+            for screen in &self.screens {
+                screen.window.show(true);
+            }
+        }
+        // A new theme has no installed still yet. Draw it normally until its snapshot is ready.
+        if std::mem::take(&mut self.game_still) {
             for screen in &self.screens {
                 screen.window.show(true);
             }

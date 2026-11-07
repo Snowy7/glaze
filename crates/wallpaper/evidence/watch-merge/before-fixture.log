@@ -1,0 +1,2 @@
+game fixture pid=55776 on Rect { x: 0, y: 0, width: 2560, height: 1440 }
+game signal on: Activity { pause_background: true, reason: Fullscreen, foreground_pid: 55776 }

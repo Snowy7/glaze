@@ -1,0 +1,29 @@
+{
+  "captures": "C:\\mypaper-targets\\watch-merge\\evidence\\after-fix",
+  "crop_physical_pixels": [
+    460,
+    70,
+    940,
+    350
+  ],
+  "comparisons": {
+    "hold-start -> before-release": {
+      "changed_pixels": 0,
+      "total_pixels": 134400,
+      "mean_absolute_channel_difference": 0.0,
+      "max_channel_difference": 0
+    },
+    "hold-start -> released": {
+      "changed_pixels": 0,
+      "total_pixels": 134400,
+      "mean_absolute_channel_difference": 0.0,
+      "max_channel_difference": 0
+    },
+    "released -> resumed": {
+      "changed_pixels": 123380,
+      "total_pixels": 134400,
+      "mean_absolute_channel_difference": 1.3737847222222221,
+      "max_channel_difference": 41
+    }
+  }
+}

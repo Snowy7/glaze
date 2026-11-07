@@ -7,6 +7,9 @@
 use mypaper_theme::{Appearance, LoadedTheme, TextTone};
 use mypaper_ui::{Colors, Material, Rgba, Text, TextStyle, Tokens, icons};
 
+#[path = "look_settings.rs"]
+pub mod settings;
+
 /// The tokens for theme `theme_name` (a name or a folder), with the installed icon font.
 pub fn tokens(theme_name: &str, text: &Text) -> Tokens {
     let appearance = mypaper_theme::locate(Some(theme_name))

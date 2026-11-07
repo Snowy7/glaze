@@ -35,6 +35,12 @@ pub struct AppsStyle {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AppRules {
+    /// Whether the styler touches this app at all while `experimental.app_styler` is on. Absent:
+    /// Explorer yes (it also needs `system.separate_process = true`), Settings no (it ends itself
+    /// on one page while attached; docs/windows-styling.md, "App styler"). Not part of the rules
+    /// file the styled app reads ([`AppRules::settled`] leaves it out).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
     /// Properties to set on the elements a selector matches.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub rules: Rules,
@@ -86,10 +92,15 @@ impl AppRules {
         for (key, value) in &self.resources {
             resources.insert(key.clone(), value.clone());
         }
-        AppRules { rules, resources }
+        AppRules {
+            enabled: self.enabled.or(base.enabled),
+            rules,
+            resources,
+        }
     }
 
-    /// The rules with every `null` dropped (and selectors left with nothing to set).
+    /// The rules with every `null` dropped (and selectors left with nothing to set), as the
+    /// styled app reads them: without `enabled`, which only the helper reads.
     pub fn settled(&self) -> AppRules {
         let rules = self
             .rules
@@ -109,7 +120,11 @@ impl AppRules {
             .filter(|(_, value)| value.is_some())
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        AppRules { rules, resources }
+        AppRules {
+            enabled: None,
+            rules,
+            resources,
+        }
     }
 }
 
@@ -143,6 +158,18 @@ mod tests {
         // Round trip keeps the nulls.
         let text = serde_json::to_string(&user).unwrap();
         assert_eq!(parse(&text), user);
+    }
+
+    #[test]
+    fn enabled_layers_like_the_rules_and_stays_out_of_the_rules_file() {
+        let theme = parse(r#"{ "explorer": { "enabled": false } }"#);
+        let user = parse(r#"{ "explorer": { "enabled": true }, "settings": { "enabled": false } }"#);
+        let merged = user.over(&theme);
+        assert_eq!(merged.explorer.enabled, Some(true), "the user's wins");
+        assert_eq!(merged.settings.enabled, Some(false));
+        assert_eq!(AppsStyle::default().over(&theme).explorer.enabled, Some(false));
+        assert_eq!(merged.explorer.settled().enabled, None);
+        assert_eq!(serde_json::to_string(&merged.settings.settled()).unwrap(), "{}");
     }
 
     #[test]

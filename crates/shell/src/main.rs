@@ -13,6 +13,7 @@
 use mypaper_shell::{bars, desktop_menu, flyouts, inbox, integrations, look, overlay_client, studio_pick, widgets};
 
 mod wakes;
+mod game;
 
 use std::process::ExitCode;
 use std::time::Instant;
@@ -69,7 +70,7 @@ fn run() -> Result<()> {
     let mut ui = Ui::new()?;
     // Window events arrive on a thread of their own; a batch that changed something posts
     // WM_NULL here (a posted message, so it runs the loop's work at once).
-    let win_events = mypaper_desktop::win_events::WinEvents::install();
+    let mut win_events = Some(mypaper_desktop::win_events::WinEvents::install());
     startup::ready("shell", "factories_ms");
     overlay_client::install();
     let bars = bars::Bars::new(&mut ui, bars_start)?;
@@ -82,6 +83,8 @@ fn run() -> Result<()> {
         bars,
         widgets: None,
         pending_widget_facts: Vec::new(),
+        game_active: false,
+        game_enabled: true,
         studio: studio_pick::StudioPick::new()?,
     };
     shell.follow_config(&ui);
@@ -99,10 +102,23 @@ fn run() -> Result<()> {
     let mut coalesced: Option<Instant> = None;
     // When the widgets last polled (see POINTER_POLL).
     let mut widgets_polled = Instant::now();
+    let mut game = game::GameControl::new();
     'run: loop {
+        game.set_enabled(shell.game_enabled);
+        game.refresh();
+        if !game.active && win_events.is_none() {
+            win_events = Some(mypaper_desktop::win_events::WinEvents::install());
+        }
+        shell.set_game_activity(&mut ui, game.active);
+        if game.active {
+            // First release providers, then the source. Core's independent signal still
+            // watches for exit; this source's hooks and batching sleep need do no work.
+            win_events = None;
+        }
         let start = Instant::now();
-        // Order matters: the parent, then the widgets' frame timer, then the bars' handles.
+        // The parent's handle is first. Other handles are identified by name below.
         let mut handles: Vec<(HANDLE, &'static str)> = parent.iter().map(|&h| (h, "parent")).collect();
+        handles.extend(game.handle().map(|h| (h, "game.publisher")));
         handles.extend(shell.widgets.as_ref().map(|w| (w.timer_handle(), "widgets.frame")));
         handles.extend(
             shell
@@ -148,12 +164,12 @@ fn run() -> Result<()> {
             log::info!("the process that started the shell exited; stopping");
             break;
         }
+        let signalled = woke.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
         if let Some(widgets) = &mut shell.widgets
-            && woke.0 == WAIT_OBJECT_0.0 + u32::from(parent.is_some())
+            && handles.get(signalled).is_some_and(|h| h.1 == "widgets.frame")
         {
             widgets.frame_ready();
         }
-        let signalled = woke.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
         let mut cause = if woke == WAIT_TIMEOUT {
             Some(Cause::Timeout(match due {
                 0 => "widgets",
@@ -211,7 +227,7 @@ fn run() -> Result<()> {
                 "bars.tick ms/Mcycles: {}; bar stats (samples, changes, sample_us, all bar repaints) since start: {:?}; WinEvents (hooks, callbacks, subscribers): {:?}; widgets since start: {:?}",
                 bars.join(", "),
                 shell.bars.stats_counts(),
-                win_events.counts(),
+                win_events.as_ref().map(mypaper_desktop::win_events::WinEvents::counts),
                 shell.widgets.as_ref().map(widgets::Widgets::costs)
             )
         }) {
@@ -242,6 +258,10 @@ fn run() -> Result<()> {
                     .inspect_err(|e| log::error!("widgets not started: {e:#}"))
                     .ok();
             shell.pending_widget_facts.clear();
+            if let Some(widgets) = &mut shell.widgets {
+                widgets.set_game_activity(shell.game_active);
+                widgets.poll(&mut ui);
+            }
             startup::ready("shell", "widgets_ready_ms");
         }
     }
@@ -310,9 +330,25 @@ struct Shell {
     /// Calendar, quick settings, notifications, launcher and the other panels the bars open.
     flyouts: flyouts::Flyouts,
     pending_widget_facts: Vec<(usize, isize)>,
+    game_active: bool,
+    game_enabled: bool,
 }
 
 impl Shell {
+    fn set_game_activity(&mut self, ui: &mut Ui, active: bool) {
+        if self.game_active == active { return; }
+        self.game_active = active;
+        log::info!("game background pause: {active}");
+        integrations::set_game_activity(active);
+        self.bars.set_game_activity(active);
+        if let Some(widgets) = &mut self.widgets {
+            widgets.set_game_activity(active);
+            widgets.poll(ui);
+        }
+        // The desktop menu's low-level mouse hook need not see a game's input stream.
+        self.follow_config(ui);
+    }
+
     fn studio_tick(&mut self, ui: &mut Ui) {
         let mut targets = Vec::new();
         if self.studio.active() {
@@ -444,7 +480,8 @@ impl Shell {
                 return;
             }
         };
-        if !config.desktop_menu.enabled {
+        self.game_enabled = config.system.game_activity.unwrap_or(true);
+        if !config.desktop_menu.enabled || self.game_active {
             if self.menu.take().is_some() {
                 log::info!("desktop right-click menu off");
             }

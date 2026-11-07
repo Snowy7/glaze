@@ -104,10 +104,10 @@ impl<'a> Kit<'a> {
                 theme.color.surface
             },
         }];
-        if let Some(border) = theme.border.filter(|_| !glass) {
+        if let Some(border) = theme.border {
             ops.push(Op::Stroke {
                 rect: rect.inflate(-0.5),
-                radius: radius - 0.5,
+                radius: (radius - 0.5).max(0.0),
                 width: 1.0,
                 color: border,
             });

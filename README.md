@@ -25,8 +25,8 @@
   glTF scenes, web pages and external renderers.
 - **Liquid Glass** on every surface, drawn by the engine with the vendored
   [liquid-rust](https://github.com/al1h3n/liquid-rust), always live to what's behind it.
-- **Native shell** on software Direct2D: no WebView, no hardware GPU device, no code injected into
-  other processes. Every change to Windows is journaled and undone on quit, on the panic hotkey and
+- **Native shell** on software Direct2D: no WebView or hardware GPU device. Windows preferences and
+  frame styling are journaled and undone on quit, on the panic hotkey and
   after a crash.
 
 > Looking for the old WebView2 prototype? It's tagged [`v0.0.1`](https://github.com/Snowy7/mypaper/releases/tag/v0.0.1).
@@ -63,7 +63,8 @@ The bars, dock, widgets, flyouts and menus all sit on glass that the engine draw
 directional rim light and a soft shadow. Thin glass such as the 24 pt bar gets a shallow lens with a
 flat face. Clarity (clear to tinted), blur, refraction, highlight and tint are adjustable per family
 (bars, widgets, menus). Over app windows, flyouts get the same glass from a Windows Graphics Capture
-crop. See [docs/glass.md](docs/glass.md).
+crop. Bars and widgets also get live glass over `web` and `app` wallpapers, with capture released
+when covered. See [docs/glass.md](docs/glass.md#glass-over-web-and-app-wallpapers-p14-6-november-2026).
 
 ### Top bar and dock
 
@@ -81,7 +82,14 @@ Tailscale. See [docs/bars.md](docs/bars.md).
 - **solid** and **mono**: no glass.
 
 The style applies to the bars, dock, flyouts, menus and widgets alike, in light and dark. The
-`preset_style_grid` golden test renders every preset in every style.
+same `look.style` switch synchronizes Windows frames, accent and light/dark mode, with independent
+overrides. The `preset_style_grid` golden test renders every preset in every style. See
+[Windows styling](docs/windows-styling.md#one-switch-for-the-desktop).
+
+The **App styler** is a separate, off-by-default experiment (`experimental.app_styler`) for
+Explorer's separate folder processes and Settings. Settings needs an explicit per-app opt-in;
+known hangs and crashes keep this experimental. Presets, undo and current limits are in
+[docs/windows-styling.md](docs/windows-styling.md#app-styler-experimental).
 
 ### Panels and menus
 
@@ -101,6 +109,25 @@ submenu; Shift or right-clicking an icon still gets the native one. See
 
 <br clear="right">
 
+### Files and search
+
+An optional native **file index** searches names and paths and supplies cached folder sizes to
+the launcher and Files. Enable `experimental.file_index`; `index.exclude` and `index.include`
+refine its built-in build/cache exclusions. Incomplete sizes are labelled. See
+[docs/index.md](docs/index.md).
+
+**mypaper Files** is an on-demand native browser: tabs, previews, indexed search and queued file
+operations. Launch it directly, or opt into folder routing with `experimental.files_default`;
+Win+E routing uses the shell's existing Windows-key hook. See [docs/files.md](docs/files.md).
+
+### Windows preferences and games
+
+Optional, reversible system settings cover Game Mode, file extensions, hidden files, separate
+Explorer folder processes and power mode. During games, background widgets, plugins and index
+work pause; `engine.during_games` defaults to `"pause"` across all screens, or `"keep"` to animate
+uncovered screens. `system.game_activity: false` disables the observer. See
+[docs/system.md](docs/system.md#games).
+
 ### Widgets
 
 17 built-in native widgets, each with a designed layout per size: clock, calendar, countdown, timer,
@@ -113,8 +140,8 @@ float above apps as overlays.
   <sub><b>Edit mode</b> (Ctrl+Alt+Shift+W): drag and resize on the grid; <b>+</b> opens the widget picker.</sub>
 </p>
 
-**Integration widgets** talk to local apps directly, with no helper process, and run only while
-visible:
+**Integration widgets** run WebAssembly plugins in an on-demand helper and subscribe to local apps
+only while visible:
 
 - **T3 Code:** running threads, threads that need you (approve or deny), a new-thread prompt,
   **Usage** (30-day cost and tokens per provider) and **Limits** (each provider's windows and
@@ -170,6 +197,11 @@ use `measure.ps1 -Seconds 60` on the live desktop. Budgets live in
 [docs/performance.md](docs/performance.md), [docs/bars.md](docs/bars.md) and
 [docs/glass.md](docs/glass.md).
 
+The [6 November live measurements](docs/performance.md#live-engine-hillclimb-6-november-2026)
+also record the Studio-preview fix (about 26% → 3–4% of one core), releasing drawing resources
+after 10 s covered, game quiescence, and the cost of glass over web wallpapers. These live runs
+use a different fixture from the 5 November table above.
+
 **Why it stays small:**
 - **One hardware GPU device for the whole product.** A process with one pays about 240 MB for the
   driver stack, so only the engine has one. The shell and Studio draw with software Direct2D and
@@ -185,7 +217,10 @@ use `measure.ps1 -Seconds 60` on the live desktop. Budgets live in
 mypaper-core         supervisor · tray · panic hotkey · Windows styling + undo journal
  ├─ mypaper-wallpaper  the engine (wgpu): wallpapers, glass plates, glass overlays. The only GPU device.
  ├─ mypaper-shell      software Direct2D: top bar, dock, flyouts, menus, launcher, widgets, tray host
- │    └─ plugins       on demand: separate processes, JSON-RPC over stdio
+ │    └─ mypaper-plugins  on demand: WebAssembly integrations
+ ├─ mypaper-index      experimental, off by default: file names and folder sizes
+ └─ mypaper-styler     experimental, off by default: app interiors
+mypaper-files        native file browser; runs only while open
 mypaper-studio       the settings app (software Direct2D); runs only while open
 ```
 
@@ -193,7 +228,7 @@ mypaper-studio       the settings app (software Direct2D); runs only while open
 |---|---|
 | One GPU device | The engine draws the wallpaper **and all glass**. The shell publishes plate geometry; it never captures the desktop. |
 | Nothing changes, nothing drawn | Display lists diff; only changed bounds redraw; still wallpaper and still plates cost 0 GPU. |
-| No injection | mypaper never loads code into Explorer or other apps. Styling uses public APIs only. |
+| Windows integration | Frame styling uses public APIs. The separate, opt-in App styler loads code into allowlisted apps; it stays experimental. |
 | Journaled undo | Every change to Windows (taskbar, styling, menus) is journaled and replayed on quit, panic (**Ctrl+Alt+Shift+Backspace**) and crash. If the shell dies, core restores the taskbar and restarts it. |
 
 | Crate | Owns |
@@ -205,6 +240,9 @@ mypaper-studio       the settings app (software Direct2D); runs only while open
 | `crates/shell` | Bars, dock, flyouts, desktop menu, widget views, integrations views |
 | `crates/widgets` · `crates/bars` · `crates/integrations` | Services: catalog, layout, storage, plugins; app bars and tray; integration providers |
 | `crates/studio` | mypaper Studio |
+| `crates/files` · `crates/index` | On-demand file browser; optional native name index and folder sizes |
+| `crates/app-styler` | Experimental helper and XAML styling DLL for app interiors |
+| `crates/fswatch` | Shared native directory notifications, with no idle polling |
 | `crates/desktop` · `crates/config` · `crates/theme` · `crates/tweaks` · `crates/inject` | Win32 plumbing, settings, theme format, Windows styling with undo, which windows may be styled |
 | `crates/glass-ipc` | Plate and overlay protocol between the shell and the engine |
 
@@ -257,10 +295,8 @@ Settings live in `%APPDATA%\mypaper\` (`config.json`, `widgets.json`, `bars.json
   ```
 
   More examples: [crates/widgets/src/custom_examples](crates/widgets/src/custom_examples).
-- **A plugin** is any executable, in any language, that speaks JSON-RPC over stdio and feeds data to
-  widgets. It starts on first use, gets suspend/resume, and stops 30 s after its last user.
-  [plugins/rss](plugins/rss) is an example; the contract is in
-  [docs/writing-widgets.md](docs/writing-widgets.md).
+- **A plugin** is a WebAssembly component with native widget faces, running in the on-demand
+  helper. The SDK, examples and lifecycle are in [docs/plugins.md](docs/plugins.md).
 - **A theme** is a folder with a `theme.json` (wallpaper, plus optional Windows styling). A shader
   wallpaper is one WGSL function; the rest is in
   [prelude.wgsl](crates/wallpaper/src/prelude.wgsl). Saving reloads it live.
@@ -268,13 +304,12 @@ Settings live in `%APPDATA%\mypaper\` (`config.json`, `widgets.json`, `bars.json
 
 ## Roadmap
 
-- **Plugin SDK.** A proper SDK for plugins, and the integrations (T3 Code, Discord, Docker, OBS,
-  Tailscale, Grok Bot, calendars) move out of the core build into separate, downloadable plugins.
+- **Plugin ecosystem.** More downloadable integrations on the [WebAssembly SDK](docs/plugins.md).
 - **Studio redesign.** A refined canvas, search and focus, on the directions in
   [docs/studio-ux.md](docs/studio-ux.md).
 - **Open performance gates:** shell CPU with widgets visible, Liquid Glass on integrated GPUs (2 ms
   per screen), and crash-to-bars recovery under 300 ms.
-- **Later:** restyling the inside of Explorer and Settings, as a separate opt-in project.
+- **Experimental:** stabilize the App styler and bring the new native services into Studio.
 
 ## Credits and licences
 

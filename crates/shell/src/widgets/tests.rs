@@ -333,6 +333,31 @@ fn widget_styles_preserve_none_solid_and_explicit_text_controls() {
 }
 
 #[test]
+fn explicit_widget_corners_and_edge_reach_the_drawn_body_even_for_pill_variants() {
+    let mut ui = Ui::new().unwrap();
+    let mut model = fixture("media-pill", temp("look-shape"));
+    for radius in [0.0, 32.0] {
+        model.corner_override = Some(radius);
+        for edge in [false, true] {
+            model.edge_override = Some(edge);
+            let rect = Rect::new(0.0, 0.0, 320.0, 128.0);
+            assert_eq!(view::plate_radius(&model, rect, 1.5), radius * 1.5);
+            let list = view::view(&model, &tokens(&model.placed.appearance), view::Frame {
+                size:(320,128), scale:1.0, now:now(), instant:Instant::now(), editing:false,
+            }, &mut ui.text);
+            assert!(list.ops.iter().any(|op| matches!(op, Op::Fill {rect: r, radius: actual, color} if *r == rect && *actual == radius && *color == Rgba::HIT)));
+            assert_eq!(list.ops.iter().any(|op| matches!(op, Op::Stroke {rect:r,..} if *r == rect.inflate(-0.5))), edge);
+        }
+    }
+    let user: mypaper_config::Look = serde_json::from_value(json!({"shape":{"corners":0,"edge":true},"text":{"font":"Consolas","icons":"lucide"}})).unwrap();
+    let theme = edit::chrome_look(&user, &ui.text);
+    let (list, _) = edit::pill(&theme, 1.0, &Default::default(), &mut ui.text, user.shape.corners);
+    assert!(list.ops.iter().any(|op| matches!(op, Op::Fill {radius,..} if *radius==0.0)));
+    assert!(theme.border.is_some());
+    assert_eq!(theme.font.family.as_ref(), "Consolas");
+}
+
+#[test]
 fn metric_invalidation_uses_displayed_precision_and_stable_trace_identity() {
     let mut m = fixture("system-monitor", temp("metrics"));
     let before = metrics::visible(&m);

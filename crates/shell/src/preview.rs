@@ -54,6 +54,11 @@ pub mod widgets {
     }
 }
 
+/// Panels use the same resolved theme and body geometry as their live windows.
+pub mod flyouts {
+    pub use crate::flyouts::{build, calendar::Calendar, look::Look};
+}
+
 /// The desktop right-click menu.
 pub mod menu {
     pub use crate::desktop_menu::items::{Command, Item, ViewState, build};

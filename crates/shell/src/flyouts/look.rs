@@ -22,6 +22,7 @@ pub struct Look {
     pub fill: Rgba,
     /// The glass under the body, for the blurred styles.
     pub glass: Option<GlassMaterial>,
+    pub glass_style: mypaper_ui::glass::GlassStyle,
     /// The kit style: the bar's `look.style`, else its family's.
     pub style: Style,
     /// Corner radius in design pixels.
@@ -38,6 +39,8 @@ pub struct Look {
     pub switch_output: bool,
     pub scale: f32,
     pub shadow: bool,
+    /// An explicit surface radius is shared with menus, instead of the style's inset default.
+    pub menu_radius: Option<f32>,
     resolved: Theme,
     pub opening: mypaper_ui::transition::Timing,
     pub hover_motion: mypaper_ui::transition::Timing,
@@ -56,6 +59,7 @@ impl Look {
             })
             .inspect_err(|e| log::debug!("flyouts: bars.json: {e:#}"))
             .unwrap_or_default();
+        let desktop = Config::load().unwrap_or_default().look;
         let loaded = Config::load()
             .and_then(|c| mypaper_theme::locate(Some(&c.theme)))
             .and_then(LoadedTheme::load)
@@ -88,7 +92,8 @@ impl Look {
             &mut appearance,
         );
         let system = accent::read();
-        let mut look = Self::resolve_with(&bar_look, &appearance, &system, &knobs);
+        crate::look::settings::bar(&desktop, crate::glass::Family::Menus, &bars, "top", &mut bar_look, &mut appearance, &system, text);
+        let mut look = Self::resolve_settings(&bar_look, &appearance, &system, &knobs, &desktop, text);
         let performance = bars.performance.active(mypaper_desktop::on_battery());
         look.opening = crate::bars::motion::resolve(
             &bars.top.animation,
@@ -116,6 +121,7 @@ impl Look {
             false,
             crate::bars::motion::Leaf::Open,
         );
+        crate::bars::look::glass_fade(&mut look.glass_style, look.opening, look.opening_style);
         if performance {
             look.glass = None;
             look.resolved.glass = None;
@@ -167,6 +173,33 @@ impl Look {
             timing: self.opening,
             style: crate::bars::motion::reveal(self.opening_style),
         }));
+    }
+
+    /// The shared desktop controls, applied once on reload to both flyouts and their menus.
+    pub fn apply_settings(&mut self, desktop: &mypaper_config::Look, text: &Text) {
+        self.font = crate::look::settings::font(&self.font, |f| text.has_family(f)).into();
+        self.resolved.font.family = self.font.clone();
+        if let Some(set) = crate::look::settings::icons(desktop, text) {
+            if let mypaper_ui::icons::IconSet::Font(family) = &set { self.icons = family.clone(); }
+            self.resolved.icons = set;
+        }
+        if let Some(edge) = desktop.shape.edge {
+            self.resolved.border = edge.then_some(self.resolved.color.separator);
+        }
+        if desktop.shape.corners.is_some() {
+            self.resolved = self.resolved.clone().with_surface_radius(self.radius);
+            self.menu_radius = Some(self.radius);
+        }
+    }
+
+    /// Runtime tokens, preserving literal family names (including Segoe's installed cuts).
+    pub fn resolve_settings(bar: &BarLook, appearance: &Appearance, system: &System, knobs: &Knobs, desktop: &mypaper_config::Look, text: &Text) -> Self {
+        let mut look = Self::resolve_with(bar, appearance, system, knobs);
+        if let Some(name) = bar.font.family.as_deref().or(appearance.font.as_deref()) {
+            look.font = crate::look::settings::font(name, |f| text.has_family(f)).into();
+        }
+        look.apply_settings(desktop, text);
+        look
     }
 
     /// The look of `bar` over `appearance`, as the bars resolve theirs (bars/look.rs).
@@ -235,6 +268,11 @@ impl Look {
                 glass.refraction *= intensity;
                 glass.highlight *= intensity;
                 glass.blur *= intensity;
+                glass.blur += match &bar.background {
+                    Some(mypaper_bars::style::Fill::Wallpaper(fill)) => fill.blur,
+                    Some(mypaper_bars::style::Fill::Blur(fill)) => fill.blur,
+                    _ => 0.0,
+                };
                 if bar.glass.style == Some(mypaper_bars::style::GlassKind::Frosted) {
                     glass.refraction = 0.0;
                     glass.highlight = 0.0;
@@ -280,6 +318,7 @@ impl Look {
             on_accent,
             fill,
             glass,
+            glass_style: tokens.glass_style,
             style: kit,
             radius,
             font: tokens.font.family,
@@ -290,6 +329,7 @@ impl Look {
             switch_output: false,
             scale: tokens.scale,
             shadow: tokens.shadow,
+            menu_radius: None,
             resolved,
             opening: crate::bars::motion::resolve(
                 &Default::default(),
@@ -326,10 +366,12 @@ impl Look {
     /// Menus share the active family, font, colors and material with the panels.
     pub fn menu_tokens(&self) -> mypaper_ui::Tokens {
         mypaper_ui::Tokens {
-            radius: Radii::concentric(self.radius, 6.0, 8.0),
+            radius: self.menu_radius.unwrap_or_else(|| Radii::concentric(self.radius, 6.0, 8.0)),
             icons: self.icons.clone(),
+            icon_set: Some(self.resolved.icons.clone()),
             scale: self.scale,
             shadow: self.shadow,
+            glass_style: self.glass_style,
             ..self.resolved.tokens()
         }
     }

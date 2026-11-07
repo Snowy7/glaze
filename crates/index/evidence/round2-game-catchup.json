@@ -1,0 +1,59 @@
+﻿{
+    "file":  "C:\\Users\\you\\mypaper-index-fixtures\\game-e6432ac7ea7846c8949730657cbd9396\\mypaper-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
+    "created_at":  "2026-11-06T08:56:02.7041518+03:00",
+    "resumed_at":  "2026-11-06T08:56:42.0483527+03:00",
+    "catchup_ms":  207768.0003,
+    "hint_after":  {
+                       "publisher_pid":  53744,
+                       "publisher_started":  134384178794728328,
+                       "activity":  {
+                                        "pause_background":  false,
+                                        "reason":  "idle",
+                                        "foreground_pid":  27116
+                                    }
+                   },
+    "search":  {
+                   "hits":  [
+                                {
+                                    "name":  "mypaper-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
+                                    "path":  "C:\\Users\\you\\mypaper-index-fixtures\\game-e6432ac7ea7846c8949730657cbd9396\\mypaper-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
+                                    "directory":  false,
+                                    "size":  32768,
+                                    "files":  1,
+                                    "modified":  1793944562,
+                                    "size_unknown":  false,
+                                    "excluded":  false
+                                }
+                            ],
+                   "entries":  5982839,
+                   "scanning":  false,
+                   "elapsed_us":  1438
+               },
+    "sizes":  {
+                  "hits":  [
+                               {
+                                   "name":  "game-e6432ac7ea7846c8949730657cbd9396",
+                                   "path":  "C:\\Users\\you\\mypaper-index-fixtures\\game-e6432ac7ea7846c8949730657cbd9396",
+                                   "directory":  true,
+                                   "size":  32768,
+                                   "files":  1,
+                                   "modified":  1793944562,
+                                   "size_unknown":  false,
+                                   "excluded":  false
+                               },
+                               {
+                                   "name":  "mypaper-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
+                                   "path":  "C:\\Users\\you\\mypaper-index-fixtures\\game-e6432ac7ea7846c8949730657cbd9396\\mypaper-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
+                                   "directory":  false,
+                                   "size":  32768,
+                                   "files":  1,
+                                   "modified":  1793944562,
+                                   "size_unknown":  false,
+                                   "excluded":  false
+                               }
+                           ],
+                  "entries":  5982839,
+                  "scanning":  false,
+                  "elapsed_us":  73
+              }
+}

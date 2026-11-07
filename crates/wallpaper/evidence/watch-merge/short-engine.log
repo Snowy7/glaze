@@ -1,0 +1,20 @@
+[2026-11-06T07:44:06Z INFO  mypaper_wallpaper::engine] held: fullscreen app in front
+[2026-11-06T07:44:06Z INFO  mypaper_wallpaper::engine] held: fullscreen app in front, game running
+[2026-11-06T07:44:06Z INFO  mypaper_shell] game background pause: true
+[2026-11-06T07:44:06Z INFO  mypaper_wallpaper::engine] game hold: showing the theme still
+[2026-11-06T07:44:06Z INFO  mypaper_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
+[2026-11-06T07:44:06Z INFO  mypaper_widgets::plugins] [plugins] [2026-11-06T07:44:06Z INFO  mypaper_plugins::host] game background pause: true
+[2026-11-06T07:44:06Z INFO  mypaper_shell] desktop right-click menu off
+[2026-11-06T07:44:06Z WARN  mypaper_core::tray] could not add the tray icon (is Explorer running?)
+[2026-11-06T07:44:07Z INFO  mypaper_wallpaper::engine] held: game running
+[2026-11-06T07:44:07Z INFO  mypaper_wallpaper::engine] released (was held: game running)
+[2026-11-06T07:44:07Z INFO  mypaper_shell] game background pause: false
+[2026-11-06T07:44:07Z INFO  mypaper_wallpaper::engine] game hold: fresh frame shown
+[2026-11-06T07:44:07Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 7.8 ms (not waited on), copy 0.01 ms on the frame, write 1.63 ms off it
+[2026-11-06T07:44:07Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
+[2026-11-06T07:44:07Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
+[2026-11-06T07:44:07Z INFO  mypaper_widgets::plugins] [plugins] [2026-11-06T07:44:07Z INFO  mypaper_plugins::host] game background pause: false
+[2026-11-06T07:44:07Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-06T07:44:07Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 1 took 34.2205ms
+[2026-11-06T07:44:08Z INFO  mypaper_shell] desktop right-click menu on
+[2026-11-06T07:44:08Z INFO  mypaper_integrations::notifications] notifications: snapshot mode (package identity is absent); no polling

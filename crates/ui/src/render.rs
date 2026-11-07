@@ -20,7 +20,6 @@ use windows::Win32::Graphics::DirectWrite::{
     DWRITE_RENDERING_MODE1, DWRITE_RENDERING_MODE1_GDI_CLASSIC, DWRITE_RENDERING_MODE1_NATURAL,
     DWRITE_RENDERING_MODE1_NATURAL_SYMMETRIC, IDWriteFactory3, IDWriteRenderingParams,
 };
-use windows::core::Interface;
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::Imaging::{
     CLSID_WICImagingFactory, GUID_WICPixelFormat32bppPBGRA, IWICBitmap, IWICImagingFactory,
@@ -29,6 +28,7 @@ use windows::Win32::Graphics::Imaging::{
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
 };
+use windows::core::Interface;
 use windows_numerics::Vector2;
 
 use crate::geom::{PixelRect, Rect, Rgba};
@@ -540,6 +540,7 @@ pub(crate) struct Canvas {
     brush: ID2D1SolidColorBrush,
     images: RefCell<HashMap<usize, (Arc<Image>, ID2D1Bitmap)>>,
     arcs: RefCell<HashMap<[u32; 4], ID2D1PathGeometry>>,
+    continuous: RefCell<HashMap<[u32; 6], ID2D1PathGeometry>>,
     /// Icon outlines on their 24-unit grid, made on first use.
     icons: RefCell<HashMap<crate::icons::Icon, Option<ID2D1PathGeometry>>>,
     /// Round caps and joins, for icons.
@@ -597,6 +598,7 @@ impl Canvas {
                 brush,
                 images: RefCell::new(HashMap::new()),
                 arcs: RefCell::new(HashMap::new()),
+                continuous: RefCell::new(HashMap::new()),
                 icons: RefCell::new(HashMap::new()),
                 round,
             })
@@ -792,6 +794,58 @@ impl Canvas {
                     t.PopLayer();
                     std::mem::ManuallyDrop::drop(&mut parameters.geometricMask);
                 }
+                Op::Continuous {
+                    rect,
+                    radius,
+                    smoothing,
+                    width,
+                    color: c,
+                } => {
+                    use windows::Win32::Graphics::Direct2D::Common::{
+                        D2D1_FIGURE_BEGIN_FILLED, D2D1_FIGURE_END_CLOSED,
+                    };
+                    let key = [
+                        rect.left,
+                        rect.top,
+                        rect.right,
+                        rect.bottom,
+                        *radius,
+                        *smoothing,
+                    ]
+                    .map(f32::to_bits);
+                    let mut paths = self.continuous.borrow_mut();
+                    if !paths.contains_key(&key)
+                        && let Ok(path) = t.GetFactory().and_then(|f| f.CreatePathGeometry())
+                        && let Ok(sink) = path.Open()
+                    {
+                        let points = crate::geom::continuous::outline(*rect, *radius, *smoothing);
+                        sink.BeginFigure(
+                            Vector2 {
+                                X: points[0].x,
+                                Y: points[0].y,
+                            },
+                            D2D1_FIGURE_BEGIN_FILLED,
+                        );
+                        for p in &points[1..] {
+                            sink.AddLine(Vector2 { X: p.x, Y: p.y });
+                        }
+                        sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+                        if sink.Close().is_ok() {
+                            if paths.len() >= 64 {
+                                paths.clear();
+                            }
+                            paths.insert(key, path);
+                        }
+                    }
+                    if let Some(path) = paths.get(&key) {
+                        brush.SetColor(&color(*c));
+                        if *width > 0.0 {
+                            t.DrawGeometry(path, brush, *width, None);
+                        } else {
+                            t.FillGeometry(path, brush, None);
+                        }
+                    }
+                }
                 Op::Clipped { rect, ops } => {
                     t.PushAxisAlignedClip(&d2d(*rect), D2D1_ANTIALIAS_MODE_ALIASED);
                     let damage = Rect {
@@ -983,7 +1037,12 @@ impl Canvas {
                             X: rect.left,
                             Y: rect.top,
                         };
-                        t.DrawTextLayout(origin, layout, brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                        t.DrawTextLayout(
+                            origin,
+                            layout,
+                            brush,
+                            D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT,
+                        );
                     }
                 }
                 Op::Image {
@@ -1010,8 +1069,7 @@ impl Canvas {
                     radius,
                 } => {
                     use windows::Win32::Graphics::Direct2D::{
-                        D2D1_BITMAP_BRUSH_PROPERTIES, D2D1_BRUSH_PROPERTIES,
-                        D2D1_EXTEND_MODE_CLAMP,
+                        D2D1_BITMAP_BRUSH_PROPERTIES, D2D1_BRUSH_PROPERTIES, D2D1_EXTEND_MODE_CLAMP,
                     };
                     let Some(bitmap) = self.bitmap(image) else {
                         return;
@@ -1370,12 +1428,22 @@ mod tests {
         let mut ui = Ui::new().unwrap();
         // Left half red, right half blue; the op shows only the right half, rounded.
         let pixels = (0..8 * 8)
-            .flat_map(|i| if i % 8 < 4 { [0, 0, 255, 255] } else { [255, 0, 0, 255] })
+            .flat_map(|i| {
+                if i % 8 < 4 {
+                    [0, 0, 255, 255]
+                } else {
+                    [255, 0, 0, 255]
+                }
+            })
             .collect();
         let list = DisplayList {
             ops: vec![Op::RoundedImage {
                 rect: Rect::new(0.0, 0.0, 32.0, 32.0),
-                image: Arc::new(Image { width: 8, height: 8, pixels }),
+                image: Arc::new(Image {
+                    width: 8,
+                    height: 8,
+                    pixels,
+                }),
                 opacity: 1.0,
                 source: Some(Rect::new(4.0, 0.0, 4.0, 8.0)),
                 radius: 10.0,
@@ -1383,9 +1451,21 @@ mod tests {
             ..Default::default()
         };
         let image = render(&mut ui, &list, 32, 32).unwrap();
-        assert_eq!(image.pixel(0, 0), [0, 0, 0, 0], "the corner is clipped clean");
-        assert_eq!(image.pixel(16, 16), [255, 0, 0, 255], "the centre shows the cropped half");
-        assert_eq!(image.pixel(6, 16), [255, 0, 0, 255], "the crop's left side is blue too");
+        assert_eq!(
+            image.pixel(0, 0),
+            [0, 0, 0, 0],
+            "the corner is clipped clean"
+        );
+        assert_eq!(
+            image.pixel(16, 16),
+            [255, 0, 0, 255],
+            "the centre shows the cropped half"
+        );
+        assert_eq!(
+            image.pixel(6, 16),
+            [255, 0, 0, 255],
+            "the crop's left side is blue too"
+        );
     }
 
     #[test]

@@ -1,0 +1,9 @@
+{
+    "win_e":  true,
+    "folder_shortcut_double_click":  true,
+    "win_e_off_opens_explorer":  true,
+    "win_e_off_creates_no_files":  true,
+    "exact_registry_restoration":  true,
+    "flag_off":  true,
+    "journal_absent":  true
+}

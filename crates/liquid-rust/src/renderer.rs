@@ -315,7 +315,9 @@ fn material_gpu(resolved: &crate::material::Resolved, presence: f32, press: f32,
             [darken_to, darken, 1.0 + (m.brightness - 1.0) * p, 1.0 + (m.saturation - 1.0) * p]
         },
         dark_a: tone_a(m.dark_tone),
-        dark_b: tone_b(m.dark_tone),
+        // mypaper: spare slots keep the GPU material's size unchanged. Both additions are
+        // neutral at zero; clipping follows the shape rather than a second circular contour.
+        dark_b: [m.dark_tone.darken_to, m.dark_tone.darken * p, m.inner_shadow * p, if m.clip_to_shape { 1.0 } else { 0.0 }],
         tint,
     }
 }

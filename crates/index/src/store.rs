@@ -2,10 +2,11 @@
 //! changed records and new names live in an overlay until the next event-driven checkpoint.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write};
+use std::os::windows::fs::OpenOptionsExt;
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
@@ -18,6 +19,10 @@ use crate::Hit;
 pub const NONE: u32 = u32::MAX;
 pub const DIRECTORY: u32 = 0x10;
 pub const REPARSE: u32 = 0x400;
+const OFFLINE: u32 = 0x2000_0000;
+// Private snapshot bits, outside Win32's currently defined file attribute range.
+pub const EXCLUDED: u32 = 0x4000_0000;
+pub const SIZE_UNKNOWN: u32 = 0x8000_0000;
 const MAGIC: &[u8; 8] = b"MYPIDX01";
 const HEADER: usize = 64;
 
@@ -42,6 +47,25 @@ impl Record {
     }
     pub fn live(self) -> bool {
         self.attributes != 0
+    }
+    fn same_search(self, other: Self) -> bool {
+        (
+            self.name,
+            self.name_len,
+            self.fold_len,
+            self.parent,
+            self.modified,
+            self.attributes & (DIRECTORY | EXCLUDED),
+            self.live(),
+        ) == (
+            other.name,
+            other.name_len,
+            other.fold_len,
+            other.parent,
+            other.modified,
+            other.attributes & (DIRECTORY | EXCLUDED),
+            other.live(),
+        )
     }
 }
 
@@ -70,8 +94,41 @@ struct Changes<'a> {
     names: Cow<'a, str>,
 }
 
+struct SearchChange {
+    record: Record,
+    name: Vec<u8>,
+}
+
+#[derive(Default)]
+struct PathCache {
+    entries: HashMap<u32, String>,
+    bytes: usize,
+}
+
+impl PathCache {
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.bytes = 0;
+    }
+    fn insert(&mut self, id: u32, path: &str) {
+        if self.bytes + path.len() > 2 * 1024 * 1024 || self.entries.len() >= 8192 {
+            self.clear();
+        }
+        self.bytes += path.len();
+        self.entries.insert(id, path.to_owned());
+    }
+}
+
 #[derive(Default)]
 pub struct Store {
+    offline: HashSet<u32>,
+    visibility: std::sync::Mutex<HashMap<u32, bool>>,
+    quiet: Option<std::sync::Arc<crate::quiet::Quiet>>,
+    column: Option<crate::names::Column>,
+    column_start: usize,
+    search_windows: Vec<crate::residency::Windows>,
+    path_cache: std::sync::Mutex<PathCache>,
+    windows: Option<crate::residency::Windows>,
     spool: Option<crate::spool::Spool>,
     mapping: Option<Mmap>,
     source: Option<std::sync::Arc<File>>,
@@ -81,12 +138,29 @@ pub struct Store {
     records: Vec<Record>,
     names: Vec<u8>,
     changed: BTreeMap<u32, Record>,
+    search_changed: BTreeMap<u32, SearchChange>,
+    path_masks_stale: bool,
     // Created only for wide directories reached by live updates/path lookup. A compact
     // hash-to-ID table avoids quadratic bursts without retaining a String per indexed file.
     children: std::sync::Mutex<HashMap<u32, HashMap<u32, u32>>>,
 }
 
 impl Store {
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation
+    }
+    pub(crate) fn set_quiet(&mut self, quiet: std::sync::Arc<crate::quiet::Quiet>) {
+        self.quiet = Some(quiet);
+    }
+    pub(crate) fn quiet(&self) -> Option<std::sync::Arc<crate::quiet::Quiet>> {
+        self.quiet.clone()
+    }
+    pub(crate) fn release_query_paths(&self) {
+        *self.path_cache.lock().expect("path cache") = PathCache::default();
+    }
+    pub(crate) fn clear_quiet(&mut self) {
+        self.quiet = None;
+    }
     /// An independent view for volume reconciliation. The immutable mapping is shared by the
     /// OS; only the bounded overlay is copied. Readers keep the old view until the final swap.
     pub fn fork(&self) -> Result<Self> {
@@ -97,6 +171,14 @@ impl Store {
             None => None,
         };
         Ok(Self {
+            offline: self.offline.clone(),
+            visibility: std::sync::Mutex::new(HashMap::new()),
+            quiet: self.quiet.clone(),
+            column: None,
+            column_start: self.column_start,
+            search_windows: Vec::new(),
+            path_cache: std::sync::Mutex::new(PathCache::default()),
+            windows: None,
             spool: None,
             mapping,
             source: self.source.clone(),
@@ -106,6 +188,8 @@ impl Store {
             records: self.records.clone(),
             names: self.names.clone(),
             changed: self.changed.clone(),
+            search_changed: BTreeMap::new(),
+            path_masks_stale: self.path_masks_stale,
             children: std::sync::Mutex::new(HashMap::new()),
         })
     }
@@ -138,6 +222,129 @@ impl Store {
     }
     pub fn is_empty(&self) -> bool {
         self.len() <= 1
+    }
+
+    pub fn search_blocks(&self) -> usize {
+        self.column
+            .as_ref()
+            .map_or(self.len(), |column| column.blocks.len())
+    }
+
+    pub(crate) fn candidate_blocks(&self, filter: &crate::names::Filter) -> (usize, usize) {
+        let Some(column) = &self.column else {
+            return (0, 0);
+        };
+        let mut blocks = 0;
+        let mut bytes = 0;
+        for (i, block) in column.blocks.iter().enumerate() {
+            if column.may_match(i, filter) {
+                blocks += 1;
+                let next = column.blocks.get(i + 1).map_or(
+                    self.mapping.as_ref().expect("column").len() - self.column_start,
+                    |next| next.offset,
+                );
+                bytes += next - block.offset;
+            }
+        }
+        (blocks, bytes)
+    }
+
+    pub fn overridden(&self, id: u32) -> bool {
+        (id as usize) < self.mapped_count && self.search_changed.contains_key(&id)
+    }
+
+    pub(crate) fn short_prefix(
+        &self,
+        name: &[u8],
+        directory: Option<bool>,
+        limit: usize,
+        extra: &[crate::names::Candidate],
+    ) -> Option<Vec<crate::names::Candidate>> {
+        self.column
+            .as_ref()?
+            .short_prefix(name, directory, limit, extra, |id| {
+                self.overridden(id) || !self.online(id)
+            })
+    }
+
+    pub(crate) fn path_possible(&self, parent: u32, name: &[u8], required: &[[u64; 2]]) -> bool {
+        self.path_masks_stale
+            || self
+                .column
+                .as_ref()
+                .is_none_or(|column| column.path_possible(parent, name, required))
+    }
+
+    /// Search reads only folded names and ranking fields. Overlay entries are searched once
+    /// by the final shard; old versions are ignored before candidate ranking.
+    pub(crate) fn visit_names(
+        &self,
+        start: usize,
+        end: usize,
+        filter: &crate::names::Filter,
+        lane: usize,
+        mut visit: impl FnMut(u32, u32, u32, u32, &[u8], bool),
+    ) {
+        if let Some(column) = &self.column {
+            let map = self.mapping.as_ref().expect("names mapping");
+            let touch = |offset, len| {
+                if let Some(windows) = self.search_windows.get(lane) {
+                    windows.touch(map.as_ptr(), map.len(), self.column_start + offset, len);
+                }
+            };
+            for index in (start..end).rev() {
+                let block = &column.blocks[index];
+                if !column.may_match(index, filter) {
+                    continue;
+                }
+                let offset = block.offset;
+                let next = column
+                    .blocks
+                    .get(index + 1)
+                    .map(|block| block.offset)
+                    .unwrap_or(map.len() - self.column_start);
+                touch(offset, next - offset);
+                crate::names::Column::visit(
+                    &map[self.column_start + offset..self.column_start + next],
+                    |id, parent, attr, modified, name| {
+                        visit(id, parent, attr, modified, name, true)
+                    },
+                );
+            }
+            if end == column.blocks.len() {
+                for (id, r) in &self.search_changed {
+                    visit(
+                        *id,
+                        r.record.parent,
+                        r.record.attributes,
+                        r.record.modified,
+                        &r.name,
+                        false,
+                    );
+                }
+                for (i, r) in self.records.iter().enumerate() {
+                    visit(
+                        (self.mapped_count + i) as u32,
+                        r.parent,
+                        r.attributes,
+                        r.modified,
+                        self.folded(*r),
+                        false,
+                    );
+                }
+            }
+        } else {
+            for (id, r) in self.reverse_range(start, end) {
+                visit(
+                    id,
+                    r.parent,
+                    r.attributes,
+                    r.modified,
+                    self.folded(r),
+                    false,
+                );
+            }
+        }
     }
     pub fn overlay_len(&self) -> usize {
         self.changed.len() + self.records.len()
@@ -258,7 +465,18 @@ impl Store {
         self.changed = changes.changed.into_owned();
         self.records = changes.records.into_owned();
         self.names = changes.names.into_owned().into_bytes();
+        self.path_cache.get_mut().expect("path cache").clear();
+        self.search_changed.clear();
+        for (id, record) in self
+            .changed
+            .iter()
+            .map(|(id, r)| (*id, *r))
+            .collect::<Vec<_>>()
+        {
+            self.cache_search_change(id, record);
+        }
         self.children.get_mut().expect("child lookup").clear();
+        self.load_offline_roots();
         Ok(())
     }
 
@@ -268,12 +486,23 @@ impl Store {
         })
     }
 
+    fn touch_mapping(&self, offset: usize, length: usize) {
+        if let Some(windows) = &self.windows {
+            let map = self.mapping.as_ref().expect("maintenance mapping");
+            windows.touch(map.as_ptr(), map.len(), offset, length);
+        }
+    }
+
     pub fn record(&self, id: u32) -> Record {
         if let Some(spool) = &self.spool {
             return spool.record(id as usize);
         }
         self.changed.get(&id).copied().unwrap_or_else(|| {
             if (id as usize) < self.mapped_count {
+                self.touch_mapping(
+                    HEADER + id as usize * size_of::<Record>(),
+                    size_of::<Record>(),
+                );
                 self.base()[id as usize]
             } else {
                 self.records[id as usize - self.mapped_count]
@@ -286,10 +515,55 @@ impl Store {
             spool.set(id as usize, record);
             return;
         }
+        let old = self.record(id);
+        if old.parent != record.parent {
+            self.visibility
+                .get_mut()
+                .expect("volume visibility")
+                .clear();
+        }
+        if (old.name, old.name_len, old.parent) != (record.name, record.name_len, record.parent) {
+            self.path_cache.get_mut().expect("path cache").clear();
+        }
         if (id as usize) < self.mapped_count {
+            self.cache_search_change(id, record);
             self.changed.insert(id, record);
         } else {
             self.records[id as usize - self.mapped_count] = record;
+        }
+    }
+
+    /// Size/count-only ancestor updates use the unchanged column. Search-relevant changes
+    /// own their small folded names once, rather than faulting scattered base pages per key.
+    fn cache_search_change(&mut self, id: u32, record: Record) {
+        if self
+            .search_changed
+            .get(&id)
+            .is_some_and(|old| old.record.same_search(record))
+        {
+            return;
+        }
+        self.touch_mapping(
+            HEADER + id as usize * size_of::<Record>(),
+            size_of::<Record>(),
+        );
+        let base = self.base()[id as usize];
+        if base.directory()
+            && (base.parent != record.parent
+                || (base.name != record.name && self.folded(base) != self.folded(record)))
+        {
+            self.path_masks_stale = true;
+        }
+        if base.same_search(record) {
+            self.search_changed.remove(&id);
+        } else {
+            let name = if record.live() {
+                self.folded(record).to_vec()
+            } else {
+                Vec::new()
+            };
+            self.search_changed
+                .insert(id, SearchChange { record, name });
         }
     }
 
@@ -297,11 +571,17 @@ impl Store {
     pub fn range(&self, start: usize, end: usize) -> impl Iterator<Item = (u32, Record)> + '_ {
         let mut changes = self.changed.range(start as u32..end as u32).peekable();
         (start..end).map(move |id| {
+            if id % 4096 == 0
+                && let Some(quiet) = &self.quiet
+            {
+                quiet.wait();
+            }
             let record = if changes.peek().is_some_and(|(key, _)| **key == id as u32) {
                 *changes.next().expect("peeked").1
             } else if let Some(spool) = &self.spool {
                 spool.record(id)
             } else if id < self.mapped_count {
+                self.touch_mapping(HEADER + id * size_of::<Record>(), size_of::<Record>());
                 self.base()[id]
             } else {
                 self.records[id - self.mapped_count]
@@ -328,6 +608,7 @@ impl Store {
             } else if let Some(spool) = &self.spool {
                 spool.record(id)
             } else if id < self.mapped_count {
+                self.touch_mapping(HEADER + id * size_of::<Record>(), size_of::<Record>());
                 self.base()[id]
             } else {
                 self.records[id - self.mapped_count]
@@ -342,6 +623,7 @@ impl Store {
         }
         if offset < self.mapped_names {
             let start = HEADER + self.mapped_count * size_of::<Record>() + offset;
+            self.touch_mapping(start, len);
             &self.mapping.as_ref().expect("mapped names")[start..start + len]
         } else {
             &self.names[offset - self.mapped_names..offset - self.mapped_names + len]
@@ -392,6 +674,10 @@ impl Store {
         (offset, len, folded)
     }
 
+    pub(crate) fn scan_bytes(&self) -> usize {
+        self.records.capacity() * size_of::<Record>() + self.names.capacity()
+    }
+
     /// Inserts a child. Bulk scanning rolls sizes up once; live changes use upsert().
     pub fn insert(
         &mut self,
@@ -402,6 +688,11 @@ impl Store {
         modified: u32,
     ) -> u32 {
         let id = u32::try_from(self.len()).expect("index exceeds four billion entries");
+        if id % 1024 == 0
+            && let Some(quiet) = &self.quiet
+        {
+            quiet.wait();
+        }
         let (name, name_len, fold_len) = self.intern(name);
         let mut p = self.record(parent);
         let record = Record {
@@ -478,6 +769,10 @@ impl Store {
     }
 
     pub fn find(&self, path: &str) -> Option<u32> {
+        self.find_any(path).filter(|id| self.online(*id))
+    }
+
+    fn find_any(&self, path: &str) -> Option<u32> {
         let path = path.trim_start_matches(r"\\?\").replace('/', "\\");
         let path = path.trim_end_matches('\\');
         let lower = fold(path);
@@ -490,7 +785,7 @@ impl Store {
                 && (lower.len() == name.len() || lower.as_bytes().get(name.len()) == Some(&b'\\'))
             {
                 let mut id = root;
-                for part in path[name.len()..].split('\\').filter(|s| !s.is_empty()) {
+                for part in lower[name.len()..].split('\\').filter(|s| !s.is_empty()) {
                     id = self.child(id, part)?;
                 }
                 return Some(id);
@@ -500,15 +795,118 @@ impl Store {
         None
     }
 
-    pub fn path(&self, mut id: u32) -> String {
-        let mut components = Vec::new();
+    /// Hide a failed root immediately with one overlay record, without tombstoning millions
+    /// of descendants. The next streamed generation drops it through parent reachability.
+    pub(crate) fn mark_offline(&mut self, root: &Path) {
+        if let Some(id) = self.root_id(root) {
+            let mut record = self.record(id);
+            if record.parent == 0 {
+                record.attributes |= OFFLINE;
+                self.set(id, record);
+                if self.offline.insert(id) {
+                    self.visibility
+                        .get_mut()
+                        .expect("volume visibility")
+                        .clear();
+                }
+            }
+        }
+    }
+
+    fn root_id(&self, root: &Path) -> Option<u32> {
+        let text = root
+            .to_string_lossy()
+            .trim_start_matches(r"\\?\")
+            .replace('/', "\\");
+        let text = fold(text.trim_end_matches('\\'));
+        let mut id = self.record(0).first;
+        while id != NONE {
+            let record = self.record(id);
+            if record.live() && self.folded(record) == text.as_bytes() {
+                return Some(id);
+            }
+            id = record.next;
+        }
+        None
+    }
+
+    pub(crate) fn roots(&self) -> Vec<std::path::PathBuf> {
+        let mut result = Vec::new();
+        let mut id = self.record(0).first;
+        while id != NONE {
+            let record = self.record(id);
+            if record.live() {
+                result.push(std::path::PathBuf::from(self.path(id)));
+            }
+            id = record.next;
+        }
+        result
+    }
+
+    pub(crate) fn online(&self, mut id: u32) -> bool {
+        if self.offline.is_empty() {
+            return true;
+        }
+        let mut visibility = self.visibility.lock().expect("volume visibility");
+        if let Some(online) = visibility.get(&id) {
+            return *online;
+        }
+        let original = id;
+        let mut online = true;
         while id != 0 && id != NONE {
+            if let Some(cached) = visibility.get(&id) {
+                online = *cached;
+                break;
+            }
+            if self.offline.contains(&id) {
+                online = false;
+                break;
+            }
+            id = self.record(id).parent;
+        }
+        if visibility.len() >= 8192 {
+            visibility.clear();
+        }
+        visibility.insert(original, online);
+        online
+    }
+
+    fn load_offline_roots(&mut self) {
+        self.offline.clear();
+        self.visibility
+            .get_mut()
+            .expect("volume visibility")
+            .clear();
+        let mut id = self.record(0).first;
+        while id != NONE {
+            let record = self.record(id);
+            if record.attributes & OFFLINE != 0 {
+                self.offline.insert(id);
+            }
+            id = record.next;
+        }
+    }
+
+    pub fn path(&self, mut id: u32) -> String {
+        let mut cache = self.path_cache.lock().expect("path cache");
+        let mut components = Vec::new();
+        let mut path = String::new();
+        while id != 0 && id != NONE {
+            if let Some(prefix) = cache.entries.get(&id) {
+                path = prefix.clone();
+                break;
+            }
             let r = self.record(id);
-            components.push(self.name(r));
+            components.push((id, self.name(r)));
             id = r.parent;
         }
-        components.reverse();
-        let mut path = components.join("\\");
+        for (id, name) in components.into_iter().rev() {
+            if !path.is_empty() {
+                path.push('\\');
+            }
+            path.push_str(name);
+            cache.insert(id, &path);
+        }
         if path.ends_with(':') {
             path.push('\\');
         }
@@ -524,6 +922,8 @@ impl Store {
             size: r.size,
             files: r.files,
             modified: r.modified,
+            size_unknown: r.attributes & SIZE_UNKNOWN != 0,
+            excluded: r.attributes & EXCLUDED != 0,
         }
     }
 
@@ -550,6 +950,11 @@ impl Store {
     /// Parent IDs precede children during enumeration, so one backwards pass rolls everything up.
     pub fn roll_up(&mut self) {
         for id in 0..self.len() {
+            if id % 4096 == 0
+                && let Some(quiet) = &self.quiet
+            {
+                quiet.wait();
+            }
             let mut r = self.record(id as u32);
             if r.directory() {
                 r.size = 0;
@@ -558,10 +963,41 @@ impl Store {
             }
         }
         for id in (1..self.len()).rev() {
+            if id % 4096 == 0
+                && let Some(quiet) = &self.quiet
+            {
+                quiet.wait();
+            }
             let r = self.record(id as u32);
             if r.live() {
                 self.adjust(r.parent, i128::from(r.size), i64::from(r.files), false);
+                if r.attributes & SIZE_UNKNOWN != 0 {
+                    let mut parent = self.record(r.parent);
+                    parent.attributes |= SIZE_UNKNOWN;
+                    self.set(r.parent, parent);
+                }
             }
+        }
+    }
+
+    /// Recompute only the affected ancestry; other excluded siblings must keep it unknown.
+    pub fn refresh_unknown(&mut self, mut id: u32) {
+        while id != NONE {
+            let mut record = self.record(id);
+            let mut unknown = record.attributes & EXCLUDED != 0;
+            let mut child = record.first;
+            while child != NONE {
+                let r = self.record(child);
+                unknown |= r.live() && r.attributes & SIZE_UNKNOWN != 0;
+                child = r.next;
+            }
+            record.attributes = if unknown {
+                record.attributes | SIZE_UNKNOWN
+            } else {
+                record.attributes & !SIZE_UNKNOWN
+            };
+            self.set(id, record);
+            id = record.parent;
         }
     }
 
@@ -590,7 +1026,12 @@ impl Store {
             let old = self.record(id);
             if old.directory() == (attributes & DIRECTORY != 0) {
                 let mut r = old;
-                r.attributes = attributes;
+                r.attributes = attributes
+                    | if r.directory() {
+                        old.attributes & SIZE_UNKNOWN
+                    } else {
+                        0
+                    };
                 r.modified = modified;
                 if !r.directory() {
                     r.size = size;
@@ -629,6 +1070,9 @@ impl Store {
             record.attributes = 0;
             self.set(at, record);
         }
+        if r.attributes & SIZE_UNKNOWN != 0 {
+            self.refresh_unknown(r.parent);
+        }
     }
 
     /// Replaces one root/subtree after reconciliation, leaving other volumes untouched.
@@ -658,17 +1102,42 @@ impl Store {
                 child = c.next;
             }
         }
+        if r.attributes & SIZE_UNKNOWN != 0 {
+            let mut at = parent;
+            while at != NONE {
+                let mut record = self.record(at);
+                record.attributes |= SIZE_UNKNOWN;
+                self.set(at, record);
+                at = record.parent;
+            }
+        }
         id
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
-        self.save_snapshot(path, None)
+        if self.mapping.is_none() {
+            return self.save_snapshot(path, None);
+        }
+        let mut streamed = self.fork()?;
+        streamed.windows = Some(crate::residency::Windows::default());
+        streamed.save_snapshot(path, None)
+    }
+
+    pub(crate) fn save_quiet(
+        &self,
+        path: &Path,
+        quiet: std::sync::Arc<crate::quiet::Quiet>,
+    ) -> Result<()> {
+        let mut streamed = self.fork()?;
+        streamed.quiet = Some(quiet);
+        streamed.windows = Some(crate::residency::Windows::default());
+        streamed.save_snapshot(path, None)
     }
 
     /// Streams a freshly scanned volume beside the other cached volumes. A four-byte ID
     /// map replaces the former private copy plus millions of deletion overlay entries.
     pub fn save_replacing_volume(&self, path: &Path, source: &Store, root: &Path) -> Result<()> {
-        let excluded = self.find(&root.to_string_lossy());
+        let excluded = self.root_id(root);
         if let Some(id) = excluded {
             ensure!(
                 self.record(id).parent == 0,
@@ -679,12 +1148,56 @@ impl Store {
             source.record(0).first == 1,
             "replacement must contain one scanned root"
         );
-        self.save_snapshot(path, Some((source, excluded)))
+        let mut streamed = self.fork()?;
+        streamed.quiet = source.quiet.clone();
+        streamed.windows = Some(crate::residency::Windows::default());
+        streamed.save_snapshot(path, Some((source, excluded, 0)))
     }
 
-    fn save_snapshot(&self, path: &Path, replacement: Option<(&Store, Option<u32>)>) -> Result<()> {
+    /// Large in-tree replays use the same bounded stream as volume replacement. Only the
+    /// scanned subtree is enumerated; siblings/other volumes are copied from their snapshot.
+    pub(crate) fn save_replacing_subtree(
+        &self,
+        path: &Path,
+        source: &mut Store,
+        root: &Path,
+    ) -> Result<bool> {
+        let old = self.find(&root.to_string_lossy());
+        let Some(parent) = old.map(|id| self.record(id).parent).or_else(|| {
+            root.parent()
+                .and_then(|path| self.find(&path.to_string_lossy()))
+        }) else {
+            return Ok(false);
+        };
+        if parent != 0 {
+            let name = root
+                .file_name()
+                .context("subtree basename")?
+                .to_string_lossy();
+            let mut record = source.record(1);
+            (record.name, record.name_len, record.fold_len) = source.intern(&name);
+            source.set(1, record);
+        }
+        let mut streamed = self.fork()?;
+        streamed.quiet = source.quiet.clone();
+        streamed.windows = Some(crate::residency::Windows::default());
+        streamed.save_snapshot(path, Some((source, old, parent)))?;
+        Ok(true)
+    }
+
+    fn save_snapshot(
+        &self,
+        path: &Path,
+        replacement: Option<(&Store, Option<u32>, u32)>,
+    ) -> Result<()> {
         let temporary = path.with_extension("tmp");
-        let mut out = BufWriter::new(File::create(&temporary)?);
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .custom_flags(windows::Win32::Storage::FileSystem::FILE_FLAG_SEQUENTIAL_SCAN.0)
+            .open(&temporary)?;
+        let mut out = BufWriter::with_capacity(1024 * 1024, file);
         let mut header = [0; HEADER];
         header[..8].copy_from_slice(MAGIC);
         // Compact tombstones and superseded names on checkpoint. IDs are internal to a
@@ -694,7 +1207,8 @@ impl Store {
         let mut names = 0u64;
         for (id, r) in self.range(0, self.len()) {
             if r.live()
-                && replacement.is_none_or(|(_, excluded)| excluded != Some(id))
+                && r.attributes & OFFLINE == 0
+                && replacement.is_none_or(|(_, excluded, _)| excluded != Some(id))
                 && (id == 0 || ids[r.parent as usize] != NONE)
             {
                 ids[id as usize] = count;
@@ -703,7 +1217,7 @@ impl Store {
             }
         }
         let kept = count;
-        if let Some((source, _)) = replacement {
+        if let Some((source, _, _)) = replacement {
             count = count
                 .checked_add(source.len() as u32 - 1)
                 .context("too many records")?;
@@ -726,10 +1240,49 @@ impl Store {
             if at == NONE { NONE } else { ids[at as usize] }
         };
         let mut name = 0;
+        let mut ancestors = BTreeMap::new();
+        if let Some((source, old, mut parent)) = replacement {
+            let previous = old.map(|id| self.record(id)).unwrap_or_default();
+            let fresh = source.record(1);
+            let mut replaced_child = old;
+            let mut unknown = fresh.attributes & SIZE_UNKNOWN != 0;
+            while parent != NONE {
+                let mut record = self.record(parent);
+                record.size = (i128::from(record.size) - i128::from(previous.size)
+                    + i128::from(fresh.size))
+                .clamp(0, i128::from(u64::MAX)) as u64;
+                record.files = (i64::from(record.files) - i64::from(previous.files)
+                    + i64::from(fresh.files))
+                .clamp(0, i64::from(u32::MAX)) as u32;
+                unknown |= record.attributes & EXCLUDED != 0;
+                let mut child = record.first;
+                while child != NONE {
+                    let sibling = self.record(child);
+                    if Some(child) != replaced_child
+                        && sibling.live()
+                        && sibling.attributes & OFFLINE == 0
+                    {
+                        unknown |= sibling.attributes & SIZE_UNKNOWN != 0;
+                    }
+                    child = sibling.next;
+                }
+                if unknown {
+                    record.attributes |= SIZE_UNKNOWN;
+                } else {
+                    record.attributes &= !SIZE_UNKNOWN;
+                }
+                ancestors.insert(parent, record);
+                replaced_child = Some(parent);
+                parent = record.parent;
+            }
+        }
         for (id, mut record) in self
             .range(0, self.len())
             .filter(|(id, _)| ids[*id as usize] != NONE)
         {
+            if let Some(updated) = ancestors.get(&id) {
+                record = *updated;
+            }
             record.name = name;
             name += u32::from(record.name_len) + u32::from(record.fold_len);
             record.parent = if record.parent == NONE {
@@ -739,29 +1292,20 @@ impl Store {
             };
             record.first = skip_dead(record.first);
             record.next = skip_dead(record.next);
-            if id == 0
-                && let Some((source, excluded)) = replacement
+            if let Some((_, _, parent)) = replacement
+                && id == parent
             {
-                let previous = excluded.map(|id| self.record(id)).unwrap_or_default();
-                record.size = record
-                    .size
-                    .saturating_sub(previous.size)
-                    .saturating_add(source.record(0).size);
-                record.files = record
-                    .files
-                    .saturating_sub(previous.files)
-                    .saturating_add(source.record(0).files);
                 record.first = kept;
             }
             out.write_all(bytemuck::bytes_of(&record))?;
         }
-        if let Some((source, _)) = replacement {
+        if let Some((source, _, parent)) = replacement {
             let offset = kept - 1;
             for (id, mut record) in source.range(1, source.len()) {
                 record.name = name;
                 name += u32::from(record.name_len) + u32::from(record.fold_len);
                 record.parent = if record.parent == 0 {
-                    0
+                    ids[parent as usize]
                 } else {
                     record.parent + offset
                 };
@@ -769,7 +1313,7 @@ impl Store {
                     record.first += offset;
                 }
                 record.next = if id == 1 {
-                    skip_dead(self.record(0).first)
+                    skip_dead(self.record(parent).first)
                 } else if record.next == NONE {
                     NONE
                 } else {
@@ -787,7 +1331,7 @@ impl Store {
                 record.name_len as usize + record.fold_len as usize,
             ))?;
         }
-        if let Some((source, _)) = replacement {
+        if let Some((source, _, _)) = replacement {
             for (_, record) in source.range(1, source.len()) {
                 out.write_all(source.bytes(
                     record.name as usize,
@@ -795,6 +1339,45 @@ impl Store {
                 ))?;
             }
         }
+        // The independent column is streamed, never materialized as a full private copy.
+        let mut column = crate::names::Builder::default();
+        for (id, record) in self
+            .range(0, self.len())
+            .filter(|(id, _)| ids[*id as usize] != NONE)
+        {
+            column.push(
+                &mut out,
+                ids[id as usize],
+                if record.parent == NONE {
+                    NONE
+                } else {
+                    ids[record.parent as usize]
+                },
+                record.attributes,
+                record.modified,
+                self.folded(record),
+            )?;
+        }
+        if let Some((source, _, parent)) = replacement {
+            for (id, record) in source.range(1, source.len()) {
+                column.push(
+                    &mut out,
+                    id + kept - 1,
+                    if record.parent == 0 {
+                        ids[parent as usize]
+                    } else {
+                        record.parent + kept - 1
+                    },
+                    record.attributes,
+                    record.modified,
+                    source.folded(record),
+                )?;
+            }
+        }
+        column.flush(&mut out)?;
+        out.seek(SeekFrom::Start(32))?;
+        out.write_all(&(column.bytes as u64).to_le_bytes())?;
+        out.write_all(b"NAME0001")?;
         out.flush()?;
         out.get_ref().sync_all()?;
         drop(out);
@@ -804,7 +1387,22 @@ impl Store {
     }
 
     pub fn open(path: &Path) -> Result<Self> {
-        let file = File::open(path)?;
+        Self::open_inner(path, None)
+    }
+
+    pub(crate) fn open_quiet(
+        path: &Path,
+        quiet: std::sync::Arc<crate::quiet::Quiet>,
+    ) -> Result<Self> {
+        quiet.wait();
+        Self::open_inner(path, Some(quiet))
+    }
+
+    fn open_inner(path: &Path, quiet: Option<std::sync::Arc<crate::quiet::Quiet>>) -> Result<Self> {
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(windows::Win32::Storage::FileSystem::FILE_FLAG_SEQUENTIAL_SCAN.0)
+            .open(path)?;
         // SAFETY: snapshot files are immutable, replaced by rename. We never truncate a mapped file.
         let mapping = unsafe { Mmap::map(&file)? };
         ensure!(
@@ -813,16 +1411,20 @@ impl Store {
         );
         let count = usize::try_from(u64::from_le_bytes(mapping[8..16].try_into()?))?;
         let names = usize::try_from(u64::from_le_bytes(mapping[16..24].try_into()?))?;
+        let column_bytes = usize::try_from(u64::from_le_bytes(mapping[32..40].try_into()?))?;
         let end = count
             .checked_mul(size_of::<Record>())
             .and_then(|n| n.checked_add(HEADER))
-            .and_then(|n| n.checked_add(names));
+            .and_then(|n| n.checked_add(names))
+            .and_then(|n| n.checked_add(column_bytes));
         ensure!(
             count > 0 && count < u32::MAX as usize && end == Some(mapping.len()),
             "bad index length"
         );
         let generation = u64::from_le_bytes(mapping[24..32].try_into()?);
-        let store = Self {
+        let mut store = Self {
+            quiet,
+            windows: Some(crate::residency::Windows::validation()),
             mapping: Some(mapping),
             source: Some(std::sync::Arc::new(file)),
             mapped_count: count,
@@ -832,10 +1434,25 @@ impl Store {
         };
         // One streaming UTF-8 validation is much cheaper than two decoder calls for each
         // short name. Record slices are then checked against character boundaries below.
-        let blob = std::str::from_utf8(
-            &store.mapping.as_ref().expect("mapped snapshot")
-                [HEADER + count * size_of::<Record>()..],
-        )?;
+        let names_start = HEADER + count * size_of::<Record>();
+        let blob_bytes =
+            &store.mapping.as_ref().expect("mapped snapshot")[names_start..names_start + names];
+        let mut start = 0;
+        while start < blob_bytes.len() {
+            if let Some(quiet) = &store.quiet {
+                quiet.wait();
+            }
+            let mut end = (start + 4 * 1024 * 1024).min(blob_bytes.len());
+            while end < blob_bytes.len() && end > start && blob_bytes[end] & 0xc0 == 0x80 {
+                end -= 1;
+            }
+            ensure!(end > start, "invalid UTF-8 name blob");
+            store.touch_mapping(names_start + start, end - start);
+            std::str::from_utf8(&blob_bytes[start..end])?;
+            start = end;
+        }
+        // SAFETY: every byte was decoded above, splitting only at UTF-8 character boundaries.
+        let blob = unsafe { std::str::from_utf8_unchecked(blob_bytes) };
         let validate = |start: usize, end: usize| -> Result<()> {
             for (id, r) in store.range(start, end) {
                 ensure!(
@@ -863,6 +1480,7 @@ impl Store {
                 let start = r.name as usize;
                 let middle = start + r.name_len as usize;
                 let end = middle + r.fold_len as usize;
+                store.touch_mapping(names_start + start, end - start + usize::from(end < names));
                 ensure!(
                     blob.is_char_boundary(start)
                         && blob.is_char_boundary(middle)
@@ -872,16 +1490,10 @@ impl Store {
             }
             Ok(())
         };
-        let workers = if count >= 250_000 {
-            std::thread::available_parallelism().map_or(2, |n| n.get().min(8))
-        } else {
-            1
-        };
-        if workers == 1 {
+        if crate::budget::Budget::active() {
             validate(0, count)?;
         } else {
-            // Temporary workers keep validation and page faults parallel without retaining
-            // another idle pool in the helper. The mapping outlives every scoped worker.
+            let workers = if count >= 250_000 { 4 } else { 1 };
             std::thread::scope(|scope| -> Result<()> {
                 let mut tasks = Vec::new();
                 for worker in 0..workers {
@@ -902,6 +1514,32 @@ impl Store {
                 Ok(())
             })?;
         }
+        if let Some(windows) = store.windows.take() {
+            windows.release();
+        }
+        if column_bytes != 0 {
+            let map = store.mapping.as_ref().expect("mapped snapshot");
+            ensure!(&map[40..48] == b"NAME0001", "bad names column version");
+            let start = names_start + names;
+            let windows = crate::residency::Windows::default();
+            store.column = Some(crate::names::Column::open(
+                &map[start..],
+                count,
+                store.quiet.as_deref(),
+                path.parent(),
+                |offset, length| {
+                    windows.touch(map.as_ptr(), map.len(), start + offset, length);
+                },
+            )?);
+            windows.release();
+            store.column_start = start;
+            store.search_windows = (0..8)
+                .map(|_| crate::residency::Windows::search())
+                .collect();
+        }
+        store.windows = Some(crate::residency::Windows::query_records());
+        store.quiet = None;
+        store.load_offline_roots();
         Ok(store)
     }
 }
@@ -909,6 +1547,159 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streamed_subtree_replacement_preserves_siblings_ancestors_and_unknown_sizes() {
+        let base =
+            std::env::temp_dir().join(format!("mypaper-stream-subtree-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        let path = base.join("snapshot.bin");
+        let mut store = Store::new();
+        let c = store.insert(0, "C:", DIRECTORY, 0, 0);
+        let d = store.insert(0, "D:", DIRECTORY, 0, 0);
+        let parent = store.insert(c, "parent", DIRECTORY, 0, 0);
+        let old = store.insert(parent, "tree", DIRECTORY, 0, 0);
+        store.insert(old, "stale", EXCLUDED | SIZE_UNKNOWN | DIRECTORY, 0, 0);
+        store.insert(old, "old.txt", 128, 3, 0);
+        store.insert(parent, "sibling.txt", 128, 5, 0);
+        store.insert(d, "other.txt", 128, 7, 0);
+        store.roll_up();
+        store.save(&path).unwrap();
+        let mapped = Store::open(&path).unwrap();
+        let mut fresh = Store::new();
+        let root = fresh.insert(0, r"C:\parent\tree", DIRECTORY, 0, 42);
+        fresh.insert(root, "new.txt", 128, 11, 0);
+        fresh.roll_up();
+        assert!(
+            mapped
+                .save_replacing_subtree(&path, &mut fresh, Path::new(r"C:\parent\tree"))
+                .unwrap()
+        );
+        let first = Store::open(&path).unwrap();
+        assert_eq!(first.sizes(r"C:\", 1)[0].size, 16);
+        assert!(!first.sizes(r"C:\", 1)[0].size_unknown);
+        assert_eq!(first.sizes(r"C:\parent", 1)[0].files, 2);
+        assert_eq!(first.sizes(r"D:\", 1)[0].size, 7);
+        assert_eq!(first.sizes(r"C:\parent\tree", 1)[0].modified, 42);
+        assert_eq!(
+            crate::query::search(&first, "new.txt", 10)[0].path,
+            r"C:\parent\tree\new.txt"
+        );
+        assert!(first.find(r"C:\parent\tree\old.txt").is_none());
+        assert!(
+            mapped.find(r"C:\parent\tree\old.txt").is_some(),
+            "old readers retain their immutable snapshot"
+        );
+        let unknown = fresh.insert(root, "unknown", DIRECTORY | EXCLUDED | SIZE_UNKNOWN, 0, 0);
+        fresh.roll_up();
+        first
+            .save_replacing_subtree(&path, &mut fresh, Path::new(r"C:\parent\tree"))
+            .unwrap();
+        let second = Store::open(&path).unwrap();
+        assert!(second.sizes(r"C:\", 1)[0].size_unknown);
+        fresh.remove(unknown);
+        second
+            .save_replacing_subtree(&path, &mut fresh, Path::new(r"C:\parent\new-tree"))
+            .unwrap();
+        let third = Store::open(&path).unwrap();
+        assert_eq!(third.sizes(r"C:\parent", 1)[0].size, 27);
+        assert_eq!(third.sizes(r"C:\parent", 1)[0].files, 3);
+        assert!(
+            third.sizes(r"C:\", 1)[0].size_unknown,
+            "unknown sibling must survive a new subtree import"
+        );
+        assert!(
+            !third
+                .save_replacing_subtree(
+                    &base.join("orphan.bin"),
+                    &mut fresh,
+                    Path::new(r"C:\absent\orphan")
+                )
+                .unwrap()
+        );
+        assert!(!base.join("orphan.bin").exists());
+        drop((mapped, first, second, third));
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn offline_root_hides_cached_search_and_sizes_and_drops_from_next_generation() {
+        let path = std::env::temp_dir().join(format!("mypaper-offline-{}.bin", std::process::id()));
+        let delta = path.with_extension("json");
+        let mut store = Store::new();
+        let c = store.insert(0, "C:", DIRECTORY, 0, 0);
+        let z = store.insert(0, "Z:", DIRECTORY, 0, 0);
+        store.insert(c, "report-online.txt", 128, 3, 0);
+        store.insert(z, "report-offline.txt", 128, 5, 100);
+        store.roll_up();
+        store.save(&path).unwrap();
+        let mut mapped = Store::open(&path).unwrap();
+        mapped.mark_offline(Path::new(r"Z:\"));
+        assert_eq!(mapped.overlay_len(), 1);
+        for query in ["r", "report", "report-", "ext:txt report"] {
+            let hits = crate::query::search(&mapped, query, 1);
+            assert_eq!(hits.len(), 1, "{query}");
+            assert_eq!(hits[0].name, "report-online.txt", "{query}");
+        }
+        assert!(mapped.sizes(r"Z:\", 50).is_empty());
+        assert!(mapped.sizes(r"Z:\report-offline.txt", 50).is_empty());
+        mapped.save_changes(&delta).unwrap();
+        let mut restored = Store::open(&path).unwrap();
+        restored.load_changes(&delta).unwrap();
+        assert!(restored.sizes(r"Z:\", 50).is_empty());
+        let mut fresh = Store::new();
+        let c = fresh.insert(0, "C:", DIRECTORY, 0, 0);
+        fresh.insert(c, "report-fresh.txt", 128, 9, 0);
+        fresh.roll_up();
+        restored
+            .save_replacing_volume(&path, &fresh, Path::new(r"C:\"))
+            .unwrap();
+        let compact = Store::open(&path).unwrap();
+        assert_eq!(compact.roots(), vec![std::path::PathBuf::from(r"C:\")]);
+        assert_eq!(
+            crate::query::search(&compact, "report", 50)[0].name,
+            "report-fresh.txt"
+        );
+        drop((mapped, restored, compact));
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_file(delta).unwrap();
+    }
+
+    #[test]
+    fn sizes_walks_folded_components_when_unicode_changes_byte_length() {
+        let mut store = Store::new();
+        let root = store.insert(0, "K:", DIRECTORY, 0, 0);
+        let dir = store.insert(root, "Kelvin", DIRECTORY, 0, 0);
+        store.insert(dir, "report.txt", 128, 7, 0);
+        store.roll_up();
+        let hits = store.sizes("\u{212a}:\\\u{212a}elvin", 50);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].size, 7);
+        assert_eq!(hits[1].name, "report.txt");
+        assert!(store.sizes("\u{212a}:\\missing", 50).is_empty());
+    }
+
+    #[test]
+    fn path_prefilter_stays_conservative_after_a_directory_name_change() {
+        let path =
+            std::env::temp_dir().join(format!("mypaper-index-pathmask-{}.bin", std::process::id()));
+        let mut store = Store::new();
+        let root = store.insert(0, "X:", DIRECTORY, 0, 0);
+        let dir = store.insert(root, "Before", DIRECTORY, 0, 0);
+        store.insert(dir, "report.txt", 128, 1, 0);
+        store.save(&path).unwrap();
+        let mut mapped = Store::open(&path).unwrap();
+        let mut r = mapped.record(dir);
+        (r.name, r.name_len, r.fold_len) = mapped.intern("After");
+        mapped.set(dir, r);
+        assert_eq!(
+            crate::query::search(&mapped, "path:after report", 10).len(),
+            1
+        );
+        assert!(crate::query::search(&mapped, "path:before report", 10).is_empty());
+        drop(mapped);
+        std::fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn wide_directory_lookup_survives_delete_recreate_and_case_changes() {

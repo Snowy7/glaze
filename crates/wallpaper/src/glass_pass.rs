@@ -98,13 +98,14 @@ impl Screen {
             // Exactly the surface's own corners: quarter circles unless the style smooths them.
             let shape = crate::material::shape(p.radius / s, style.smoothing);
             let (material, appearance) = crate::material::liquid(&p.material, s);
-            let material = crate::material::styled(
+            let mut material = crate::material::styled(
                 material,
                 style.brightness,
                 style.saturation,
                 style.sheen,
                 style.depth,
             );
+            material.inner_shadow = style.inner_shadow;
             match self.ids.get(&p.id) {
                 Some(&id) => {
                     self.scene.place(id, frame);
@@ -176,12 +177,22 @@ impl GlassPass {
         self.set_styled(plates.into_iter().map(|p| (p, Style::default())).collect());
     }
 
-    fn set_styled(&mut self, plates: Vec<(Plate, Style)>) {
+    pub(crate) fn set_styled(&mut self, plates: Vec<(Plate, Style)>) {
         for screen in &mut self.screens {
             // Only this monitor's plates: identical publications cause zero drawing.
             let mine = plates.iter().filter(|(p, _)| overlaps(p, &screen.monitor)).copied().collect();
             screen.apply(mine);
         }
+    }
+
+    /// Screen `index`'s plates (and their styles) as last published.
+    pub fn plates(&self, index: usize) -> &[(Plate, Style)] {
+        self.screens.get(index).map_or(&[], |s| &s.plates)
+    }
+
+    /// The process id of the shell that published them (0 before any snapshot).
+    pub fn writer_pid(&self) -> u32 {
+        self.reader.writer_pid()
     }
 
     /// Whether screen `index` must redraw its glass: its plates changed, or a spring runs.
@@ -230,7 +241,11 @@ impl GlassPass {
         // Nothing left, not even glass fading out: this screen no longer holds a pyramid.
         screen.source = drawn.then(|| behind.clone());
         let screens = &self.screens;
-        self.shared.retain(|s| screens.iter().any(|screen| screen.source.as_ref() == Some(&s.texture)));
+        self.shared.retain(|s| {
+            screens
+                .iter()
+                .any(|screen| screen.source.as_ref() == Some(&s.texture))
+        });
         if !drawn {
             return false;
         }
@@ -239,8 +254,16 @@ impl GlassPass {
         let shared = match self.shared.iter().position(|s| s.texture == *behind) {
             Some(i) => &mut self.shared[i],
             None => {
-                let view = behind.create_view(&wgpu::TextureViewDescriptor { format: Some(srgb), ..Default::default() });
-                self.shared.push(Shared { texture: behind.clone(), view, renderer: template.fork(&gpu.device), drawn: None });
+                let view = behind.create_view(&wgpu::TextureViewDescriptor {
+                    format: Some(srgb),
+                    ..Default::default()
+                });
+                self.shared.push(Shared {
+                    texture: behind.clone(),
+                    view,
+                    renderer: template.fork(&gpu.device),
+                    drawn: None,
+                });
                 self.shared.last_mut().expect("just pushed")
             }
         };
@@ -312,11 +335,26 @@ mod tests {
     #[test]
     fn only_affected_screens_redraw_and_identical_publications_do_nothing() {
         let monitors = [
-            Rect { x: -2560, y: 9, width: 2560, height: 1440 },
-            Rect { x: 0, y: 0, width: 2560, height: 1440 },
+            Rect {
+                x: -2560,
+                y: 9,
+                width: 2560,
+                height: 1440,
+            },
+            Rect {
+                x: 0,
+                y: 0,
+                width: 2560,
+                height: 1440,
+            },
         ];
         let mut pass = pass(&monitors);
-        let mut p = Plate { id: 7, rect: [-2544.25, 77.0, 309.0, 307.0], radius: 22.0, material: mypaper_glass_ipc::Material::default() };
+        let mut p = Plate {
+            id: 7,
+            rect: [-2544.25, 77.0, 309.0, 307.0],
+            radius: 22.0,
+            material: mypaper_glass_ipc::Material::default(),
+        };
         pass.set_plates(vec![p]);
         assert!(pass.take_dirty(0));
         assert!(!pass.take_dirty(1));

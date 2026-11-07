@@ -44,6 +44,7 @@ struct Queue {
     /// The connection's thread ended (peer closed, error, or our close finished).
     done: bool,
     undelivered: usize,
+    game: bool,
 }
 
 struct Shared {
@@ -78,6 +79,16 @@ fn size(message: &Message) -> usize {
 }
 
 impl Conn {
+    /// Freeze queued polling writes without disconnecting. Reads remain event-driven and
+    /// bounded by the normal credit. WinHTTP's transport keepalive is independent.
+    pub fn set_game_activity(&self, active: bool) {
+        let mut queue = self.0.lock();
+        if queue.game == active { return; }
+        queue.game = active;
+        drop(queue);
+        self.0.poke();
+    }
+
     fn new(pipe: bool) -> Result<Self, String> {
         let wake = if pipe { Some(Event::new()?) } else { None };
         Ok(Self(Arc::new(Shared { queue: Mutex::default(), cv: Condvar::new(), wake })))
@@ -109,6 +120,16 @@ impl Conn {
         if resume {
             self.0.poke();
         }
+    }
+
+    /// Discard queued writes and request shutdown, retaining read credit until close delivery.
+    pub(crate) fn request_close(&self) {
+        let mut queue = self.0.lock();
+        queue.out.clear();
+        queue.bytes = 0;
+        queue.closing = true;
+        drop(queue);
+        self.0.poke();
     }
 
     fn close(&self) {
@@ -163,6 +184,7 @@ struct WsHandle {
 // SAFETY: WinHTTP handles may be used from any thread; one receive and one send may be in flight
 // at once, which is exactly the reader/writer split here. `close` runs once.
 unsafe impl Send for WsHandle {}
+// SAFETY: concurrent send/receive is supported; atomic `closed` serializes closing the handle.
 unsafe impl Sync for WsHandle {}
 impl WsHandle {
     fn close(&self) {
@@ -320,7 +342,7 @@ fn read_socket(ws: &WsHandle, shared: &Shared, id: u64, post: &dyn Fn(SocketEven
 fn write_socket(ws: &WsHandle, shared: &Shared) {
     loop {
         let mut queue = shared.lock();
-        while queue.out.is_empty() && !queue.closing && !queue.done {
+        while (queue.out.is_empty() || queue.game) && !queue.closing && !queue.done {
             queue = shared.cv.wait(queue).expect("io queue");
         }
         if queue.done {
@@ -359,6 +381,7 @@ fn write_socket(ws: &WsHandle, shared: &Shared) {
 struct Event(HANDLE);
 // SAFETY: an event handle is a kernel object usable from any thread.
 unsafe impl Send for Event {}
+// SAFETY: event operations are thread-safe, and this owner closes the handle only on drop.
 unsafe impl Sync for Event {}
 impl Event {
     fn new() -> Result<Self, String> {
@@ -425,6 +448,10 @@ fn run_pipe(shared: &Shared, id: u64, name: &str, post: &dyn Fn(PipeEvent) -> bo
     let result = loop {
         // Start a read when there's credit, and a write when something is queued.
         let mut queue = shared.lock();
+        // Reset while holding the queue lock, before inspecting it. A concurrent resume/
+        // send must either be observed below or leave the event set for the next wait.
+        // SAFETY: this pipe's wake event stays owned by Shared for the thread's lifetime.
+        let _ = unsafe { ResetEvent(wake.0) };
         if queue.closing {
             break Ok(());
         }
@@ -438,7 +465,7 @@ fn run_pipe(shared: &Shared, id: u64, name: &str, post: &dyn Fn(PipeEvent) -> bo
                 Err(e) => break Err(e.message()),
             }
         }
-        if writing.is_none()
+        if writing.is_none() && !queue.game
             && let Some(message) = queue.out.pop_front()
         {
             queue.bytes -= size(&message);
@@ -456,12 +483,9 @@ fn run_pipe(shared: &Shared, id: u64, name: &str, post: &dyn Fn(PipeEvent) -> bo
             writing = Some(bytes);
         }
         drop(queue);
-        // SAFETY: valid event handles owned above.
-        let _ = unsafe { ResetEvent(wake.0) };
         let handles = [read_done.0, write_done.0, wake.0];
-        let count = if writing.is_some() { 3 } else { 3 };
-        // SAFETY: as above.
-        let woke = unsafe { WaitForMultipleObjects(&handles[..count], false, INFINITE) };
+        // SAFETY: all three owned event handles remain live for this blocking wait.
+        let woke = unsafe { WaitForMultipleObjects(&handles, false, INFINITE) };
         if woke.0 == WAIT_OBJECT_0.0 && reading {
             let mut n = 0u32;
             // SAFETY: the read on `read_ov` completed (its event is set).
@@ -471,6 +495,7 @@ fn run_pipe(shared: &Shared, id: u64, name: &str, post: &dyn Fn(PipeEvent) -> bo
                 Err(_) => break Ok(()), // the server closed its end
             }
             reading = false;
+            // SAFETY: this owned event's completed read has been consumed before rearming it.
             let _ = unsafe { ResetEvent(read_done.0) };
             shared.lock().undelivered += 1;
             if !post(PipeEvent::Data((id, buffer[..n as usize].to_vec()))) {
@@ -480,6 +505,7 @@ fn run_pipe(shared: &Shared, id: u64, name: &str, post: &dyn Fn(PipeEvent) -> bo
             let mut n = 0u32;
             // SAFETY: the write on `write_ov` completed (its event is set).
             let written = unsafe { GetOverlappedResult(pipe.0, &write_ov, &mut n, false) };
+            // SAFETY: this owned event's completed write has been consumed before rearming it.
             let _ = unsafe { ResetEvent(write_done.0) };
             writing = None;
             if written.is_err() {

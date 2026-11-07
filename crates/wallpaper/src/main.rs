@@ -1,8 +1,10 @@
 //! mypaper-wallpaper: renders a theme's wallpaper behind the desktop icons.
 //!
 //! ```text
-//! mypaper-wallpaper [--windowed] [THEME]
+//! mypaper-wallpaper [--windowed] [--parent PID] [THEME]
 //! ```
+//!
+//! Core passes `--parent <its pid>`: the engine exits when core does, however core ends.
 //!
 //! The theme and pause settings come from `config.json` and follow it live:
 //! switching the theme or pausing needs no restart. `THEME` (a theme folder or
@@ -19,6 +21,7 @@
 mod backdrop;
 mod control;
 mod engine;
+mod game;
 mod glass_pass;
 mod material;
 mod gpu;
@@ -28,6 +31,7 @@ mod lab;
 #[allow(dead_code)]
 mod overlay;
 mod palette;
+mod parent;
 mod preview;
 mod snapshot;
 mod sources;
@@ -38,7 +42,7 @@ mod window;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use mypaper_config::Config;
 use mypaper_desktop::{
     ControlWindow, DesktopEvents, DesktopHost, EXIT_CONFIG, EXIT_RESTART, WindowEvents, hold,
@@ -55,12 +59,14 @@ use crate::hold::Fact;
 use crate::trim::Trimmer;
 use crate::window::{CONTROL_CLASS, WM_CONFIG, WM_FACT, WM_RELOAD, Waiter, Window};
 
-const USAGE: &str = "usage: mypaper-wallpaper [--windowed] [THEME]";
+const USAGE: &str = "usage: mypaper-wallpaper [--windowed] [--parent PID] [THEME]";
 
 struct Args {
     windowed: bool,
     /// Overrides `Config::theme` for this run.
     theme: Option<String>,
+    /// The supervisor (core) to exit with.
+    parent: Option<u32>,
 }
 
 fn main() -> ExitCode {
@@ -114,9 +120,15 @@ fn load(args: &Args) -> Result<(Config, LoadedTheme)> {
 fn parse_args() -> Result<Args> {
     let mut windowed = false;
     let mut theme = None;
-    for arg in std::env::args().skip(1) {
+    let mut parent = None;
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
         match arg.as_str() {
             "--windowed" => windowed = true,
+            "--parent" => {
+                let pid = args.next().and_then(|pid| pid.parse().ok());
+                parent = Some(pid.context("--parent expects a process id")?);
+            }
             "-h" | "--help" => {
                 println!("{USAGE}");
                 std::process::exit(0);
@@ -125,11 +137,24 @@ fn parse_args() -> Result<Args> {
             name => theme = Some(name.to_owned()),
         }
     }
-    Ok(Args { windowed, theme })
+    Ok(Args {
+        windowed,
+        theme,
+        parent,
+    })
 }
 
 fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Result<u8> {
     log::info!("theme: {} ({})", theme.theme.name, theme.dir.display());
+    // Exit with core, however it ends (see `parent`). Already gone: nothing to draw for.
+    let parent = match args.parent.map(|pid| (pid, parent::Parent::open(pid))) {
+        Some((pid, None)) => {
+            log::info!("core (pid {pid}) has already ended; not starting");
+            return Ok(0);
+        }
+        Some((_, parent)) => parent,
+        None => None,
+    };
     window::init_com_apartment()?;
     window::register_class()?;
 
@@ -181,15 +206,19 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
     startup::ready("wallpaper", "loop_ms");
     let mut desktop_lost = false;
     let mut desktop_at = None;
+    let parent_handle: Vec<_> = parent.iter().map(parent::Parent::handle).collect();
     let code = loop {
         if let Some(code) = pump(&mut engine, &mut live) {
             break code;
         }
+        if parent.as_ref().is_some_and(parent::Parent::exited) {
+            log::info!("core has ended: exiting with it");
+            break 0;
+        }
         // Requests and capture frames arrived as messages in that pump.
-        let warm_at = overlays.as_mut().and_then(|o| {
-            o.tick();
-            o.deadline()
-        });
+        if let Some(overlays) = &mut overlays {
+            overlays.tick();
+        }
         if let Some(events) = &desktop_events {
             desktop_lost |= events.take_lost();
             if events.take_ready() {
@@ -213,20 +242,31 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
             }
             if desktop_lost {
                 // Keep the GPU away from orphaned HWNDs until the replacement shell is ready.
-                waiter.wait(desktop_at, &[]);
+                waiter.wait(desktop_at, &parent_handle);
                 continue;
             }
         }
         live.apply_due(&mut engine);
         let trim_at = trimmer.poll(engine.theme_dir());
         match tick(&mut engine, events.as_ref()) {
-            Flow::Wait(deadline) => waiter.wait(
-                earliest(
-                    earliest(desktop_at, warm_at),
-                    earliest(earliest(deadline, trim_at), live.deadline()),
-                ),
-                &engine.glass_handles(),
-            ),
+            Flow::Wait(deadline) => {
+                // Plates over a web or app wallpaper are drawn as overlays (P14): after the tick,
+                // which read the latest plates and what is covered or held.
+                let warm_at = overlays.as_mut().and_then(|o| {
+                    o.set_fps(engine.fps());
+                    o.sync_plates(&engine.native_plates());
+                    o.deadline()
+                });
+                let mut handles = engine.glass_handles();
+                handles.extend_from_slice(&parent_handle);
+                waiter.wait(
+                    earliest(
+                        earliest(desktop_at, warm_at),
+                        earliest(earliest(deadline, trim_at), live.deadline()),
+                    ),
+                    &handles,
+                );
+            }
             Flow::Exit(code) => break code,
         }
     };

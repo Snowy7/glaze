@@ -1,0 +1,22 @@
+10:41:20 [after burst 20] explorer 57456 is gone
+10:41:20 bursts done design
+10:41:21 variant design: separate explorer 51544
+10:41:22 design helper attached: True (helper 41964)
+10:41:27 bursts start design (explorer 51544, 25 bursts)
+10:41:27 [start] explorer 51544: 131.3 MB priv, 188.9 MB ws, 2489 handles, 2.69 s cpu | styler 41964: 3.5 MB priv
+10:41:35   burst 1: 2 opened, 2 closed, 8 s with the lock
+10:41:41 [after burst 1] explorer 51544: 181.5 MB priv, 254.8 MB ws, 3617 handles, 10.47 s cpu | styler 41964: 3.5 MB priv
+10:41:52   burst 2: 2 opened, 2 closed, 6 s with the lock
+10:41:58 [after burst 2] explorer 51544: 194.1 MB priv, 267.8 MB ws, 3829 handles, 16.11 s cpu | styler 41964: 3.6 MB priv
+10:42:10   burst 3: 2 opened, 2 closed, 6 s with the lock
+10:42:16 [after burst 3] explorer 51544: 302.7 MB priv, 316.9 MB ws, 4155 handles, 21.75 s cpu | styler 41964: 3.6 MB priv
+10:42:27   burst 4: 2 opened, 2 closed, 6 s with the lock
+10:42:33 [after burst 4] explorer 51544: 393.3 MB priv, 343.8 MB ws, 4250 handles, 27.09 s cpu | styler 41964: 3.5 MB priv
+10:42:43   burst 5: 2 opened, 2 closed, 5 s with the lock
+10:42:49 [after burst 5] explorer 51544: 393.9 MB priv, 339.4 MB ws, 4008 handles, 32.11 s cpu | styler 41964: 3.5 MB priv
+10:43:12   burst 6: 2 opened, 2 closed, 7 s with the lock
+10:43:19 [after burst 6] explorer 51544: 400.5 MB priv, 348.1 MB ws, 4018 handles, 37.61 s cpu | styler 41964: 3.5 MB priv
+10:43:37   burst 7: 2 opened, 2 closed, 6 s with the lock
+10:43:43 [after burst 7] explorer 51544: 672.4 MB priv, 393.9 MB ws, 4448 handles, 46.33 s cpu | styler 41964: 3.4 MB priv
+10:43:55   burst 8: 2 opened, 2 closed, 7 s with the lock
+10:44:01 [after burst 8] explorer 51544: 711.4 MB priv, 400.4 MB ws, 4122 handles, 53.08 s cpu | styler 41964: 3.4 MB priv

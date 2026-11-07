@@ -529,31 +529,6 @@ fn displayed_stats(stats: &Stats) -> String {
     format!("CPU {:.0}%  RAM {memory:.0}%", stats.cpu)
 }
 
-#[cfg(test)]
-mod stats_tests {
-    use super::*;
-    use mypaper_bars::system::Memory;
-
-    #[test]
-    fn stats_invalidation_follows_the_rendered_integer_percentages() {
-        let mut stats = Stats {
-            cpu: 3.1,
-            memory: Memory {
-                used: 701,
-                total: 1000,
-            },
-        };
-        let before = displayed_stats(&stats);
-        stats.cpu = 3.4;
-        stats.memory.used = 704;
-        assert_eq!(before, displayed_stats(&stats));
-        stats.cpu = 3.6;
-        assert_ne!(before, displayed_stats(&stats));
-        stats.cpu = 3.1;
-        stats.memory.used = 706;
-        assert_ne!(before, displayed_stats(&stats));
-    }
-}
 
 pub fn take_due(timer: &mut Option<Instant>, now: Instant) -> bool {
     timer.take_if(|at| *at <= now).is_some()
@@ -607,4 +582,30 @@ pub fn default_pins() -> Vec<services::config::Pinned> {
             name: None,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod stats_tests {
+    use super::*;
+    use mypaper_bars::system::Memory;
+
+    #[test]
+    fn stats_invalidation_follows_the_rendered_integer_percentages() {
+        let mut stats = Stats {
+            cpu: 3.1,
+            memory: Memory {
+                used: 701,
+                total: 1000,
+            },
+        };
+        let before = displayed_stats(&stats);
+        stats.cpu = 3.4;
+        stats.memory.used = 704;
+        assert_eq!(before, displayed_stats(&stats));
+        stats.cpu = 3.6;
+        assert_ne!(before, displayed_stats(&stats));
+        stats.cpu = 3.1;
+        stats.memory.used = 706;
+        assert_ne!(before, displayed_stats(&stats));
+    }
 }

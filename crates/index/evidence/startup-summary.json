@@ -1,0 +1,70 @@
+{
+  "pid": 60180,
+  "completed": true,
+  "markers": [
+    [
+      0.074,
+      "start; panic=abort"
+    ],
+    [
+      3.158,
+      "startup catch-up: 3 stale, 0 recent volumes; delay=120s"
+    ],
+    [
+      125.55,
+      "catch-up C:\\: 29 changed top-level markers; recursive drift unverified, full fallback"
+    ],
+    [
+      474.2,
+      "scan C:\\: 2535732 entries, 348.407s, 565 inaccessible directories"
+    ],
+    [
+      500.554,
+      "catch-up D:\\: 39 changed top-level markers; recursive drift unverified, full fallback"
+    ],
+    [
+      743.157,
+      "scan D:\\: 3091791 entries, 242.597s, 2 inaccessible directories"
+    ],
+    [
+      778.237,
+      "catch-up E:\\: 8 changed top-level markers; recursive drift unverified, full fallback"
+    ],
+    [
+      813.328,
+      "scan E:\\: 370198 entries, 35.052s, 0 inaccessible directories"
+    ],
+    [
+      841.487,
+      "initial reconciliation and notification replay complete"
+    ]
+  ],
+  "active": {
+    "start_s": 125.6909551,
+    "end_s": 841.0804412,
+    "cpu_seconds": 148.703125,
+    "one_core_percent": 20.786316809136565
+  },
+  "max_60_second_average_one_core_percent": 23.785363864326005,
+  "final": {
+    "seconds_from_start": 847.1806277,
+    "cpu_seconds": 153.90625,
+    "private_bytes": 17399808,
+    "working_set_bytes": 9351168
+  },
+  "recent_restart": {
+    "pid": 75764,
+    "start_utc": "2026-11-06T09:49:49.0509538Z",
+    "exe_sha256": "185A8FF0134A0389BEECD8048DD52BE749C9555189975A631DE9FD1789B00642",
+    "observed_seconds": 180.059,
+    "cpu_seconds": 36.15625,
+    "one_core_percent": 20.08022370445243,
+    "first_search": {
+      "from_start_ms": 3778.0867000000003,
+      "request_ms": 8.3979,
+      "hit": "C:\\Users\\you\\AppData\\Local\\Fork\\gitInstance\\2.50.1\\usr\\share\\vim\\vim91\\autoload\\cargo"
+    },
+    "startup_volume_scans": 0,
+    "context": "Includes existing live game-resume subtree recovery; not a quiet CPU sample."
+  }
+}
