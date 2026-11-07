@@ -1100,7 +1100,7 @@ impl<'a, A: Clone> Builder<'a, A> {
                     *seg,
                     inner_radius,
                     if self.filled_controls {
-                        self.p.fill
+                        self.p.selected
                     } else if self.p.selected == self.p.solid {
                         self.p.solid
                     } else {
@@ -1108,12 +1108,23 @@ impl<'a, A: Clone> Builder<'a, A> {
                     },
                 );
             }
-            self.wash(keys[i], *seg, inner_radius);
+            if self.filled_controls {
+                if self.hovered(keys[i]) || self.pressed(keys[i]) {
+                    let base = if on { self.p.selected } else { self.p.well };
+                    self.fill(
+                        *seg,
+                        inner_radius,
+                        crate::theme::over(self.p.ink1.with_alpha(0.06), base),
+                    );
+                }
+            } else {
+                self.wash(keys[i], *seg, inner_radius);
+            }
             let ink = if on {
-                if self.filled_controls {
-                    self.p.ink1
-                } else if self.p.selected == self.p.solid {
+                if self.p.selected == self.p.solid {
                     self.p.on_solid
+                } else if self.filled_controls {
+                    self.p.ink1
                 } else {
                     hex(0xffffff)
                 }
@@ -1889,6 +1900,56 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn filled_controls_keep_selection_and_fractional_dpi_thumb_geometry() {
+        let mut text = Text::new().unwrap();
+        let mut p = Palette::dark();
+        p.fill = hex(0x262626);
+        p.well = p.fill;
+        p.selected = hex(0x383838);
+        let ty = Type::new(&text);
+        let input = Input::default();
+        for scale in [1.0, 1.25, 1.5, 2.0] {
+            let mut b = Builder::new(&mut text, &p, &ty, scale, &input).with_filled_controls();
+            b.segmented(
+                key("segments"),
+                Rect::new(0.0, 0.0, 300.0 * scale, 32.0 * scale),
+                &["A", "B"],
+                Some(0),
+                "Choice",
+                true,
+                Act::Go,
+            );
+            assert!(
+                b.list
+                    .ops
+                    .iter()
+                    .any(|op| matches!(op, Op::Fill { color, .. } if *color == p.selected)),
+                "selection remains visible when track and fill tokens match"
+            );
+            b.slider(
+                key("slider"),
+                Rect::new(0.0, 50.0 * scale, 300.0 * scale, 32.0 * scale),
+                37.3,
+                (0.0, 100.0, 1.0),
+                "37%",
+                40.0 * scale,
+                "Value",
+                Act::Flip,
+            );
+            let Behavior::Slider { track, .. } = b.targets.last().unwrap().behavior else {
+                panic!("missing slider")
+            };
+            let center = Point::new(
+                track.left + track.width() * 0.373,
+                track.top + track.height() / 2.0,
+            );
+            assert!(b.list.ops.iter().any(|op| matches!(op, Op::Fill { rect, radius, color } if *color == p.ink1 && (*radius * 2.0 - rect.height()).abs() < 0.01 && (rect.left + rect.width() / 2.0 - center.x).abs() < 0.01 && (rect.top + rect.height() / 2.0 - center.y).abs() < 0.01)), "drawing and dragging share the same unrounded center at {scale}");
+            assert!(!b.list.ops.iter().any(|op| matches!(op, Op::Stroke { .. })));
+            assert!(b.semantics.iter().any(|(_, value)| matches!(value, crate::Semantics::Range { value, .. } if *value == 37.3)));
+        }
     }
 
     #[test]

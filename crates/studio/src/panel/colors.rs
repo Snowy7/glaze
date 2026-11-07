@@ -886,6 +886,7 @@ mod control_tests {
             for scale in [1.0, 1.25, 1.5, 2.0] {
                 for state in ["rest", "hover", "drag", "focus"] {
                     let app = crate::goldens::window_app(dark, &ui, (1280, 800));
+                    let palette = crate::panel::palette_for(&app);
                     let mut input = app.input.clone();
                     match state {
                         "hover" => input.hover = Some(key("slider-review")),
@@ -896,13 +897,8 @@ mod control_tests {
                         }
                         _ => {}
                     }
-                    let mut b = crate::ui::builder(
-                        &mut ui.text,
-                        &app.theme.palette,
-                        &app.theme.ty,
-                        scale,
-                        &input,
-                    );
+                    let mut b =
+                        crate::ui::builder(&mut ui.text, &palette, &app.theme.ty, scale, &input);
                     b.fill(
                         Rect::new(0.0, 0.0, 640.0 * scale, 300.0 * scale),
                         0.0,
@@ -994,6 +990,7 @@ mod control_tests {
                         (Page::Bars, "bars"),
                         (Page::Widget, "widget"),
                         (Page::Settings, "settings"),
+                        (Page::Performance, "performance"),
                         (Page::History, "history"),
                         (Page::FirstRun, "first-run"),
                         (Page::Look, "off"),
