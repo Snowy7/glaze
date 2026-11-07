@@ -171,7 +171,6 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
             true,
             |i| Action::Panel(Command::Side(i == 0)),
         );
-        b.stroke(rect, b.control_radius(rect), b.px(1.0), b.p.edge);
         c.y = rect.bottom + b.px(8.0);
         }
     });

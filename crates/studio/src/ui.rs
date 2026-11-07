@@ -19,7 +19,9 @@ pub fn builder<'a>(
     scale: f32,
     input: &'a mypaper_ui::controls::Input,
 ) -> B<'a> {
-    let mut b = Builder::new(text, palette, ty, scale, input).with_style(mypaper_ui::Style::OneUi);
+    let mut b = Builder::new(text, palette, ty, scale, input)
+        .with_style(mypaper_ui::Style::OneUi)
+        .with_filled_controls();
     b.kit.metrics.pad = 18.0;
     b.kit.metrics.row_single = b.kit.metrics.row;
     b.kit.radius.surface = radius::CARD;
