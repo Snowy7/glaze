@@ -24,7 +24,7 @@ dependencies = [
 [[package]]
 name = "accesskit_windows"
 version = "0.35.2"
-source = "git+https://github.com/Snowy7/stillkit?rev=069ee9e88dff5bee9d2eeb50b01820e1de8abae7#069ee9e88dff5bee9d2eeb50b01820e1de8abae7"
+source = "git+https://github.com/Snowy7/stillkit?rev=999e08154997b4a6beb405b0d7b26806a82d770a#999e08154997b4a6beb405b0d7b26806a82d770a"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
@@ -2863,6 +2863,7 @@ dependencies = [
  "anyhow",
  "log",
  "png 0.18.1",
+ "taffy",
  "windows",
  "windows-core",
  "windows-numerics",
@@ -2952,6 +2953,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "taffy"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31f7bd2d97198df05186f93a3a3c306845f40e8b3c22bf9279cdd7e5cf5fea7d"
+dependencies = [
+ "serde",
+ "slotmap",
+ "smallvec",
 ]
 
 [[package]]
