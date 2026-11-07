@@ -681,7 +681,9 @@ pub fn finish(app: &App) {
         state.suppressed = None;
     }
     let Some((key, action)) = request.filter(|(key, _)| Some(*key) != state.suppressed) else {
-        if state.pending.take().is_some() || state.previewed.take().is_some() {
+        let pending = state.pending.take().is_some();
+        let previewed = state.previewed.take().is_some();
+        if pending || previewed {
             super::pick_client::end_preview();
         }
         cancel_timer(app);
