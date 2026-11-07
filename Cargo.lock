@@ -24,7 +24,7 @@ dependencies = [
 [[package]]
 name = "accesskit_windows"
 version = "0.35.2"
-source = "git+https://github.com/Snowy7/stillkit?rev=1058e79cbff347c7157c52abfba529a076412a4a#1058e79cbff347c7157c52abfba529a076412a4a"
+source = "git+https://github.com/Snowy7/stillkit?rev=d2dc708ca8f03acce2fd8b96177d348869059ca4#d2dc708ca8f03acce2fd8b96177d348869059ca4"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
