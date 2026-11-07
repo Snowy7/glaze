@@ -24,6 +24,7 @@ dependencies = [
 [[package]]
 name = "accesskit_windows"
 version = "0.35.2"
+source = "git+https://github.com/Snowy7/stillkit?rev=b5b7e9f9cb5bcf5642ba90dd2c26deb59bab2b57#b5b7e9f9cb5bcf5642ba90dd2c26deb59bab2b57"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
@@ -1784,9 +1785,9 @@ dependencies = [
  "mypaper-index",
  "mypaper-theme",
  "mypaper-tweaks",
- "mypaper-ui",
  "serde",
  "serde_json",
+ "stillkit",
  "windows",
  "windows-core",
 ]
@@ -1943,11 +1944,11 @@ dependencies = [
  "mypaper-plugin-weather",
  "mypaper-theme",
  "mypaper-tweaks",
- "mypaper-ui",
  "mypaper-widgets",
  "resvg",
  "serde",
  "serde_json",
+ "stillkit",
  "windows",
  "windows-core",
 ]
@@ -1965,11 +1966,11 @@ dependencies = [
  "mypaper-plugin-weather",
  "mypaper-shell",
  "mypaper-theme",
- "mypaper-ui",
  "mypaper-widgets",
  "notify",
  "serde",
  "serde_json",
+ "stillkit",
  "windows",
 ]
 
@@ -1996,20 +1997,6 @@ dependencies = [
  "serde",
  "serde_json",
  "windows",
-]
-
-[[package]]
-name = "mypaper-ui"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "accesskit_windows",
- "anyhow",
- "log",
- "png 0.18.1",
- "windows",
- "windows-core",
- "windows-numerics",
 ]
 
 [[package]]
@@ -2866,6 +2853,20 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "stillkit"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "accesskit_windows",
+ "anyhow",
+ "log",
+ "png 0.18.1",
+ "windows",
+ "windows-core",
+ "windows-numerics",
+]
 
 [[package]]
 name = "strict-num"

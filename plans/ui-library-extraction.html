@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI library extraction plan</title>
+<style>
+  :root {
+    --bg: #0b0b0c; --panel: #121214; --line: #26262a; --text: #f2f2f3; --muted: #9a9aa2;
+    --faint: #6d6d75; --accent: #6aa8ff; --code: #17171a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.6 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 48px 20px 96px; }
+  h1 { font-size: 28px; line-height: 1.25; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 { font-size: 19px; margin: 48px 0 12px; padding-top: 20px; border-top: 1px solid var(--line); }
+  h3 { font-size: 15px; margin: 24px 0 8px; }
+  p, li { color: var(--text); }
+  .muted, .sub { color: var(--muted); }
+  .sub { margin: 0 0 28px; }
+  a { color: var(--accent); }
+  code { font: 13px/1.5 "Cascadia Mono", Consolas, ui-monospace, monospace; background: var(--code);
+    padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px;
+    overflow-x: auto; font: 13px/1.55 "Cascadia Mono", Consolas, ui-monospace, monospace; margin: 10px 0 0; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  .answer { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--panel);
+    border-radius: 8px; padding: 16px 20px; }
+  .answer p { margin: 6px 0; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase;
+    padding: 1px 7px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
+  .tag.open { color: var(--accent); border-color: var(--accent); }
+  .tag.fact { color: var(--text); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .two > div > .label { color: var(--muted); font-size: 13px; }
+  @media (max-width: 720px) { .two { grid-template-columns: 1fr; } }
+  ol.phases > li { margin-bottom: 18px; }
+  ol.phases .gate { color: var(--muted); }
+  svg text { font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Turning <code>glaze-ui</code> into its own cross-platform library</h1>
+<p class="sub">Plan · 2026-11-07 · repo: desktop-wallpaper, <code>crates/ui</code></p>
+
+<div class="answer">
+  <p><strong>What:</strong> move <code>crates/ui</code> into its own repo, keep Glaze building from it, then grow it into a general UI library: a declarative element tree, a shared animation runtime, one component set, and backends for Windows, macOS and Linux.</p>
+  <p><strong>Recommendation:</strong> keep our strongest property as a rule on every OS: <em>no GPU device in the process, and nothing drawn when nothing changes</em>. That is why our bar idles at 8.5 MB and 0 wakes, while Rune's hello app measured 159 MB and loaded the NVIDIA driver on this PC. The element tree compiles down to today's <code>DisplayList</code>, so damage-only redraw and existing code keep working throughout.</p>
+  <p><strong>Decided (v2):</strong> the library is <code>stillkit</code>, in <code>Snowy7/stillkit</code>, private until 0.1. Linux work runs on a Linux workstation. Glaze's <code>main</code> stays untouched for now: the switch-over lives on a separate branch. Still open: the renderer for macOS and Linux, decided from the phase 2 spikes.</p>
+</div>
+
+<h2>Where it stands today</h2>
+<p><span class="tag fact">Confirmed</span>From the code at <code>ac8f1c6a</code>:</p>
+<ul>
+  <li><strong>Already self-contained.</strong> <code>crates/ui/Cargo.toml</code> depends on no other Glaze crate: just <code>windows</code>, AccessKit, <code>log</code>, <code>anyhow</code> and <code>png</code>. 31 modules, about 17.5k lines plus vendored <code>accesskit_windows</code>, 107 commits of history.</li>
+  <li><strong>Few Glaze references.</strong> About 20: the window class names (<code>glaze.ui</code>, <code>glaze.ui.app</code>), the <code>GLAZE_BLESS</code> golden variable, the engine glass window class looked up in <code>surface.rs</code>, Studio's monochrome tokens in <code>controls.rs</code>, and comments.</li>
+  <li><strong>Glass is already a hook.</strong> <code>glass.rs</code> only says <em>where</em> glass goes and tells a <code>Backdrop</code> (the shell's engine client). The engine side can stay in glaze.</li>
+  <li><strong>Three users.</strong> shell (526 use sites: icons, theme, glass, menu, layout, golden), Studio (433, of which 105 are <code>controls</code>), files (24).</li>
+  <li><strong>What keeps it from being a library:</strong>
+    <ul>
+      <li>Two component sets: <code>kit.rs</code> (<code>Frame</code>, used by shell surfaces) and <code>controls.rs</code> (<code>Builder</code>, used by Studio), each with its own <code>ButtonKind</code>, <code>Align</code> and <code>Palette</code>.</li>
+      <li>An older token API (<code>Tokens</code>, <code>Colors</code>, <code>Ink</code>, <code>Step</code>) kept beside <code>Theme</code>.</li>
+      <li>Layout by hand-sliced rects.</li>
+      <li>Animation wired separately in each component.</li>
+      <li>Everything is Win32.</li>
+    </ul>
+  </li>
+</ul>
+
+<h2>Target architecture</h2>
+<p>Five layers. Apps normally write only the top one; the <code>DisplayList</code> stays public so custom controls, charts and today's code can still draw directly.</p>
+
+<svg viewBox="0 0 820 360" width="100%" role="img" aria-label="Layer diagram">
+  <g fill="none" stroke="#26262a">
+    <rect x="10" y="10" width="800" height="54" rx="8" fill="#121214"/>
+    <rect x="10" y="76" width="800" height="54" rx="8" fill="#121214"/>
+    <rect x="10" y="142" width="800" height="54" rx="8" fill="#121214" stroke="#6aa8ff"/>
+    <rect x="10" y="208" width="262" height="66" rx="8" fill="#121214"/>
+    <rect x="279" y="208" width="262" height="66" rx="8" fill="#121214"/>
+    <rect x="548" y="208" width="262" height="66" rx="8" fill="#121214"/>
+    <rect x="10" y="286" width="800" height="54" rx="8" fill="#121214"/>
+  </g>
+  <g fill="#f2f2f3" font-size="14" font-weight="600">
+    <text x="26" y="34">Components + themes</text>
+    <text x="26" y="100">Element tree + runtime</text>
+    <text x="26" y="166">DisplayList (ops + hits) · damage</text>
+    <text x="26" y="232">Windows</text>
+    <text x="295" y="232">macOS</text>
+    <text x="564" y="232">Linux</text>
+    <text x="26" y="310">Headless (same backend into a bitmap, virtual clock)</text>
+  </g>
+  <g fill="#9a9aa2" font-size="12.5">
+    <text x="26" y="52">Button, Switch, Slider, Menu, TextField, List, Popover… · Liquid, Fluent, Mono… as data</text>
+    <text x="26" y="118">keys · flex layout (Taffy) · keyed diff · springs, presence, layout motion · handlers on &amp;mut State</text>
+    <text x="26" y="184">today's Op / Hit / Surface::present — the seam every backend draws from; AccessKit reads the hits</text>
+    <text x="26" y="252">Direct2D (software) + DirectWrite</text>
+    <text x="26" y="266">layered HWND · RichEdit IME</text>
+    <text x="295" y="252">CoreGraphics + CoreText (spike)</text>
+    <text x="295" y="266">NSWindow / NSPanel · CALayer</text>
+    <text x="564" y="252">tiny-skia + swash (spike)</text>
+    <text x="564" y="266">Wayland shm, layer-shell · X11</text>
+    <text x="26" y="328">--snap PNG · --tree JSON · --script input · goldens per platform</text>
+  </g>
+</svg>
+
+<h3>Key choices</h3>
+<table>
+  <tr><th>Choice</th><th>Recommendation</th><th>Why</th></tr>
+  <tr><td>Renderer</td><td>CPU only on every OS, native 2D and text where the OS has them</td><td>The vendor GPU stack costs about 240 MB private per process (our measurement). Native text keeps each OS's own look (Rune spends a lot of code imitating CoreText and DirectWrite).</td></tr>
+  <tr><td>Backend seam</td><td>At the <code>DisplayList</code>: a backend draws <code>Op</code>s into a bitmap within a damage rect, plus a text system (shape, measure, cache) and IME</td><td>The seam already exists: the renderer, headless goldens and live surfaces all go through it.</td></tr>
+  <tr><td>Windowing</td><td>Our own per-OS window layer, not winit</td><td>Our window kinds (per-pixel-alpha popups, a bar, a desktop band above Progman, non-activating panels) are beyond winit; Rune ends up bypassing winit for overlays too.</td></tr>
+  <tr><td>Layout</td><td>Taffy (flex + grid) for the element tree; rect helpers stay for custom drawing</td><td>The standard model people already know, portable, and caches per keyed node.</td></tr>
+  <tr><td>View model</td><td>Element tree with keys, diffed to retarget animations; hover and press don't re-run the view</td><td>Declarative like Rune/SwiftUI, but the result is our <code>DisplayList</code>, so damage stays per control.</td></tr>
+  <tr><td>Components</td><td>One set, merging <code>kit</code> and <code>controls</code>; Studio's monochrome look becomes a theme</td><td>Removes the duplicate types and the second code path.</td></tr>
+  <tr><td>OS-specific features</td><td>Extension modules (e.g. <code>platform::windows::DesktopLayer</code>, the appbar <code>Bar</code>)</td><td>A desktop widget layer is useful to anyone; the core stays portable.</td></tr>
+  <tr><td>Stays in Glaze</td><td>Engine glass client (implements <code>Backdrop</code>), <code>config.json</code> look loading, Studio-only screens</td><td>Product-specific; the library only exposes the hook.</td></tr>
+</table>
+
+<h3>What writing UI looks like</h3>
+<div class="two">
+  <div>
+    <div class="label">Today (shortened)</div>
+<pre><code>let mut f = Frame::new(&amp;mut ui.text, &amp;theme, s, &amp;ix);
+let (title, rest) = body.take_top(f.line(TextRole::Title2), f.px(8.0));
+f.label(title.x, title.y, "Sound", TextRole::Title2,
+        theme.color.label, title.w);
+let (row, rest) = rest.take_top(f.px(theme.metrics.control), f.px(8.0));
+f.slider(VOLUME, row, m.level, "Volume", Some(Icon::Volume(2)));
+let (row, _) = rest.take_top(f.px(theme.metrics.item), 0.0);
+f.switch(MUTE, row.right(), row.center_y(), m.muted, "Mute", true);
+// …and the input loop maps VOLUME / MUTE hits back to the model</code></pre>
+  </div>
+  <div>
+    <div class="label">Proposed</div>
+<pre><code>fn view(s: &amp;Sound, cx: &amp;mut Cx&lt;Sound&gt;) -&gt; El&lt;Sound&gt; {
+    col().gap_token(Gap::Block).pad_token(Pad::Panel).surface()
+        .child(text("Sound").role(TextRole::Title2))
+        .child(Slider::new("volume", s.level)
+            .icon(Icon::Volume(2))
+            .on_change(|s, v| s.level = v))
+        .child(Switch::new("mute", s.muted).label("Mute")
+            .on_toggle(|s| s.muted = !s.muted))
+}</code></pre>
+  </div>
+</div>
+<p class="muted">Keys (<code>"volume"</code>) name elements for diffing, animation, accessibility ids and scripts. Lengths come from theme tokens, so styles keep working unchanged.</p>
+
+<h2>Looks and materials</h2>
+<p>Liquid, One UI, Solid, Fluent and Mono become <strong>data the library ships</strong>, not a closed <code>Style</code> enum. Components read only theme values and never ask which look is active.</p>
+
+<h3>Today</h3>
+<ul>
+  <li><span class="tag fact">Confirmed</span><code>Theme::new(style, scheme, accent)</code> turns a look into values through <code>match</code> arms in <code>theme.rs</code> (lines 296–346, 432–437, 671–697). In the kit, only <code>kit.rs:577</code> (a Mono case) checks the look by name.</li>
+  <li>Glass: <code>theme::material(style, tint)</code> gives a <code>GlassMaterial</code>, and the engine draws it through the <code>Backdrop</code> hook.</li>
+  <li><code>GlassMaterial::tuned</code> sets refraction and highlight to 0 unless the look is Liquid (<code>lensed(style)</code>). That rule, not anything technical, is what blocks a lens on other looks.</li>
+  <li>The current look is a process global (<code>theme::active()</code>). The shell checks the look by name 148 times.</li>
+</ul>
+
+<h3>In stillkit: a look is a bundle of independent parts</h3>
+<table>
+  <tr><th>Part</th><th>Holds</th><th>Liquid</th><th>One UI</th></tr>
+  <tr><td>Material</td><td>glass or fill: clarity, blur, refraction, highlight, tint</td><td>lens + rim light</td><td>heavy frost, no lens</td></tr>
+  <tr><td>Shape</td><td>surface, card and control radii; capsule or rounded</td><td>24 / 12 / capsules</td><td>28 / 16</td></tr>
+  <tr><td>Type</td><td>sizes, weights, tracking</td><td>SF-like ramp</td><td>bolder, a size up</td></tr>
+  <tr><td>Spacing</td><td>pad, gap, row and control heights</td><td colspan="2">per preset</td></tr>
+  <tr><td>Colour</td><td>palette per scheme, label contrast steps</td><td colspan="2">per preset</td></tr>
+  <tr><td>Motion</td><td>springs for hover, open, layout and scroll</td><td colspan="2">per preset</td></tr>
+  <tr><td>Icons</td><td>set and stroke weight</td><td>Lucide, thin</td><td>Lucide, 2.0</td></tr>
+</table>
+<p>A preset is one value of each part. To mix, take parts from different presets, or set any single property yourself. You can mix by place too: set a theme on one subtree.</p>
+<pre><code>App::new("Sound").theme(Theme::liquid(Scheme::System, Accent::System))
+
+let t = Theme::one_ui(scheme, accent).material(Material::liquid());  // One UI with Liquid glass
+let t = Theme::liquid(scheme, accent)
+    .shape(Shape::one_ui())                  // One UI's corners
+    .type_ramp(TypeRamp::one_ui())           // One UI's bolder text
+    .material(Material::liquid().refraction(0.3).blur(20.0))
+    .radius(Radius::Control, 10.0);
+let t = Theme::from_file("looks/sunset.toml")?;       // a look as data
+
+col().theme(Theme::mono(..)).child(dock)             // one subtree in another look
+tx.set_theme(Theme::one_ui(..))                      // live switch; colours spring across</code></pre>
+<p>Every <code>match</code> on the look becomes a theme value: control radius (<code>None</code> = capsules), icon set (Lucide vectors or Segoe Fluent glyphs), stroke weight, focus ring, material. A new look needs no code.</p>
+
+<h3>Values derived after mixing</h3>
+<ul>
+  <li><strong>Card radius</strong> is concentric (surface radius minus pad), so One UI corners with Liquid padding give a new card radius automatically.</li>
+  <li><strong>Text contrast</strong> depends on the material. Labels on glass hold 7:1, secondary text 4.5:1, accent 3:1. A clearer material re-checks them and lightens or darkens the steps until they pass.</li>
+  <li><strong><code>theme.check()</code></strong> reports anything a mix can't fix, such as text that can't reach contrast over a very clear material. The built-in looks pass it in the golden tests.</li>
+</ul>
+
+<h3>Who draws the glass</h3>
+<p>The look says which material a surface wants. A <code>Backdrop</code> provider the app registers draws it, outside our process, so the CPU-only rule holds. Each provider reports what it can do, and looks degrade cleanly: Liquid without a lens provider keeps its tint, shapes, type and motion, frosted instead of refracting.</p>
+<table>
+  <tr><th>Provider</th><th>Draws</th><th>Lens</th></tr>
+  <tr><td>Glaze engine (stays in Glaze)</td><td>liquid-rust glass in the engine process</td><td>yes, on any look</td></tr>
+  <tr><td>macOS built-in</td><td><code>NSGlassEffectView</code> on macOS 26+, <code>NSVisualEffectView</code> before</td><td>system glass only</td></tr>
+  <tr><td>Windows built-in</td><td>DWM Acrylic or Mica for app windows. <span class="tag open">Unchecked</span> whether layered popups can use it</td><td>no</td></tr>
+  <tr><td>Linux built-in</td><td>KDE's blur protocol where the compositor has it</td><td>no</td></tr>
+  <tr><td>none (headless, goldens)</td><td>the look's tinted fill</td><td>no</td></tr>
+</table>
+<p>The user's material sliders (<code>Knobs</code>, from <code>config.json</code>) become generic <code>MaterialOverrides</code> the app passes in. The theme goes through context instead of the <code>theme::active()</code> global.</p>
+
+<h2>Rules carried over, with budgets</h2>
+<table>
+  <tr><th>Rule</th><th>Windows</th><th>macOS</th><th>Linux</th></tr>
+  <tr><td>No GPU device created by the process</td><td colspan="3">checked by a test on each OS, as <code>no_gpu_driver.rs</code> does today (no <code>nv*</code>/<code>amd*</code>/<code>MTLCreateSystemDefaultDevice</code>/<code>libvulkan</code>/<code>libGL</code>)</td></tr>
+  <tr><td>Idle private memory, hello app</td><td>≤ 10 MB (bar spike: 8.5)</td><td colspan="2">≤ 5 MB above an empty native window on that OS <span class="tag">assumption</span>, set after the spike</td></tr>
+  <tr><td>Idle CPU</td><td colspan="3">0 wakes while nothing moves; the frame ticker runs only during animation</td></tr>
+  <tr><td>Identical frame</td><td colspan="3">not drawn (one list comparison)</td></tr>
+  <tr><td>First paint</td><td colspan="3">≤ 100 ms from process start (bar spike: 73 ms)</td></tr>
+</table>
+
+<h2>Repo and the dev loop</h2>
+<ul>
+  <li>New repo, made with <code>git filter-repo</code> on <code>crates/ui</code> so its 107 commits of history come along.</li>
+  <li>Layout: <code>crates/&lt;name&gt;</code> (core and platform backends behind <code>cfg</code>), <code>crates/&lt;name&gt;-kit</code> (components and themes), <code>examples/</code> (hello, gallery), goldens under <code>tests/golden/&lt;os&gt;/</code>.</li>
+  <li>Glaze depends on it by a pinned git <code>rev</code>. For working on both at once, a local <code>[patch]</code> in <code>.cargo/config.toml</code> points at a sibling checkout (assumed <code>D:\Coding projects\&lt;name&gt;</code>). It is not committed, so CI always builds the pinned rev.</li>
+  <li>A change Glaze needs: commit to the library, then bump the rev in Glaze in the same sitting. Agent briefs on the shared <code>main</code> checkout must say which repo they own.</li>
+</ul>
+
+<h2>Phases</h2>
+<p class="muted">Each phase ends with Glaze building and its goldens passing. Sizes are relative (S, M, L), not estimates.</p>
+<ol class="phases">
+  <li><strong>Extract as is (S).</strong> New repo with history; rename the crate; make window class names and the bless variable library-owned (<code>&lt;NAME&gt;_BLESS</code>); move Studio's monochrome tokens out of <code>controls.rs</code> into glaze. Windows CI.<br><span class="gate">Gate: Glaze's goldens byte-identical; shell idle RAM and CPU unchanged.</span></li>
+  <li><strong>Platform seam on Windows (M).</strong> Split the core (geometry, display list, damage, motion, theme, layout, focus, accessibility glue) from <code>platform/windows</code> (surface, Direct2D renderer, DirectWrite, RichEdit text field, DirectComposition sprites, app window). Traits: <code>Backend</code>, <code>TextSystem</code>, <code>Window</code>, <code>TextInput</code>. Delete the older token API once its users are ported.<br><span class="gate">Gate: same goldens, no frame-time or RAM regression.</span></li>
+  <li><strong>macOS and Linux spikes (S each, in parallel).</strong> About 300 lines each: draw the gallery's Control Center in a real window with CPU only. Measure idle RAM, idle wakes, first paint, and confirm no GPU device. Compare native 2D with tiny-skia on each OS.<br><span class="gate">Gate: numbers in a short report; you pick the renderer per OS.</span></li>
+  <li><strong>Element tree and agent tooling (L).</strong> <code>El</code>, keys, Taffy layout, handlers queued and run on <code>&amp;mut State</code>, keyed diff to <code>DisplayList</code>, hover and press without re-running the view. Built-in <code>--snap</code>, <code>--tree</code> and <code>--script</code> on a virtual clock (the Rune idea worth copying). Port hello and the gallery.<br><span class="gate">Gate: same damage rects as the hand-written path; tree dump and scripts drive the gallery headless.</span></li>
+  <li><strong>Animation runtime (M).</strong> Springs on any property, per-edge layout motion, enter and exit transitions that stay drawn until faded out, colour in OKLab, reduced motion, time scale. Fold <code>motion</code>, <code>transition</code>, <code>reveal</code> and <code>interaction_motion</code> into it.<br><span class="gate">Gate: scripted golden frame strips; ticker disarms when everything settles.</span></li>
+  <li><strong>One component set (L).</strong> Button, IconButton, Switch, Checkbox, Radio, Slider, Segmented, TextField, Select, cascading Menu, Tooltip, Popover, Dialog, Toast, Tabs, List row, Tree, ScrollView, Tile, Progress, Ring, Badge, Empty state, Calendar, Chart, Color picker, Sortable list. Themes as data: Liquid, OneUI, Solid, Fluent, Mono and Studio's monochrome.<br><span class="gate">Gate: gallery goldens for every theme × scheme; contrast tests carried over.</span></li>
+  <li><strong>macOS backend (L).</strong> App window, panel and popup kinds, chosen renderer, CoreText, IME through <code>NSTextInputClient</code>, AccessKit macOS, native menus. Tested on macOS hardware.<br><span class="gate">Gate: budgets above, gallery goldens for macOS, VoiceOver reads the gallery.</span></li>
+  <li><strong>Linux backend (L).</strong> Wayland (xdg-shell, layer-shell for bars), X11, shared-memory buffers, text-input-v3/IBus, AT-SPI.<br><span class="gate">Gate: budgets above under GNOME and a wlroots compositor; Orca reads the gallery.</span></li>
+  <li><strong>Port Glaze (ongoing).</strong> Surface by surface onto the element tree and components (bars, flyouts, widgets, Studio). Remove <code>Frame</code> and <code>controls</code> when nothing uses them.</li>
+  <li><strong>Docs and 0.1 (S).</strong> README, docs per layer, examples, then decide on crates.io.</li>
+</ol>
+
+<h2>Progress</h2>
+<ul>
+  <li><strong>Phase 0: done.</strong> <code>Snowy7/stillkit</code> is private, with 109 commits of history. Glaze branch <code>t3/0d9e3250</code> (<code>9ce3cd86</code>) builds on it under its old crate name, so no call site changed; <code>set_identity</code> keeps its window class names. Against untouched <code>main</code>, shell, Studio and Files fail the same tests (11 + 4, all already failing on <code>main</code>) with identical golden pixel diffs.</li>
+  <li><strong>Merged into stillkit main:</strong>
+    <ul>
+      <li>phase 1, the platform seam;</li>
+      <li>the looks as mixable parts;</li>
+      <li>phase 3, the element tree and agent tooling (hello idles at 4.99 MB, 0 wakes);</li>
+      <li>the Linux backend (GNOME hello at 5.7 MB, 0 CPU);</li>
+      <li>phase 5 v1, the <code>stillkit-kit</code> components: 14 done, 3 partial;</li>
+      <li><code>stillkit-glass</code>.</li>
+    </ul>
+    Glaze's tests are unchanged after each merge.</li>
+  <li><strong>Running:</strong> phase 4 (animation runtime) and render modes with in-process glass on Windows.</li>
+  <li><strong>macOS spike:</strong> its draft favours CoreGraphics + CoreText.</li>
+</ul>
+
+<h3 id="linux">Linux spike (GNOME 50.1 Wayland)</h3>
+<p><span class="tag fact">Measured</span>Same Control Center panel, release builds, real GNOME session. Full report: <code>docs/research/linux-spike/report.md</code> in stillkit.</p>
+<table>
+  <tr><th></th><th>Private, 10 s / end</th><th>Full draw 1× / 2× (median)</th><th>One label</th><th>First commit</th></tr>
+  <tr><td>Blank wl_shm client</td><td>1.4 / 1.4 MiB</td><td>–</td><td>–</td><td>7 ms</td></tr>
+  <tr><td>tiny-skia + cosmic-text + swash</td><td>5.0 / 6.1 MiB</td><td>4.7 / 16.8 ms</td><td>0.02 ms</td><td>27 ms</td></tr>
+  <tr><td><strong>vello_cpu, atlas off</strong></td><td><strong>6.5 / 7.2 MiB</strong></td><td><strong>0.52 / 1.14 ms</strong></td><td>0.03 ms</td><td>25 ms</td></tr>
+  <tr><td>vello_cpu, stock atlas</td><td>71 / 135 MiB</td><td>0.49 / 1.13 ms</td><td>0.02 ms</td><td>51 ms</td></tr>
+</table>
+<ul>
+  <li>No GPU library loaded in any run. No commits and zero CPU ticks in steady idle. Damage was exactly the slider or the label.</li>
+  <li>vello_cpu's stock glyph atlas allocates 64 MiB pages: a CPU cache can rebuild the GPU memory problem. Off, it keeps nearly all its speed.</li>
+  <li>tiny-skia's full draw is dominated by the uncached soft shadow; at 2× it reached only half the frame rate.</li>
+  <li><strong>GNOME has no layer-shell:</strong> a real bar or overlay there needs a GNOME Shell extension. KDE and wlroots have wlr-layer-shell. X11 uses dock windows and struts.</li>
+  <li>IME: text-input-v3 in Mutter and KWin, IBus as fallback. Accessibility: AccessKit's AT-SPI adapter. Blur: KDE's blur protocol; newer Mutter has <code>ext-background-effect-v1</code>, not yet on this host.</li>
+</ul>
+
+<h2>Status, 2026-11-08: feature-complete for 0.1, live testing left</h2>
+<div class="answer">
+  <p><strong>On stillkit <code>main</code> (CI green on Windows, Linux and the macOS check):</strong></p>
+  <ul>
+    <li><strong>Platforms.</strong>
+      <ul>
+        <li>Windows: CPU and GPU.</li>
+        <li>Linux: Wayland, CPU and GPU, AT-SPI opt-in.</li>
+        <li>macOS: AppKit, CoreGraphics + CoreText, GPU on Metal. Compile-checked only.</li>
+      </ul>
+    </li>
+    <li><strong>Core.</strong> Element tree with layout, animation, keys and focus groups, scroll views, anchored overlays (popups escape the window), text input with IME, rotation, spin, and arcs from any angle.</li>
+    <li><strong>Looks and render modes.</strong> Looks as mixable parts. Render modes Cpu, Gpu and Auto, chosen per surface.</li>
+    <li><strong>Glass and shadows.</strong>
+      <ul>
+        <li>Liquid Glass in-process via <code>stillkit-glass</code>.</li>
+        <li>System frost on Windows CPU via DWM: 8.4 MB, no GPU driver.</li>
+        <li>Real soft shadows with elevation levels.</li>
+      </ul>
+    </li>
+    <li><strong>Components.</strong> <code>stillkit-kit</code>, about 45 components: buttons, fields, text area, combobox, command palette, select, menus, dialogs, toasts, tabs, table, tree, sidebar, chart and more, polished.</li>
+    <li><strong>Docs and process.</strong> README, eleven guides, a showcase app, CI, an API review, and a doc comment on every public item.</li>
+  </ul>
+  <p><strong>Glaze:</strong> branch <code>t3/0d9e3250</code> builds on it. After every merge the same 15 tests fail as on <code>main</code>, with identical golden pixel diffs.</p>
+  <p><strong>Left:</strong></p>
+  <ul>
+    <li>Live tests:
+      <ul>
+        <li>the macOS checklist (docs/ui.md);</li>
+        <li>Linux typing and AT-SPI on the Linux workstation;</li>
+        <li>Glaze's live before/after against <code>main</code> before its branch merges.</li>
+      </ul>
+    </li>
+    <li>A lazy AT-SPI start on Linux, so it needs no opt-in.</li>
+    <li>Your call on darker Solid and Mono shadows in dark mode.</li>
+  </ul>
+</div>
+
+<h2>Render modes and glass (added 2026-11-07)</h2>
+<p>Liquid Glass is now stillkit's own: <code>crates/stillkit-glass</code> is liquid-rust by al1h3n (MIT OR Apache-2.0, credited), with Glaze's speedups. It already does liquid merging (a smooth signed-distance union per container) and morphs. Glaze never wired those up.</p>
+<table>
+  <tr><th>Mode</th><th>UI drawn by</th><th>Glass</th><th>Cost</th></tr>
+  <tr><td><strong>Cpu</strong> (default)</td><td>software renderer, as today</td><td>a GPU process that already exists (Glaze's engine, a shared glass host), else none</td><td>about 5–8 MB, no driver</td></tr>
+  <tr><td><strong>Gpu</strong></td><td>hardware Direct2D on Windows; <code>vello_hybrid</code> on Linux and macOS</td><td><code>stillkit-glass</code> on the same device, in-process</td><td>about 150–240 MB of driver memory</td></tr>
+  <tr><td><strong>Auto</strong></td><td colspan="3">No glass: Cpu. Glass and an existing GPU process to reuse: Cpu with that process. Otherwise Gpu, because a separate process would pay the same driver cost. The rule is confirmed by measurement before it is fixed.</td></tr>
+</table>
+<p>Both modes keep damage-only redraw and zero idle work. Golden tests run on the CPU path; GPU output is checked against it within a small tolerance.</p>
+<div class="answer">
+  <p><strong>Final acceptance:</strong> every combination works with no issues. That means CPU alone, GPU alone, and CPU and GPU together, which is a per-surface choice inside one process. Glass comes from a separate process when one exists, or in-process.</p>
+  <p><strong>Glaze must not get slower or bigger, and lower is better.</strong> It stays in CPU mode, and nothing GPU-related compiles or loads unless a surface asks for it.</p>
+  <p>Gate before Glaze's branch merges: a live before/after on the same PC against <code>main</code>, using <code>measure.ps1</code> and the shell's own counters. It covers:</p>
+  <ul>
+    <li>shell idle private memory and CPU;</li>
+    <li>bar redraw median and p95;</li>
+    <li>menu open time;</li>
+    <li>first paint;</li>
+    <li>idle wakes.</li>
+  </ul>
+</div>
+
+<h2>Next phases</h2>
+<ol>
+  <li><strong>Element-tree features the components need:</strong> key handlers and focus groups, value semantics for screen readers, theme focus rings, an arc primitive, a scroll viewport, then anchored overlays and native text input.</li>
+  <li><strong>Component wave 2</strong>, toward Rune's ~34 kit modules:
+    <ul>
+      <li>menu and context menu, popover, tooltip, select and combobox, dialog and sheet, toast, command palette;</li>
+      <li>tabs, accordion, stepper, table, tree, text field and area, search;</li>
+      <li>date and colour pickers, sidebar and toolbar, chart, sortable list, avatar, skeleton, spinner, ring;</li>
+      <li>motion on every component;</li>
+      <li>fixes from the first gallery (calendar, badge, radio alignment).</li>
+    </ul>
+  </li>
+  <li><strong>Glass through the hook:</strong> containers (liquid merging) and morph targets, so neighbouring glass fuses and a button can morph into its menu.</li>
+  <li><strong>GPU mode on Linux and macOS</strong> (<code>vello_hybrid</code>), and the macOS backend (its spike leans to CoreGraphics + CoreText).</li>
+</ol>
+
+<h2>Risks</h2>
+<ul>
+  <li><strong>Scope.</strong> Cross-platform from day one is the biggest risk: IME and accessibility alone are large on each OS. Phases 7 and 8 can slip without blocking Glaze, which only needs Windows.</li>
+  <li><strong>CPU rendering on macOS.</strong> We need to confirm that handing CoreGraphics bitmaps to a <code>CALayer</code> keeps our process free of a Metal device and stays smooth on Retina sizes. The spike answers this before any backend work.</li>
+  <li><strong>Text differs per OS,</strong> so goldens are per OS and layout can shift a pixel between them. Components must not depend on exact text widths.</li>
+  <li><strong>Two repos on a shared checkout.</strong> Agents can commit library changes without bumping Glaze's rev (or the reverse). Briefs name the repo, and a check in Glaze warns when the local patch differs from the pinned rev.</li>
+</ul>
+
+<h2 id="open">Open decisions</h2>
+<table>
+  <tr><th></th><th>Decision</th><th>Options</th></tr>
+  <tr><td><span class="tag fact">Decided</span></td><td>Name</td><td><code>stillkit</code></td></tr>
+  <tr><td><span class="tag fact">Decided</span></td><td>GitHub owner and visibility</td><td><code>Snowy7/stillkit</code>, private until 0.1</td></tr>
+  <tr><td><span class="tag fact">Decided</span></td><td>Linux test machine</td><td>Ubuntu 26.04 GNOME, Radeon 760M</td></tr>
+  <tr><td><span class="tag fact">Decided</span></td><td>Glaze's <code>main</code></td><td>left alone for now; the switch-over is on branch <code>t3/0d9e3250</code></td></tr>
+  <tr><td><span class="tag open">Your OK</span></td><td>Renderer on Linux (spike done)</td><td>Recommended: <code>vello_cpu</code> 0.3 with its bitmap atlas off, cosmic-text + fontconfig, raw wayland-client + wl_shm. See <a href="#linux">Linux spike</a>.</td></tr>
+  <tr><td><span class="tag open">After its spike</span></td><td>Renderer on macOS</td><td>CoreGraphics + CoreText, or the Linux choice; pending the macOS spike</td></tr>
+</table>
+
+<h2>Next step</h2>
+<p>Phase 0 has started: create the repo with history, rename, remove the Glaze references, point a Glaze branch at it, and confirm identical goldens and idle numbers. The macOS and Linux spikes run in parallel.</p>
+
+</main>
+</body>
+</html>

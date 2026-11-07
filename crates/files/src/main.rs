@@ -14,6 +14,11 @@ mod view;
 
 fn main() -> std::process::ExitCode {
     env_logger::init();
+    // mypaper's window names, as the shell and Studio set them.
+    let _ = mypaper_ui::set_identity(mypaper_ui::Identity {
+        prefix: "mypaper.ui",
+        desktop_classes: &["mypaper.wallpaper.glass"],
+    });
     match run() {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {

@@ -25,3 +25,13 @@ codegen-backend = "llvm"
 [alias]
 paper = "run -p mypaper-wallpaper --"          # cargo paper --windowed themes/aurora
 core = "run -p mypaper-core --"                # cargo core themes/aurora
+
+# Private git dependencies (stillkit) fetch through git, which has the GitHub credentials.
+[net]
+git-fetch-with-cli = true
+
+# Build against the local stillkit checkout, so a change there shows up here without a rev bump.
+# Remove these lines to build the pinned rev in Cargo.toml. (The vendored accesskit_windows always
+# comes from the pinned rev: Cargo cannot patch a patch.)
+[patch."https://github.com/Snowy7/stillkit"]
+stillkit = { path = "D:/Coding/projects/desktop/stillkit/crates/stillkit" }

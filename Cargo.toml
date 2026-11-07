@@ -20,15 +20,9 @@ mypaper-desktop = { path = "crates/desktop" }
 mypaper-inject = { path = "crates/inject" }
 mypaper-tweaks = { path = "crates/tweaks" }
 mypaper-bars = { path = "crates/bars" }
-mypaper-ui = { path = "crates/ui" }
-
-# Accessibility for the native UI (`crates/ui`); built on the same `windows` 0.62.
-accesskit = "0.25"
-accesskit_windows = "0.35"
-# Direct2D takes its points as `Vector2`; the version `windows` 0.62 already uses.
-windows-numerics = "0.3"
-# Golden-image tests only (`mypaper-ui`'s `golden` feature).
-png = "0.18"
+# The UI library, its own repo since 2026-11-07. .cargo/config.toml patches it to the sibling
+# checkout at D:/Coding/projects/desktop/stillkit, so both change together on this PC.
+mypaper-ui = { package = "stillkit", git = "https://github.com/Snowy7/stillkit", rev = "b5b7e9f9cb5bcf5642ba90dd2c26deb59bab2b57" }
 
 anyhow = "1"
 bytemuck = { version = "1", features = ["derive"] }
@@ -75,4 +69,5 @@ opt-level = "s"
 
 
 [patch.crates-io]
-accesskit_windows = { path = "crates/ui/vendor/accesskit_windows" }
+# stillkit's vendored adapter; Cargo applies only this workspace's patches.
+accesskit_windows = { git = "https://github.com/Snowy7/stillkit", rev = "b5b7e9f9cb5bcf5642ba90dd2c26deb59bab2b57" }

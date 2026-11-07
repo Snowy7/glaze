@@ -65,6 +65,11 @@ pub fn wake(thread: u32) {
 fn main() -> ExitCode {
     mypaper_desktop::init_logging();
     mypaper_desktop::enable_dpi_awareness();
+    // mypaper's window names: a second launch finds this window by its `mypaper.ui.app` class.
+    let _ = mypaper_ui::set_identity(mypaper_ui::Identity {
+        prefix: "mypaper.ui",
+        desktop_classes: &["mypaper.wallpaper.glass"],
+    });
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

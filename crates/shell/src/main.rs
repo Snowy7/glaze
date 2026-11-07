@@ -47,6 +47,12 @@ fn main() -> ExitCode {
     mypaper_desktop::init_logging();
     mypaper_desktop::enable_dpi_awareness();
     mypaper_desktop::quit_on_ctrl_c();
+    // mypaper's window names (Studio, Files and tools find these classes); the engine's glass
+    // windows share the desktop band with the widgets.
+    let _ = mypaper_ui::set_identity(mypaper_ui::Identity {
+        prefix: "mypaper.ui",
+        desktop_classes: &["mypaper.wallpaper.glass"],
+    });
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
