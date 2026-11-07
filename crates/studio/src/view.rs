@@ -140,11 +140,8 @@ pub fn has_stage(page: Page) -> bool {
 }
 
 pub fn inspector_width(app: &App) -> f32 {
-    let default = if app.size.0 as f32 / app.scale >= 1600.0 {
-        380.0
-    } else {
-        340.0
-    };
+    // Give larger displays a useful editor without taking over the desktop preview.
+    let default = 340.0 + ((app.size.0 as f32 / app.scale - 1600.0) / 8.0).clamp(0.0, 180.0);
     let width = app.panel.as_ref().and_then(|s| s.window.inspector_drag)
         .or_else(|| app.get(DocId::Studio, INSPECTOR_SETTING).and_then(Value::as_f64).map(|v| v as f32))
         .filter(|width| width.is_finite()).unwrap_or(default);
@@ -192,11 +189,11 @@ pub fn regions(app: &App) -> Regions {
     }
 }
 
-/// The page host: a fixed inspector, or a wider centered column for pages without a stage.
+/// The page host: a responsive inspector, or a centered reading area for settings.
 pub fn content_regions(app: &App) -> (Rect, Option<Rect>) {
     let r = regions(app);
     let content = r.inspector.unwrap_or_else(|| {
-        let width = (r.body.width() - app.px(32.0)).min(app.px(672.0));
+        let width = (r.body.width() - app.px(32.0)).min(app.px(1200.0));
         Rect::new(
             r.body.left + (r.body.width() - width) / 2.0,
             r.body.top + app.px(16.0),
@@ -1202,4 +1199,102 @@ fn stage_menu(app: &App, b: &mut B, picture: Rect) {
         Action::None,
         Behavior::Click,
     );
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    #[test]
+    fn settings_grow_and_groups_reflow_without_horizontal_overflow() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let out = std::env::var_os("MYPAPER_STUDIO_LAYOUT_SHOTS").map(std::path::PathBuf::from);
+        for size in [(960, 640), (1280, 800), (1920, 1080), (2560, 1440)] {
+            for dark in [true, false] {
+                for (page, name) in [
+                    (Page::Settings, "settings"),
+                    (Page::General, "general"),
+                    (Page::Performance, "performance"),
+                    (Page::Keyboard, "keyboard"),
+                    (Page::Troubleshoot, "troubleshoot"),
+                    (Page::About, "about"),
+                    (Page::Look, "look"),
+                    (Page::Windows, "windows"),
+                    (Page::Wallpapers, "wallpapers"),
+                    (Page::Bars, "bars"),
+                    (Page::Top, "top"),
+                    (Page::Dock, "dock"),
+                    (Page::Widgets, "widgets"),
+                    (Page::Widget, "widget"),
+                    (Page::DesktopMenu, "desktop-menu"),
+                    (Page::Connections, "connections"),
+                ] {
+                    let mut app = crate::goldens::window_app(dark, &ui, size);
+                    app.run(Action::Panel(Command::Open(page)));
+                    if page == Page::Widget {
+                        app.nav.widget = Some("clock-1".into());
+                    }
+                    let (host, stage) = content_regions(&app);
+                    assert!(host.width() <= 1200.0);
+                    if let Some(stage) = stage {
+                        assert!(stage.width() > host.width());
+                    }
+                    let built = build(&app, &mut ui);
+                    let scroll = key(("studio-panel", page));
+                    for target in built
+                        .targets
+                        .iter()
+                        .filter(|target| target.scroll == Some(scroll))
+                    {
+                        assert!(
+                            target.rect.left >= host.left - 1.0
+                                && target.rect.right <= host.right + 1.0,
+                            "{name} {size:?}: {:?} outside {host:?}",
+                            target.rect
+                        );
+                    }
+                    if page == Page::General {
+                        let heading = |name: &str| {
+                            built
+                                .list
+                                .ops
+                                .iter()
+                                .find_map(|op| match op {
+                                    mypaper_ui::Op::Text { rect, text, .. }
+                                        if text.as_ref() == name =>
+                                    {
+                                        Some(*rect)
+                                    }
+                                    _ => None,
+                                })
+                                .unwrap()
+                        };
+                        let startup = heading("Startup");
+                        let experimental = heading("Experimental");
+                        if size.0 >= 1280 {
+                            assert_eq!(startup.top, experimental.top);
+                            assert!(experimental.left > startup.right);
+                        } else {
+                            assert_eq!(startup.left, experimental.left);
+                            assert!(experimental.top > startup.bottom);
+                        }
+                    }
+                    if let Some(out) = &out {
+                        let image =
+                            mypaper_ui::render(&mut ui, &built.list, size.0, size.1).unwrap();
+                        mypaper_ui::golden::write(
+                            &image,
+                            &out.join(format!(
+                                "{name}-{}x{}-{}.png",
+                                size.0,
+                                size.1,
+                                if dark { "dark" } else { "light" }
+                            )),
+                        )
+                        .unwrap();
+                    }
+                }
+            }
+        }
+    }
 }

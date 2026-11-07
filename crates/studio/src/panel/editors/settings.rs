@@ -128,93 +128,119 @@ mod frame_cap_tests {
 
 pub fn general(app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "General", "mypaper and Studio");
-    group(b, c, "Startup", |b, c| {
-        let on = app.system.autostart.as_ref().is_some_and(|a| a.enabled);
-        toggle(
-            b,
-            c,
-            "Start with Windows",
-            "When you sign in",
-            on,
-            Action::ToggleAutostart(!on),
-        );
-        setting(
-            app,
-            b,
-            c,
-            "static_snapshot",
-            "Wallpaper at sign-in",
-            "A still while Windows starts",
-        );
-    });
-    group(b, c, "Studio", |b, c| {
-        setting(app, b, c, "studio_appearance", "Appearance", "");
-        if !app.panel.as_ref().unwrap().windowed {
-        let left = crate::panel::pick_client::panel_side(app) == Some("left");
-        text(
-            b,
-            Rect::new(c.x, c.y, c.w, height(b, 24.0)),
-            "Panel side",
-            13.0,
-            400,
-            b.p.ink1,
-            Align::Start,
-        );
-        c.y += height(b, 28.0);
-        let rect = Rect::new(c.x, c.y, c.w, height(b, 30.0));
-        b.segmented(
-            key("panel-side"),
-            rect,
-            &["Left", "Right"],
-            Some(usize::from(!left)),
-            "Panel side",
-            true,
-            |i| Action::Panel(Command::Side(i == 0)),
-        );
-        c.y = rect.bottom + b.px(8.0);
-        }
-    });
-    group(b, c, "Experimental", |b, c| {
-        notice(b, c, "New or unproven features. Each one turns on and off live.");
-        setting(app, b, c, "experimental_file_index", "File index", "Instant search and folder sizes");
-        setting(app, b, c, "experimental_files_default", "Open folders in Files", "Folders and Win+E");
-        setting(
-            app,
-            b,
-            c,
-            "experimental_app_styler",
-            "Restyle Explorer and Settings",
-            "Can crash some Settings pages and grow Explorer's memory",
-        );
-    });
-    group(b, c, "History", |b, c| {
-        select(
-            b,
-            c,
-            "Keep",
-            app.get(DocId::Studio, "/panel_history_days")
-                .cloned()
-                .unwrap_or(serde_json::json!(30)),
-            Edit::new(DocId::Studio, "/panel_history_days", "Keep history"),
-            [(7, "7 days"), (30, "30 days"), (90, "90 days")]
-                .into_iter()
-                .map(|(v, l)| (serde_json::json!(v), l.into()))
-                .collect(),
-        );
-        notice(b, c, "Up to 100 desktops, saved between Studio sessions.");
-        action_button(b, c, "Open History", open(Page::History));
-        let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(30.0));
-        b.button(
-            key("panel-clear-history"),
-            r,
-            "Clear history",
-            None,
-            mypaper_ui::controls::ButtonKind::Ghost,
-            app.panel.as_ref().unwrap().history.borrow().error.is_none(),
-            Action::Panel(Command::ClearHistory),
-        );
-        c.y = r.bottom + b.px(6.0);
-    });
+    columns(
+        b,
+        c,
+        |b, c| {
+            group(b, c, "Startup", |b, c| {
+                let on = app.system.autostart.as_ref().is_some_and(|a| a.enabled);
+                toggle(
+                    b,
+                    c,
+                    "Start with Windows",
+                    "When you sign in",
+                    on,
+                    Action::ToggleAutostart(!on),
+                );
+                setting(
+                    app,
+                    b,
+                    c,
+                    "static_snapshot",
+                    "Wallpaper at sign-in",
+                    "A still while Windows starts",
+                );
+            });
+            group(b, c, "Studio", |b, c| {
+                setting(app, b, c, "studio_appearance", "Appearance", "");
+                if !app.panel.as_ref().unwrap().windowed {
+                    let left = crate::panel::pick_client::panel_side(app) == Some("left");
+                    text(
+                        b,
+                        Rect::new(c.x, c.y, c.w, height(b, 24.0)),
+                        "Panel side",
+                        13.0,
+                        400,
+                        b.p.ink1,
+                        Align::Start,
+                    );
+                    c.y += height(b, 28.0);
+                    let rect = Rect::new(c.x, c.y, c.w, height(b, 30.0));
+                    b.segmented(
+                        key("panel-side"),
+                        rect,
+                        &["Left", "Right"],
+                        Some(usize::from(!left)),
+                        "Panel side",
+                        true,
+                        |i| Action::Panel(Command::Side(i == 0)),
+                    );
+                    c.y = rect.bottom + b.px(8.0);
+                }
+            });
+        },
+        |b, c| {
+            group(b, c, "Experimental", |b, c| {
+                notice(
+                    b,
+                    c,
+                    "New or unproven features. Each one turns on and off live.",
+                );
+                setting(
+                    app,
+                    b,
+                    c,
+                    "experimental_file_index",
+                    "File index",
+                    "Instant search and folder sizes",
+                );
+                setting(
+                    app,
+                    b,
+                    c,
+                    "experimental_files_default",
+                    "Open folders in Files",
+                    "Folders and Win+E",
+                );
+                setting(
+                    app,
+                    b,
+                    c,
+                    "experimental_app_styler",
+                    "Restyle Explorer and Settings",
+                    "Can crash some Settings pages and grow Explorer's memory",
+                );
+            });
+            group(b, c, "History", |b, c| {
+                select(
+                    b,
+                    c,
+                    "Keep",
+                    app.get(DocId::Studio, "/panel_history_days")
+                        .cloned()
+                        .unwrap_or(serde_json::json!(30)),
+                    Edit::new(DocId::Studio, "/panel_history_days", "Keep history"),
+                    [(7, "7 days"), (30, "30 days"), (90, "90 days")]
+                        .into_iter()
+                        .map(|(v, l)| (serde_json::json!(v), l.into()))
+                        .collect(),
+                );
+                notice(b, c, "Up to 100 desktops, saved between Studio sessions.");
+                action_button(b, c, "Open History", open(Page::History));
+                let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(30.0));
+                b.button(
+                    key("panel-clear-history"),
+                    r,
+                    "Clear history",
+                    None,
+                    mypaper_ui::controls::ButtonKind::Ghost,
+                    app.panel.as_ref().unwrap().history.borrow().error.is_none(),
+                    Action::Panel(Command::ClearHistory),
+                );
+                c.y = r.bottom + b.px(6.0);
+            });
+        },
+    );
 }
 
 pub fn keyboard(b: &mut B, c: &mut Col) {
@@ -224,7 +250,7 @@ pub fn keyboard(b: &mut B, c: &mut Col) {
         "Keyboard",
         "Reference · shortcuts cannot be changed yet",
     );
-    for (heading, shortcuts) in [
+    let sections = [
         (
             "Anywhere",
             &[
@@ -270,7 +296,9 @@ pub fn keyboard(b: &mut B, c: &mut Col) {
             ][..],
         ),
         ("Lists", &[("Move selected row", "Alt ↑ / Alt ↓")][..]),
-    ] {
+    ];
+    let section = |b: &mut B, c: &mut Col, index: usize| {
+        let (heading, shortcuts) = sections[index];
         group(b, c, heading, |b, c| {
             for (label, keys) in shortcuts {
                 let h = height(b, 36.0);
@@ -297,195 +325,223 @@ pub fn keyboard(b: &mut B, c: &mut Col) {
                 c.y += h;
             }
         });
-    }
+    };
+    columns(
+        b,
+        c,
+        |b, c| {
+            for index in [0, 2, 3] {
+                section(b, c, index);
+            }
+        },
+        |b, c| section(b, c, 1),
+    );
 }
 
 pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "Troubleshoot", "Status and recovery");
-    group(b, c, "mypaper", |b, c| {
-        notice(
-            b,
-            c,
-            if app.system.running() {
-                "Running · changes apply live"
-            } else {
-                "Off · changes apply when mypaper starts"
-            },
-        );
-        action_button(
-            b,
-            c,
-            if app.system.running() {
-                "Stop mypaper"
-            } else {
-                "Start mypaper"
-            },
-            if app.system.running() {
-                Action::StopMypaper
-            } else {
-                Action::StartMypaper
-            },
-        );
-    });
-    group(b, c, "Parts", |b, c| {
-        if let Some(memory) = crate::panel::measure::memory(app.fixture) {
-            row(
-                b,
-                c,
-                Some(glyph::APP),
-                "Studio",
-                "",
-                &format!(
-                    "{:.0} MB working set \u{b7} {:.0} MB private",
-                    memory.working_mb, memory.private_mb
-                ),
-                None,
-                Action::None,
-            );
-            notice(b, c, "Software rendering");
-        }
-        for ((id, _), part) in crate::system::PARTS.iter().zip(app.system.parts) {
-            let label = match *id {
-                "core" => "Core",
-                "engine" => "Engine",
-                _ => "Shell",
-            };
-            let detail = if part.running {
-                format!("Running · {:.0} MB · {:.1}% CPU", part.memory, part.cpu)
-            } else {
-                "Stopped".into()
-            };
-            let r = Rect::new(c.x, c.y, c.w, height(b, 58.0));
-            text(
-                b,
-                Rect::new(r.left, r.top, r.width() - b.px(104.0), height(b, 28.0)),
-                label,
-                13.0,
-                500,
-                b.p.ink1,
-                Align::Start,
-            );
-            text(
-                b,
-                Rect::new(
-                    r.left,
-                    r.top + height(b, 28.0),
-                    r.width() - b.px(104.0),
-                    height(b, 22.0),
-                ),
-                &detail,
-                11.0,
-                400,
-                b.p.ink3,
-                Align::Start,
-            );
-            button(
-                b,
-                Rect::new(
-                    r.right - b.px(98.0),
-                    r.top + b.px(12.0),
-                    b.px(98.0),
-                    b.px(30.0),
-                ),
-                &format!("Restart {}", label.to_lowercase()),
-                None,
-                false,
-                true,
-                Action::Restart(id),
-            );
-            c.y = r.bottom;
-        }
-    });
-    group(b, c, "Recovery", |b, c| {
-        notice(
-            b,
-            c,
-            "Ctrl Alt Shift Backspace restores the Windows desktop from anywhere.",
-        );
-        action_button(b, c, "Restore Windows desktop", Action::RestoreDesktop);
-        let options = RESET_PARTS
-            .iter()
-            .enumerate()
-            .filter(|(_, (_, doc, _))| {
-                !matches!(
-                    app.docs.doc(*doc).issue,
-                    Some(crate::docs::ReadIssue::Newer | crate::docs::ReadIssue::Unavailable)
-                )
-            })
-            .map(|(index, (name, _, _))| (serde_json::json!(index), (*name).to_owned()))
-            .collect();
-        row(
-            b,
-            c,
-            Some(glyph::RESET),
-            "Start over…",
-            "",
-            "Choose a part · A backup is kept",
-            None,
-            Action::Choose(Choices {
-                edit: Edit::new(DocId::Studio, "/panel/start-over", "Start over"),
-                options,
-                current: None,
-            }),
-        );
-    });
-    group(b, c, "Help", |b, c| {
-        action_button(b, c, "Copy diagnostics", Action::CopyDiagnostics);
-        action_button(b, c, "Open logs", Action::OpenLogs);
-        let how = app
-            .system
-            .autostart
-            .as_ref()
-            .and_then(|a| a.method.as_deref())
-            .unwrap_or("Not configured");
-        notice(b, c, &format!("How it starts: {how}"));
-        if let Some(path) = app.system.core_path.as_ref().and_then(|p| p.parent()) {
-            notice(b, c, &format!("Installed at: {}", path.display()));
-        }
-    });
+    columns(
+        b,
+        c,
+        |b, c| {
+            group(b, c, "mypaper", |b, c| {
+                notice(
+                    b,
+                    c,
+                    if app.system.running() {
+                        "Running · changes apply live"
+                    } else {
+                        "Off · changes apply when mypaper starts"
+                    },
+                );
+                action_button(
+                    b,
+                    c,
+                    if app.system.running() {
+                        "Stop mypaper"
+                    } else {
+                        "Start mypaper"
+                    },
+                    if app.system.running() {
+                        Action::StopMypaper
+                    } else {
+                        Action::StartMypaper
+                    },
+                );
+            });
+            group(b, c, "Parts", |b, c| {
+                if let Some(memory) = crate::panel::measure::memory(app.fixture) {
+                    row(
+                        b,
+                        c,
+                        Some(glyph::APP),
+                        "Studio",
+                        "",
+                        &format!(
+                            "{:.0} MB working set \u{b7} {:.0} MB private",
+                            memory.working_mb, memory.private_mb
+                        ),
+                        None,
+                        Action::None,
+                    );
+                    notice(b, c, "Software rendering");
+                }
+                for ((id, _), part) in crate::system::PARTS.iter().zip(app.system.parts) {
+                    let label = match *id {
+                        "core" => "Core",
+                        "engine" => "Engine",
+                        _ => "Shell",
+                    };
+                    let detail = if part.running {
+                        format!("Running · {:.0} MB · {:.1}% CPU", part.memory, part.cpu)
+                    } else {
+                        "Stopped".into()
+                    };
+                    let r = Rect::new(c.x, c.y, c.w, height(b, 58.0));
+                    text(
+                        b,
+                        Rect::new(r.left, r.top, r.width() - b.px(104.0), height(b, 28.0)),
+                        label,
+                        13.0,
+                        500,
+                        b.p.ink1,
+                        Align::Start,
+                    );
+                    text(
+                        b,
+                        Rect::new(
+                            r.left,
+                            r.top + height(b, 28.0),
+                            r.width() - b.px(104.0),
+                            height(b, 22.0),
+                        ),
+                        &detail,
+                        11.0,
+                        400,
+                        b.p.ink3,
+                        Align::Start,
+                    );
+                    button(
+                        b,
+                        Rect::new(
+                            r.right - b.px(98.0),
+                            r.top + b.px(12.0),
+                            b.px(98.0),
+                            b.px(30.0),
+                        ),
+                        &format!("Restart {}", label.to_lowercase()),
+                        None,
+                        false,
+                        true,
+                        Action::Restart(id),
+                    );
+                    c.y = r.bottom;
+                }
+            });
+        },
+        |b, c| {
+            group(b, c, "Recovery", |b, c| {
+                notice(
+                    b,
+                    c,
+                    "Ctrl Alt Shift Backspace restores the Windows desktop from anywhere.",
+                );
+                action_button(b, c, "Restore Windows desktop", Action::RestoreDesktop);
+                let options = RESET_PARTS
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (_, doc, _))| {
+                        !matches!(
+                            app.docs.doc(*doc).issue,
+                            Some(
+                                crate::docs::ReadIssue::Newer | crate::docs::ReadIssue::Unavailable
+                            )
+                        )
+                    })
+                    .map(|(index, (name, _, _))| (serde_json::json!(index), (*name).to_owned()))
+                    .collect();
+                row(
+                    b,
+                    c,
+                    Some(glyph::RESET),
+                    "Start over…",
+                    "",
+                    "Choose a part · A backup is kept",
+                    None,
+                    Action::Choose(Choices {
+                        edit: Edit::new(DocId::Studio, "/panel/start-over", "Start over"),
+                        options,
+                        current: None,
+                    }),
+                );
+            });
+            group(b, c, "Help", |b, c| {
+                action_button(b, c, "Copy diagnostics", Action::CopyDiagnostics);
+                action_button(b, c, "Open logs", Action::OpenLogs);
+                let how = app
+                    .system
+                    .autostart
+                    .as_ref()
+                    .and_then(|a| a.method.as_deref())
+                    .unwrap_or("Not configured");
+                notice(b, c, &format!("How it starts: {how}"));
+                if let Some(path) = app.system.core_path.as_ref().and_then(|p| p.parent()) {
+                    notice(b, c, &format!("Installed at: {}", path.display()));
+                }
+            });
+        },
+    );
 }
 
 pub fn about(app: &App, b: &mut B, c: &mut Col) {
     title(b, c, "About", "mypaper Studio");
-    group(b, c, "mypaper", |b, c| {
-        notice(b, c, &format!("Version {}", env!("CARGO_PKG_VERSION")));
-        notice(
-            b,
-            c,
-            "MIT licensed. A native desktop, built with Rust and Direct2D.",
-        );
-        notice(
-            b,
-            c,
-            "Studio keeps your desktop settings on this PC. Connections describe their own data use.",
-        );
-    });
-    group(b, c, "Wallpaper credits", |b, c| {
-        for (i, wallpaper) in app
-            .library
-            .items
-            .iter()
-            .enumerate()
-            .filter(|(_, w)| w.credit.is_some())
-        {
-            let credit = wallpaper.credit.as_ref().unwrap();
-            let detail = [credit.author.as_deref(), credit.license.as_deref()]
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>()
-                .join(" · ");
-            row(
-                b,
-                c,
-                Some(glyph::WALLPAPERS),
-                &wallpaper.name,
-                "",
-                &detail,
-                None,
-                Action::Panel(Command::Wallpaper(i)),
-            );
-        }
-    });
+    columns(
+        b,
+        c,
+        |b, c| {
+            group(b, c, "mypaper", |b, c| {
+                notice(b, c, &format!("Version {}", env!("CARGO_PKG_VERSION")));
+                notice(
+                    b,
+                    c,
+                    "MIT licensed. A native desktop, built with Rust and Direct2D.",
+                );
+                notice(
+                    b,
+                    c,
+                    "Studio keeps your desktop settings on this PC. Connections describe their own data use.",
+                );
+            });
+        },
+        |b, c| {
+            group(b, c, "Wallpaper credits", |b, c| {
+                for (i, wallpaper) in app
+                    .library
+                    .items
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, w)| w.credit.is_some())
+                {
+                    let credit = wallpaper.credit.as_ref().unwrap();
+                    let detail = [credit.author.as_deref(), credit.license.as_deref()]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>()
+                        .join(" · ");
+                    row(
+                        b,
+                        c,
+                        Some(glyph::WALLPAPERS),
+                        &wallpaper.name,
+                        "",
+                        &detail,
+                        None,
+                        Action::Panel(Command::Wallpaper(i)),
+                    );
+                }
+            });
+        },
+    );
 }
 
 fn menu_name(entry: &Entry) -> String {

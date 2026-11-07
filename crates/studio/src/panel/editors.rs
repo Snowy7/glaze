@@ -35,6 +35,43 @@ pub fn open(page: Page) -> Action {
     Action::Panel(Command::Open(page))
 }
 
+/// Independent card groups share a row only when both retain comfortable reading room.
+/// The kit owns the split; each column keeps its natural height and the page scrolls as one.
+pub(super) fn columns(
+    b: &mut B,
+    c: &mut Col,
+    left: impl FnOnce(&mut B, &mut Col),
+    right: impl FnOnce(&mut B, &mut Col),
+) {
+    if c.w < b.px(960.0 * b.t.text_scale.max(1.0)) {
+        left(b, c);
+        right(b, c);
+        return;
+    }
+    use mypaper_ui::layout::{Axis, Length, split};
+    let mut slots = [Rect::default(); 2];
+    split(
+        Rect::new(c.x, c.y, c.w, 0.0),
+        Axis::Row,
+        b.px(24.0),
+        &[Length::Fill(1.0), Length::Fill(1.0)],
+        &mut slots,
+    );
+    let mut first = Col {
+        x: slots[0].left,
+        w: slots[0].width(),
+        ..*c
+    };
+    let mut second = Col {
+        x: slots[1].left,
+        w: slots[1].width(),
+        ..*c
+    };
+    left(b, &mut first);
+    right(b, &mut second);
+    c.y = first.y.max(second.y);
+}
+
 pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
     match page {
         Page::Widget => widgets::widget(app, b, c),

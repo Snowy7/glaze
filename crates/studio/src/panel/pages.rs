@@ -834,46 +834,54 @@ fn performance(app: &App, b: &mut B, c: &mut Col) {
         .get(DocId::Config, "/engine/gpu")
         .cloned()
         .unwrap_or(json!("auto"));
-    group(b, c, "", |b, c| {
-        super::editors::segments(
-            b,
-            c,
-            "Graphics card",
-            current,
-            Edit::new(DocId::Config, "/engine/gpu", "Graphics card"),
-            vec![
-                (json!("integrated"), "Integrated".into()),
-                (json!("high-performance"), "High performance".into()),
-                (json!("auto"), "Windows' choice".into()),
-            ],
-        );
-        if let Some(card) = &app.system.display_gpu {
-            notice(b, c, &format!("Display graphics: {card}"));
-        }
-    });
-    group(b, c, "Frame rate", |b, c| {
-        super::editors::frame_cap(app, b, c, "/engine/fps", "Wallpaper's frame rate")
-    });
-    group(b, c, "When to rest", |b, c| {
-        setting(
-            app,
-            b,
-            c,
-            "pause_on_battery",
-            "On battery",
-            "Pause the wallpaper",
-        );
-        setting(
-            app,
-            b,
-            c,
-            "pause_on_fullscreen",
-            "Behind fullscreen",
-            "Games and videos get the GPU",
-        );
-        setting(app, b, c, "save_power", "Save power", "");
-        setting(app, b, c, "reduce_motion", "Reduce motion", "");
-    });
+    super::editors::columns(
+        b,
+        c,
+        |b, c| {
+            group(b, c, "", |b, c| {
+                super::editors::segments(
+                    b,
+                    c,
+                    "Graphics card",
+                    current,
+                    Edit::new(DocId::Config, "/engine/gpu", "Graphics card"),
+                    vec![
+                        (json!("integrated"), "Integrated".into()),
+                        (json!("high-performance"), "High performance".into()),
+                        (json!("auto"), "Windows' choice".into()),
+                    ],
+                );
+                if let Some(card) = &app.system.display_gpu {
+                    notice(b, c, &format!("Display graphics: {card}"));
+                }
+            });
+            group(b, c, "Frame rate", |b, c| {
+                super::editors::frame_cap(app, b, c, "/engine/fps", "Wallpaper's frame rate")
+            });
+        },
+        |b, c| {
+            group(b, c, "When to rest", |b, c| {
+                setting(
+                    app,
+                    b,
+                    c,
+                    "pause_on_battery",
+                    "On battery",
+                    "Pause the wallpaper",
+                );
+                setting(
+                    app,
+                    b,
+                    c,
+                    "pause_on_fullscreen",
+                    "Behind fullscreen",
+                    "Games and videos get the GPU",
+                );
+                setting(app, b, c, "save_power", "Save power", "");
+                setting(app, b, c, "reduce_motion", "Reduce motion", "");
+            });
+        },
+    );
 }
 
 pub fn toast(app: &App, b: &mut B, window: Rect) {
