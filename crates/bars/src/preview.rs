@@ -57,7 +57,8 @@ impl Previews {
     }
 
     /// Shows each window's thumbnail at `rect` (DIPs from the window's top-left; `scale` turns
-    /// them into px). Thumbnails not listed are hidden.
+    /// them into px). Thumbnails not listed are hidden. DWM preserves source alpha even
+    /// at opacity 255; the destination must paint an opaque surface under each rect.
     pub fn place(&self, windows: &[(isize, [f64; 4])], scale: f64) {
         for &(hwnd, thumbnail) in &self.live {
             let rect = windows.iter().find(|(h, _)| *h == hwnd).map(|(_, r)| *r);

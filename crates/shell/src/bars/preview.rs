@@ -181,7 +181,12 @@ fn view(
     let has_glass = glass(tokens, scale, size).is_some();
     f.surface_shaped(body, radius, has_glass);
     if has_glass && let Some(color) = tokens.theme.border {
-        f.push(Op::Stroke {rect:body.inflate(-0.5), radius:(radius-0.5).max(0.0), width:1.0, color});
+        f.push(Op::Stroke {
+            rect: body.inflate(-0.5),
+            radius: (radius - 0.5).max(0.0),
+            width: 1.0,
+            color,
+        });
     }
     let c = tokens.theme.color;
     let corner = corner(tokens, scale);
@@ -197,6 +202,10 @@ fn view(
         if hovered {
             f.fill(cell.rect, corner, c.hover);
         }
+        // DWM preserves the source's alpha (Files glass, Mica/acrylic apps).
+        // Its 255 opacity is only a multiplier, so give every thumbnail an opaque
+        // theme surface before DWM composites it; the overlay still rounds its corners.
+        f.fill(cell.thumb, 0.0, c.surface.with_alpha(1.0));
         let (bar, _) = cell.rect.take_top(f.px(TITLE), 0.0);
         let (close, rest) = bar.take_right(bar.height(), 0.0);
         let glyph = f.px(16.0);
@@ -440,6 +449,153 @@ impl Preview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Opt-in live fixture: only our Files HWND is read, and both popups are nonactivating.
+    /// Run under the desktop lock with MYPAPER_PREVIEW_CAPTURE set to an output directory.
+    #[test]
+    #[ignore = "requires the desktop lock and a live mypaper-files window"]
+    fn capture_live_files_preview_without_input() {
+        use windows::Win32::UI::{HiDpi::*, WindowsAndMessaging::*};
+        struct Backdrop;
+        impl mypaper_ui::glass::Backdrop for Backdrop {
+            fn available(&self) -> bool {
+                true
+            }
+            fn open(
+                &self,
+                _: windows::Win32::Foundation::HWND,
+                _: mypaper_ui::glass::Shape,
+                _: f32,
+                _: &mypaper_ui::GlassMaterial,
+            ) -> bool {
+                false
+            }
+            fn place(
+                &self,
+                _: windows::Win32::Foundation::HWND,
+                _: mypaper_ui::glass::Shape,
+                _: f32,
+            ) {
+            }
+            fn material(&self, _: windows::Win32::Foundation::HWND, _: &mypaper_ui::GlassMaterial) {
+            }
+            fn close(&self, _: windows::Win32::Foundation::HWND) {}
+        }
+        let output = std::path::PathBuf::from(std::env::var_os("MYPAPER_PREVIEW_CAPTURE").unwrap());
+        std::fs::create_dir_all(&output).unwrap();
+        // SAFETY: DPI context is established before the fixture creates any HWND.
+        unsafe {
+            let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        }
+        let mut apps = mypaper_bars::apps::Apps::default();
+        apps.refresh();
+        let group = apps
+            .groups
+            .into_iter()
+            .find(|g| {
+                g.exe
+                    .as_ref()
+                    .is_some_and(|e| e.ends_with("\\mypaper-files.exe"))
+            })
+            .expect("live Files window");
+        let window = &group.windows[0];
+        let item = Item {
+            key: group.key.clone(),
+            name: "Files".into(),
+            path: group.exe.clone().unwrap(),
+            icon: None,
+            pinned: false,
+            aumid: None,
+            exe: group.exe.clone(),
+            windows: vec![mypaper_bars::apps::ItemWindow {
+                hwnd: window.hwnd,
+                title: window.title.clone(),
+                active: false,
+                minimized: window.minimized,
+                attention: false,
+            }],
+        };
+        let mut ui = Ui::new().unwrap();
+        mypaper_ui::glass::install(std::rc::Rc::new(Backdrop));
+        let config = mypaper_bars::config::path()
+            .and_then(|p| mypaper_bars::BarsConfig::load(&p))
+            .unwrap_or_default();
+        let tokens = Tokens::resolve(
+            &config.dock.look,
+            &config.appearance,
+            &mypaper_bars::accent::read(),
+        );
+        // Resolve through the dock's real worker and disk cache, rather than bypassing
+        // executable lookup with a supplied bitmap.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut icons = mypaper_bars::icons::Icons::new(
+            mypaper_bars::wake::Waker::new(tx, 0),
+            mypaper_bars::files::local("icons").unwrap(),
+        );
+        icons.get(&mypaper_bars::icons::Source::App {
+            aumid: group.aumid.clone(),
+            exe: group.exe.clone(),
+        });
+        let mypaper_bars::wake::Msg::Described(_, described) =
+            rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap()
+        else {
+            panic!("icon worker did not describe Files");
+        };
+        let icon = described
+            .icon
+            .as_ref()
+            .and_then(|p| Image::load(&ui, std::path::Path::new(p)).ok())
+            .map(Arc::new);
+        if let Some(icon) = &icon {
+            mypaper_ui::golden::write(icon, &output.join("dock-icon.png")).unwrap();
+        }
+        let preview = Preview::open(
+            &mut ui,
+            item,
+            Rect::new(400.0, 600.0, 64.0, 64.0),
+            &tokens,
+            1.0,
+            false,
+            icon,
+        )
+        .unwrap();
+        let image = mypaper_ui::render(
+            &mut ui,
+            preview.surface.shown(),
+            preview.size.0,
+            preview.size.1,
+        )
+        .unwrap();
+        mypaper_ui::golden::write(&image, &output.join("backing.png")).unwrap();
+        let thumb = preview.cells[0].thumb;
+        std::fs::write(
+            output.join("preview.json"),
+            serde_json::json!({
+                "hwnd": preview.surface.hwnd().0 as usize,
+                "corners": preview.corners.hwnd().0 as usize,
+                "source": window.hwnd,
+                "icon_cache": described.icon,
+                "origin": preview.origin, "size": preview.size,
+                "thumb": [thumb.left, thumb.top, thumb.width(), thumb.height()],
+                "center_alpha": image.pixel((thumb.left + thumb.width()/2.0) as u32,
+                    (thumb.top + thumb.height()/2.0) as u32)[3],
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(8);
+        while std::time::Instant::now() < until {
+            let mut msg = MSG::default();
+            // SAFETY: only this fixture thread's message queue is dispatched; no synthetic input.
+            unsafe {
+                while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                    let _ = TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
     #[test]
     fn cells_keep_their_windows_aspect_between_the_width_limits_and_fit_the_room() {
         for scale in [1.0, 1.5, 2.0] {
@@ -510,6 +666,53 @@ mod tests {
             );
             assert_eq!(list.hit_at(p).map(|h| h.id), Some(hit.id));
             assert!(image.pixel(p.x as u32, p.y as u32)[3] > 0);
+        }
+    }
+
+    #[test]
+    fn translucent_sources_have_an_opaque_thumbnail_backing() {
+        let mut ui = Ui::new().unwrap();
+        let app = Item {
+            key: "app".into(),
+            name: "App".into(),
+            path: "app.exe".into(),
+            windows: vec![mypaper_bars::apps::ItemWindow {
+                hwnd: 1,
+                title: "Translucent window".into(),
+                active: false,
+                minimized: false,
+                attention: false,
+            }],
+            icon: None,
+            pinned: false,
+            aumid: None,
+            exe: None,
+        };
+        let mut tokens = Tokens::resolve(
+            &Default::default(),
+            &Default::default(),
+            &mypaper_bars::accent::read(),
+        );
+        // A theme can make both the popup and cell translucent. DWM preserves the
+        // source window's alpha, so the destination must supply its own backing.
+        tokens.theme.color.surface = Rgba::new(0.2, 0.3, 0.4, 0.15);
+        tokens.theme.color.fill = Rgba::new(0.8, 0.8, 0.8, 0.05);
+        for aspect in [1.6, 0.5, 4.0] {
+            let (cells, size) = layout(&[aspect], (2000.0, 800.0), 1.0, false);
+            for hover in [None, Some(1)] {
+                let list = view(&app, &cells, 0, size, &tokens, 1.0, &mut ui, None, hover);
+                let image = mypaper_ui::render(&mut ui, &list, size.0, size.1).unwrap();
+                let t = cells[0].thumb;
+                for fraction in [0.1, 0.5, 0.9] {
+                    assert_eq!(
+                        image.pixel(
+                            (t.left + t.width() * fraction) as u32,
+                            (t.top + t.height() * fraction) as u32,
+                        )[3],
+                        255
+                    );
+                }
+            }
         }
     }
 }
