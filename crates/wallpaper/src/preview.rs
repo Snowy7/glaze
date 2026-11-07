@@ -14,8 +14,9 @@
 //! While Studio is closed nothing is mapped and the request event never fires: the engine pays
 //! one idle handle in its wait. Textures and buffers live only while a request is answered.
 //!
-//! Any screen's drawn frame answers (the first screen's when it has one): a covered screen has
-//! none until it's uncovered. With no frame at all the engine answers `status` 1 once; the same
+//! Any screen's drawn frame answers (the first screen's when it has one). A covered engine
+//! draws one offscreen frame for a request, then releases it again. If a source cannot supply
+//! a frame or poster the engine answers `status` 1 once; the same
 //! request asked again waits for a frame instead of another refusal. Studio asks again as soon as
 //! it's refused, so refusing at once kept both processes spinning (6,700 round trips a second,
 //! 2026-11-06).

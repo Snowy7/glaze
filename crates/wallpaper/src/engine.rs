@@ -1,7 +1,7 @@
 //! The frame loop policy: when to draw, when to sleep, when to reload.
 //!
-//! The engine never draws a frame nobody can see or that would look the
-//! same as the last one: covered screens are skipped, static sources draw
+//! The engine never animates a frame nobody can see: covered screens are skipped except for
+//! one offscreen refresh on a source/settings change or Studio request. Static sources draw
 //! once, animated ones are paced by their own fps cap, and the clock that
 //! drives animation stops while everything is hidden. Once every screen has
 //! been covered (or held for a game) for [`RELEASE_AFTER`], it also lets go of what drawing holds

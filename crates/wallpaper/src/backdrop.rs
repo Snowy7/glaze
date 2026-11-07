@@ -19,7 +19,8 @@
 //! `backdrop\request.json` or `widgets-request.json` (`{ "interval": N }`, clamped to
 //! 2..=600, default 10) exists. The shortest request wins. Files are checked once per interval on
 //! frames drawn anyway: this module never wakes the engine. Nothing is
-//! published while held or paused, and never for native (web/app) screens,
+//! published periodically while held or paused; a change/request publishes one still instead.
+//! Native (web/app) screens use their poster for that one-off refresh;
 //! whose stale file is deleted on load. Web sources publish their own CapturePreview snapshots;
 //! app sources retain the visible CSS fallback.
 
