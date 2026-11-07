@@ -68,6 +68,8 @@ pub struct Content {
 #[derive(Default)]
 pub struct Cache {
     key: u64,
+    /// Glass requests contain geometry, so a wallpaper edit must also invalidate their answer.
+    wallpaper_version: u64,
     pub content: Content,
     images: Option<shell::bars::Images>,
     /// The shell's app-icon service (names and icons of pinned apps), started on first use.
@@ -145,6 +147,10 @@ pub fn prepare(app: &App, ui: &mut Ui, size: (u32, u32), show: Show) {
     }
     let key = h.finish();
     let mut cache = app.stage.borrow_mut();
+    if cache.wallpaper_version != app.docs.version {
+        cache.wallpaper_version = app.docs.version;
+        app.glass.borrow_mut().answer = None;
+    }
     if cache.key == key && cache.content.size == size {
         return;
     }
