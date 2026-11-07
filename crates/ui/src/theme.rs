@@ -567,8 +567,9 @@ fn palette(style: Style, dark: bool, accent: Rgba) -> Palette {
         (Style::Fluent, false) => hex(0xF3F3F3, 0.90),
         (Style::OneUi, true) => hex(0x17171A, 0.92),
         (Style::OneUi, false) => hex(0xF4F4F6, 0.92),
-        (Style::Mono, true) => hex(0x141416, 0.94),
-        (Style::Mono, false) => hex(0xF7F7F8, 0.94),
+        // Mono stays visibly translucent without adding glass, grain or shading.
+        (Style::Mono, true) => hex(0x141416, 0.78),
+        (Style::Mono, false) => hex(0xF7F7F8, 0.78),
         // liquid-rust's tinted dark face, `#1C1C1E` at 70-85 %; white frost on light.
         (Style::Liquid, true) => hex(0x1C1C1E, 0.82),
         (Style::Liquid, false) => hex(0xF5F5F7, 0.80),

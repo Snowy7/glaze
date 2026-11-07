@@ -637,10 +637,13 @@ fn paint_material(
             let from = (sy * width + sx) * 4;
             let edge = if style == Style::Liquid {
                 rim.powf(3.0) * sample.highlight * if dx + dy < 0.0 { 1.15 } else { 0.5 }
+            } else if sample.edge && style == Style::Solid {
+                // A narrow bevel reads as an opaque raised plate at actual card size.
+                let bevel = (1.0 + distance / (2.0 * scale).max(2.0)).clamp(0.0, 1.0);
+                bevel * if dy < 0.0 { 0.24 } else { -0.28 }
             } else if sample.edge && distance > -0.85 {
                 match style {
-                    Style::Solid => 0.10,
-                    Style::Mono => 0.52,
+                    Style::Mono => 0.24,
                     _ => 0.65,
                 }
             } else {
@@ -660,7 +663,11 @@ fn paint_material(
             {
                 let body =
                     frosted[from + channel] as f32 * (1.0 - alpha) + color * 255.0 * alpha + grain;
-                let body = body * (1.0 - edge) + 255.0 * edge;
+                let body = if edge < 0.0 {
+                    body * (1.0 + edge)
+                } else {
+                    body * (1.0 - edge) + 255.0 * edge
+                };
                 pixels[at + channel] = (pixels[at + channel] as f32 * (1.0 - coverage)
                     + body * coverage)
                     .round()
@@ -1428,6 +1435,26 @@ mod tests {
             row.len() > 5,
             "Fluent retains grain even over a uniform backdrop"
         );
+    }
+
+    #[test]
+    fn solid_has_a_raised_rim_while_mono_has_only_a_flat_hairline() {
+        let ui = Ui::new().unwrap();
+        for dark in [true, false] {
+            let app = crate::goldens::app(dark, &ui);
+            let background = Image { width: 130, height: 82, pixels: [80, 80, 80, 255].repeat(130 * 82) };
+            let surface = Rect::new(10.0, 8.0, 110.0, 66.0);
+            let draw = |style| paint_material(&background, MaterialSample::defaults(&app, style), surface, 0.46, 8.0);
+            let pixel = |image: &Image, y: usize| image.pixels[(y * 130 + 65) * 4] as i32;
+            let solid = draw(Style::Solid);
+            assert!(pixel(&solid, 9) > pixel(&solid, 41) + 8, "Solid needs a visible raised top edge");
+            assert!(pixel(&solid, 72) < pixel(&solid, 41), "Solid's lower rim gives the plate depth");
+            let mono = draw(Style::Mono);
+            assert!(MaterialSample::defaults(&app, Style::Mono).clarity >= 0.2,
+                "Mono must transmit enough backdrop to read as a translucent tint at card size");
+            assert_eq!(pixel(&mono, 9), pixel(&mono, 41), "Mono has no inner bevel or shading");
+            assert_eq!(pixel(&mono, 72), pixel(&mono, 41));
+        }
     }
 
     #[test]
