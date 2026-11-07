@@ -947,7 +947,7 @@ impl Overlays {
         let opened = Instant::now();
         let (monitor, bounds) = monitor_of(rect);
         if self.live.is_none() {
-            let capture = CaptureDevice::new(&self.gpu.adapter, &self.gpu.device)?;
+            let capture = CaptureDevice::new(&self.gpu.adapter, &self.gpu.device, &self.gpu.queue)?;
             // Capture first: its first frame takes ~300 ms, the rest is built meanwhile.
             self.start_session(&capture, monitor, bounds)?;
             // Compiled once per engine: rebuilding them made every cold open ~100 ms slower.

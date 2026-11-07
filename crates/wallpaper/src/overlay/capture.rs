@@ -104,7 +104,11 @@ pub struct Crop {
 
 impl CaptureDevice {
     /// A D3D11 device on wgpu's adapter, fenced with wgpu's queue.
-    pub fn new(adapter: &wgpu::Adapter, device: &wgpu::Device) -> Result<Self> {
+    pub fn new(
+        adapter: &wgpu::Adapter,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<Self> {
         // SAFETY: the raw DX12 objects behind wgpu's adapter and device, kept alive here.
         let (dxgi_adapter, device12, queue12) = unsafe {
             let adapter = adapter
@@ -113,10 +117,15 @@ impl CaptureDevice {
             let hal = device
                 .as_hal::<Dx12>()
                 .context("the engine is not on DX12")?;
+            let queue = queue
+                .as_hal::<Dx12>()
+                .context("the engine queue is not on DX12")?;
             (
                 adapter.as_raw().cast::<IDXGIAdapter>()?,
                 hal.raw_device().clone(),
-                hal.raw_queue().clone(),
+                // Device::raw_queue is the separate PRESENT queue. Fences there do not
+                // order wgpu submissions; wallpaper presents merely masked the race.
+                queue.as_raw().clone(),
             )
         };
         let mut d3d11 = None;
@@ -289,9 +298,13 @@ impl CaptureDevice {
         self.value += 1;
         // SAFETY: live context, fences and queue.
         unsafe {
-            self.context.Signal(&self.fence11, self.value)?;
+            self.context
+                .Signal(&self.fence11, self.value)
+                .context("D3D11 capture Signal")?;
             self.context.Flush();
-            self.queue12.Wait(&self.fence12, self.value)?;
+            self.queue12
+                .Wait(&self.fence12, self.value)
+                .context("DX12 render queue Wait")?;
         }
         Ok(())
     }
@@ -301,8 +314,12 @@ impl CaptureDevice {
         self.value += 1;
         // SAFETY: live queue, fences and context.
         unsafe {
-            self.queue12.Signal(&self.fence12, self.value)?;
-            self.context.Wait(&self.fence11, self.value)?;
+            self.queue12
+                .Signal(&self.fence12, self.value)
+                .context("DX12 render queue Signal")?;
+            self.context
+                .Wait(&self.fence11, self.value)
+                .context("D3D11 composition Wait")?;
         }
         Ok(())
     }
@@ -364,6 +381,63 @@ impl CaptureDevice {
             start,
             end,
         })
+    }
+}
+
+#[cfg(test)]
+mod fence_tests {
+    use super::*;
+
+    #[test]
+    fn composition_waits_for_the_render_queue_without_any_wallpaper_presents() {
+        let gpu = crate::gpu::Gpu::headless().expect("DX12 GPU for the fence regression");
+        let mut capture = CaptureDevice::new(&gpu.adapter, &gpu.device, &gpu.queue).unwrap();
+        let render_queue = unsafe { gpu.queue.as_hal::<Dx12>() }
+            .unwrap()
+            .as_raw()
+            .clone();
+        assert!(
+            !overtakes_rendering(&mut capture, &render_queue),
+            "composition passed rendering still blocked on the render queue"
+        );
+        // Negative control: the old queue really does pass the blocked rendering. This
+        // proves the test discriminates the bug instead of relying on wallpaper activity.
+        capture.queue12 = unsafe { gpu.device.as_hal::<Dx12>() }
+            .unwrap()
+            .raw_queue()
+            .clone();
+        assert!(
+            overtakes_rendering(&mut capture, &render_queue),
+            "the old presentation queue must demonstrate the unsynchronized handoff"
+        );
+    }
+
+    fn overtakes_rendering(capture: &mut CaptureDevice, render_queue: &ID3D12CommandQueue) -> bool {
+        // Block the actual render queue, then ask capture to wait for its rendering. A fence
+        // signalled on Device::raw_queue (the old presentation-queue bug) completes too early.
+        let gate: ID3D12Fence =
+            unsafe { capture.device12.CreateFence(0, Default::default()) }.unwrap();
+        unsafe { render_queue.Wait(&gate, 1) }.unwrap();
+        let waited = capture.wait_for_wgpu();
+        let until = std::time::Instant::now() + Duration::from_millis(100);
+        while unsafe { capture.fence12.GetCompletedValue() } < capture.value
+            && std::time::Instant::now() < until
+        {
+            std::thread::yield_now();
+        }
+        let premature = unsafe { capture.fence12.GetCompletedValue() } >= capture.value;
+        // Always unblock before asserting, including on the broken implementation.
+        unsafe { gate.Signal(1) }.unwrap();
+        waited.unwrap();
+        // Drain the native signal too: there need not have been a wgpu submission to poll.
+        let until = std::time::Instant::now() + Duration::from_secs(2);
+        while unsafe { capture.fence12.GetCompletedValue() } < capture.value
+            && std::time::Instant::now() < until
+        {
+            std::thread::yield_now();
+        }
+        assert!(unsafe { capture.fence12.GetCompletedValue() } >= capture.value);
+        premature
     }
 }
 
