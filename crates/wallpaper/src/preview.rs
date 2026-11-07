@@ -118,6 +118,13 @@ impl Preview {
         self.event
     }
 
+    /// Inspect without consuming the request: a released engine must draw before answering.
+    pub fn requested(&self) -> bool {
+        // SAFETY: a zero-timeout observation of our own event, without resetting it.
+        self.event
+            .is_some_and(|event| unsafe { WaitForSingleObject(event, 0) == WAIT_OBJECT_0 })
+    }
+
     /// Answers a new request, or the parked one once there's a frame, from `kept`: a drawn
     /// wallpaper frame (`None`: a source that draws itself, or nothing drawn yet). The glass is
     /// the desktop's own (`pass` lends its compiled pipelines).
@@ -247,7 +254,15 @@ fn draw(
         quad.draw(&gpu.blit, &mut pass);
     }
     if !plates.is_empty() {
-        glass(gpu, kept, size, plates, &target, &mut encoder, desktop.fork(gpu));
+        glass(
+            gpu,
+            kept,
+            size,
+            plates,
+            &target,
+            &mut encoder,
+            desktop.fork(gpu),
+        );
     }
     let row = (size.0 * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
     let readback = device.create_buffer(&wgpu::BufferDescriptor {
@@ -287,7 +302,12 @@ fn draw(
     let width = size.0 as usize * 4;
     for (y, line) in out.chunks_exact_mut(width).enumerate() {
         let src = &mapped[y * row as usize..y * row as usize + width];
-        for (d, s) in line.as_chunks_mut::<4>().0.iter_mut().zip(src.as_chunks::<4>().0) {
+        for (d, s) in line
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(src.as_chunks::<4>().0)
+        {
             let (r, b) = if swap { (s[0], s[2]) } else { (s[2], s[0]) };
             d.copy_from_slice(&[b, s[1], r, 255]);
         }

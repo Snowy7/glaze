@@ -14,6 +14,66 @@ pub fn requested() -> bool {
     std::env::var_os("MYPAPER_GPU_TIMINGS").is_some()
 }
 
+/// Two GPU timestamps, allocated only for a covered change or a Studio request.
+pub struct OneOff {
+    queries: wgpu::QuerySet,
+    resolve: wgpu::Buffer,
+    readback: wgpu::Buffer,
+}
+
+impl OneOff {
+    pub fn new(gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) -> Option<Self> {
+        if !gpu.device.features().contains(FEATURES) {
+            return None;
+        }
+        let this = Self {
+            queries: gpu.device.create_query_set(&wgpu::QuerySetDescriptor {
+                label: Some("covered refresh timing"),
+                ty: wgpu::QueryType::Timestamp,
+                count: 2,
+            }),
+            resolve: gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("covered refresh timing resolve"),
+                size: 16,
+                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            }),
+            readback: gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("covered refresh timing readback"),
+                size: 16,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+        };
+        encoder.write_timestamp(&this.queries, 0);
+        Some(this)
+    }
+
+    pub fn finish(&self, encoder: &mut wgpu::CommandEncoder) {
+        encoder.write_timestamp(&self.queries, 1);
+        encoder.resolve_query_set(&self.queries, 0..2, &self.resolve, 0);
+        encoder.copy_buffer_to_buffer(&self.resolve, 0, &self.readback, 0, 16);
+    }
+
+    pub fn read(self, gpu: &Gpu) -> Option<f64> {
+        let (tx, rx) = mpsc::channel();
+        self.readback
+            .map_async(wgpu::MapMode::Read, .., move |result| {
+                let _ = tx.send(result);
+            });
+        gpu.device.poll(wgpu::PollType::wait_indefinitely()).ok()?;
+        rx.recv().ok()?.ok()?;
+        let bytes = self.readback.get_mapped_range(..).ok()?;
+        let start = u64::from_ne_bytes(bytes[..8].try_into().ok()?);
+        let end = u64::from_ne_bytes(bytes[8..16].try_into().ok()?);
+        let ms = end.saturating_sub(start) as f64 * f64::from(gpu.queue.get_timestamp_period())
+            / 1_000_000.0;
+        drop(bytes);
+        self.readback.unmap();
+        Some(ms)
+    }
+}
+
 pub struct Timing {
     slots: Vec<Slot>,
     sender: Option<mpsc::Sender<String>>,

@@ -139,6 +139,22 @@ pub fn load(gpu: &Gpu, theme: &LoadedTheme, screens: &[HWND]) -> Result<Box<dyn 
     })
 }
 
+/// A native wallpaper's cheap covered-screen still, using the same poster names as Studio.
+pub fn poster(gpu: &Gpu, theme: &LoadedTheme) -> Option<Box<dyn Source>> {
+    let source = ["preview.png", "preview.jpg", "preview.jpeg", "preview.webp"]
+        .into_iter()
+        .map(std::path::PathBuf::from)
+        .find(|path| theme.asset(path).is_file())?;
+    let config = mypaper_theme::ImageWallpaper {
+        source,
+        fit: mypaper_theme::Fit::Cover,
+    };
+    image::ImageSource::new(gpu, theme, &config)
+        .inspect_err(|e| log::warn!("wallpaper poster: {e:#}"))
+        .ok()
+        .map(|source| Box::new(source) as Box<dyn Source>)
+}
+
 /// Shown when a theme fails to load at startup: a dim red screen, so a
 /// broken theme is obvious rather than silently black. Fix the theme and
 /// it hot-reloads over this.

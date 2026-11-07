@@ -130,6 +130,15 @@ impl Snapshot {
         self.enabled && self.shown.load(Ordering::Relaxed)
     }
 
+    pub fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    /// A black first frame retries even when no visible screen drives the frame clock.
+    pub fn deadline(&self) -> Option<Instant> {
+        self.not_before.filter(|_| self.enabled && self.due)
+    }
+
     /// Turns the feature on or off. Returns whether it was just turned on, so the engine draws
     /// a frame to capture. Turning it off restores the user's wallpaper (also when it was never
     /// on in this run, e.g. it was turned off while mypaper wasn't running).
@@ -421,6 +430,7 @@ fn work(base: &Path, jobs: &mpsc::Receiver<Job>, blank: &AtomicBool, thread: u32
             job = newer;
         }
         let started = Instant::now();
+        let cpu = crate::trim::cpu_ms();
         let done = match job {
             Job::Apply(stills, shown) => {
                 apply(base, stills, blank).map(|all| shown.store(all, Ordering::Relaxed))
@@ -432,7 +442,12 @@ fn work(base: &Path, jobs: &mpsc::Receiver<Job>, blank: &AtomicBool, thread: u32
             }),
         };
         match done {
-            Ok(()) => log::debug!("snapshot job took {:.1?}", started.elapsed()),
+            Ok(()) => log::info!(
+                "snapshot job: wall {:.1?}, CPU {:.1} ms, private {:.1} MiB (readbacks dropped)",
+                started.elapsed(),
+                crate::trim::cpu_ms() - cpu,
+                crate::trim::private_mib()
+            ),
             Err(e) => log::warn!("snapshot: {e:#}"),
         }
         // A held engine may be asleep indefinitely. Re-evaluate the game still/release as
@@ -655,6 +670,21 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn a_blank_snapshot_schedules_a_retry_without_visible_frames() {
+        let mut snapshot = Snapshot::in_dir(None);
+        snapshot.enabled = true;
+        snapshot.theme_loaded(true);
+        snapshot.due = false; // the first capture was queued
+        snapshot.blank.store(true, Ordering::Relaxed);
+        assert!(!snapshot.due());
+        assert!(snapshot.deadline().is_some());
+        snapshot.not_before = Some(Instant::now());
+        assert!(snapshot.due());
+        snapshot.due = false; // the retry was queued
+        assert!(snapshot.deadline().is_none());
+    }
 
     /// A scratch folder, empty.
     fn temp_dir(name: &str) -> PathBuf {

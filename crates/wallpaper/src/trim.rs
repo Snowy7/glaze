@@ -68,6 +68,28 @@ pub fn private_mib() -> f64 {
     counters.PrivateUsage as f64 / 1_048_576.0
 }
 
+/// Process CPU time, including the source and readback workers, in milliseconds.
+pub fn cpu_ms() -> f64 {
+    use windows::Win32::Foundation::FILETIME;
+    use windows::Win32::System::Threading::GetProcessTimes;
+    let mut created = FILETIME::default();
+    let mut exited = FILETIME::default();
+    let mut kernel = FILETIME::default();
+    let mut user = FILETIME::default();
+    // SAFETY: our process and initialized output structures.
+    let _ = unsafe {
+        GetProcessTimes(
+            GetCurrentProcess(),
+            &mut created,
+            &mut exited,
+            &mut kernel,
+            &mut user,
+        )
+    };
+    let ticks = |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
+    (ticks(kernel) + ticks(user)) as f64 / 10_000.0
+}
+
 /// Moves this process's pages out of its working set.
 fn trim() {
     // SAFETY: `usize::MAX` for both limits asks Windows to trim our own

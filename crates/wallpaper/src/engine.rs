@@ -96,6 +96,8 @@ pub struct Engine {
     game_still: bool,
     /// ... and so is the source, which [`resume`](Self::resume) loads again.
     source_released: bool,
+    /// A change owes covered screens one offscreen frame, without starting their clock.
+    refresh_due: bool,
     /// When the last resume began, until its first frame is presented (logged).
     resuming: Option<Instant>,
     /// Core's game signal, followed while `engine.during_games` is `pause` (desktop mode).
@@ -174,6 +176,7 @@ impl Engine {
             released: false,
             game_still: false,
             source_released: false,
+            refresh_due: true,
             resuming: None,
             game: crate::game::GameSignal::default(),
         })
@@ -239,6 +242,7 @@ impl Engine {
     /// not touch the real desktop.
     pub fn set_static_snapshot(&mut self, on: bool) {
         if self.monitors.is_some() && self.snapshot.set_enabled(on) {
+            self.refresh_due = true;
             self.mark_dirty();
         }
     }
@@ -252,8 +256,13 @@ impl Engine {
         &self.theme.dir
     }
 
+    pub fn preview_requested(&self) -> bool {
+        self.preview.requested()
+    }
+
     /// Takes the pause settings from `config` and re-evaluates the hold.
     pub fn apply_config(&mut self, config: &Config) {
+        self.refresh_due = true;
         self.apply_renderer_config(&config.engine);
         self.holds.apply(config);
         self.game
@@ -279,6 +288,7 @@ impl Engine {
         if next != self.render_settings {
             log::info!("renderer settings: {next:?}");
             self.next_frame = Instant::now();
+            self.refresh_due = true;
         }
         self.render_settings = next;
         self.restart_due = next.gpu != self.gpu.preference;
@@ -334,6 +344,20 @@ impl Engine {
     /// say how long the thread may sleep.
     pub fn tick(&mut self, events: Option<&WindowEvents>) -> Flow {
         let flow = self.step(events);
+        if matches!(flow, Flow::Exit(_)) {
+            return flow;
+        }
+        let refresh = self.monitors.is_some()
+            && (std::mem::take(&mut self.refresh_due)
+                || self.snapshot.due()
+                || self.preview.requested())
+            && self
+                .screens
+                .iter()
+                .any(|s| s.paused || self.held || self.released);
+        if refresh {
+            self.refresh_hidden();
+        }
         // After drawing, so a preview waiting for a frame gets the one just drawn. Any screen's
         // will do: a covered first screen has none.
         let kept = self
@@ -343,7 +367,28 @@ impl Engine {
             .find(|k| k.drawn.get().is_some());
         self.preview
             .serve(&self.gpu, kept.map(|k| &k.texture), &mut self.glass);
-        flow
+        if refresh {
+            // Answer Studio before dropping its temporary frame. No swapchain was opened.
+            for screen in &mut self.screens {
+                if screen.paused || self.held || self.released {
+                    screen.kept = None;
+                }
+            }
+            self.backdrop.release();
+            if self.released && self.source.releasable() {
+                self.source = Box::new(sources::Released);
+                self.source_released = true;
+            }
+            let _ = self.gpu.device.poll(wgpu::PollType::wait_indefinitely());
+            log::info!(
+                "covered refresh: temporary drawing dropped, private {:.1} MiB",
+                crate::trim::private_mib()
+            );
+        }
+        match flow {
+            Flow::Wait(frame) => Flow::Wait(self.deadline(frame)),
+            other => other,
+        }
     }
 
     fn step(&mut self, events: Option<&WindowEvents>) -> Flow {
@@ -381,7 +426,10 @@ impl Engine {
             self.refresh_fullscreen();
             self.sync_hold();
         }
-        if self.reload_at.is_some_and(|t| now >= t) {
+        if self
+            .reload_at
+            .is_some_and(|t| now >= t || self.preview.requested())
+        {
             self.reload_at = None;
             self.reload();
         }
@@ -413,7 +461,9 @@ impl Engine {
         self.sync_visibility();
         self.glass.reload();
         for (index, screen) in self.screens.iter_mut().enumerate() {
-            screen.dirty |= self.source.take_dirty(index);
+            let changed = self.source.take_dirty(index);
+            screen.dirty |= changed;
+            self.refresh_due |= changed && (screen.paused || self.held);
             screen.glass_dirty |= self.glass.take_dirty(index);
         }
         let active = !self.held && self.screens.iter().any(|s| !s.paused);
@@ -478,7 +528,7 @@ impl Engine {
         if self.monitors.is_none() {
             return;
         }
-        if self.released && !self.can_release() {
+        if self.released && !self.snapshot.enabled() {
             self.resume(); // Snapshot was disabled while held: keep the wallpaper visible.
         }
         let game = self.reasons.contains(Reason::Game);
@@ -590,6 +640,7 @@ impl Engine {
             self.reload_at,
             self.recheck_at,
             self.release_at(),
+            self.snapshot.deadline(),
             self.timing
                 .as_ref()
                 .filter(|t| t.pending())
@@ -751,7 +802,13 @@ impl Engine {
 
         // Once per theme load, too: the same frame, full size, for the Windows wallpaper (a
         // native source has none to give, which the snapshot answers by restoring the original).
-        if (drew || native) && self.snapshot.due() {
+        if drew || native {
+            self.capture_snapshot(cursor);
+        }
+    }
+
+    fn capture_snapshot(&mut self, cursor: POINT) {
+        if self.snapshot.due() {
             let monitors = self.monitors.iter().flatten();
             let targets: Vec<Target> = monitors
                 .zip(&self.screens)
@@ -770,6 +827,113 @@ impl Engine {
                 self.frame,
             );
         }
+    }
+
+    /// Publish a changed wallpaper or answer Studio while covered. This never acquires a
+    /// swapchain, presents, shows a window, or advances animation time.
+    fn refresh_hidden(&mut self) {
+        let started = Instant::now();
+        let cpu = crate::trim::cpu_ms();
+        let before = crate::trim::private_mib();
+        if std::mem::take(&mut self.source_released) {
+            let hwnds: Vec<HWND> = self.screens.iter().map(|s| s.window.0).collect();
+            self.source = load_or_broken(&self.gpu, &self.theme, &hwnds).0;
+            self.shown.fill(Visibility::Live);
+            self.sync_visibility();
+        }
+        self.source.update(&self.gpu, self.clock);
+        // Native windows cannot be read by wgpu. Their shipped poster is sufficient while
+        // covered, and does not wake the browser or external app.
+        let native = self
+            .screens
+            .iter()
+            .enumerate()
+            .all(|(i, _)| self.source.native(i));
+        let original = if native {
+            sources::poster(&self.gpu, &self.theme)
+                .map(|poster| std::mem::replace(&mut self.source, poster))
+        } else {
+            None
+        };
+        self.frame = self.frame.wrapping_add(1);
+        let mut drawn = 0;
+        let mut gpu_ms = Some(0.0);
+        for index in 0..self.screens.len() {
+            let screen = &self.screens[index];
+            if !(screen.paused || self.held || self.released) || self.source.native(index) {
+                continue;
+            }
+            let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
+            let timing = crate::timing::OneOff::new(&self.gpu, &mut encoder);
+            let size = self.source.render_size(screen.size());
+            let sibling = self
+                .screens
+                .iter()
+                .filter_map(|s| s.kept.as_ref())
+                .find(|k| {
+                    self.source.shared() && k.size() == size && k.drawn.get() == Some(self.frame)
+                })
+                .cloned();
+            let kept = sibling.unwrap_or_else(|| Rc::new(KeptFrame::new(&self.gpu, size)));
+            if kept.drawn.get() != Some(self.frame) {
+                self.source.render(
+                    &self.gpu,
+                    Frame {
+                        screen: index,
+                        size,
+                        mouse: [0.0, 0.0],
+                        clock: self.clock,
+                        frame: self.frame,
+                        view: &kept.view,
+                        encoder: &mut encoder,
+                    },
+                );
+                kept.drawn.set(Some(self.frame));
+            }
+            // One-shot readback must finish now: there will be no later animated frame.
+            self.backdrop.refresh_screen(index);
+            let publish = self.backdrop.encode(
+                &self.gpu,
+                Draw {
+                    screen: index,
+                    frame: self.frame,
+                    size: screen.size(),
+                    kept: &kept,
+                    held: false,
+                    animated: false,
+                },
+                &mut encoder,
+            );
+            self.screens[index].kept = Some(kept);
+            self.screens[index].dirty = false;
+            if let Some(timing) = &timing {
+                timing.finish(&mut encoder);
+            }
+            self.gpu.queue.submit([encoder.finish()]);
+            gpu_ms = gpu_ms
+                .zip(timing.and_then(|t| t.read(&self.gpu)))
+                .map(|(sum, ms)| sum + ms);
+            if publish {
+                self.backdrop.finish(&self.gpu, index);
+            }
+            drawn += 1;
+        }
+        if drawn != 0 && std::mem::take(&mut self.palette_due) {
+            if let Some(kept) = self.screens.iter().find_map(|s| s.kept.as_ref()) {
+                palette::publish(&self.gpu, kept, &self.theme.dir);
+            }
+        }
+        self.capture_snapshot(POINT::default());
+        if let Some(original) = original {
+            self.source = original;
+        }
+        log::info!(
+            "covered refresh: {drawn} screens, wall {:.1} ms, CPU {:.1} ms, GPU {} ms, private {before:.1} -> {:.1} MiB",
+            started.elapsed().as_secs_f64() * 1000.0,
+            crate::trim::cpu_ms() - cpu,
+            gpu_ms.map_or_else(|| "unavailable".into(), |ms| format!("{ms:.3}")),
+            crate::trim::private_mib(),
+        );
     }
 
     /// Gives every visible swapchain screen a kept frame at the source's render size. When the
@@ -823,14 +987,9 @@ impl Engine {
         let hwnds: Vec<HWND> = self.screens.iter().map(|s| s.window.0).collect();
         let source = sources::load(&self.gpu, &theme, &hwnds)?;
         log::info!("{} loaded in {:.1?}", theme.theme.name, started.elapsed());
-        // Switched while released: the new theme has no still yet, so it waits under covered
-        // screens as it would have, windows shown, and isn't released until it has one.
-        if std::mem::take(&mut self.released) {
-            self.source_released = false;
-            for screen in &self.screens {
-                screen.window.show(true);
-            }
-        }
+        // A released engine stays hidden; tick publishes the new still offscreen.
+        self.source_released = false;
+        self.refresh_due = true;
         // A new theme has no installed still yet. Draw it normally until its snapshot is ready.
         if std::mem::take(&mut self.game_still) {
             for screen in &self.screens {

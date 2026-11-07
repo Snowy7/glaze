@@ -81,7 +81,10 @@ fn pick_adapter(instance: &wgpu::Instance, preference: GpuPreference) -> Result<
         if let Some(adapter) = adapters.into_iter().find(|a| luid(a) == Some(display.luid)) {
             return Ok(adapter);
         }
-        log::warn!("GPU: {} drives the screens but wgpu can't use it", display.name);
+        log::warn!(
+            "GPU: {} drives the screens but wgpu can't use it",
+            display.name
+        );
     }
     Ok(pollster::block_on(
         instance.request_adapter(&adapter_options(None, preference)),
@@ -518,22 +521,18 @@ const MEMORY_HINTS: wgpu::MemoryHints = wgpu::MemoryHints::Manual {
 /// few hundred for a large glTF scene) fit in this many with room to spare.
 const DESCRIPTORS: u32 = 16_384;
 
-/// Opens the device and queue, routing GPU errors to the log. `timing` adds the timestamp
-/// features the adapter supports.
-fn open_device(adapter: &wgpu::Adapter, timing: bool) -> Result<(wgpu::Device, wgpu::Queue)> {
+/// Opens the device and queue. Timestamp support costs no queries until telemetry or a
+/// one-off covered refresh uses it.
+fn open_device(adapter: &wgpu::Adapter, _timing: bool) -> Result<(wgpu::Device, wgpu::Queue)> {
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("mypaper"),
         // Immediate data (every DX12 adapter has it): a shader wallpaper's inputs ride in its
         // draw. 16-bit normalized formats: the planes of 10-bit (P010) video.
-        required_features: wgpu::Features::IMMEDIATES
-            | adapter.features().intersection(
-                wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
-                    | if timing {
-                        crate::timing::FEATURES
-                    } else {
-                        wgpu::Features::empty()
-                    },
-            ),
+        required_features:
+            wgpu::Features::IMMEDIATES
+                | adapter.features().intersection(
+                    wgpu::Features::TEXTURE_FORMAT_16BIT_NORM | crate::timing::FEATURES,
+                ),
         required_limits: wgpu::Limits {
             max_non_sampler_bindings: DESCRIPTORS,
             max_immediate_size: crate::sources::shader::PAPER_SIZE,

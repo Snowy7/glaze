@@ -93,6 +93,11 @@ impl Live {
 
     /// Applies a pending config change once its debounce has passed.
     pub fn apply_due(&mut self, engine: &mut Engine) {
+        // Studio can ask before the config watch/debounce fires. Read its saved selection
+        // before answering, or an old wallpaper would be cached under the new geometry.
+        if engine.preview_requested() {
+            self.apply_at = Some(Instant::now());
+        }
         if !self.apply_at.is_some_and(|t| Instant::now() >= t) {
             return;
         }

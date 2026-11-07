@@ -183,6 +183,17 @@ impl Backdrop {
         }
     }
 
+    /// A covered change publishes immediately, independent of the animated cadence. Each
+    /// screen owns its one-shot readback, so no later frame is needed to collect or share it.
+    pub fn refresh_screen(&mut self, screen: usize) {
+        self.latest = None;
+        if let Some(state) = self.screens.get_mut(screen) {
+            state.cadence = Cadence::new();
+            state.reading = None;
+            state.pyramid = None;
+        }
+    }
+
     /// If `draw`'s screen is due, records the copy, the blur and the readback
     /// into `encoder` (after the source drew, before submit) and returns true:
     /// call [`finish`](Self::finish) once the encoder is submitted.
@@ -790,6 +801,33 @@ mod tests {
     }
 
     #[test]
+    fn covered_refresh_bypasses_cadence_without_starting_a_timer() {
+        let mut backdrop = Backdrop::with(None, vec![Some("DISPLAY1".into())], |_| false);
+        let now = Instant::now();
+        assert!(
+            backdrop.screens[0]
+                .cadence
+                .due(now, false, || unreachable!())
+        );
+        assert!(
+            !backdrop.screens[0]
+                .cadence
+                .due(now, false, || unreachable!())
+        );
+        backdrop.refresh_screen(0);
+        assert!(
+            backdrop.screens[0]
+                .cadence
+                .due(now, false, || unreachable!())
+        );
+        assert!(
+            !backdrop.screens[0]
+                .cadence
+                .due(now, false, || unreachable!())
+        );
+    }
+
+    #[test]
     fn animated_sources_republish_per_interval_and_only_with_a_request() {
         let t0 = Instant::now();
         let after = |s| t0 + Duration::from_secs(s);
@@ -873,7 +911,10 @@ mod tests {
         gpu.queue.submit([encoder.finish()]);
         backdrop.finish(&gpu, 0);
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        assert!(!backdrop.encode(&gpu, draw(1), &mut encoder), "no second readback");
+        assert!(
+            !backdrop.encode(&gpu, draw(1), &mut encoder),
+            "no second readback"
+        );
         assert!(backdrop.screens[1].pyramid.is_none());
         let image = |name| std::fs::read(image_path(&dir, name)).unwrap();
         assert_eq!(image("DISPLAY1"), image("DISPLAY2"));
