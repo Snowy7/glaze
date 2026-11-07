@@ -2,11 +2,12 @@
 //! corners, backdrop and dark title bar. Public API only, and no code runs
 //! inside other processes.
 //!
-//! A window is touched only if it is top-level, visible, captioned and its
+//! A window is touched only if it is a visible app frame and its
 //! process passes the injection allowlist (`mypaper_inject::evaluate`, with
 //! the signature check). Existing windows are styled when the [`Styler`]
-//! starts; new ones through an out-of-context `EVENT_OBJECT_SHOW` hook, so
-//! nothing polls. Dropping the `Styler` puts every touched window back.
+//! starts; WinEvents follow new windows and frame changes. A slow timer checks
+//! only tracked windows for style changes that emit no WinEvent. Dropping the
+//! `Styler` puts every readable attribute back exactly as it was.
 //!
 //! WinEvent callbacks arrive through the message loop of the thread that
 //! created the `Styler`, which therefore must pump messages (core does).
@@ -21,14 +22,17 @@ use anyhow::{Result, bail};
 use mypaper_inject::signature::microsoft_signed;
 use mypaper_inject::{Target, Verdict, evaluate};
 use mypaper_theme::{Backdrop, Corners, WindowsStyle};
-use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, HWND, LPARAM};
+use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, HWND, LPARAM, RECT};
 use windows::Win32::Graphics::Dwm::{
     DWM_SYSTEMBACKDROP_TYPE, DWM_WINDOW_CORNER_PREFERENCE, DWMSBT_AUTO, DWMSBT_MAINWINDOW,
     DWMSBT_NONE, DWMSBT_TABBEDWINDOW, DWMSBT_TRANSIENTWINDOW, DWMWA_BORDER_COLOR,
-    DWMWA_CAPTION_COLOR, DWMWA_COLOR_DEFAULT, DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_TEXT_COLOR,
-    DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DEFAULT,
-    DWMWCP_DONOTROUND, DWMWCP_ROUND, DWMWCP_ROUNDSMALL, DWMWINDOWATTRIBUTE, DwmGetWindowAttribute,
-    DwmSetWindowAttribute,
+    DWMWA_CAPTION_COLOR, DWMWA_CLOAKED, DWMWA_COLOR_DEFAULT, DWMWA_SYSTEMBACKDROP_TYPE,
+    DWMWA_TEXT_COLOR, DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE,
+    DWMWCP_DEFAULT, DWMWCP_DONOTROUND, DWMWCP_ROUND, DWMWCP_ROUNDSMALL, DWMWINDOWATTRIBUTE,
+    DwmGetWindowAttribute, DwmSetWindowAttribute,
+};
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
 };
 use windows::Win32::Storage::Packaging::Appx::GetPackageFamilyName;
 use windows::Win32::System::SystemInformation::GetWindowsDirectoryW;
@@ -38,9 +42,14 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CHILDID_SELF, EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, EnumWindows, GA_PARENT, GWL_STYLE,
-    GetAncestor, GetDesktopWindow, GetWindowLongPtrW, GetWindowThreadProcessId, IsWindow,
-    IsWindowVisible, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WS_CAPTION,
+    CHILDID_SELF, EVENT_OBJECT_CLOAKED, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
+    EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW, EVENT_OBJECT_STATECHANGE,
+    EVENT_OBJECT_UNCLOAKED, EnumWindows, GA_PARENT, GW_OWNER, GWL_EXSTYLE, GWL_STYLE, GetAncestor,
+    GetDesktopWindow, GetWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
+    IsWindow, IsWindowVisible, KillTimer, OBJID_WINDOW, SetTimer, WINEVENT_OUTOFCONTEXT,
+    WINEVENT_SKIPOWNPROCESS, WS_CAPTION, WS_CHILD, WS_EX_APPWINDOW, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX,
+    WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU, WS_THICKFRAME,
 };
 use windows::core::{BOOL, PWSTR};
 
@@ -79,20 +88,33 @@ impl ProcessCache {
 
 struct Tracked {
     process: ProcessKey,
-    dark: bool,
+    original: Originals,
     applied: WindowStyle,
+}
+
+/// Values are captured before each attribute's first write, including failed writes.
+/// Every attribute we manage has a four-byte DWM representation.
+#[derive(Default)]
+struct Originals {
+    border: Option<u32>,
+    caption: Option<u32>,
+    caption_text: Option<u32>,
+    corners: Option<u32>,
+    backdrop: Option<u32>,
+    dark: Option<u32>,
 }
 
 struct State {
     style: WindowStyle,
     windows_dir: PathBuf,
-    /// Every window we styled, with the dark-mode value it had before.
+    /// Every window we styled, with its original attribute values.
     originals: HashMap<isize, Tracked>,
 }
 
 /// Styles allowlisted windows while alive; restores them on drop.
 pub struct Styler {
     hook: HWINEVENTHOOK,
+    timer: usize,
 }
 
 impl Styler {
@@ -119,9 +141,9 @@ impl Styler {
         let hook = unsafe {
             SetWinEventHook(
                 EVENT_OBJECT_DESTROY,
-                EVENT_OBJECT_SHOW,
+                EVENT_OBJECT_UNCLOAKED,
                 None,
-                Some(on_show),
+                Some(on_window_event),
                 0,
                 0,
                 WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
@@ -131,12 +153,19 @@ impl Styler {
             STATE.with_borrow_mut(Option::take);
             bail!("SetWinEventHook failed");
         }
-        let styler = Self { hook };
+        // SetWindowLongPtr does not guarantee an accessibility event. Check only
+        // already-managed handles, without enumerating apps or rewriting attributes.
+        // SAFETY: a thread timer with a static callback, removed before state is dropped.
+        let timer = unsafe { SetTimer(None, 0, 1000, Some(recheck_tracked)) };
+        let styler = Self { hook, timer };
+        if timer == 0 {
+            bail!("SetTimer failed for window-style revalidation");
+        }
         sweep();
         Ok(styler)
     }
 
-    /// Updates attributes in place, retaining each window's first dark-mode value.
+    /// Updates attributes in place, retaining each attribute's first original value.
     pub fn update(&self, raw: &WindowsStyle, palette: Option<&Palette>) {
         with_state(|s| {
             s.style = WindowStyle::resolve(raw, palette);
@@ -149,11 +178,15 @@ impl Drop for Styler {
     fn drop(&mut self) {
         // SAFETY: the hook came from `SetWinEventHook` in `start`.
         let _ = unsafe { UnhookWinEvent(self.hook) };
-        let Some(state) = STATE.with_borrow_mut(Option::take) else {
+        if self.timer != 0 {
+            // SAFETY: this timer belongs to this thread and this Styler.
+            let _ = unsafe { KillTimer(None, self.timer) };
+        }
+        let Some(mut state) = STATE.with_borrow_mut(Option::take) else {
             return;
         };
         let mut restored = 0;
-        for (&key, tracked) in &state.originals {
+        for (&key, tracked) in &mut state.originals {
             let hwnd = hwnd_from(key);
             // The handle may have been reused by a window that is not ours
             // to touch, so check again before writing.
@@ -161,7 +194,12 @@ impl Drop for Styler {
             if unsafe { IsWindow(Some(hwnd)) }.as_bool()
                 && allowed_process(hwnd, &state.windows_dir) == Some(tracked.process)
             {
-                apply_transition(hwnd, tracked.applied, WindowStyle::default(), tracked.dark);
+                apply_transition(
+                    hwnd,
+                    tracked.applied,
+                    WindowStyle::default(),
+                    &mut tracked.original,
+                );
                 restored += 1;
             }
         }
@@ -206,29 +244,53 @@ fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
 impl State {
     /// Styles the window if it is eligible; returns whether it was.
     fn consider(&mut self, hwnd: HWND) -> bool {
-        if !is_candidate(hwnd) {
+        let key = hwnd.0 as isize;
+        let candidate = is_candidate(hwnd);
+        if !candidate && !self.originals.contains_key(&key) {
             return false;
         }
-        let Some(process) = allowed_process(hwnd, &self.windows_dir) else {
+        let process = allowed_process(hwnd, &self.windows_dir);
+        if self
+            .originals
+            .get(&key)
+            .is_some_and(|t| Some(t.process) != process)
+        {
+            self.originals.remove(&key); // A dead or reused handle is no longer ours.
+        }
+        if !candidate {
+            if let Some(tracked) = self.originals.get_mut(&key) {
+                tracked.applied = apply_transition(
+                    hwnd,
+                    tracked.applied,
+                    WindowStyle::default(),
+                    &mut tracked.original,
+                );
+                if tracked.applied == WindowStyle::default() {
+                    self.originals.remove(&key);
+                }
+            }
+            return false;
+        }
+        let Some(process) = process else {
             return false;
         };
-        // Remember the dark-mode value from before our first change only.
-        let tracked = self
-            .originals
-            .entry(hwnd.0 as isize)
-            .or_insert_with(|| Tracked {
+        if let std::collections::hash_map::Entry::Vacant(entry) = self.originals.entry(key) {
+            let backdrop = read(hwnd, DWMWA_SYSTEMBACKDROP_TYPE);
+            if !unmanaged_backdrop(backdrop) {
+                return false; // The app owns its material; never mistake ours for its original.
+            }
+            entry.insert(Tracked {
                 process,
-                dark: read_dark(hwnd),
+                original: Originals {
+                    backdrop,
+                    ..Originals::default()
+                },
                 applied: WindowStyle::default(),
             });
-        if tracked.process != process {
-            *tracked = Tracked {
-                process,
-                dark: read_dark(hwnd),
-                applied: WindowStyle::default(),
-            };
         }
-        tracked.applied = apply_transition(hwnd, tracked.applied, self.style, tracked.dark);
+        let tracked = self.originals.get_mut(&key).expect("inserted above");
+        tracked.applied =
+            apply_transition(hwnd, tracked.applied, self.style, &mut tracked.original);
         true
     }
 }
@@ -240,7 +302,7 @@ fn sweep() {
     log::info!("styled {styled} window(s)");
 }
 
-unsafe extern "system" fn on_show(
+unsafe extern "system" fn on_window_event(
     _: HWINEVENTHOOK,
     event: u32,
     hwnd: HWND,
@@ -258,11 +320,26 @@ unsafe extern "system" fn on_show(
             s.originals.remove(&(hwnd.0 as isize));
             return;
         }
-        s.consider(hwnd);
-        // Forget windows that are gone, so the map does not grow forever.
-        // SAFETY: `IsWindow` accepts any handle value.
-        s.originals
-            .retain(|&key, _| unsafe { IsWindow(Some(hwnd_from(key))) }.as_bool());
+        if matches!(
+            event,
+            EVENT_OBJECT_SHOW
+                | EVENT_OBJECT_HIDE
+                | EVENT_OBJECT_STATECHANGE
+                | EVENT_OBJECT_LOCATIONCHANGE
+                | EVENT_OBJECT_CLOAKED
+                | EVENT_OBJECT_UNCLOAKED
+        ) {
+            s.consider(hwnd);
+        }
+    });
+}
+
+unsafe extern "system" fn recheck_tracked(_: HWND, _: u32, _: usize, _: u32) {
+    with_state(|s| {
+        let handles: Vec<_> = s.originals.keys().copied().collect();
+        for key in handles {
+            s.consider(hwnd_from(key));
+        }
     });
 }
 
@@ -283,14 +360,59 @@ fn for_each_window(mut f: impl FnMut(HWND)) {
     let _ = unsafe { EnumWindows(Some(visit), LPARAM(&raw mut f as isize)) };
 }
 
-/// Top-level, visible and captioned: the windows that have a title bar to style.
+/// Caption alone is insufficient: capture overlays also advertise a title bar.
+fn frame_styles(style: u32, ex: u32, owned: bool) -> bool {
+    let excluded = WS_EX_TOOLWINDOW.0 | WS_EX_LAYERED.0 | WS_EX_TRANSPARENT.0 | WS_EX_NOACTIVATE.0;
+    let app_frame = ex & WS_EX_APPWINDOW.0 != 0
+        || (style & (WS_THICKFRAME.0 | WS_SYSMENU.0) == WS_THICKFRAME.0 | WS_SYSMENU.0
+            && style & (WS_MINIMIZEBOX.0 | WS_MAXIMIZEBOX.0) != 0);
+    style & WS_CAPTION.0 == WS_CAPTION.0
+        && style & WS_CHILD.0 == 0
+        && ex & excluded == 0
+        && (!(owned || style & WS_POPUP.0 != 0) || app_frame)
+}
+
+fn unmanaged_backdrop(original: Option<u32>) -> bool {
+    original.is_none_or(|v| v == DWMSBT_AUTO.0 as u32)
+}
+
+/// Only visible, uncloaked app frames; monitor-sized topmost surfaces draw themselves.
 fn is_candidate(hwnd: HWND) -> bool {
     // SAFETY: plain queries on a window handle; stale handles just fail.
     unsafe {
-        let caption = WS_CAPTION.0;
-        IsWindowVisible(hwnd).as_bool()
-            && GetAncestor(hwnd, GA_PARENT) == GetDesktopWindow()
-            && GetWindowLongPtrW(hwnd, GWL_STYLE) as u32 & caption == caption
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+        if !IsWindowVisible(hwnd).as_bool()
+            || GetAncestor(hwnd, GA_PARENT) != GetDesktopWindow()
+            || !frame_styles(
+                GetWindowLongPtrW(hwnd, GWL_STYLE) as u32,
+                ex,
+                GetWindow(hwnd, GW_OWNER).is_ok_and(|h| !h.is_invalid()),
+            )
+            || read(hwnd, DWMWA_CLOAKED).is_some_and(|v| v != 0)
+        {
+            return false;
+        }
+        if ex & WS_EX_TOPMOST.0 != 0 {
+            let mut rect = RECT::default();
+            let mut monitor = MONITORINFO {
+                cbSize: size_of::<MONITORINFO>() as u32,
+                ..Default::default()
+            };
+            if GetWindowRect(hwnd, &mut rect).is_ok()
+                && GetMonitorInfoW(
+                    MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+                    &mut monitor,
+                )
+                .as_bool()
+                && rect.left <= monitor.rcMonitor.left
+                && rect.top <= monitor.rcMonitor.top
+                && rect.right >= monitor.rcMonitor.right
+                && rect.bottom >= monitor.rcMonitor.bottom
+            {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -417,112 +539,105 @@ fn set<T>(hwnd: HWND, attribute: DWMWINDOWATTRIBUTE, value: T) -> bool {
     result.is_ok()
 }
 
-fn read_dark(hwnd: HWND) -> bool {
-    let mut dark = BOOL::default();
-    // SAFETY: `dark` is a BOOL, the size this attribute uses.
-    let read = unsafe {
+/// DWM uses four-byte values for every attribute managed here. Some color
+/// attributes are write-only on Windows builds; only those use a default.
+fn read(hwnd: HWND, attribute: DWMWINDOWATTRIBUTE) -> Option<u32> {
+    let mut value = 0u32;
+    // SAFETY: a correctly sized, initialized four-byte output buffer.
+    unsafe {
         DwmGetWindowAttribute(
             hwnd,
-            DWMWA_USE_IMMERSIVE_DARK_MODE,
-            (&raw mut dark).cast::<c_void>(),
-            size_of::<BOOL>() as u32,
+            attribute,
+            (&raw mut value).cast(),
+            size_of::<u32>() as u32,
         )
-    };
-    read.is_ok() && dark.as_bool()
+    }
+    .ok()
+    .map(|()| value)
+}
+
+/// Capture once, write only a changed field, and remember only successful writes.
+fn update_attribute<T: Copy>(
+    field: &mut Option<T>,
+    next: Option<T>,
+    change: Change<T>,
+    original: &mut Option<u32>,
+    fallback: u32,
+    encode: impl FnOnce(T) -> u32,
+    mut io: impl FnMut(Option<u32>) -> Option<u32>,
+) {
+    if matches!(change, Change::Keep) {
+        return;
+    }
+    let saved = *original.get_or_insert_with(|| io(None).unwrap_or(fallback));
+    let value = next.map_or(saved, encode);
+    if io(Some(value)).is_some() {
+        *field = next;
+    }
 }
 
 fn apply_transition(
     hwnd: HWND,
     mut before: WindowStyle,
     next: WindowStyle,
-    dark: bool,
+    original: &mut Originals,
 ) -> WindowStyle {
     let delta = before.transition_to(next);
-    fn update<T: Copy>(
-        field: &mut Option<T>,
-        next: Option<T>,
-        change: Change<T>,
-        write: impl FnOnce(Option<T>) -> bool,
-    ) {
-        if !matches!(change, Change::Keep) && write(next) {
-            *field = next;
-        }
-    }
-    update(&mut before.border, next.border, delta.border, |v| {
-        set(
-            hwnd,
-            DWMWA_BORDER_COLOR,
-            v.map_or(DWMWA_COLOR_DEFAULT, colorref),
-        )
-    });
-    update(&mut before.caption, next.caption, delta.caption, |v| {
-        set(
-            hwnd,
-            DWMWA_CAPTION_COLOR,
-            v.map_or(DWMWA_COLOR_DEFAULT, colorref),
-        )
-    });
-    update(
-        &mut before.caption_text,
-        next.caption_text,
-        delta.caption_text,
-        |v| {
-            set(
-                hwnd,
-                DWMWA_TEXT_COLOR,
-                v.map_or(DWMWA_COLOR_DEFAULT, colorref),
-            )
-        },
-    );
-    update(&mut before.corners, next.corners, delta.corners, |v| {
-        let requested = v.map_or(DWMWCP_DEFAULT, corner_preference);
-        if !set(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, requested) {
-            return false;
-        }
-        let mut actual = DWM_WINDOW_CORNER_PREFERENCE::default();
-        // SAFETY: the output is the exact type/size of this DWM attribute.
-        let read = unsafe {
-            DwmGetWindowAttribute(
-                hwnd,
-                DWMWA_WINDOW_CORNER_PREFERENCE,
-                (&raw mut actual).cast(),
-                size_of_val(&actual) as u32,
-            )
-        };
-        if read.is_err() || actual != requested {
-            log::warn!(
-                "DWM corners on {hwnd:?}: requested {}, read {:?} ({read:?})",
-                requested.0,
-                actual.0
+    macro_rules! attribute {
+        ($field:ident, $saved:ident, $attribute:ident, $fallback:expr, $encode:expr) => {
+            update_attribute(
+                &mut before.$field,
+                next.$field,
+                delta.$field,
+                &mut original.$saved,
+                $fallback,
+                $encode,
+                |value| match value {
+                    None => read(hwnd, $attribute),
+                    Some(value) => set(hwnd, $attribute, value).then_some(value),
+                },
             );
-            return false;
-        }
-        true
-    });
-    update(&mut before.backdrop, next.backdrop, delta.backdrop, |v| {
-        set(
-            hwnd,
-            DWMWA_SYSTEMBACKDROP_TYPE,
-            v.map_or(DWMSBT_AUTO, backdrop_type),
-        )
-    });
-    update(
-        &mut before.dark_mode,
-        next.dark_mode,
-        delta.dark_mode,
-        |v| {
-            set(
-                hwnd,
-                DWMWA_USE_IMMERSIVE_DARK_MODE,
-                BOOL::from(v.unwrap_or(dark)),
-            )
-        },
+        };
+    }
+    attribute!(
+        border,
+        border,
+        DWMWA_BORDER_COLOR,
+        DWMWA_COLOR_DEFAULT,
+        colorref
     );
+    attribute!(
+        caption,
+        caption,
+        DWMWA_CAPTION_COLOR,
+        DWMWA_COLOR_DEFAULT,
+        colorref
+    );
+    attribute!(
+        caption_text,
+        caption_text,
+        DWMWA_TEXT_COLOR,
+        DWMWA_COLOR_DEFAULT,
+        colorref
+    );
+    attribute!(
+        corners,
+        corners,
+        DWMWA_WINDOW_CORNER_PREFERENCE,
+        DWMWCP_DEFAULT.0 as u32,
+        |v| corner_preference(v).0 as u32
+    );
+    attribute!(
+        backdrop,
+        backdrop,
+        DWMWA_SYSTEMBACKDROP_TYPE,
+        DWMSBT_AUTO.0 as u32,
+        |v| backdrop_type(v).0 as u32
+    );
+    attribute!(dark_mode, dark, DWMWA_USE_IMMERSIVE_DARK_MODE, 0, u32::from);
     before
 }
-
-/// Puts back the defaults for the attributes `raw` sets, and the dark-mode
-/// value the window had before.
+/// Crash recovery only: live transitions use the recorded originals instead.
 fn reset(hwnd: HWND, raw: &WindowsStyle, dark: bool) {
     if raw.border.is_some() {
         set(hwnd, DWMWA_BORDER_COLOR, DWMWA_COLOR_DEFAULT);
@@ -566,6 +681,150 @@ fn backdrop_type(backdrop: Backdrop) -> DWM_SYSTEMBACKDROP_TYPE {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn snipping_transient_surfaces_never_qualify_even_with_a_caption() {
+        let frame = WS_CAPTION.0 | WS_THICKFRAME.0 | WS_SYSMENU.0 | WS_MINIMIZEBOX.0;
+        for ex in [0x801a8, 0x200188, 0x8200008] {
+            assert!(!frame_styles(frame, ex, false), "ex={ex:#x}");
+        }
+        // 0x200108 has NOREDIRECTIONBITMAP but no TOOLWINDOW bit (0x80).
+        // A captioned recording toolbar is still an owned popup, not an app frame.
+        assert!(!frame_styles(WS_CAPTION.0 | WS_POPUP.0, 0x200108, true));
+        for excluded in [
+            WS_EX_TOOLWINDOW,
+            WS_EX_LAYERED,
+            WS_EX_TRANSPARENT,
+            WS_EX_NOACTIVATE,
+        ] {
+            assert!(!frame_styles(frame, WS_EX_APPWINDOW.0 | excluded.0, false));
+        }
+    }
+
+    #[test]
+    fn normal_frames_survive_but_popups_and_owned_transients_do_not() {
+        let frame = WS_CAPTION.0 | WS_THICKFRAME.0 | WS_SYSMENU.0 | WS_MINIMIZEBOX.0;
+        // WinUI's NOREDIRECTIONBITMAP alone does not make the main app an overlay.
+        for ex in [0, WS_EX_APPWINDOW.0, 0x200100] {
+            assert!(frame_styles(frame, ex, false));
+            assert!(frame_styles(frame | WS_POPUP.0, ex, false));
+        }
+        assert!(!frame_styles(WS_CAPTION.0 | WS_POPUP.0, 0, false));
+        assert!(!frame_styles(WS_CAPTION.0, 0, true));
+        assert!(frame_styles(frame, 0, true));
+        assert!(frame_styles(
+            WS_CAPTION.0 | WS_POPUP.0,
+            WS_EX_APPWINDOW.0,
+            true
+        ));
+        assert!(!frame_styles(frame & !WS_CAPTION.0, 0, false));
+        assert!(!frame_styles(frame | WS_CHILD.0, 0, false));
+    }
+
+    #[test]
+    fn explicit_app_materials_are_preserved_including_none_and_unknown_values() {
+        assert!(unmanaged_backdrop(None));
+        assert!(unmanaged_backdrop(Some(0)));
+        for explicit in [1, 2, 3, 4, 99] {
+            assert!(!unmanaged_backdrop(Some(explicit)));
+        }
+    }
+
+    #[test]
+    fn releasing_attributes_restores_the_first_readable_value_exactly() {
+        // Exercise each DWM representation, including non-default corner/dark values
+        // and the color sentinel. Repeated themes must not replace the original.
+        for initial in [0x123456, 0xfffffffe, 1, 3, 4] {
+            let mut field = None;
+            let mut original = None;
+            let mut actual = initial;
+            let mut reads = 0;
+            for next in [Some(7), Some(9), None] {
+                let change = match next {
+                    Some(v) => Change::Set(v),
+                    None => Change::Reset,
+                };
+                update_attribute(
+                    &mut field,
+                    next,
+                    change,
+                    &mut original,
+                    0,
+                    |v| v,
+                    |value| match value {
+                        None => {
+                            reads += 1;
+                            Some(actual)
+                        }
+                        Some(value) => {
+                            actual = value;
+                            Some(value)
+                        }
+                    },
+                );
+                assert_eq!(field, next);
+            }
+            assert_eq!(actual, initial);
+            assert_eq!(reads, 1);
+        }
+    }
+
+    #[test]
+    fn unreadable_attributes_use_defaults_and_failed_restores_remain_pending() {
+        let mut field = None;
+        let mut original = None;
+        let mut writes = Vec::new();
+        update_attribute(
+            &mut field,
+            Some(2),
+            Change::Set(2),
+            &mut original,
+            17,
+            |v| v,
+            |value| {
+                if let Some(v) = value {
+                    writes.push(v);
+                    value
+                } else {
+                    None
+                }
+            },
+        );
+        assert_eq!(original, Some(17));
+        update_attribute(
+            &mut field,
+            None,
+            Change::Reset,
+            &mut original,
+            17,
+            |v| v,
+            |_| None,
+        );
+        assert_eq!(field, Some(2), "a failed restore must be retried");
+        update_attribute(
+            &mut field,
+            None,
+            Change::Reset,
+            &mut original,
+            17,
+            |v| v,
+            |value| {
+                writes.push(value.unwrap());
+                value
+            },
+        );
+        assert_eq!(field, None);
+        assert_eq!(writes, [2, 17]);
+        update_attribute(
+            &mut field,
+            None,
+            Change::Keep,
+            &mut original,
+            17,
+            |v| v,
+            |_| panic!("unchanged attributes perform no IO"),
+        );
+    }
 
     #[test]
     fn process_verdict_is_cached_once_and_pid_reuse_is_rechecked() {
