@@ -33,6 +33,85 @@ fn resolve(user: &Look, bars: &BarsConfig, key: &str, text: &Text) -> crate::bar
 }
 
 #[test]
+fn selected_tints_give_the_macos_bar_live_glass_and_readable_ink() {
+    let ui = Ui::new().unwrap();
+    let bars = BarsConfig::parse(r#"{"preset":"macos"}"#).unwrap();
+    for color in [
+        "#8b9eb7", "#c88d3c", "#7fae8e", "#c96b73", "#9388c9", "#e6e6e6", "#2476c8",
+    ] {
+        let user = settings(json!({"material":{"tint":color}}));
+        for key in ["top", "dock"] {
+            let mut tokens = resolve(&user, &bars, key, &ui.text);
+            assert!(
+                !tokens.bare && tokens.live_blur && !tokens.wallpaper_only,
+                "{key}: {color}"
+            );
+            let material = tokens.material.unwrap();
+            let expected = crate::bars::look::hex(color).unwrap();
+            assert_eq!(material.tint, expected.with_alpha(material.tint.a));
+            tokens.adapt_ink(&bars.top.look, None);
+            let under = crate::glass::tone::backdrop(None, tokens.theme.dark());
+            let face = crate::glass::tone::face(&material, under, 40.0);
+            let ink = mypaper_ui::theme::over(tokens.theme.color.label, face);
+            assert!(
+                mypaper_ui::theme::contrast(ink, face) >= 4.498,
+                "{key}: {color}"
+            );
+        }
+    }
+    let reset = resolve(&Look::default(), &bars, "top", &ui.text);
+    assert!(reset.bare && reset.material.is_none() && !reset.live_blur);
+}
+
+#[test]
+fn chosen_bodies_replace_design_transparency_but_explicit_bare_bars_win() {
+    let ui = Ui::new().unwrap();
+    let user = settings(json!({"material":{"tint":"#8b9eb7"}}));
+    for own in [
+        json!({"transparent":true}),
+        json!({"background":{"type":"none"}}),
+    ] {
+        let bars =
+            BarsConfig::parse(&json!({"preset":"macos","top":{"look":own}}).to_string()).unwrap();
+        assert!(resolve(&user, &bars, "top", &ui.text).bare);
+    }
+    for (body, wallpaper) in [
+        (json!({"type":"solid","color":"#123456"}), false),
+        (json!({"type":"wallpaper"}), true),
+    ] {
+        let bars = BarsConfig::parse(
+            &json!({"preset":"macos","top":{"look":{"background":body}}}).to_string(),
+        )
+        .unwrap();
+        let tokens = resolve(&user, &bars, "top", &ui.text);
+        assert!(!tokens.bare && !tokens.live_blur);
+        assert_eq!(tokens.wallpaper_only, wallpaper);
+        assert_eq!(tokens.material.is_some(), wallpaper);
+    }
+    let bars = BarsConfig::parse(
+        r#"{"preset":"macos","overrides":{"secondary":{"top":{"look":{"transparent":true}}}}}"#,
+    )
+    .unwrap();
+    assert!(!resolve(&user, &bars, "top", &ui.text).bare);
+    assert!(
+        resolve(
+            &user,
+            &bars.for_monitor("DISPLAY2", false).unwrap(),
+            "top",
+            &ui.text
+        )
+        .bare
+    );
+    for style in ["solid", "mono"] {
+        let tokens = resolve(&settings(json!({"style":style})), &bars, "top", &ui.text);
+        assert!(
+            !tokens.bare && tokens.material.is_none(),
+            "{style}: a chosen flat body"
+        );
+    }
+}
+
+#[test]
 fn corners_override_design_and_theme_but_explicit_bar_and_monitor_radii_win() {
     let ui = Ui::new().unwrap();
     let bars = BarsConfig::parse(r#"{"preset":"macos","dock":{"look":{"radius":7}},"overrides":{"secondary":{"top":{"look":{"radius":3}}}}}"#).unwrap();
