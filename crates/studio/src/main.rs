@@ -31,6 +31,8 @@ mod watch;
 
 #[cfg(test)]
 mod goldens;
+#[cfg(test)]
+mod pump_tests;
 
 use std::cell::RefCell;
 use std::process::ExitCode;
@@ -45,7 +47,7 @@ use windows::Win32::System::Threading::{CreateMutexW, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, FindWindowW, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE,
     PeekMessageW, PostThreadMessageW, QS_ALLINPUT, SW_RESTORE, SetForegroundWindow, ShowWindow,
-    TranslateMessage, WM_QUIT,
+    TranslateMessage, WM_KEYDOWN, WM_QUIT, WM_SYSKEYDOWN,
 };
 use windows::core::w;
 
@@ -371,6 +373,11 @@ fn pump(studio: &Rc<RefCell<Studio>>, rx: &Receiver<Msg>) -> Result<()> {
                 }
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
+                // Shortcuts read this message's GetKeyState. Consume them before removing
+                // a queued key-up, which would otherwise erase Ctrl/Shift/Alt from the chord.
+                if matches!(msg.message, WM_KEYDOWN | WM_SYSKEYDOWN) {
+                    studio.borrow_mut().drain();
+                }
             }
         }
         let mut s = studio.borrow_mut();
