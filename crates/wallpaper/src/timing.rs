@@ -16,6 +16,8 @@ pub fn requested() -> bool {
 
 /// Two GPU timestamps, allocated only for a covered change or a Studio request.
 pub struct OneOff {
+    device: wgpu::Device,
+    period: f64,
     queries: wgpu::QuerySet,
     resolve: wgpu::Buffer,
     readback: wgpu::Buffer,
@@ -27,6 +29,8 @@ impl OneOff {
             return None;
         }
         let this = Self {
+            device: gpu.device.clone(),
+            period: f64::from(gpu.queue.get_timestamp_period()),
             queries: gpu.device.create_query_set(&wgpu::QuerySetDescriptor {
                 label: Some("covered refresh timing"),
                 ty: wgpu::QueryType::Timestamp,
@@ -55,19 +59,18 @@ impl OneOff {
         encoder.copy_buffer_to_buffer(&self.resolve, 0, &self.readback, 0, 16);
     }
 
-    pub fn read(self, gpu: &Gpu) -> Option<f64> {
+    pub fn read(&self) -> Option<f64> {
         let (tx, rx) = mpsc::channel();
         self.readback
             .map_async(wgpu::MapMode::Read, .., move |result| {
                 let _ = tx.send(result);
             });
-        gpu.device.poll(wgpu::PollType::wait_indefinitely()).ok()?;
+        self.device.poll(wgpu::PollType::wait_indefinitely()).ok()?;
         rx.recv().ok()?.ok()?;
         let bytes = self.readback.get_mapped_range(..).ok()?;
         let start = u64::from_ne_bytes(bytes[..8].try_into().ok()?);
         let end = u64::from_ne_bytes(bytes[8..16].try_into().ok()?);
-        let ms = end.saturating_sub(start) as f64 * f64::from(gpu.queue.get_timestamp_period())
-            / 1_000_000.0;
+        let ms = end.saturating_sub(start) as f64 * self.period / 1_000_000.0;
         drop(bytes);
         self.readback.unmap();
         Some(ms)

@@ -288,6 +288,7 @@ enum Content {
 
 /// A screen's pixels, on their way back from the GPU.
 struct Readback {
+    timing: Option<crate::timing::OneOff>,
     device: wgpu::Device,
     buffer: wgpu::Buffer,
     size: (u32, u32),
@@ -334,6 +335,7 @@ fn read(
 
     let view = texture.create_view(&Default::default());
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
+    let timing = crate::timing::OneOff::new(gpu, &mut encoder);
     source.render(
         gpu,
         Frame {
@@ -362,8 +364,12 @@ fn read(
             depth_or_array_layers: 1,
         },
     );
+    if let Some(timing) = &timing {
+        timing.finish(&mut encoder);
+    }
     gpu.queue.submit([encoder.finish()]);
     Ok(Readback {
+        timing,
         device: gpu.device.clone(),
         buffer,
         size: target.size,
@@ -375,6 +381,9 @@ fn read(
 impl Readback {
     /// Waits for the GPU, then runs `f` on the pixels (`row_bytes` apart).
     fn with_pixels<T>(&self, f: impl FnOnce(&[u8]) -> T) -> Result<T> {
+        if let Some(ms) = self.timing.as_ref().and_then(|t| t.read()) {
+            log::info!("snapshot: GPU draw+copy {ms:.3} ms");
+        }
         let (sender, receiver) = mpsc::channel();
         self.buffer
             .slice(..)

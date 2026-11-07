@@ -911,7 +911,7 @@ impl Engine {
             }
             self.gpu.queue.submit([encoder.finish()]);
             gpu_ms = gpu_ms
-                .zip(timing.and_then(|t| t.read(&self.gpu)))
+                .zip(timing.and_then(|t| t.read()))
                 .map(|(sum, ms)| sum + ms);
             if publish {
                 self.backdrop.finish(&self.gpu, index);
