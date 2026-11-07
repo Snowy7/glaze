@@ -1,0 +1,20 @@
+{
+    "start":  "\/Date(1794056456298)\/",
+    "before":  {
+                   "pid":  36932,
+                   "privateMiB":  169.1953125,
+                   "cpu":  2609.375
+               },
+    "afterFrame":  {
+                       "pid":  36932,
+                       "privateMiB":  186.796875,
+                       "cpu":  3078.125
+                   },
+    "rest":  {
+                 "pid":  36932,
+                 "cpuMsOver30s":  15.625,
+                 "oneCorePercent":  0.052083333333333336,
+                 "privateMiB":  158.671875
+             },
+    "sameProcess":  true
+}

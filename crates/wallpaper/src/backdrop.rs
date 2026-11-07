@@ -20,9 +20,8 @@
 //! 2..=600, default 10) exists. The shortest request wins. Files are checked once per interval on
 //! frames drawn anyway: this module never wakes the engine. Nothing is
 //! published periodically while held or paused; a change/request publishes one still instead.
-//! Native (web/app) screens use their poster for that one-off refresh;
-//! whose stale file is deleted on load. Web sources publish their own CapturePreview snapshots;
-//! app sources retain the visible CSS fallback.
+//! Native (web/app) screens have their stale file deleted on load and use their poster for a
+//! one-off refresh when available. Web sources also publish their own CapturePreview snapshots.
 
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};

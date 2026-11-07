@@ -1,0 +1,25 @@
+[2026-11-07T12:36:00Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 21.0342ms
+[2026-11-07T12:36:09Z INFO  mypaper_wallpaper::engine] every screen covered or a game held for 10s: drawing released in 4.5ms (source too: true), private 215 -> 185 MiB
+[2026-11-07T12:36:18Z INFO  mypaper_wallpaper::engine] resuming 2560x1440 screen
+[2026-11-07T12:36:18Z INFO  mypaper_wallpaper::engine] Amber Downpour (non-commercial) ready in 92.4ms
+[2026-11-07T12:36:18Z INFO  mypaper_wallpaper::engine] resumed: first frame presented 136.1ms after a screen was uncovered, private 223 MiB
+[2026-11-07T12:36:18Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY1 320x180 (1 screens): ready after 60.7 ms (not waited on), copy 0.04 ms on the frame, write 1.87 ms off it
+[2026-11-07T12:36:20Z INFO  mypaper_wallpaper::engine] pausing 2560x1440 screen
+[2026-11-07T12:36:30Z INFO  mypaper_wallpaper::engine] every screen covered or a game held for 10s: drawing released in 3.8ms (source too: true), private 214 -> 214 MiB
+[2026-11-07T12:38:07Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 21.1448ms
+[2026-11-07T12:38:21Z INFO  mypaper_wallpaper::overlay] glass overlay: open to glass 53.9 ms
+[2026-11-07T12:38:22Z INFO  mypaper_wallpaper::overlay] glass overlay closed; totals: 725 updates, 3762 compares (568 unchanged), 3217 passes, 0.000 ms GPU per timed update, frames Counts { delivered: 1078, stale: 0, missed: 353, taken: 725 }
+[2026-11-07T12:42:19Z WARN  mypaper_wallpaper::overlay] glass overlay Open { client: HWND(0x2e60a0a), layer: Popup, rect: Rect { x: 1231, y: 1187, width: 233, height: 166 }, radius: 20.0, material: Material { clarity: 0.92, blur: 0.5, refraction: 0.55, highlight: 0.5, tint: [23, 24, 28, 0] } }: Invalid window handle. (0x80070578)
+[2026-11-07T12:42:19Z INFO  mypaper_wallpaper::engine] resuming 2560x1440 screen
+[2026-11-07T12:42:19Z INFO  mypaper_wallpaper::engine] Amber Downpour (non-commercial) ready in 44.2ms
+[2026-11-07T12:42:19Z INFO  mypaper_wallpaper::engine] resumed: first frame presented 66.8ms after a screen was uncovered, private 235 MiB
+[2026-11-07T12:42:19Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 0.3 ms (not waited on), copy 0.03 ms on the frame, write 3.88 ms off it
+[2026-11-07T12:42:19Z INFO  mypaper_wallpaper::engine] pausing 2560x1440 screen
+[2026-11-07T12:42:20Z INFO  mypaper_wallpaper::overlay] glass overlay: open to glass 13.3 ms
+[2026-11-07T12:42:21Z INFO  mypaper_wallpaper::overlay] glass overlay closed; totals: 750 updates, 3785 compares (574 unchanged), 3235 passes, 0.000 ms GPU per timed update, frames Counts { delivered: 1225, stale: 0, missed: 474, taken: 751 }
+[2026-11-07T12:42:29Z INFO  mypaper_wallpaper::engine] every screen covered or a game held for 10s: drawing released in 3.3ms (source too: true), private 218 -> 215 MiB
+[2026-11-07T12:42:37Z INFO  mypaper_tweaks::dwm] styled 1 window(s)
+[2026-11-07T12:42:37Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 25.6278ms
+[2026-11-07T12:42:37Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 24.9018ms
+[2026-11-07T12:42:37Z INFO  mypaper_wallpaper::engine] Aurora loaded in 531.9ms
+[2026-11-07T12:42:39Z INFO  mypaper_wallpaper::trim] trimmed the working set

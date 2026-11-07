@@ -1,0 +1,31 @@
+[2026-11-07T13:01:01Z INFO  mypaper_wallpaper::overlay] glass overlay closed; totals: 558 updates, 904 compares (541 unchanged), 386 passes, 0.000 ms GPU per timed update, frames Counts { delivered: 983, stale: 0, missed: 425, taken: 558 }
+[2026-11-07T13:01:01Z INFO  mypaper_wallpaper::overlay] glass overlay: open to glass 19.0 ms
+[2026-11-07T13:01:02Z INFO  mypaper_wallpaper::overlay] glass overlay closed; totals: 580 updates, 934 compares (562 unchanged), 398 passes, 0.000 ms GPU per timed update, frames Counts { delivered: 1016, stale: 0, missed: 436, taken: 580 }
+[2026-11-07T13:01:02Z INFO  mypaper_wallpaper::overlay] glass overlay closed; totals: 580 updates, 934 compares (562 unchanged), 398 passes, 0.000 ms GPU per timed update, frames Counts { delivered: 1017, stale: 0, missed: 436, taken: 581 }
+[2026-11-07T13:01:06Z INFO  mypaper_wallpaper::engine] Aurora loaded in 114.4ms
+[2026-11-07T13:01:06Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY1 320x180: gpu+readback 0.00 ms, write 1.67 ms
+[2026-11-07T13:01:06Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180: gpu+readback 0.00 ms, write 1.43 ms
+[2026-11-07T13:01:06Z INFO  mypaper_wallpaper::palette] palette: dominant #1d8c5c, accent #15d17f
+[2026-11-07T13:01:06Z INFO  mypaper_wallpaper::snapshot] snapshot: 2 of 2 screens drawn in 7.2ms on the main thread
+[2026-11-07T13:01:06Z INFO  mypaper_wallpaper::engine] covered refresh: 2 screens, wall 43.0 ms, CPU 0.0 ms, GPU 21.500 ms, private 158.2 -> 250.5 MiB
+[2026-11-07T13:01:06Z INFO  mypaper_wallpaper::engine] covered refresh: temporary drawing dropped, private 250.5 MiB
+[2026-11-07T13:01:06Z INFO  mypaper_wallpaper::engine] held: game running
+[2026-11-07T13:01:07Z INFO  mypaper_wallpaper::snapshot] snapshot: GPU draw+copy 7.886 ms
+[2026-11-07T13:01:07Z INFO  mypaper_wallpaper::snapshot] snapshot: GPU draw+copy 7.888 ms
+[2026-11-07T13:01:07Z INFO  mypaper_wallpaper::snapshot] snapshot (worker thread): GPU wait 166.5µs, encode 28.2ms, set 122.2ms
+[2026-11-07T13:01:07Z INFO  mypaper_wallpaper::snapshot] snapshot job: wall 436.8ms, CPU 31.2 ms, private 251.0 MiB (readbacks dropped)
+[2026-11-07T13:01:07Z INFO  mypaper_wallpaper::engine] game hold: showing the theme still
+[2026-11-07T13:01:08Z INFO  mypaper_wallpaper::trim] trimmed the working set
+replay directory [2026-11-07T13:01:36Z INFO  mypaper_wallpaper::engine] released (was held: game running)
+[2026-11-07T13:01:42Z INFO  mypaper_wallpaper::engine] Amber Downpour (non-commercial) loaded in 29.9ms
+[2026-11-07T13:01:42Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY1 320x180: gpu+readback 0.00 ms, write 2.12 ms
+[2026-11-07T13:01:42Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180: gpu+readback 0.00 ms, write 1.57 ms
+[2026-11-07T13:01:42Z INFO  mypaper_wallpaper::palette] palette: dominant #624331, accent #b8602e
+[2026-11-07T13:01:42Z INFO  mypaper_wallpaper::snapshot] snapshot: 2 of 2 screens drawn in 8.6ms on the main thread
+[2026-11-07T13:01:42Z INFO  mypaper_wallpaper::engine] covered refresh: 2 screens, wall 32.5 ms, CPU 31.2 ms, GPU 5.042 ms, private 185.3 -> 283.3 MiB
+[2026-11-07T13:01:42Z INFO  mypaper_wallpaper::engine] covered refresh: temporary drawing dropped, private 283.3 MiB
+[2026-11-07T13:01:42Z INFO  mypaper_wallpaper::snapshot] snapshot: GPU draw+copy 15.494 ms
+[2026-11-07T13:01:42Z INFO  mypaper_wallpaper::snapshot] snapshot: GPU draw+copy 3.706 ms
+[2026-11-07T13:01:42Z INFO  mypaper_wallpaper::snapshot] snapshot (worker thread): GPU wait 143.6µs, encode 29.0ms, set 170.7ms
+[2026-11-07T13:01:42Z INFO  mypaper_wallpaper::snapshot] snapshot job: wall 364.3ms, CPU 15.6 ms, private 283.3 MiB (readbacks dropped)
+[2026-11-07T13:01:44Z INFO  mypaper_wallpaper::trim] trimmed the working set

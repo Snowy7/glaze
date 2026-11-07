@@ -1,0 +1,38 @@
+[
+    {
+        "name":  "DISPLAY1.bmp",
+        "utc":  "\/Date(1794056466846)\/",
+        "bytes":  172854,
+        "sha256":  "E8E611EEEF4AF34E9B10AF1DCCE428559001EA0BFFF7A6ABDF90C55D5FB11C77"
+    },
+    {
+        "name":  "DISPLAY2.bmp",
+        "utc":  "\/Date(1794056466858)\/",
+        "bytes":  172854,
+        "sha256":  "E8E611EEEF4AF34E9B10AF1DCCE428559001EA0BFFF7A6ABDF90C55D5FB11C77"
+    },
+    {
+        "name":  "DISPLAY39.bmp",
+        "utc":  "\/Date(1793996255653)\/",
+        "bytes":  172854,
+        "sha256":  "32A41387141B3D2AB96BB05307C12116ACE6F22F8B79272F8FA7625745E7661E"
+    },
+    {
+        "name":  "DISPLAY40.bmp",
+        "utc":  "\/Date(1793996909092)\/",
+        "bytes":  172854,
+        "sha256":  "DE170EF36F5ABE3BEFC6C84D67C02BE86C7D8B7CF45FC72ACA7287CF8C402E77"
+    },
+    {
+        "name":  "aurora-0-1dd1e1601a6e244f.jpg",
+        "utc":  "\/Date(1794056467141)\/",
+        "bytes":  137541,
+        "sha256":  "7B744A24CA28E44CBE0BDA8D4D3C071F3516D7C826E2BD4F1CA14AADDFD4E5B5"
+    },
+    {
+        "name":  "aurora-1-d04e6b370f886c4e.jpg",
+        "utc":  "\/Date(1794056467236)\/",
+        "bytes":  137508,
+        "sha256":  "3C5EC5FE2918CF1132114F6B2C9D66EB9D26FA15B282FF9B3253AD60DF9D78C3"
+    }
+]

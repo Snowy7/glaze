@@ -1,0 +1,40 @@
+{
+  "commits": {"engine": "3562c140", "studio": "c4a4db01", "snapshotGpuTelemetry": "5061474e", "documentation": "37e44311"},
+  "rootCauses": [
+    "Covered screens were skipped after changes; released drawing only resumed when uncovered.",
+    "Studio cached geometry-only answers and parked without a retained frame. Requests could beat the config debounce.",
+    "Animated backdrop readback needed another frame, which never arrived while covered."
+  ],
+  "validation": {
+    "cargoCheck": "wallpaper and studio passed",
+    "wallpaperTests": "110 passed, 11 ignored",
+    "releaseWorkspaceBuild": "passed",
+    "deploy": "scripts/deploy-local.ps1 passed; Studio restarted from target/release",
+    "stage": "PrintWindow images inspected: Aurora then restored Amber Downpour, without an uncovered-screen resume",
+    "files": "Both backdrop BMP hashes changed and two fresh Aurora snapshot JPEGs appeared",
+    "originals": "config.json, widgets.json and wallpaper.json restored with identical SHA256"
+  },
+  "costs": {
+    "sourceLoadWallMs": 114.4,
+    "frameAndBackdropGpuMs": 21.500,
+    "snapshotGpuMs": [7.886, 7.888],
+    "totalGpuMs": 37.274,
+    "frameMainThreadCpuMs": "0.0 reported; below coarse process-clock resolution",
+    "snapshotWorkerCpuMs": 31.2,
+    "processCpuMsOverFiveSecondSwitchWindow": 468.75,
+    "beforePrivateMiB": 169.1953125,
+    "peakPrivateMiB": 251.0,
+    "restPrivateMiB": 158.671875,
+    "restCpuMsOverThirtySeconds": 15.625,
+    "restOneCorePercent": 0.0520833333,
+    "stageVisualRunPeakPrivateMiB": 298.7
+  },
+  "limits": [
+    "GPU numbers cover frame/backdrop and full-size snapshot draws; Studio glass answer GPU work is excluded.",
+    "The 30-second rest sample kept the same engine PID. Another deployment interrupted the later post-stage memory sample.",
+    "Native web/app sources without a shipped poster cannot supply a wgpu snapshot.",
+    "Aurora is a hidden example, so Studio labels it No wallpaper although the stage is correct. The restored curated wallpaper label is correct."
+  ],
+  "backup": "C:\\Users\\you\\AppData\\Local\\mypaper\\backups\\covered-refresh-20261107-153959",
+  "ownership": "Only owned wallpaper paths and six preview/cache lines in studio/src/stage.rs; no widgets() edits. Shared stage hunks committed via git apply --cached."
+}
