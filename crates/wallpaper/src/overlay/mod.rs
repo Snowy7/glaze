@@ -945,7 +945,16 @@ impl Overlays {
                 }
             } else {
                 self.create(
-                    client, plate, layer, rect, radius, material, monitor, bounds,
+                    recovery::Desired {
+                        client,
+                        layer,
+                        rect,
+                        radius,
+                        material,
+                        style: Style::DEFAULT,
+                    },
+                    plate,
+                    (monitor, bounds),
                 )?;
             }
         }
@@ -955,15 +964,19 @@ impl Overlays {
     /// A new overlay under `client`: the shell's (`plate` `None`) or one of the engine's plates.
     fn create(
         &mut self,
-        client: HWND,
+        request: recovery::Desired,
         plate: Option<u64>,
-        layer: Layer,
-        rect: Rect,
-        radius: f32,
-        material: Material,
-        monitor: HMONITOR,
-        bounds: Rect,
+        monitor: (HMONITOR, Rect),
     ) -> Result<()> {
+        let recovery::Desired {
+            client,
+            layer,
+            rect,
+            radius,
+            material,
+            ..
+        } = request;
+        let (monitor, bounds) = monitor;
         let opened = Instant::now();
         if self.live.is_none() {
             let capture = CaptureDevice::new(&self.gpu.adapter, &self.gpu.device, &self.gpu.queue)?;

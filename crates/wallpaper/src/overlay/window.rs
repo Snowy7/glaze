@@ -220,6 +220,7 @@ impl OverlayWindow {
             let replacement = unsafe { surface(dcomp, self.size)? };
             capture.present(glass, &replacement)?;
             // Publish only a fully painted surface, in the same commit as resetting scale.
+            // SAFETY: these visuals, transform and painted surface belong to this device.
             unsafe {
                 self.content.SetContent(&replacement)?;
                 self.scale.SetScaleX2(1.0)?;
