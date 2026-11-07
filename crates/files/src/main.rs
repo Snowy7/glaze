@@ -65,6 +65,7 @@ fn run() -> anyhow::Result<()> {
     }
     let mut ui = mypaper_ui::Ui::new()?;
     let mut app = app::App::new(path, scheme)?;
+    set_window_icons(app.surface.hwnd(), app.surface.scale())?;
     let hwnd = app.surface.hwnd().0 as usize;
     let reload = WM_APP + 172;
     let mut watches = Vec::new();
@@ -173,6 +174,47 @@ fn run() -> anyhow::Result<()> {
     // SAFETY: all OLE windows and data objects have been released before balancing initialization.
     unsafe {
         OleUninitialize();
+    }
+    Ok(())
+}
+
+/// Match executable lookup, the window class and both task-switcher icon sizes.
+fn set_window_icons(hwnd: windows::Win32::Foundation::HWND, scale: f32) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use windows::Win32::{
+        Foundation::{LPARAM, WPARAM},
+        System::LibraryLoader::GetModuleHandleW,
+        UI::WindowsAndMessaging::{
+            GCLP_HICON, GCLP_HICONSM, ICON_BIG, ICON_SMALL, IMAGE_ICON, LR_SHARED, LoadImageW,
+            SendMessageW, SetClassLongPtrW, WM_SETICON,
+        },
+    };
+    // SAFETY: resource 101 is embedded in our exe. LR_SHARED keeps the icons alive
+    // for the window/class lifetime; Windows owns them, so do not destroy them.
+    unsafe {
+        let instance = GetModuleHandleW(None)?;
+        for (kind, class, size) in [
+            (ICON_BIG, GCLP_HICON, 32.0),
+            (ICON_SMALL, GCLP_HICONSM, 16.0),
+        ] {
+            let size = (size * scale).round() as i32;
+            let icon = LoadImageW(
+                Some(instance.into()),
+                windows::core::PCWSTR(101usize as *const u16),
+                IMAGE_ICON,
+                size,
+                size,
+                LR_SHARED,
+            )
+            .context("Files icon resource")?;
+            SetClassLongPtrW(hwnd, class, icon.0 as isize);
+            SendMessageW(
+                hwnd,
+                WM_SETICON,
+                Some(WPARAM(kind as usize)),
+                Some(LPARAM(icon.0 as isize)),
+            );
+        }
     }
     Ok(())
 }
