@@ -403,7 +403,20 @@ fn widgets(
     });
     
     out.grid = Some((grid, scale));
-    for instance in &layout.instances {
+    // As the desktop shows them: widgets from a missing display wait on the main one, never over others.
+    let shown = match app.monitors.get(primary) {
+        Some(main) => {
+            let main_grid = grid_for(&layout, main);
+            layout::as_shown(&layout.instances, &devices, primary, &main_grid, |i| {
+                app.registry
+                    .get(&i.widget)
+                    .and_then(|w| w.manifest.fit_size(i.size.map(f64::from), [main_grid.cols, main_grid.rows]))
+                    .unwrap_or(i.size)
+            })
+        }
+        None => layout.instances.clone(),
+    };
+    for instance in &shown {
         if layout::show_on(&instance.monitor, &devices, primary) != Some(monitor.device.as_str()) {
             continue;
         }

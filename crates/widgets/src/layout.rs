@@ -98,7 +98,8 @@ impl Default for GridSpec {
 pub struct Instance {
     pub instance: String,
     pub widget: String,
-    /// The monitor's device name, e.g. `\\.\DISPLAY1`.
+    /// The monitor's device name, e.g. `\\.\DISPLAY1`. Windows can renumber these;
+    /// the shell renames them after it ([`Layout::follow_renamed_displays`]).
     pub monitor: String,
     pub cell: [u32; 2],
     pub size: [u32; 2],
@@ -597,6 +598,109 @@ pub fn show_on<'a>(monitor: &str, devices: &'a [String], primary: usize) -> Opti
         .map(String::as_str)
 }
 
+/// The instances as they show on `devices`. Those saved on a display that isn't
+/// connected move to the primary (`devices[primary]`, laid out on `grid`): at
+/// their saved cell when it's free, else the first free cell, else they're left
+/// out. Nothing they land on moves, so they never overlap another widget. The
+/// layout itself keeps their display and cell, so they go back when it returns.
+/// `fit` is an instance's size as its manifest allows on `grid`.
+pub fn as_shown(
+    instances: &[Instance],
+    devices: &[String],
+    primary: usize,
+    grid: &Grid,
+    fit: impl Fn(&Instance) -> [u32; 2],
+) -> Vec<Instance> {
+    let Some(main) = devices.get(primary) else {
+        return Vec::new();
+    };
+    let home = |i: &Instance| devices.contains(&i.monitor);
+    let mut taken: Vec<([u32; 2], [u32; 2])> =
+        instances.iter().filter(|i| &i.monitor == main).map(|i| (i.cell, i.size)).collect();
+    let free = |taken: &[([u32; 2], [u32; 2])], cell: [u32; 2], size: [u32; 2]| {
+        grid.clamp(cell, size) == (cell, size)
+            && !taken.iter().any(|&(c, s)| (0..2).all(|k| cell[k] < c[k] + s[k] && c[k] < cell[k] + size[k]))
+    };
+    let mut moved = BTreeMap::new();
+    for instance in instances.iter().filter(|i| !home(i)) {
+        let (cell, size) = grid.clamp(instance.cell, fit(instance));
+        let spot = std::iter::once(cell)
+            .chain((0..grid.rows).flat_map(|row| (0..grid.cols).map(move |col| [col, row])))
+            .find(|&c| free(&taken, c, size));
+        if let Some(cell) = spot {
+            taken.push((cell, size));
+            moved.insert(instance.instance.as_str(), (cell, size));
+        }
+    }
+    instances
+        .iter()
+        .filter_map(|i| {
+            if home(i) {
+                return Some(i.clone());
+            }
+            let &(cell, size) = moved.get(i.instance.as_str())?;
+            Some(Instance { monitor: main.clone(), cell, size, ..i.clone() })
+        })
+        .collect()
+}
+
+impl Layout {
+    /// Moves instances saved on a display Windows has since renamed onto its new
+    /// name. `last` maps each monitor's device path to the display name it had
+    /// when last seen ([`remember_displays`]); `now` is `(display name, device
+    /// path)` for each display connected now. All renames apply at once, so two
+    /// displays trading names trade their widgets too. True when any moved.
+    pub fn follow_renamed_displays(
+        &mut self,
+        last: &BTreeMap<String, String>,
+        now: &[(String, String)],
+    ) -> bool {
+        let renames: BTreeMap<&str, &str> = now
+            .iter()
+            .filter_map(|(name, path)| {
+                let old = last.get(path)?;
+                (old != name).then_some((old.as_str(), name.as_str()))
+            })
+            .collect();
+        let mut moved = false;
+        for instance in &mut self.instances {
+            if let Some(&name) = renames.get(instance.monitor.as_str()) {
+                instance.monitor = name.to_owned();
+                moved = true;
+            }
+        }
+        moved
+    }
+}
+
+/// The display memory after seeing `now` (`(display name, device path)` pairs):
+/// each connected monitor's current name, plus monitors not connected now whose
+/// old name no connected display has taken since.
+pub fn remember_displays(
+    last: &BTreeMap<String, String>,
+    now: &[(String, String)],
+) -> BTreeMap<String, String> {
+    let mut next: BTreeMap<String, String> = last
+        .iter()
+        .filter(|(_, name)| !now.iter().any(|(taken, _)| taken == *name))
+        .map(|(path, name)| (path.clone(), name.clone()))
+        .collect();
+    next.extend(now.iter().map(|(name, path)| (path.clone(), name.clone())));
+    next
+}
+
+/// Reads the display memory (device path → display name); missing or unreadable is empty.
+pub fn load_displays(path: &Path) -> BTreeMap<String, String> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_displays(path: &Path, displays: &BTreeMap<String, String>) -> Result<()> {
+    crate::files::write_atomic(path, (serde_json::to_string_pretty(displays)? + "\n").as_bytes())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1008,6 +1112,61 @@ mod tests {
         assert_eq!(show_on(r"\\.\DISPLAY2", &devices, 0), Some(r"\\.\DISPLAY2"));
         assert_eq!(show_on(r"\\.\DISPLAY9", &devices, 0), Some(r"\\.\DISPLAY1"));
         assert_eq!(show_on("x", &[], 0), None);
+    }
+
+    fn at(instance: &str, monitor: &str, cell: [u32; 2], size: [u32; 2]) -> Instance {
+        Instance {
+            instance: instance.into(),
+            widget: "clock".into(),
+            monitor: monitor.into(),
+            cell,
+            size,
+            settings: Map::new(),
+            appearance: Appearance::default(),
+        }
+    }
+
+    #[test]
+    fn widgets_from_a_missing_display_never_land_on_others() {
+        let grid = Grid { origin: [0.0; 2], cell: [10.0; 2], gap: 0.0, cols: 8, rows: 4 };
+        let devices = ["main".to_owned(), "side".to_owned()];
+        let instances = [
+            at("home", "main", [0, 0], [4, 2]),
+            at("free-spot", "gone", [4, 0], [4, 2]),
+            at("collides", "gone", [0, 0], [4, 2]),
+            at("last-gap", "gone", [0, 0], [4, 2]),
+            at("other", "side", [0, 0], [8, 4]),
+        ];
+        let shown = as_shown(&instances, &devices, 0, &grid, |i| i.size);
+        let cells: Vec<_> = shown.iter().map(|i| (i.instance.as_str(), i.monitor.as_str(), i.cell)).collect();
+        assert_eq!(
+            cells,
+            [("home", "main", [0, 0]), ("free-spot", "main", [4, 0]), ("collides", "main", [0, 2]), ("last-gap", "main", [4, 2]), ("other", "side", [0, 0])],
+        );
+        let full = as_shown(&[instances[0].clone(), instances[1].clone(), instances[2].clone(), instances[3].clone(), at("fifth", "gone", [0, 0], [4, 2])], &devices, 0, &grid, |i| i.size);
+        assert!(!full.iter().any(|i| i.instance == "fifth"), "no room left: hidden, not stacked");
+    }
+
+    #[test]
+    fn widgets_follow_their_monitor_when_windows_renumbers_displays() {
+        let mut layout = Layout {
+            instances: vec![at("a", r"\\.\DISPLAY39", [0, 0], [1, 1]), at("b", r"\\.\DISPLAY40", [0, 0], [1, 1]), at("c", "elsewhere", [0, 0], [1, 1])],
+            ..Layout::default()
+        };
+        let last = BTreeMap::from([("left".to_owned(), r"\\.\DISPLAY40".to_owned()), ("right".to_owned(), r"\\.\DISPLAY39".to_owned())]);
+        let now = [(r"\\.\DISPLAY1".to_owned(), "right".to_owned()), (r"\\.\DISPLAY2".to_owned(), "left".to_owned())];
+        assert!(layout.follow_renamed_displays(&last, &now));
+        let monitors: Vec<_> = layout.instances.iter().map(|i| i.monitor.as_str()).collect();
+        assert_eq!(monitors, [r"\\.\DISPLAY1", r"\\.\DISPLAY2", "elsewhere"]);
+        assert!(!layout.follow_renamed_displays(&remember_displays(&last, &now), &now));
+    }
+
+    #[test]
+    fn a_display_name_belongs_to_the_monitor_holding_it_now() {
+        let last = BTreeMap::from([("unplugged".to_owned(), r"\\.\DISPLAY2".to_owned()), ("away".to_owned(), r"\\.\DISPLAY5".to_owned())]);
+        let now = [(r"\\.\DISPLAY2".to_owned(), "new".to_owned())];
+        let next = remember_displays(&last, &now);
+        assert_eq!(next, BTreeMap::from([("new".to_owned(), r"\\.\DISPLAY2".to_owned()), ("away".to_owned(), r"\\.\DISPLAY5".to_owned())]));
     }
 
     const LOOK_LAYOUT: &str = r##"{

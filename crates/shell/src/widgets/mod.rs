@@ -170,6 +170,8 @@ pub struct Widgets {
     host: Option<DesktopHost>,
     desktop_events: DesktopEvents,
     monitors: Vec<Monitor>,
+    /// The display names the saved layout was last checked against ([`Self::follow_display_names`]).
+    names_checked: Vec<String>,
     covered: Vec<bool>,
     windows: WindowEvents,
     _control: control::Control,
@@ -325,6 +327,7 @@ impl Widgets {
             host: Some(host),
             desktop_events,
             monitors,
+            names_checked: Vec::new(),
             covered: Vec::new(),
             windows: WindowEvents::install(),
             _control,
@@ -1123,6 +1126,10 @@ impl Widgets {
         };
         let devices: Vec<_> = self.monitors.iter().map(|m| m.device.clone()).collect();
         let primary = self.monitors.iter().position(|m| m.primary).unwrap_or(0);
+        if self.studio_layout.is_none() && self.names_checked != devices {
+            self.names_checked = devices.clone();
+            self.follow_display_names();
+        }
         let mut effective = self.studio_layout.clone().unwrap_or_else(|| self.layout.clone());
         let mut constrained = effective.clone();
         for monitor in &self.monitors {
@@ -1138,11 +1145,20 @@ impl Widgets {
             if self.studio_layout.is_none() { self.commit_layout(constrained.clone()); }
             effective = constrained;
         }
-        let installed: BTreeSet<_> = effective
-            .instances
-            .iter()
-            .map(|i| i.instance.clone())
-            .collect();
+        // Widgets whose display is gone show on the main one, never over another widget.
+        let shown = match self.monitors.get(primary) {
+            Some(main) => {
+                let grid = grid_for_bars(&effective, main, self.studio_bars.as_ref().unwrap_or(&self.bars));
+                layout::as_shown(&effective.instances, &devices, primary, &grid, |i| {
+                    self.registry
+                        .get(&i.widget)
+                        .and_then(|w| w.manifest.fit_size(i.size.map(f64::from), [grid.cols, grid.rows]))
+                        .unwrap_or(i.size)
+                })
+            }
+            None => effective.instances.clone(),
+        };
+        let installed: BTreeSet<_> = shown.iter().map(|i| i.instance.clone()).collect();
         let removed: Vec<_> = self
             .entries
             .keys()
@@ -1154,7 +1170,7 @@ impl Widgets {
             self.entries.remove(&id);
         }
         let system = mypaper_bars::accent::read();
-        for instance in &effective.instances {
+        for instance in &shown {
             let Some(manifest) = self.registry.get(&instance.widget).map(|i| &i.manifest) else {
                 continue;
             };
@@ -3419,6 +3435,32 @@ impl Widgets {
         self.motion_frame = true;
         self.poll(ui);
     }
+    /// Windows renumbers displays (`\\.\DISPLAY39` becomes `\\.\DISPLAY1`) after driver
+    /// resets and some reboots. `displays.json` remembers which name each monitor had;
+    /// widgets saved under a name that moved follow their monitor to its new one.
+    fn follow_display_names(&mut self) {
+        let now = mypaper_desktop::display_paths();
+        if now.is_empty() {
+            return;
+        }
+        let file = self.path.with_file_name("displays.json");
+        let last = layout::load_displays(&file);
+        let mut next = self.layout.clone();
+        if next.follow_renamed_displays(&last, &now) {
+            log::info!("displays renamed since last run: widgets follow their monitors ({now:?})");
+            // Keep the old names on a failed save, so the next check can still move them.
+            if !self.commit_layout(next) {
+                return;
+            }
+        }
+        let remembered = layout::remember_displays(&last, &now);
+        if remembered != last {
+            if let Err(e) = layout::save_displays(&file, &remembered) {
+                log::warn!("{}: {e:#}", file.display());
+            }
+        }
+    }
+
     fn commit_layout(&mut self, next: Layout) -> bool {
         if self.layout_error.is_some() {
             return false;

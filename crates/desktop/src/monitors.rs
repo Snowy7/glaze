@@ -118,6 +118,66 @@ unsafe extern "system" fn push_info(monitor: HMONITOR, _: HDC, _: *mut RECT, out
     true.into()
 }
 
+/// Each active display's GDI name (`\\.\DISPLAY1`) with its monitor's device
+/// path (`\\?\DISPLAY#GSM5B7F#...`). Windows hands out GDI numbers again after
+/// driver resets and some reboots; the device path stays with the monitor and
+/// the port it's plugged into. Empty when the display config can't be read.
+pub fn display_paths() -> Vec<(String, String)> {
+    use windows::Win32::Devices::Display::{
+        DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+        DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_SOURCE_DEVICE_NAME,
+        DISPLAYCONFIG_TARGET_DEVICE_NAME, DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes,
+        QDC_ONLY_ACTIVE_PATHS, QueryDisplayConfig,
+    };
+    let text = |w: &[u16]| String::from_utf16_lossy(&w[..w.iter().position(|&c| c == 0).unwrap_or(w.len())]);
+    let (mut paths, mut modes) = (0u32, 0u32);
+    // SAFETY: the buffers are sized from GetDisplayConfigBufferSizes and outlive the calls;
+    // each device-info request carries its own struct size in the header, as the API requires.
+    unsafe {
+        if GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &mut paths, &mut modes).is_err() {
+            return Vec::new();
+        }
+        let mut path_info = vec![DISPLAYCONFIG_PATH_INFO::default(); paths as usize];
+        let mut mode_info = vec![DISPLAYCONFIG_MODE_INFO::default(); modes as usize];
+        if QueryDisplayConfig(
+            QDC_ONLY_ACTIVE_PATHS,
+            &mut paths,
+            path_info.as_mut_ptr(),
+            &mut modes,
+            mode_info.as_mut_ptr(),
+            None,
+        )
+        .is_err()
+        {
+            return Vec::new();
+        }
+        path_info.truncate(paths as usize);
+        let mut out = Vec::new();
+        for path in &path_info {
+            let mut source = DISPLAYCONFIG_SOURCE_DEVICE_NAME::default();
+            source.header.r#type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+            source.header.size = size_of::<DISPLAYCONFIG_SOURCE_DEVICE_NAME>() as u32;
+            source.header.adapterId = path.sourceInfo.adapterId;
+            source.header.id = path.sourceInfo.id;
+            let mut target = DISPLAYCONFIG_TARGET_DEVICE_NAME::default();
+            target.header.r#type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+            target.header.size = size_of::<DISPLAYCONFIG_TARGET_DEVICE_NAME>() as u32;
+            target.header.adapterId = path.targetInfo.adapterId;
+            target.header.id = path.targetInfo.id;
+            if DisplayConfigGetDeviceInfo(&mut source.header) != 0
+                || DisplayConfigGetDeviceInfo(&mut target.header) != 0
+            {
+                continue;
+            }
+            let (name, device) = (text(&source.viewGdiDeviceName), text(&target.monitorDevicePath));
+            if !name.is_empty() && !device.is_empty() && !out.iter().any(|(n, _)| *n == name) {
+                out.push((name, device));
+            }
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

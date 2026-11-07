@@ -24,7 +24,7 @@ pub use cover::{WindowEvents, covered_monitors};
 pub use explorer::DesktopEvents;
 pub use fullscreen::{fullscreen_app_in_front, fullscreen_app_monitor};
 pub use host::DesktopHost;
-pub use monitors::{Monitor, Rect, monitor_infos, monitors};
+pub use monitors::{Monitor, Rect, display_paths, monitor_infos, monitors};
 pub use power::on_battery;
 
 use std::sync::atomic::{AtomicU32, Ordering};
