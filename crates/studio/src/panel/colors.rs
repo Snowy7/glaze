@@ -1,5 +1,5 @@
-use crate::panel::tokens::radius;
 use super::{Command, controls::text, specimens};
+use crate::panel::tokens::radius;
 use crate::{
     actions::{Action, Edit, FieldId},
     app::App,
@@ -20,7 +20,7 @@ pub fn swatches(
     _none: bool,
     presets: &[[u8; 3]],
 ) {
-    use mypaper_ui::color_row::{Choice, draw};
+    use mypaper_ui::color_row::Choice;
     let current = app
         .pending_value
         .as_ref()
@@ -95,7 +95,7 @@ pub fn swatches(
     choices.extend(presets.iter().map(|rgb| {
         let hex = mypaper_config::Color(*rgb).hex();
         Choice {
-            label: format!("{} {hex}", edit.label),
+            label: color_name(*rgb).into(),
             color: Some(Rgba::rgb8(*rgb, 1.0)),
             selected: !linked && current.eq_ignore_ascii_case(&hex),
             action: Action::Set(edit.clone(), json!(hex)),
@@ -113,12 +113,19 @@ pub fn swatches(
             }),
         action: Action::Panel(Command::PickColor(edit.clone())),
     });
-    let row_height = mypaper_ui::color_row::height(b);
-    draw(
+    let row_height = b.px(36.0 + 20.0 * b.t.text_scale);
+    let picture = if let Some(wallpaper) = target_wallpaper {
+        specimens::wallpaper_image(app, wallpaper)
+    } else {
+        specimens::wallpaper(app)
+    };
+    draw_swatches(
         b,
         key(("panel-colors", edit.doc, edit.path.as_ref())),
         Rect::new(c.x, c.y, c.w, row_height),
         &choices,
+        picture.as_ref(),
+        &edit.label,
     );
     c.y += row_height + b.px(6.0);
     if app.is_open(picker_key(edit)) {
@@ -219,6 +226,129 @@ pub fn swatches(
             .borrow_mut()
             .extend(b.list.ops.drain(first_op..));
     }
+}
+
+fn color_name(rgb: [u8; 3]) -> &'static str {
+    let hsv = Hsv::from_rgb(rgb);
+    if hsv.saturation < 0.12 {
+        return if hsv.value > 0.8 {
+            "White"
+        } else if hsv.value < 0.2 {
+            "Black"
+        } else {
+            "Gray"
+        };
+    }
+    match hsv.hue as u16 {
+        0..=14 | 345..=359 => "Red",
+        15..=49 => "Amber",
+        50..=69 => "Yellow",
+        70..=169 => "Green",
+        170..=194 => "Teal",
+        195..=254 => "Blue",
+        255..=289 => "Purple",
+        _ => "Pink",
+    }
+}
+
+/// Equal circular choices, followed by a readable selected/hovered/focused name.
+/// Grouped radio targets preserve AccessKit state and the app's arrow-key navigation.
+fn draw_swatches(
+    b: &mut B,
+    id: mypaper_ui::controls::Key,
+    rect: Rect,
+    choices: &[mypaper_ui::color_row::Choice<Action>],
+    wallpaper: Option<&std::sync::Arc<mypaper_ui::Image>>,
+    label: &str,
+) {
+    let step = ((rect.width() - b.px(8.0)) / choices.len().max(1) as f32).min(b.px(38.0));
+    let diameter = (step - b.px(10.0)).clamp(b.px(14.0), b.px(26.0));
+    let mut caption = choices
+        .iter()
+        .find(|choice| choice.selected)
+        .map(|choice| choice.label.as_str())
+        .unwrap_or("As is");
+    b.group(id, |b| {
+        for (i, choice) in choices.iter().enumerate() {
+            let k = key((id, i));
+            let dot = Rect::new(
+                rect.left + b.px(4.0) + step * i as f32 + (step - diameter) / 2.0,
+                rect.top + (b.px(34.0) - diameter) / 2.0,
+                diameter,
+                diameter,
+            );
+            let radius = diameter / 2.0;
+            let color = choice.color.unwrap_or(b.p.fill);
+            b.fill(dot, radius, color);
+            if i == 0 {
+                let inset = diameter * 0.28;
+                b.line(
+                    Point::new(dot.left + inset, dot.bottom - inset),
+                    Point::new(dot.right - inset, dot.top + inset),
+                    b.px(1.5),
+                    b.p.ink2,
+                );
+            } else if i == 1 {
+                if let Some(image) = wallpaper {
+                    let start = b.list.ops.len();
+                    crate::stage::image_cover(b, dot, image, 1.0);
+                    let ops = b.list.ops.split_off(start);
+                    b.list.ops.push(mypaper_ui::Op::RoundedClipped {
+                        rect: dot,
+                        radius,
+                        ops: ops.into(),
+                    });
+                }
+            } else if i == choices.len() - 1 {
+                let ink = if mypaper_ui::theme::luminance(mypaper_ui::theme::over(color, b.p.panel))
+                    > 0.45
+                {
+                    Rgba::rgb8([25, 25, 25], 1.0)
+                } else {
+                    Rgba::rgb8([245, 245, 245], 1.0)
+                };
+                b.icon(dot, mypaper_ui::icons::Icon::Palette, 14.0, ink);
+            }
+            if choice.selected {
+                // 1.5 DIP ring separated from the swatch by a genuine transparent gap.
+                let ring = dot.inflate(b.px(3.5));
+                b.stroke(ring, ring.height() / 2.0, b.px(1.5), b.p.ink1);
+            }
+            let hit = Rect::new(
+                dot.left - (step - diameter) / 2.0,
+                rect.top,
+                step,
+                b.px(34.0),
+            );
+            if b.hovered(k) || b.focused(k) {
+                caption = &choice.label;
+            }
+            b.hit_checked(
+                k,
+                hit,
+                mypaper_ui::Role::RadioButton,
+                &format!("{label}: {}", choice.label),
+                Some(choice.selected),
+                choice.action.clone(),
+                mypaper_ui::controls::Behavior::Click,
+            );
+            b.focus_ring(k, dot.inflate(b.px(5.5)), radius + b.px(5.5));
+        }
+    });
+    text(
+        b,
+        Rect::new(
+            rect.left + b.px(4.0),
+            rect.top + b.px(36.0),
+            rect.width() - b.px(8.0),
+            rect.height() - b.px(36.0),
+        ),
+        caption,
+        12.0,
+        400,
+        b.p.ink2,
+        Align::Start,
+    );
 }
 
 /// Popovers paint after the body's final control boundaries, including when they flip up.
@@ -688,5 +818,219 @@ mod tests {
         assert!(!app.is_open(picker_key(&edit)));
         assert_eq!(app.panel.as_ref().unwrap().page, Page::Look);
         assert!(!app.quit);
+    }
+}
+#[cfg(test)]
+mod control_tests {
+    use super::*;
+    use crate::{docs::DocId, panel::Page};
+    use mypaper_ui::Ui;
+
+    #[test]
+    fn circular_choices_keep_names_selection_and_arrow_navigation() {
+        let mut ui = Ui::new().unwrap();
+        let mut app = crate::goldens::window_app(true, &ui, (1280, 800));
+        let edit = Edit::new(DocId::Config, "/look/accent", "Accent");
+        let mut b = crate::ui::builder(
+            &mut ui.text,
+            &app.theme.palette,
+            &app.theme.ty,
+            1.25,
+            &app.input,
+        );
+        let mut c = Col {
+            x: 10.0,
+            y: 10.0,
+            w: 360.0,
+            view: key("swatch-test"),
+        };
+        swatches(
+            &app,
+            &mut b,
+            &mut c,
+            &edit,
+            Some(&json!("#8b9eb7")),
+            true,
+            false,
+            &super::super::material::SWATCHES,
+        );
+        assert_eq!(b.targets.len(), 9);
+        assert_eq!(b.list.hits[2].label.as_ref(), "Accent: Blue");
+        assert_eq!(b.list.hits[2].checked, Some(true));
+        let group = b.targets[0].group;
+        assert!(group.is_some() && b.targets.iter().all(|target| target.group == group));
+        assert!(b.targets.iter().all(|target| target.rect
+            == Rect::new(
+                target.rect.left,
+                b.targets[0].rect.top,
+                b.targets[0].rect.width(),
+                b.targets[0].rect.height()
+            )));
+        let next = b.targets[3].key;
+        let targets = b.targets;
+        app.input.focus = Some(targets[2].key);
+        app.frame.targets = targets;
+        app.key_with(0x27, (false, false, false));
+        assert_eq!(app.input.focus, Some(next));
+    }
+
+    /// Review output stays outside the checkout; shared golden baselines are never rewritten.
+    #[test]
+    #[ignore = "writes the explicit Studio control review matrix"]
+    fn render_controls_review() {
+        use mypaper_ui::{golden, render};
+        let out =
+            std::path::PathBuf::from(std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS").unwrap());
+        let mut ui = Ui::new().unwrap();
+        for dark in [true, false] {
+            for scale in [1.0, 1.25, 1.5, 2.0] {
+                for state in ["rest", "hover", "drag", "focus"] {
+                    let app = crate::goldens::window_app(dark, &ui, (1280, 800));
+                    let mut input = app.input.clone();
+                    match state {
+                        "hover" => input.hover = Some(key("slider-review")),
+                        "drag" => input.pressed = Some(key("slider-review")),
+                        "focus" => {
+                            input.focus = Some(key("slider-review"));
+                            input.focus_visible = true;
+                        }
+                        _ => {}
+                    }
+                    let mut b = crate::ui::builder(
+                        &mut ui.text,
+                        &app.theme.palette,
+                        &app.theme.ty,
+                        scale,
+                        &input,
+                    );
+                    b.fill(
+                        Rect::new(0.0, 0.0, 640.0 * scale, 300.0 * scale),
+                        0.0,
+                        b.p.panel,
+                    );
+                    b.segmented(
+                        key("segments-review"),
+                        Rect::new(20.0 * scale, 20.0 * scale, 600.0 * scale, 32.0 * scale),
+                        &["Integrated", "High performance", "Windows' choice"],
+                        Some(0),
+                        "Graphics card",
+                        true,
+                        |_| Action::None,
+                    );
+                    for (row, value) in [0.0, 37.3, 100.0].into_iter().enumerate() {
+                        let slider_key = if row == 1 {
+                            key("slider-review")
+                        } else {
+                            key(("slider-review", row))
+                        };
+                        b.slider(
+                            slider_key,
+                            Rect::new(
+                                20.0 * scale,
+                                (65.0 + row as f32 * 40.0) * scale,
+                                600.0 * scale,
+                                32.0 * scale,
+                            ),
+                            value,
+                            (0.0, 100.0, 1.0),
+                            &format!("{value}%"),
+                            48.0 * scale,
+                            "Opacity",
+                            Action::None,
+                        );
+                    }
+                    let mut c = Col {
+                        x: 20.0 * scale,
+                        y: 200.0 * scale,
+                        w: 340.0 * scale,
+                        view: key("colors-review"),
+                    };
+                    swatches(
+                        &app,
+                        &mut b,
+                        &mut c,
+                        &Edit::new(DocId::Config, "/look/accent", "Accent"),
+                        Some(&json!("auto")),
+                        true,
+                        false,
+                        &super::super::material::SWATCHES,
+                    );
+                    assert_eq!(
+                        b.list
+                            .hits
+                            .iter()
+                            .filter(|hit| hit.role == mypaper_ui::Role::Slider)
+                            .count(),
+                        3
+                    );
+                    let list = b.list;
+                    let image = render(
+                        &mut ui,
+                        &list,
+                        (640.0 * scale) as u32,
+                        (300.0 * scale) as u32,
+                    )
+                    .unwrap();
+                    golden::write(
+                        &image,
+                        &out.join(format!(
+                            "controls-{}-{}-{state}.png",
+                            if dark { "dark" } else { "light" },
+                            (scale * 100.0) as u32
+                        )),
+                    )
+                    .unwrap();
+                }
+            }
+        }
+        for size in [(1280, 800), (1920, 1080)] {
+            for dark in [true, false] {
+                for collapsed in [false, true] {
+                    for (page, name) in [
+                        (Page::Root, "home"),
+                        (Page::Wallpapers, "wallpapers"),
+                        (Page::Look, "look"),
+                        (Page::Windows, "windows"),
+                        (Page::Bars, "bars"),
+                        (Page::Widget, "widget"),
+                        (Page::Settings, "settings"),
+                        (Page::History, "history"),
+                        (Page::FirstRun, "first-run"),
+                        (Page::Look, "off"),
+                    ] {
+                        if matches!(page, Page::History) {
+                            continue;
+                        }
+                        let mut app = crate::goldens::window_app(dark, &ui, size);
+                        if collapsed {
+                            crate::view::toggle_sidebar(&mut app);
+                            app.toast = None;
+                        }
+                        app.run(Action::Panel(Command::Open(page)));
+                        if page == Page::Widget {
+                            app.nav.widget = Some("clock-1".into());
+                        }
+                        if name == "off" {
+                            app.system
+                                .parts
+                                .iter_mut()
+                                .for_each(|part| part.running = false);
+                        }
+                        let image = crate::goldens::shot(&mut app, &mut ui);
+                        golden::write(
+                            &image,
+                            &out.join(format!(
+                                "{name}{}-{}x{}-{}.png",
+                                if collapsed { "-collapsed" } else { "" },
+                                size.0,
+                                size.1,
+                                if dark { "dark" } else { "light" }
+                            )),
+                        )
+                        .unwrap();
+                    }
+                }
+            }
+        }
     }
 }
