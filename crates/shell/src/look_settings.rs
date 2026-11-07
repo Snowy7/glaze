@@ -154,6 +154,12 @@ pub fn bar(
         bar.border = Default::default();
     }
     let material = family(look, surface).map_or(look.material, |f| f.material.over(&look.material));
+    // A design's bare bar has nothing to colour. Selecting a tint restores its glass body;
+    // explicitly configured transparent/background overrides still take precedence.
+    if material.tint.is_some() && !own("/transparent") && !own("/background") {
+        bar.transparent = Some(false);
+        bar.background = None;
+    }
     for (path, value, target) in [
         ("/glass/clarity", material.clarity, &mut bar.glass.clarity),
         ("/glass/blur", material.blur, &mut bar.glass.blur),
