@@ -945,6 +945,11 @@ impl Bars {
         module: Option<&crate::studio_pick::module_drag::Preview>,
     ) {
         use crate::studio_pick::wire::{self, Document};
+        if !preview.has(Document::Config) && self.studio_look.is_none()
+            && !preview.has(Document::Bars) && module.is_none()
+            && self.studio_stamp.0.is_none() && self.studio_stamp.2.is_none() {
+            return;
+        }
         let desktop_raw = mypaper_config::path().ok().and_then(|p| std::fs::read(p).ok())
             .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
         let desktop = desktop_raw.as_ref().and_then(|raw| {

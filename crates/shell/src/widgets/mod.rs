@@ -3943,7 +3943,7 @@ pub(crate) fn tokens(appearance: &serde_json::Map<String, Value>) -> Tokens {
     };
     Tokens {
         font: TextStyle::new(layer.font.as_deref().unwrap_or(view::DEFAULT_FAMILY), 14.0),
-        colors: Colors::new(dark, accent),
+        colors: Colors { text_dim: Colors::new(dark, accent).text.with_alpha(0.78), ..Colors::new(dark, accent) },
         material: mypaper_ui::Material {
             tint: Rgba::rgb8(
                 layer.tint.unwrap_or(look::DEFAULT_TINT).0,
