@@ -824,7 +824,7 @@ mod tests {
 
     /// The style alone decides the material: only Liquid bends and lights its rim; One UI and
     /// Fluent are flat frosted glass even when a design asks for refraction; Solid and Mono have
-    /// none, and Mono stays near-opaque.
+    /// none, and Mono keeps the kit's deliberately translucent flat tint.
     #[test]
     fn styles_pick_distinct_materials() {
         let system = crate::flyouts::look::fixed_system();
@@ -859,7 +859,8 @@ mod tests {
         for flat in [NativeStyle::Solid, NativeStyle::Mono] {
             let t = tokens(flat);
             assert!(t.material.is_none(), "{flat:?}");
-            assert!(t.theme.color.surface.a >= 0.9, "{flat:?}: near-opaque");
+            let expected = if flat == NativeStyle::Solid { 1.0 } else { 0.78 };
+            assert_eq!(t.theme.color.surface.a, expected, "{flat:?}: flat fill");
         }
         assert!(tokens(NativeStyle::Fluent).radius <= 8.0);
         // A look without a style takes its family's.
