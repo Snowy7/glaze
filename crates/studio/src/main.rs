@@ -54,8 +54,7 @@ use windows::core::w;
 use crate::app::{App, Msg, WM_STUDIO};
 use mypaper_bars::wake as mypaper_bars_wake;
 
-// This branch runs alongside the installed Studio until the owner chooses to replace it.
-const TITLE: &str = "mypaper Studio (new)";
+const TITLE: &str = "mypaper Studio";
 
 /// Wakes the UI thread's loop (workers post after sending a [`Msg`]).
 pub fn wake(thread: u32) {
@@ -248,7 +247,7 @@ fn run() -> Result<()> {
     let title = if panel_mode { panel::TITLE } else { TITLE };
     // SAFETY: a named mutex held (never closed) for the life of the process.
     unsafe {
-        let name = if panel_mode { w!("Local\\mypaper-studio-panel-new") } else { w!("Local\\mypaper-studio-window-new") };
+        let name = if panel_mode { w!("Local\\mypaper-studio-panel") } else { w!("Local\\mypaper-studio") };
         let _mutex = CreateMutexW(None, true, name).context("mutex")?;
         if GetLastError() == ERROR_ALREADY_EXISTS {
             if let Ok(hwnd) = FindWindowW(w!("mypaper.ui.app"), &windows::core::HSTRING::from(title)) {

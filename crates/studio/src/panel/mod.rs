@@ -43,7 +43,7 @@ use crate::actions::{Action, FieldId};
 use crate::app::App;
 use crate::view::Built;
 
-pub const TITLE: &str = "mypaper Studio (new) · Panel";
+pub const TITLE: &str = "mypaper Studio · Panel";
 
 pub fn enabled() -> bool {
     std::env::var("MYPAPER_STUDIO_PANEL").is_ok_and(|v| v == "1")

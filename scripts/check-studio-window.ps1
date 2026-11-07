@@ -52,7 +52,7 @@ if ($Mode -eq 'Start') {
     [IO.File]::WriteAllText((Join-Path $settings 'studio.json'), (@{ first_run_done = $false; appearance = 'dark' } | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
     [void][IO.Directory]::CreateDirectory($Shots)
     $review = [pscustomobject]@{
-        process = 0; exe = $Exe; title = 'mypaper Studio (new)'; closed = $false
+        process = 0; exe = $Exe; title = 'mypaper Studio'; closed = $false
         sourceHead = (git -C $checkout rev-parse HEAD)
         exeSha256 = (Get-FileHash -LiteralPath $Exe).Hash
         startedAt = (Get-Date).ToUniversalTime().ToString('o')
@@ -86,7 +86,7 @@ if ($Mode -eq 'Start') {
 
 $script:window = $script:process.MainWindowHandle
 if ($script:process.Id -eq 32732 -or $script:process.Path -ne $Exe -or
-    $script:process.MainWindowTitle -ne 'mypaper Studio (new)' -or $script:window -eq [IntPtr]::Zero) {
+    $script:process.MainWindowTitle -ne 'mypaper Studio' -or $script:window -eq [IntPtr]::Zero) {
     throw 'The selected process is not our standalone review window; no UI action was sent.'
 }
 WaitOwnStable
