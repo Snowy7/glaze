@@ -2,8 +2,9 @@
 //! corners, backdrop and dark title bar. Public API only, and no code runs
 //! inside other processes.
 //!
-//! A window is touched only if it is a visible app frame and its
-//! process passes the injection allowlist (`mypaper_inject::evaluate`, with
+//! A visible app frame gets full styling; floating surfaces get dark mode only.
+//! Overlays and transparent indicators are untouched. A window must pass the
+//! process injection allowlist (`mypaper_inject::evaluate`, with
 //! the signature check). Existing windows are styled when the [`Styler`]
 //! starts; WinEvents follow new windows and frame changes. A slow timer checks
 //! only tracked windows for style changes that emit no WinEvent. Dropping the
@@ -226,7 +227,7 @@ pub fn reset_all(dark: Option<bool>) {
         ..WindowsStyle::default()
     };
     for_each_window(|hwnd| {
-        if is_candidate(hwnd) && process_allowed(hwnd, &windows_dir) {
+        if window_class(hwnd) == WindowClass::AppFrame && process_allowed(hwnd, &windows_dir) {
             reset(hwnd, &everything, dark.unwrap_or_default());
         }
     });
@@ -245,8 +246,8 @@ impl State {
     /// Styles the window if it is eligible; returns whether it was.
     fn consider(&mut self, hwnd: HWND) -> bool {
         let key = hwnd.0 as isize;
-        let candidate = is_candidate(hwnd);
-        if !candidate && !self.originals.contains_key(&key) {
+        let class = window_class(hwnd);
+        if class == WindowClass::Untouched && !self.originals.contains_key(&key) {
             return false;
         }
         let process = allowed_process(hwnd, &self.windows_dir);
@@ -257,7 +258,7 @@ impl State {
         {
             self.originals.remove(&key); // A dead or reused handle is no longer ours.
         }
-        if !candidate {
+        if class == WindowClass::Untouched {
             if let Some(tracked) = self.originals.get_mut(&key) {
                 tracked.applied = apply_transition(
                     hwnd,
@@ -289,8 +290,12 @@ impl State {
             });
         }
         let tracked = self.originals.get_mut(&key).expect("inserted above");
-        tracked.applied =
-            apply_transition(hwnd, tracked.applied, self.style, &mut tracked.original);
+        tracked.applied = apply_transition(
+            hwnd,
+            tracked.applied,
+            class.style(self.style),
+            &mut tracked.original,
+        );
         true
     }
 }
@@ -360,45 +365,75 @@ fn for_each_window(mut f: impl FnMut(HWND)) {
     let _ = unsafe { EnumWindows(Some(visit), LPARAM(&raw mut f as isize)) };
 }
 
-/// Caption alone is insufficient: capture overlays also advertise a title bar.
-fn frame_styles(style: u32, ex: u32, owned: bool) -> bool {
-    let excluded = WS_EX_TOOLWINDOW.0 | WS_EX_LAYERED.0 | WS_EX_TRANSPARENT.0 | WS_EX_NOACTIVATE.0;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WindowClass {
+    AppFrame,
+    Floating,
+    Untouched,
+}
+
+impl WindowClass {
+    fn style(self, requested: WindowStyle) -> WindowStyle {
+        match self {
+            Self::AppFrame => requested,
+            Self::Floating => WindowStyle {
+                dark_mode: requested.dark_mode,
+                ..Default::default()
+            },
+            Self::Untouched => WindowStyle::default(),
+        }
+    }
+}
+
+/// Pure classification: transparent indicators and full-monitor overlays must
+/// never receive writes. Floating shapes may follow the scheme, but DWM must
+/// not paint their enclosing rectangle. NOREDIRECTIONBITMAP alone is fine.
+fn classify_window(
+    style: u32,
+    ex: u32,
+    owned: bool,
+    cloaked: bool,
+    covers_monitor: bool,
+) -> WindowClass {
+    if style & WS_CHILD.0 != 0
+        || cloaked
+        || ex & (WS_EX_LAYERED.0 | WS_EX_TRANSPARENT.0) != 0
+        || (covers_monitor && ex & WS_EX_TOPMOST.0 != 0)
+    {
+        return WindowClass::Untouched;
+    }
     let app_frame = ex & WS_EX_APPWINDOW.0 != 0
         || (style & (WS_THICKFRAME.0 | WS_SYSMENU.0) == WS_THICKFRAME.0 | WS_SYSMENU.0
             && style & (WS_MINIMIZEBOX.0 | WS_MAXIMIZEBOX.0) != 0);
-    style & WS_CAPTION.0 == WS_CAPTION.0
-        && style & WS_CHILD.0 == 0
-        && ex & excluded == 0
+    if style & WS_CAPTION.0 == WS_CAPTION.0
+        && ex & (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0) == 0
         && (!(owned || style & WS_POPUP.0 != 0) || app_frame)
+    {
+        WindowClass::AppFrame
+    } else {
+        WindowClass::Floating
+    }
 }
 
 fn unmanaged_backdrop(original: Option<u32>) -> bool {
     original.is_none_or(|v| v == DWMSBT_AUTO.0 as u32)
 }
 
-/// Only visible, uncloaked app frames; monitor-sized topmost surfaces draw themselves.
-fn is_candidate(hwnd: HWND) -> bool {
+fn window_class(hwnd: HWND) -> WindowClass {
     // SAFETY: plain queries on a window handle; stale handles just fail.
     unsafe {
-        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
-        if !IsWindowVisible(hwnd).as_bool()
-            || GetAncestor(hwnd, GA_PARENT) != GetDesktopWindow()
-            || !frame_styles(
-                GetWindowLongPtrW(hwnd, GWL_STYLE) as u32,
-                ex,
-                GetWindow(hwnd, GW_OWNER).is_ok_and(|h| !h.is_invalid()),
-            )
-            || read(hwnd, DWMWA_CLOAKED).is_some_and(|v| v != 0)
-        {
-            return false;
+        if !IsWindowVisible(hwnd).as_bool() || GetAncestor(hwnd, GA_PARENT) != GetDesktopWindow() {
+            return WindowClass::Untouched;
         }
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+        let mut covers_monitor = false;
         if ex & WS_EX_TOPMOST.0 != 0 {
             let mut rect = RECT::default();
             let mut monitor = MONITORINFO {
                 cbSize: size_of::<MONITORINFO>() as u32,
                 ..Default::default()
             };
-            if GetWindowRect(hwnd, &mut rect).is_ok()
+            covers_monitor = GetWindowRect(hwnd, &mut rect).is_ok()
                 && GetMonitorInfoW(
                     MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
                     &mut monitor,
@@ -407,15 +442,17 @@ fn is_candidate(hwnd: HWND) -> bool {
                 && rect.left <= monitor.rcMonitor.left
                 && rect.top <= monitor.rcMonitor.top
                 && rect.right >= monitor.rcMonitor.right
-                && rect.bottom >= monitor.rcMonitor.bottom
-            {
-                return false;
-            }
+                && rect.bottom >= monitor.rcMonitor.bottom;
         }
-        true
+        classify_window(
+            GetWindowLongPtrW(hwnd, GWL_STYLE) as u32,
+            ex,
+            GetWindow(hwnd, GW_OWNER).is_ok_and(|h| !h.is_invalid()),
+            read(hwnd, DWMWA_CLOAKED).is_some_and(|v| v != 0),
+            covers_monitor,
+        )
     }
 }
-
 /// Does the window's process pass the injection allowlist?
 fn process_allowed(hwnd: HWND, windows_dir: &Path) -> bool {
     allowed_process(hwnd, windows_dir).is_some()
@@ -683,44 +720,86 @@ mod tests {
     use super::*;
 
     #[test]
-    fn snipping_transient_surfaces_never_qualify_even_with_a_caption() {
+    fn capture_overlays_and_see_through_indicators_are_untouched() {
         let frame = WS_CAPTION.0 | WS_THICKFRAME.0 | WS_SYSMENU.0 | WS_MINIMIZEBOX.0;
-        for ex in [0x801a8, 0x200188, 0x8200008] {
-            assert!(!frame_styles(frame, ex, false), "ex={ex:#x}");
-        }
-        // 0x200108 has NOREDIRECTIONBITMAP but no TOOLWINDOW bit (0x80).
-        // A captioned recording toolbar is still an owned popup, not an app frame.
-        assert!(!frame_styles(WS_CAPTION.0 | WS_POPUP.0, 0x200108, true));
-        for excluded in [
-            WS_EX_TOOLWINDOW,
-            WS_EX_LAYERED,
-            WS_EX_TRANSPARENT,
-            WS_EX_NOACTIVATE,
+        for (style, ex, cloaked, fullscreen) in [
+            (frame, 0x801a8, false, false),
+            (frame, 0x200188, false, true),
+            (frame, WS_EX_LAYERED.0, false, false),
+            (frame, WS_EX_TRANSPARENT.0, false, false),
+            (frame | WS_CHILD.0, 0, false, false),
+            (frame, 0, true, false),
         ] {
-            assert!(!frame_styles(frame, WS_EX_APPWINDOW.0 | excluded.0, false));
+            assert_eq!(
+                classify_window(style, ex, false, cloaked, fullscreen),
+                WindowClass::Untouched
+            );
         }
     }
 
     #[test]
-    fn normal_frames_survive_but_popups_and_owned_transients_do_not() {
-        let frame = WS_CAPTION.0 | WS_THICKFRAME.0 | WS_SYSMENU.0 | WS_MINIMIZEBOX.0;
-        // WinUI's NOREDIRECTIONBITMAP alone does not make the main app an overlay.
-        for ex in [0, WS_EX_APPWINDOW.0, 0x200100] {
-            assert!(frame_styles(frame, ex, false));
-            assert!(frame_styles(frame | WS_POPUP.0, ex, false));
+    fn floating_toolbars_popups_and_captionless_notifications_only_follow_dark_mode() {
+        for (style, ex, owned) in [
+            (WS_CAPTION.0 | WS_POPUP.0, 0x200108, true),
+            (WS_CAPTION.0, WS_EX_TOOLWINDOW.0, false),
+            (0, 0x200188, false),
+            (0, 0x8200008, false),
+            (WS_CAPTION.0, 0, true),
+        ] {
+            let class = classify_window(style, ex, owned, false, false);
+            assert_eq!(class, WindowClass::Floating);
+            let requested = WindowStyle {
+                border: Some(mypaper_theme::Color([2; 3])),
+                caption: Some(mypaper_theme::Color([3; 3])),
+                caption_text: Some(mypaper_theme::Color([4; 3])),
+                corners: Some(Corners::Round),
+                backdrop: Some(Backdrop::Mica),
+                dark_mode: Some(true),
+            };
+            let safe = class.style(requested);
+            assert_eq!(
+                safe,
+                WindowStyle {
+                    dark_mode: Some(true),
+                    ..Default::default()
+                }
+            );
+            let released = requested.transition_to(safe);
+            assert_eq!(released.backdrop, Change::Reset);
+            assert_eq!(released.corners, Change::Reset);
+            assert_eq!(released.border, Change::Reset);
+            assert_eq!(released.caption, Change::Reset);
+            assert_eq!(released.caption_text, Change::Reset);
+            assert_eq!(released.dark_mode, Change::Keep);
         }
-        assert!(!frame_styles(WS_CAPTION.0 | WS_POPUP.0, 0, false));
-        assert!(!frame_styles(WS_CAPTION.0, 0, true));
-        assert!(frame_styles(frame, 0, true));
-        assert!(frame_styles(
-            WS_CAPTION.0 | WS_POPUP.0,
-            WS_EX_APPWINDOW.0,
-            true
-        ));
-        assert!(!frame_styles(frame & !WS_CAPTION.0, 0, false));
-        assert!(!frame_styles(frame | WS_CHILD.0, 0, false));
     }
 
+    #[test]
+    fn normal_frames_keep_full_styling_including_winui_no_redirection_frames() {
+        let frame = WS_CAPTION.0 | WS_THICKFRAME.0 | WS_SYSMENU.0 | WS_MINIMIZEBOX.0;
+        for ex in [0, WS_EX_APPWINDOW.0, 0x200100] {
+            for popup in [0, WS_POPUP.0] {
+                assert_eq!(
+                    classify_window(frame | popup, ex, false, false, false),
+                    WindowClass::AppFrame
+                );
+            }
+        }
+        assert_eq!(
+            classify_window(frame, 0, true, false, false),
+            WindowClass::AppFrame
+        );
+        let requested = WindowStyle {
+            corners: Some(Corners::Round),
+            backdrop: Some(Backdrop::Mica),
+            ..Default::default()
+        };
+        assert_eq!(WindowClass::AppFrame.style(requested), requested);
+        assert_eq!(
+            WindowClass::Untouched.style(requested),
+            WindowStyle::default()
+        );
+    }
     #[test]
     fn explicit_app_materials_are_preserved_including_none_and_unknown_values() {
         assert!(unmanaged_backdrop(None));
