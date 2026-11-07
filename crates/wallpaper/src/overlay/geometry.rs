@@ -18,10 +18,15 @@ pub fn reach(rect: Rect, material: &Material, scale: f32) -> i32 {
 /// The overlay window: the surface grown by `reach` on every side, kept on its monitor (the
 /// capture ends there; samples past the edge clamp to it).
 pub fn frame(rect: Rect, reach: i32, monitor: Rect) -> Rect {
-    let x0 = (rect.x - reach).max(monitor.x);
-    let y0 = (rect.y - reach).max(monitor.y);
-    let x1 = (rect.x + rect.width + reach).min(monitor.x + monitor.width);
-    let y1 = (rect.y + rect.height + reach).min(monitor.y + monitor.height);
+    // Sliding bars can lie entirely beyond the monitor. Keep even their 1px placeholder
+    // inside the capture texture: max(1) alone left its origin out of bounds, which removes
+    // the D3D11 device when CopySubresourceRegion receives that invalid source box.
+    let right = monitor.x + monitor.width.max(1);
+    let bottom = monitor.y + monitor.height.max(1);
+    let x0 = (rect.x - reach).clamp(monitor.x, right - 1);
+    let y0 = (rect.y - reach).clamp(monitor.y, bottom - 1);
+    let x1 = (rect.x + rect.width + reach).clamp(x0 + 1, right);
+    let y1 = (rect.y + rect.height + reach).clamp(y0 + 1, bottom);
     Rect {
         x: x0,
         y: y0,
@@ -65,6 +70,40 @@ mod tests {
     }
 
     #[test]
+    fn a_slid_offscreen_dock_never_copies_outside_the_capture_texture() {
+        let primary = rect(0, 0, 2560, 1440);
+        for monitor in [primary, SCREEN] {
+            for surface in [
+                rect(1000, 1490, 528, 54),
+                rect(-4000, 100, 100, 40),
+                rect(4000, 100, 100, 40),
+                rect(0, -500, 100, 40),
+            ] {
+                let f = frame(surface, 30, monitor);
+                assert!(f.x >= monitor.x && f.y >= monitor.y);
+                assert!(f.x + f.width <= monitor.x + monitor.width);
+                assert!(f.y + f.height <= monitor.y + monitor.height);
+                assert!(f.width > 0 && f.height > 0);
+            }
+        }
+    }
+
+    #[test]
+    fn straddling_shape_has_adjacent_pieces_without_internal_corners() {
+        let shape = rect(-300, 200, 600, 500);
+        let left = frame(shape, 30, SCREEN);
+        let right = frame(shape, 30, rect(0, 0, 2560, 1440));
+        assert_eq!(left.x + left.width, right.x);
+        assert_eq!((left.y, left.height), (right.y, right.height));
+        assert_eq!(local(shape, left).width, 600);
+        assert_eq!(local(shape, right).width, 600);
+        assert!(
+            local(shape, right).x < 0,
+            "right piece clips the full shape, not a new corner"
+        );
+    }
+
+    #[test]
     fn reach_covers_the_shadow_and_scales_with_dpi() {
         let menu = rect(0, 0, 420, 600);
         let at = |scale| reach(menu, &Material::CLEAR, scale);
@@ -78,7 +117,10 @@ mod tests {
             blur: 300.0,
             ..Material::CLEAR
         };
-        assert!(reach(menu, &frosted, 1.0) > at(1.0), "heavy frost samples further");
+        assert!(
+            reach(menu, &frosted, 1.0) > at(1.0),
+            "heavy frost samples further"
+        );
     }
 
     #[test]

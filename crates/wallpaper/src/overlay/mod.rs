@@ -404,6 +404,7 @@ struct Live {
 
 struct Overlay {
     client: HWND,
+    layer: Layer,
     /// The plate it draws ([`Overlays::sync_plates`]); `None` for the shell's own requests.
     plate: Option<u64>,
     /// Shows its last glass and takes no frames (a plate on a covered or held screen).
@@ -782,29 +783,26 @@ impl Overlays {
                     return Ok(());
                 };
                 let material = self.open[o].material;
-                self.place(o, rect, radius, material)
+                self.open(client, self.open[o].layer, rect, radius, material)
             }
             Request::Material { client, material } => {
                 let Some(o) = self.find(client) else {
                     return Ok(());
                 };
                 let (rect, radius) = (self.open[o].rect, self.open[o].radius);
-                self.place(o, rect, radius, material)?;
-                // The shown crop still holds what is behind: redraw at once.
-                if self.open[o].shown.is_some() && !self.open[o].fresh {
-                    self.draw(&[o])?;
-                }
-                Ok(())
+                self.open(client, self.open[o].layer, rect, radius, material)
             }
             Request::Close { client } => {
                 self.close(client);
                 Ok(())
             }
             Request::Style { client, style } => {
-                let Some(o) = self.find(client) else {
-                    return Ok(());
-                };
-                self.restyle(o, style)
+                for o in 0..self.open.len() {
+                    if self.open[o].client == client && self.open[o].plate.is_none() {
+                        self.restyle(o, style)?;
+                    }
+                }
+                Ok(())
             }
         }
     }
@@ -835,33 +833,24 @@ impl Overlays {
     }
 
     fn sync_plate(&mut self, plate: &PlateOverlay) -> Result<()> {
-        let Some(o) = self.open.iter().position(|o| o.plate == Some(plate.id)) else {
-            // A plate first seen on a covered or held screen waits until it can be seen.
-            if plate.live {
-                self.create(
-                    plate.client,
-                    Some(plate.id),
-                    plate.layer,
-                    plate.rect,
-                    plate.radius,
-                    plate.material,
-                )?;
-                self.restyle(self.open.len() - 1, plate.style)?;
-            }
+        if !plate.live && !self.open.iter().any(|o| o.plate == Some(plate.id)) {
             return Ok(());
-        };
-        let overlay = &self.open[o];
-        if (overlay.rect, overlay.radius, overlay.material)
-            != (plate.rect, plate.radius, plate.material)
-        {
-            let material_changed = overlay.material != plate.material;
-            self.place(o, plate.rect, plate.radius, plate.material)?;
-            if material_changed && self.open[o].shown.is_some() && !self.open[o].fresh {
-                self.draw(&[o])?;
+        }
+        self.upsert(
+            plate.client,
+            Some(plate.id),
+            plate.layer,
+            plate.rect,
+            plate.radius,
+            plate.material,
+        )?;
+        for o in 0..self.open.len() {
+            if self.open[o].plate == Some(plate.id) {
+                self.restyle(o, plate.style)?;
+                self.set_frozen(o, !plate.live)?;
             }
         }
-        self.restyle(o, plate.style)?;
-        self.set_frozen(o, !plate.live)
+        Ok(())
     }
 
     /// Takes overlay `o`'s finer knobs: shown glass redraws with them at once; the fade only
@@ -923,15 +912,44 @@ impl Overlays {
         radius: f32,
         material: Material,
     ) -> Result<()> {
-        if let Some(o) = self.find(client) {
-            let material_changed = self.open[o].material != material;
-            self.place(o, rect, radius, material)?;
-            if material_changed && self.open[o].shown.is_some() && !self.open[o].fresh {
-                self.draw(&[o])?;
-            }
-            return Ok(());
+        self.upsert(client, None, layer, rect, radius, material)
+    }
+
+    /// One piece per intersected monitor, each using the full shape in local coordinates.
+    /// Internal monitor edges therefore do not become rounded corners of the client.
+    fn upsert(
+        &mut self,
+        client: HWND,
+        plate: Option<u64>,
+        layer: Layer,
+        rect: Rect,
+        radius: f32,
+        material: Material,
+    ) -> Result<()> {
+        let monitors = pieces(rect);
+        while let Some(o) = self.open.iter().position(|o| {
+            o.client == client && o.plate == plate && !monitors.iter().any(|(m, _)| *m == o.monitor)
+        }) {
+            self.close_at(o);
         }
-        self.create(client, None, layer, rect, radius, material)
+        for (monitor, bounds) in monitors {
+            if let Some(o) = self
+                .open
+                .iter()
+                .position(|o| o.client == client && o.plate == plate && o.monitor == monitor)
+            {
+                let material_changed = self.open[o].material != material;
+                self.place(o, rect, radius, material)?;
+                if material_changed && self.open[o].shown.is_some() && !self.open[o].fresh {
+                    self.draw(&[o])?;
+                }
+            } else {
+                self.create(
+                    client, plate, layer, rect, radius, material, monitor, bounds,
+                )?;
+            }
+        }
+        Ok(())
     }
 
     /// A new overlay under `client`: the shell's (`plate` `None`) or one of the engine's plates.
@@ -943,9 +961,10 @@ impl Overlays {
         rect: Rect,
         radius: f32,
         material: Material,
+        monitor: HMONITOR,
+        bounds: Rect,
     ) -> Result<()> {
         let opened = Instant::now();
-        let (monitor, bounds) = monitor_of(rect);
         if self.live.is_none() {
             let capture = CaptureDevice::new(&self.gpu.adapter, &self.gpu.device, &self.gpu.queue)?;
             // Capture first: its first frame takes ~300 ms, the rest is built meanwhile.
@@ -986,6 +1005,7 @@ impl Overlays {
         }
         self.open.push(Overlay {
             client,
+            layer,
             plate,
             frozen: false,
             rect,
@@ -1041,7 +1061,7 @@ impl Overlays {
 
     /// Moves, resizes or re-materials overlay `o`.
     fn place(&mut self, o: usize, rect: Rect, radius: f32, material: Material) -> Result<()> {
-        let (monitor, bounds) = monitor_of(rect);
+        let (monitor, bounds) = (self.open[o].monitor, self.open[o].bounds);
         let scale = if monitor == self.open[o].monitor {
             self.open[o].scale
         } else {
@@ -1092,7 +1112,7 @@ impl Overlays {
     }
 
     fn close(&mut self, client: HWND) {
-        if let Some(o) = self.find(client) {
+        while let Some(o) = self.find(client) {
             self.close_at(o);
         }
     }
@@ -1217,7 +1237,7 @@ impl Overlays {
                 &texture,
                 geometry::local(overlay.frame, bounds),
                 overlay.targets.fresh(),
-            );
+            )?;
         }
         live.capture.hand_to_wgpu()?;
         if let Some(t) = &live.copy_timer {
@@ -1333,7 +1353,7 @@ impl Overlays {
             let overlay = &mut self.open[o];
             overlay
                 .window
-                .show(&live.capture, overlay.targets.glass())?;
+                .show(&live.dcomp, &live.capture, overlay.targets.glass())?;
             let fade = Duration::from_secs_f32(overlay.style.fade_ms / 1000.0);
             match overlay.shown {
                 None => {
@@ -1485,6 +1505,18 @@ fn size(frame: Rect) -> (u32, u32) {
     (frame.width.max(1) as u32, frame.height.max(1) as u32)
 }
 
+fn pieces(rect: Rect) -> Vec<(HMONITOR, Rect)> {
+    let mut monitors: Vec<_> = mypaper_desktop::monitor_infos()
+        .into_iter()
+        .filter(|m| geometry::touches(rect, m.rect))
+        .map(|m| monitor_of(m.rect))
+        .collect();
+    if monitors.is_empty() {
+        monitors.push(monitor_of(rect));
+    }
+    monitors
+}
+
 /// The monitor most of `rect` is on, and its bounds.
 fn monitor_of(rect: Rect) -> (HMONITOR, Rect) {
     let r = RECT {
@@ -1589,14 +1621,16 @@ fn move_now(inbox: &Inbox, request: &Request) {
         return;
     };
     let mut placements = inbox.placements.borrow_mut();
-    let Some(p) = placements.iter_mut().find(|p| p.client == client) else {
-        return;
-    };
-    let frame = geometry::frame(rect, geometry::reach(rect, &p.material, p.scale), p.bounds);
-    let same_size = (frame.width, frame.height) == (p.frame.width, p.frame.height);
-    if same_size && frame != p.frame && window::move_under(p.overlay, client, frame, true).is_ok() {
-        p.frame = frame;
-        inbox.moved_at_once.set(inbox.moved_at_once.get() + 1);
+    for p in placements.iter_mut().filter(|p| p.client == client) {
+        let frame = geometry::frame(rect, geometry::reach(rect, &p.material, p.scale), p.bounds);
+        let same_size = (frame.width, frame.height) == (p.frame.width, p.frame.height);
+        if same_size
+            && frame != p.frame
+            && window::move_under(p.overlay, client, frame, true).is_ok()
+        {
+            p.frame = frame;
+            inbox.moved_at_once.set(inbox.moved_at_once.get() + 1);
+        }
     }
 }
 

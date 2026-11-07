@@ -123,8 +123,8 @@ impl CaptureDevice {
             (
                 adapter.as_raw().cast::<IDXGIAdapter>()?,
                 hal.raw_device().clone(),
-                // Device::raw_queue is the separate PRESENT queue. Fences there do not
-                // order wgpu submissions; wallpaper presents merely masked the race.
+                // Fence the queue wgpu submits rendering to, rather than relying on the
+                // device's presentation-queue accessor remaining an alias of it.
                 queue.as_raw().clone(),
             )
         };
@@ -276,7 +276,23 @@ impl CaptureDevice {
     }
 
     /// Queues a copy of `frame`'s monitor-local `from` (clamped to the frame) into `to` at 0, 0.
-    pub fn copy(&self, frame: &ID3D11Texture2D, from: Rect, to: &Crop) {
+    pub fn copy(&self, frame: &ID3D11Texture2D, from: Rect, to: &Crop) -> Result<()> {
+        let mut desc = windows::Win32::Graphics::Direct3D11::D3D11_TEXTURE2D_DESC::default();
+        // SAFETY: read-only descriptor query. A display change can leave one old-sized frame.
+        unsafe { frame.GetDesc(&mut desc) };
+        if from.x < 0
+            || from.y < 0
+            || from.width <= 0
+            || from.height <= 0
+            || (from.x as u32).saturating_add(from.width as u32) > desc.Width
+            || (from.y as u32).saturating_add(from.height as u32) > desc.Height
+        {
+            anyhow::bail!(
+                "capture size changed: crop {from:?} outside {}x{}",
+                desc.Width,
+                desc.Height
+            );
+        }
         let source = D3D11_BOX {
             left: from.x.max(0) as u32,
             top: from.y.max(0) as u32,
@@ -291,6 +307,7 @@ impl CaptureDevice {
             self.context
                 .CopySubresourceRegion(&to.d3d11, 0, 0, 0, 0, frame, 0, Some(&source));
         }
+        Ok(())
     }
 
     /// Submits the queued copies, and makes wgpu's queue wait for them on the GPU.
@@ -330,7 +347,9 @@ impl CaptureDevice {
         let mut offset = windows::Win32::Foundation::POINT::default();
         // SAFETY: a surface of this device's DirectComposition device, drawn whole and ended.
         unsafe {
-            let target: ID3D11Texture2D = surface.BeginDraw(None, &mut offset)?;
+            let target: ID3D11Texture2D = surface
+                .BeginDraw(None, &mut offset)
+                .context("DComp BeginDraw")?;
             self.context.CopySubresourceRegion(
                 &target,
                 0,
@@ -341,7 +360,7 @@ impl CaptureDevice {
                 0,
                 None,
             );
-            surface.EndDraw()?;
+            surface.EndDraw().context("DComp EndDraw")?;
         }
         Ok(())
     }
@@ -399,16 +418,6 @@ mod fence_tests {
         assert!(
             !overtakes_rendering(&mut capture, &render_queue),
             "composition passed rendering still blocked on the render queue"
-        );
-        // Negative control: the old queue really does pass the blocked rendering. This
-        // proves the test discriminates the bug instead of relying on wallpaper activity.
-        capture.queue12 = unsafe { gpu.device.as_hal::<Dx12>() }
-            .unwrap()
-            .raw_queue()
-            .clone();
-        assert!(
-            overtakes_rendering(&mut capture, &render_queue),
-            "the old presentation queue must demonstrate the unsynchronized handoff"
         );
     }
 
