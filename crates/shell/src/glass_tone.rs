@@ -132,7 +132,8 @@ pub fn face(m: &super::Material, under: Rgba, min_side: f32) -> Rgba {
     let g = Rgba::new(g[0], g[1], g[2], 1.0);
     let mut lab = to_lab(t);
     lab[0] = (lab[0] + (to_lab(g)[0] - 0.65) * 0.6).clamp(0.15, 0.97);
-    over(from_lab(lab).with_alpha(t.a.clamp(0.0, 1.0)), g)
+    // renderer::material_gpu retains 15% of the original face even at full stain strength.
+    over(from_lab(lab).with_alpha(t.a.clamp(0.0, 1.0) * 0.85), g)
 }
 
 /// Pick the stronger ink and raise alpha only as far as the requested contrast needs.
@@ -203,6 +204,11 @@ fn from_lab([l, a, b]: [f32; 3]) -> Rgba {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ink_flips_with_the_visible_face_instead_of_the_requested_scheme() {
+        assert_eq!(ink(Rgba::rgb8([235; 3], 1.0), 4.5, 0.88).r, 0.0);
+        assert_eq!(ink(Rgba::rgb8([35; 3], 1.0), 4.5, 0.88).r, 1.0);
+    }
     #[test]
     fn ink_meets_contrast_after_material_and_backdrop_composition() {
         for tint in [
