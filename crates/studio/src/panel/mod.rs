@@ -142,7 +142,7 @@ impl Page {
 #[derive(Debug, Default)]
 pub struct State {
     pub window: crate::view::State,
-    /// The standalone frame hosts these same pages without any desktop picking session.
+    /// The standalone frame borrows desktop previews without panel picking or placement.
     pub windowed: bool,
     pub stage_actual: bool,
     pub chooser: std::cell::RefCell<choosers::State>,
@@ -658,7 +658,6 @@ pub(crate) fn prepare_page(app: &App, text: &mut Text) -> Page {
     choosers::begin(app);
     history::observe(app);
     let page = current_page(app);
-    history::preview_selected(app);
     let state = app.panel.as_ref().unwrap();
     if state.specimen_page.replace(Some(page)) != Some(page) {
         state.specimens.borrow_mut().clear();

@@ -157,6 +157,36 @@ pub fn captioned(
     cards(app, b, c, id, Some(captions), choices, picture)
 }
 
+/// History rows share the cards' pointer/focus arbitration and preview debounce.
+pub fn preview_row(app: &App, b: &B, id: Key, rect: Rect, action: Action) {
+    let state = app.panel.as_ref().unwrap().chooser.borrow();
+    let keyboard = b.input.focus_visible && !state.pointer_mode;
+    let pointer = if app.fixture || app.window.is_none() {
+        b.input.pointer
+    } else {
+        super::pick_client::panel_pointer(app)
+    };
+    let visible = b.clip_rect().map_or(rect, |clip| rect.intersect(clip));
+    let hot = if keyboard {
+        b.input.focus == Some(id) && visible.width() > 0.0 && visible.height() > 0.0
+    } else {
+        pointer.is_some_and(|point| visible.contains(point))
+    };
+    drop(state);
+    if hot {
+        app.panel.as_ref().unwrap().chooser.borrow_mut().requested = Some((id, action));
+    }
+}
+
+/// Track an immediate row preview so leaving it cancels just like a debounced hover.
+pub fn track_preview(app: &App, id: Key, action: Action) {
+    let mut state = app.panel.as_ref().unwrap().chooser.borrow_mut();
+    state.requested = Some((id, action.clone()));
+    state.pending = Some((id, action.clone(), Instant::now()));
+    state.previewed = Some(action);
+    state.suppressed = None;
+}
+
 fn cards(
     app: &App,
     b: &mut B,
@@ -832,6 +862,54 @@ mod tests {
             presented(&app);
             assert!(claim_raster(&app));
         }
+    }
+
+    #[test]
+    fn window_history_hover_and_focus_preview_without_selecting_or_saving() {
+        let mut ui = Ui::new().unwrap();
+        let mut app = crate::goldens::window_app(true, &ui, (1280, 800));
+        super::super::history::observe(&app);
+        app.run(Action::SetStyle(Some(Style::Solid)));
+        app.run(Action::Panel(super::super::Command::Open(Page::Look)));
+        app.run(Action::SetStyle(Some(Style::Mono)));
+        app.run(Action::Panel(super::super::Command::Open(Page::History)));
+        let before = DocId::ALL.map(|id| app.docs.doc(id).raw.clone());
+        let undo = app.docs.undo_count();
+        let frame = crate::view::build(&app, &mut ui);
+        let target = frame.targets.iter().find(|target| {
+            target.action == Action::Panel(super::super::Command::History(1))
+        }).unwrap();
+        let target_key = target.key;
+        app.input.pointer = Some(Point::new(target.rect.left + 20.0, target.rect.top + 20.0));
+        crate::view::build(&app, &mut ui);
+        let requested = || app.panel.as_ref().unwrap().chooser.borrow().pending
+            .as_ref().map(|(_, action, _)| action.clone());
+        assert_eq!(requested(), Some(Action::Panel(super::super::Command::History(1))));
+        assert_eq!(app.panel.as_ref().unwrap().history.borrow().selected, None);
+        app.event(Event::Leave);
+        crate::view::build(&app, &mut ui);
+        assert!(app.panel.as_ref().unwrap().chooser.borrow().pending.is_none());
+        app.frame.targets = frame.targets;
+        let id = app.frame.targets.iter().position(|target| target.key == target_key).unwrap() as u32 + 1;
+        app.event(Event::Focus(id));
+        crate::view::build(&app, &mut ui);
+        assert!(app.panel.as_ref().unwrap().chooser.borrow().pending.is_some());
+        for event in [Event::Deactivated, Event::Cancelled, Event::Close] {
+            app.event(event);
+            crate::view::build(&app, &mut ui);
+            assert!(app.panel.as_ref().unwrap().chooser.borrow().pending.is_none());
+        }
+        app.input.focus = None;
+        super::super::history::select(&app, 1);
+        assert!(app.panel.as_ref().unwrap().chooser.borrow().previewed.is_some());
+        crate::view::build(&app, &mut ui);
+        assert!(app.panel.as_ref().unwrap().chooser.borrow().previewed.is_none());
+        crate::view::build(&app, &mut ui);
+        assert!(app.panel.as_ref().unwrap().chooser.borrow().pending.is_none(),
+            "repainting a selected History row must not restart its preview after list leave");
+        assert_eq!(app.panel.as_ref().unwrap().history.borrow().selected, Some(1));
+        assert_eq!(before, DocId::ALL.map(|id| app.docs.doc(id).raw.clone()));
+        assert_eq!(app.docs.undo_count(), undo);
     }
 
     #[test]

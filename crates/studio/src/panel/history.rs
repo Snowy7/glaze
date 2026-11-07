@@ -682,6 +682,11 @@ pub fn select(app: &App, index: usize) {
     history.selected = (index < history.entries.len()).then_some(index);
     drop(history);
     preview_selected(app);
+    super::choosers::track_preview(
+        app,
+        mypaper_ui::controls::key(("panel-history", index)),
+        crate::actions::Action::Panel(super::Command::History(index)),
+    );
 }
 
 pub fn cancel(app: &App) {
@@ -692,17 +697,21 @@ pub fn cancel(app: &App) {
 }
 
 pub fn preview_selected(app: &App) {
-    let Some(panel) = &app.panel else { return };
+    let index = app.panel.as_ref().and_then(|panel| panel.history.borrow().selected);
+    preview_entry(app, index);
+}
+
+/// Hover/focus borrows a snapshot without changing the row chosen for Restore.
+pub fn preview_entry(app: &App, index: Option<usize>) -> bool {
+    let Some(panel) = &app.panel else { return false };
     if panel.page != super::Page::History {
-        return;
+        return false;
     }
     let history = panel.history.borrow();
-    let selected = history
-        .selected
-        .and_then(|index| history.entries.get(index));
+    let selected = index.and_then(|index| history.entries.get(index));
     let Some(entry) = selected.filter(|entry| history.last.as_ref() != Some(&entry.desktop)) else {
         super::pick_client::end_preview();
-        return;
+        return false;
     };
     let mut config = app.docs.doc(DocId::Config).raw.clone();
     for (path, value) in &entry.desktop.config {
@@ -734,7 +743,7 @@ pub fn preview_selected(app: &App) {
         &entry.desktop.widgets,
         &entry.desktop.theme,
         dir,
-    );
+    )
 }
 
 pub fn retry(app: &App) {

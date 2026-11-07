@@ -1,4 +1,4 @@
-//! Studio's transient selection client. The panel calls `connect` while building and
+//! Studio's transient desktop client. Both hosts call `connect` while building and
 //! `on_key` for the semantic IPC wake; no native keyboard input is synthesized.
 use mypaper_shell::studio_pick::wire::{self, Kind, Message, Selection};
 use std::cell::RefCell;
@@ -15,6 +15,7 @@ struct Client {
     shell: Option<HWND>,
     begun: bool,
     panel: HWND,
+    windowed: bool,
     highlighted: Option<String>,
     observed: [(DocId, Value); 3],
     observed_version: u64,
@@ -69,6 +70,29 @@ impl UndoGuard {
 }
 
 impl Client {
+    fn begin(&mut self) -> bool {
+        if !self.begun && let Some(shell) = self.shell {
+            self.begun = wire::send(shell, self.endpoint.hwnd(), &Message::Begin {
+                panel: self.panel.0 as isize,
+            });
+            if !self.begun && self.windowed {
+                // A timed-out Begin can still arrive. Retire that uncertain session too.
+                wire::send(shell, self.endpoint.hwnd(), &Message::End);
+            }
+        }
+        self.begun
+    }
+
+    /// The standalone window borrows the desktop only for a transient preview.
+    fn end_window_preview(&mut self) {
+        if self.windowed && self.begun {
+            if let Some(shell) = self.shell {
+                wire::send(shell, self.endpoint.hwnd(), &Message::End);
+            }
+            self.begun = false;
+        }
+    }
+
     fn warm_preview(&mut self, app: &App) {
         let page = app.panel.as_ref().map(|state| (state.page, app.nav.display));
         if self.warmed_page == page { return; }
@@ -101,6 +125,7 @@ impl Client {
             }
         };
         wire::send(shell, self.endpoint.hwnd(), &message);
+        self.end_window_preview();
     }
 
     fn stream_preview(&mut self, app: &App) {
@@ -562,10 +587,17 @@ thread_local! { static CLIENT: RefCell<Option<Client>> = const { RefCell::new(No
 /// Call after the chooser's hover/focus delay; clicking still runs the normal action.
 /// Returns false for unsupported actions (including Windows looks) or an absent shell.
 pub fn preview_action(app: &App, action: &Action) -> bool {
+    preview_action_with(app, action, wire::find_shell)
+}
+
+fn preview_action_with(app: &App, action: &Action, find_shell: impl FnOnce() -> Option<HWND>) -> bool {
     if app.fixture || app.drag.is_some() {
         return false;
     }
-    connect(app);
+    if let Action::Panel(Command::History(index)) = action {
+        return super::history::preview_entry(app, Some(*index));
+    }
+    connect_with(app, find_shell);
     if CLIENT.with(|client| client.borrow().as_ref().is_some_and(|client| {
         client.choice_preview.as_ref().is_some_and(|choice| {
             choice.action == *action && choice.version == app.docs.version && choice.display == app.nav.display
@@ -577,10 +609,11 @@ pub fn preview_action(app: &App, action: &Action) -> bool {
         end_preview();
         return false;
     };
-    CLIENT.with(|client| {
+    let sent = CLIENT.with(|client| {
         let mut client = client.borrow_mut();
         let Some(client) = client.as_mut() else { return false };
-        let Some(shell) = client.shell.filter(|_| client.begun && !client.color_open) else { return false };
+        if client.color_open || !client.begin() { return false; }
+        let Some(shell) = client.shell else { return false };
         client.snapshot_preview = None;
         client.sequence += 1;
         let message = if documents.is_empty() {
@@ -593,7 +626,9 @@ pub fn preview_action(app: &App, action: &Action) -> bool {
         }
         client.choice_preview = Some(ChoicePreview { action: action.clone(), version: app.docs.version, display: app.nav.display });
         true
-    })
+    });
+    if !sent { end_preview(); }
+    sent
 }
 
 /// Show a History desktop on every display using frozen theme data, without changing files.
@@ -606,8 +641,20 @@ pub fn preview_snapshot(
     theme: &Value,
     theme_dir: Option<&std::path::Path>,
 ) -> bool {
+    preview_snapshot_with(app, config, bars, widgets, theme, theme_dir, wire::find_shell)
+}
+
+fn preview_snapshot_with(
+    app: &App,
+    config: &Value,
+    bars: &Value,
+    widgets: &Value,
+    theme: &Value,
+    theme_dir: Option<&std::path::Path>,
+    find_shell: impl FnOnce() -> Option<HWND>,
+) -> bool {
     if app.fixture || app.drag.is_some() { return false; }
-    connect(app);
+    connect_with(app, find_shell);
     let revisions = [config, bars, widgets, theme].map(wire::revision);
     if CLIENT.with(|client| client.borrow().as_ref().is_some_and(|c|
         c.snapshot_preview.as_ref().is_some_and(|p| p.revisions == revisions
@@ -626,7 +673,8 @@ pub fn preview_snapshot(
     let sent = CLIENT.with(|client| {
         let mut client = client.borrow_mut();
         let Some(client) = client.as_mut() else { return false };
-        let Some(shell) = client.shell.filter(|_| client.begun && !client.color_open) else { return false };
+        if client.color_open || !client.begin() { return false; }
+        let Some(shell) = client.shell else { return false };
         client.sequence += 1;
         if !wire::send(shell, client.endpoint.hwnd(), &Message::PreviewSnapshot {
             session: client.session, sequence: client.sequence, documents: documents.into(), theme,
@@ -668,6 +716,7 @@ pub fn end_preview() {
                 session: client.session, sequence: client.sequence,
             });
         }
+        client.end_window_preview();
     });
 }
 
@@ -750,9 +799,13 @@ impl Drop for Client {
     }
 }
 
-/// Starts only for a real panel window (fixtures never contact the desktop).
+/// Fixtures never contact the desktop. A standalone host begins a session only on preview.
 pub fn connect(app: &App) {
-    if app.fixture || app.panel.as_ref().is_none_or(|state| state.windowed) {
+    connect_with(app, wire::find_shell);
+}
+
+fn connect_with(app: &App, find_shell: impl FnOnce() -> Option<HWND>) {
+    if app.fixture || app.panel.is_none() {
         return;
     }
     let Some(panel) = app.window else { return };
@@ -771,6 +824,7 @@ pub fn connect(app: &App) {
                 shell: None,
                 begun: false,
                 panel,
+                windowed: app.panel.as_ref().unwrap().windowed,
                 highlighted: None,
                 observed: snapshot(app),
                 observed_version: app.docs.version,
@@ -794,7 +848,7 @@ pub fn connect(app: &App) {
             });
         }
         let client = client.as_mut().unwrap();
-        let shell = wire::find_shell();
+        let shell = find_shell();
         if client.shell != shell {
             client.shell = shell;
             client.begun = false;
@@ -810,19 +864,20 @@ pub fn connect(app: &App) {
             client.panel_home = None;
             client.flashed_display = None;
         }
-        if !client.begun
-            && let Some(shell) = shell
-        {
-            // A timeout can still deliver Begin. Keep the peer identity so its valid reply
-            // is accepted, and retry the handshake on the next frame if no reply arrives.
-            client.begun = wire::send(
-                shell,
-                client.endpoint.hwnd(),
-                &Message::Begin {
-                    panel: panel.0 as isize,
-                },
-            );
+        if client.windowed {
+            if (client.choice_preview.is_some() || client.snapshot_preview.is_some())
+                && client.observed_version != app.docs.version
+            {
+                client.finish_choice(app);
+            }
+            if client.observed_version != app.docs.version {
+                client.observed = snapshot(app);
+                client.observed_version = app.docs.version;
+            }
+            return;
         }
+        // Retry a handshake whose timed-out Begin may still have been delivered.
+        client.begin();
         if client.undo_step.is_some_and(|g| !g.matches(app, g.step)) {
             client.undo_step = None;
             if let Some(shell) = client.shell {
@@ -856,7 +911,9 @@ pub fn connect(app: &App) {
     });
     // A caption's WM_NCMOUSELEAVE can follow the client's move and clear Input::pointer.
     // Sample our HWND directly so that transition cannot lose the row's desktop highlight.
-    highlight(hovered_widget(app, panel_pointer(app)));
+    if !app.panel.as_ref().unwrap().windowed {
+        highlight(hovered_widget(app, panel_pointer(app)));
+    }
 }
 
 fn page_selection(app: &App) -> Option<Selection> {
@@ -932,6 +989,11 @@ pub fn record_pick(app: &App, label: &str, ops: &[Op], checkpoint: usize, merge:
             return;
         }
         client.finish_choice(app);
+        if client.windowed {
+            client.observed = snapshot(app);
+            client.observed_version = app.docs.version;
+            return;
+        }
         let choice = ops.iter().find_map(|op| {
             let before = client
                 .observed
@@ -1078,6 +1140,10 @@ pub fn on_key(app: &mut App, key: u16) -> bool {
         messages
     });
     for message in messages {
+        if app.panel.as_ref().is_some_and(|state| state.windowed) {
+            // The window's stage owns selection; panel placement and desktop edits stay docked.
+            continue;
+        }
         match message {
             Message::PanelMove { x, y } => move_panel(app.window, x, y),
             Message::MoveModule {selection,destination,base_revision} => {
@@ -1390,6 +1456,73 @@ fn move_panel(window: Option<HWND>, x: i32, y: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn standalone_previews_use_an_on_demand_session_and_cancel_without_saves_or_activation() {
+        use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, IsWindowVisible};
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::window_app(true, &ui, (1280, 800));
+        let surface = mypaper_ui::Surface::new_deferred_accessibility(
+            mypaper_ui::Kind::App { min: (960, 640) },
+            "Studio hidden preview fixture",
+            mypaper_ui::Role::Window,
+        ).unwrap();
+        // This fake peer has the client class, so runtime discovery cannot find it.
+        let peer = wire::Endpoint::new(false).unwrap();
+        app.window = Some(surface.hwnd());
+        app.fixture = false;
+        let before = DocId::ALL.map(|id| app.docs.doc(id).raw.clone());
+        // SAFETY: read-only activation/visibility queries; this fixture is never shown.
+        let foreground = unsafe { GetForegroundWindow() };
+        connect_with(&app, || Some(peer.hwnd()));
+        assert!(CLIENT.with(|client| client.borrow().as_ref().is_some_and(|client| client.windowed)));
+        assert!(peer.next().is_none(), "ordinary window frames must not begin desktop picking");
+        let endpoint = CLIENT.with(|client| client.borrow().as_ref().unwrap().endpoint.hwnd());
+        let position = || {
+            let mut rect = windows::Win32::Foundation::RECT::default();
+            // SAFETY: read-only geometry query on the hidden window owned by this test.
+            unsafe { windows::Win32::UI::WindowsAndMessaging::GetWindowRect(surface.hwnd(), &mut rect) }.unwrap();
+            (rect.left, rect.top, rect.right, rect.bottom)
+        };
+        let original_position = position();
+        assert!(wire::send(endpoint, peer.hwnd(), &Message::PanelMove { x: 1500, y: 300 }));
+        on_key(&mut app, wire::PICK_EVENT);
+        assert_eq!(position(), original_position, "panel avoidance cannot move the standalone window");
+        for (action, event) in [
+            (Action::SetStyle(Some(mypaper_config::look::Style::Solid)), mypaper_ui::Event::Leave),
+            (Action::SetStyle(Some(mypaper_config::look::Style::Mono)), mypaper_ui::Event::Deactivated),
+            (Action::Preset("islands"), mypaper_ui::Event::Cancelled),
+            (Action::Preset("floating"), mypaper_ui::Event::Close),
+        ] {
+            let expected = choice_documents(&app, &action).unwrap();
+            assert!(preview_action_with(&app, &action, || Some(peer.hwnd())));
+            assert!(matches!(peer.next(), Some((_, Message::Begin { panel })) if panel == surface.hwnd().0 as isize));
+            assert!(matches!(peer.next(), Some((_, Message::Preview { documents, .. })) if documents == expected));
+            assert!(preview_action_with(&app, &action, || Some(peer.hwnd())));
+            assert!(peer.next().is_none(), "stationary hover is cached");
+            super::super::choosers::track_preview(&app, mypaper_ui::controls::key("fixture-choice"), action);
+            app.event(event);
+            assert!(matches!(peer.next(), Some((_, Message::PreviewCancel { .. }))));
+            assert!(matches!(peer.next(), Some((_, Message::End))));
+            connect_with(&app, || Some(peer.hwnd()));
+            assert!(peer.next().is_none(), "a later repaint must not restart the session");
+        }
+        let mut config = before[0].clone();
+        config["look"] = serde_json::json!({"style":"solid"});
+        assert!(preview_snapshot_with(&app, &config, &before[1], &before[2], &Value::Null, None, || Some(peer.hwnd())));
+        assert!(matches!(peer.next(), Some((_, Message::Begin { .. }))));
+        assert!(matches!(peer.next(), Some((_, Message::PreviewSnapshot { .. }))));
+        end_preview();
+        assert!(matches!(peer.next(), Some((_, Message::PreviewCancel { .. }))));
+        assert!(matches!(peer.next(), Some((_, Message::End))));
+        assert_eq!(before, DocId::ALL.map(|id| app.docs.doc(id).raw.clone()));
+        assert!(!app.docs.can_undo());
+        assert!(DocId::ALL.iter().all(|id| app.docs.doc(*id).path.is_none()));
+        // SAFETY: confirms that the hidden surface and IPC never changed the foreground.
+        assert_eq!(unsafe { GetForegroundWindow() }, foreground);
+        assert!(!unsafe { IsWindowVisible(surface.hwnd()) }.as_bool());
+        CLIENT.with(|client| *client.borrow_mut() = None);
+    }
 
     #[test]
     fn module_release_is_one_undo_step_and_rejects_a_stale_desktop() {
@@ -1718,6 +1851,7 @@ mod tests {
             shell: Some(receiver.hwnd()),
             begun: true,
             panel: HWND::default(),
+            windowed: false,
             highlighted: None,
             observed: snapshot(&app),
             observed_version: app.docs.version,
@@ -2030,6 +2164,7 @@ mod tests {
                 shell: Some(shell.hwnd()),
                 begun: true,
                 panel: HWND::default(),
+                windowed: false,
                 highlighted: None,
                 observed: snapshot(&app),
                 observed_version: app.docs.version,

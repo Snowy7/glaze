@@ -396,6 +396,7 @@ impl App {
             Event::Focus(id) => {
                 if let Some(t) = self.frame.targets.get(id as usize - 1) {
                     self.input.focus = Some(t.key);
+                    self.input.focus_visible = true;
                     self.dirty = true;
                 }
             }

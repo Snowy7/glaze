@@ -508,9 +508,7 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
 }
 
 fn history(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "History", if app.panel.as_ref().unwrap().windowed {
-        "Select a desktop to restore"
-    } else { "Preview on every display" });
+    title(b, c, "History", "Preview on every display");
     if super::history::partial_preview(app) {
         notice(b, c, "Partial preview · wallpaper unchanged");
     }
@@ -547,6 +545,7 @@ fn history(app: &App, b: &mut B, c: &mut Col) {
             let row_h = height(b, 84.0);
             let r = b.list_row_area(Rect::new(c.x, c.y, c.w, row_h));
             let k = key(("panel-history", i));
+            super::choosers::preview_row(app, b, k, r, Action::Panel(Command::History(i)));
             if history.selected == Some(i) {
                 b.fill(r, b.px(radius::CONTROL), b.p.selected);
             } else {

@@ -236,6 +236,56 @@ fn inspector_drag_is_bounded_remembered_and_does_not_edit_the_desktop() {
 }
 
 #[test]
+fn window_hover_and_card_clicks_keep_previews_transient_and_undoable() {
+    use crate::panel::{Command, Page};
+    use mypaper_ui::{Button, Event, Point, Pointer};
+    let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-window\shots"));
+    let mut ui = Ui::new().unwrap();
+    for (page, name, action) in [
+        (Page::Look, "solid", Action::SetStyle(Some(mypaper_config::look::Style::Solid))),
+        (Page::Look, "mono", Action::SetStyle(Some(mypaper_config::look::Style::Mono))),
+        (Page::BarDesign, "bar-preset", Action::Set(
+            crate::actions::Edit::new(crate::docs::DocId::Studio, "/panel/bar-preset", "Bar design"),
+            serde_json::json!("islands"),
+        )),
+    ] {
+        let mut app = window_app(true, &ui, (1280, 800));
+        app.run(Action::Panel(Command::Open(page)));
+        let before = crate::docs::DocId::ALL.map(|id| app.docs.doc(id).raw.clone());
+        shot(&mut app, &mut ui);
+        let rect = app.frame.targets.iter().find(|target| target.action == action)
+            .and_then(|target| target.visible).expect("the preview card must be visible");
+        let pointer = Pointer { at: Point::new(rect.left + 20.0, rect.top + 20.0), screen: (0, 0) };
+        app.event(Event::Move(pointer));
+        let image = shot(&mut app, &mut ui);
+        assert!(crate::view::build(&app, &mut ui).semantics.iter().any(|(_, semantic)| {
+            matches!(semantic, mypaper_ui::Semantics::Status(message) if message.starts_with("Previewing"))
+        }), "the hovered card must actually request a preview");
+        golden::write(&image, &out.join(format!("headless-hover-{name}.png"))).unwrap();
+        assert_eq!(before, crate::docs::DocId::ALL.map(|id| app.docs.doc(id).raw.clone()));
+        assert!(!app.docs.can_undo());
+        if page == Page::BarDesign {
+            app.event(Event::Press(pointer, Button::Left));
+            app.event(Event::Release(pointer, Button::Left));
+            assert_eq!(crate::panel::editors::bar_value(&app, "/preset"), Some(serde_json::json!("islands")));
+            assert_eq!(app.docs.undo_count(), 1);
+            for key in [0x5A, 0x59, 0x5A] {
+                app.key_with(key, (true, false, false));
+            }
+            assert_eq!(before, crate::docs::DocId::ALL.map(|id| app.docs.doc(id).raw.clone()));
+        }
+        app.event(Event::Leave);
+        let image = shot(&mut app, &mut ui);
+        golden::write(&image, &out.join(format!("headless-restored-{name}.png"))).unwrap();
+    }
+    let mut app = window_app(true, &ui, (960, 640));
+    let image = shot(&mut app, &mut ui);
+    golden::write(&image, &out.join("headless-home-rail.png")).unwrap();
+}
+
+#[test]
 fn render_window_pages() {
     use crate::panel::{Command, Page};
     let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
