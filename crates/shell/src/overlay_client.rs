@@ -266,13 +266,22 @@ fn wire(material: &GlassMaterial) -> Material {
         blur: material.blur.clamp(0.0, 256.0),
         refraction: material.refraction.clamp(0.0, 1.0),
         highlight: material.highlight.clamp(0.0, 1.0),
-        tint: [byte(t.r), byte(t.g), byte(t.b), 0],
+        tint: [byte(t.r), byte(t.g), byte(t.b), byte(t.a)],
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn overlay_keeps_the_resolved_stained_tint_strength() {
+        let material = GlassMaterial {
+            clarity: 0.78, blur: 12.0, refraction: 0.6, highlight: 0.55,
+            tint: mypaper_ui::Rgba::rgb8([200, 141, 60], 0.22),
+        };
+        assert_eq!(wire(&material).tint, [200, 141, 60, 56]);
+    }
 
     #[test]
     fn wire_curves_follow_the_resolved_content_transition() {
