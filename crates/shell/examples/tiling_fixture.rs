@@ -346,8 +346,7 @@ fn verify_placements(tiler: &Tiler) -> Result<()> {
                 && (f64::from(actual.top) - expected.y).abs() < 2.0
                 && (f64::from(actual.right - actual.left) - expected.w).abs() < 2.0
                 && (f64::from(actual.bottom - actual.top) - expected.h).abs() < 2.0,
-            "actual frame did not match layout for {:?}",
-            identity
+            "actual frame did not match layout for {identity:?}: actual {actual:?}, expected {expected:?}"
         );
     }
     Ok(())
@@ -882,7 +881,17 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
     unsafe {
         let _ = ShowWindowAsync(tray.window(), SW_SHOWNOACTIVATE);
     }
-    pump(tiler, Duration::from_millis(400));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !tiler
+        .as_ref()
+        .unwrap()
+        .placements()
+        .iter()
+        .any(|(id, _)| *id == tray)
+        && Instant::now() < deadline
+    {
+        pump(tiler, Duration::from_millis(25));
+    }
     ensure!(
         tiler
             .as_ref()
@@ -978,10 +987,7 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
     }
     tiler.as_mut().unwrap().update(Settings::default());
     // Force a real pan even when the preceding fullscreen return retained a centered view.
-    tiler
-        .as_mut()
-        .unwrap()
-        .command(Op::Focus(Direction::Right));
+    tiler.as_mut().unwrap().command(Op::Focus(Direction::Right));
     tiler.as_mut().unwrap().command(Op::Center);
     pump(tiler, Duration::from_millis(60));
     let animation = owned_overlay("glaze.tiling.animation")?;
