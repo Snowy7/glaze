@@ -1,8 +1,8 @@
-//! Embed the same Glaze artwork used by Studio and the installer.
+//! Embed Files' own icon (the Glaze tile with a folder) as resource 101.
 fn main() {
     let root = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
     println!("cargo:rerun-if-changed=glaze-files.rc");
-    println!("cargo:rerun-if-changed=../../assets/logo/glaze.ico");
+    println!("cargo:rerun-if-changed=../../assets/logo/glaze-files.ico");
     println!("cargo:rerun-if-env-changed=RC");
     let resource = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("files.res");
     let compiler = std::env::var_os("RC")
