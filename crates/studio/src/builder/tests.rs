@@ -415,6 +415,10 @@ fn print_own_window(
         let _ = DeleteObject(bitmap.into());
         let _ = DeleteDC(dc);
         assert!(painted);
+        assert!(
+            pixels.chunks_exact(4).any(|pixel| pixel[0] > 100),
+            "PrintWindow returned an empty frame"
+        );
         for pixel in pixels.chunks_exact_mut(4) {
             pixel[3] = 255;
         }

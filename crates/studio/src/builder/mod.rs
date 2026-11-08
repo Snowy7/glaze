@@ -1110,7 +1110,9 @@ pub fn event(app: &mut App, event: &mypaper_ui::Event) -> bool {
                 });
             if let Some(from) = from {
                 state(app).drag = Some(from);
+                app.blur_field();
                 if let Some(window) = app.window {
+                    // SAFETY: capture belongs only to this Studio window and this drag.
                     unsafe {
                         windows::Win32::UI::Input::KeyboardAndMouse::SetCapture(window);
                     }
@@ -1146,6 +1148,11 @@ pub fn event(app: &mut App, event: &mypaper_ui::Event) -> bool {
         }
         Event::CaptureLost | Event::Key(0x1B) if active(app).unwrap().drag.is_some() => {
             state(app).drag = None;
+            if app.window.is_some() {
+                // SAFETY: this editor acquired the capture above; cancellation releases it.
+                let _ = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture() };
+            }
+            app.dirty = true;
             return true;
         }
         _ => {}
