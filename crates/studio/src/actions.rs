@@ -213,6 +213,8 @@ pub enum FieldId {
     /// The command palette's input.
     Palette,
     WallpaperSearch,
+    /// The effect gallery's search.
+    EffectSearch,
     AddUrl,
     AddName,
     AddArgs,

@@ -63,6 +63,31 @@ impl Images {
         self.trim();
     }
 
+    /// The current budget, so a mode that raises it can put it back.
+    pub fn budget(&self) -> Option<usize> {
+        self.budget
+    }
+
+    /// `path` changed on disk: decode it again, keeping its newest pixels on screen until the
+    /// new ones arrive (a live preview rewrites its file many times a second).
+    pub fn reload(&mut self, path: &Path) {
+        let page = self.generation.load(std::sync::atomic::Ordering::Relaxed);
+        let prefix = format!("{page}:{}|", path.display());
+        let newest = self
+            .slots
+            .iter()
+            .filter(|(key, _)| key.starts_with(&prefix))
+            .filter_map(|(_, slot)| match slot {
+                Slot::Ready(image, used, size) => Some((*used, image.clone(), *size)),
+                _ => None,
+            })
+            .max_by_key(|(used, ..)| *used);
+        self.slots.retain(|key, _| !key.starts_with(&prefix));
+        if let Some((used, image, size)) = newest {
+            self.slots.insert(format!("{prefix}stale"), Slot::Ready(image, used, size));
+        }
+    }
+
     /// Release a page's decoded pixels and skip its queued work; the decoder stays connected.
     pub fn clear_page(&mut self) {
         self.generation

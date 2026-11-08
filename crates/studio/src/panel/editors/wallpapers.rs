@@ -267,12 +267,28 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
                 b.px(30.0),
                 b.px(28.0),
             );
+            let edit_key = key(("panel-wallpaper-edit", i));
+            let edit = Rect::new(detail.left - b.px(58.0), detail.top, b.px(54.0), detail.height());
+            let blocked = crate::builder::cannot_edit(wallpaper);
             if app.input.pointer.is_some_and(|point| card.contains(point))
                 || app.input.focus == Some(k)
                 || app.input.focus == Some(details_key)
+                || app.input.focus == Some(edit_key)
             {
                 b.fill(detail, b.px(radius::SMALL), b.p.chrome);
                 text(b, detail, "\u{22ef}", 20.0, 600, b.p.ink1, Align::Center);
+                b.fill(edit, b.px(radius::SMALL), if b.hovered(edit_key) && blocked.is_none() { b.p.hover } else { b.p.chrome });
+                text(b, edit, "Edit", 12.0, 600, if blocked.is_some() { b.p.ink3 } else { b.p.ink1 }, Align::Center);
+                // A disabled Edit still says why when pointed at or read aloud.
+                b.hit(
+                    edit_key,
+                    edit,
+                    Role::Button,
+                    &blocked.map_or_else(|| format!("Edit {}", wallpaper.name), |why| format!("Can't edit: {why}")),
+                    if blocked.is_some() { Action::Panel(Command::Wallpaper(i)) } else { Action::Panel(Command::Builder(crate::builder::Command::Edit(i))) },
+                    Behavior::Click,
+                );
+                b.focus_ring(edit_key, edit, b.px(radius::SMALL));
             }
             b.hit(
                 details_key,
@@ -369,10 +385,9 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
     let pic = Rect::new(c.x, c.y + b.px(8.0), c.w, c.w * 0.56);
     thumbnail(app, b, pic, i);
     c.y = pic.bottom + b.px(8.0);
-    if std::fs::read_to_string(w.dir.join("theme.json")).ok()
-        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-        .is_some_and(|v| v.pointer("/wallpaper/kind").and_then(Value::as_str) == Some("stack")) {
-        action_button(b, c, "Edit wallpaper", Action::Panel(Command::Builder(crate::builder::Command::Edit(i))));
+    match crate::builder::cannot_edit(w) {
+        None => action_button(b, c, "Edit wallpaper", Action::Panel(Command::Builder(crate::builder::Command::Edit(i)))),
+        Some(why) => notice(b, c, why),
     }
     if w.error.is_none() {
         if !w.active {

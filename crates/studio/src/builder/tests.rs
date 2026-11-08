@@ -44,49 +44,73 @@ fn fixture(dark: bool, ui: &mypaper_ui::Ui) -> App {
     app
 }
 
+/// The editor's states, each in both themes at two window sizes:
+/// `MYPAPER_BLESS=1` updates tests/golden/window; review copies go to the shots folder.
 #[test]
 fn render_builder_window_goldens() {
-    use mypaper_ui::{Ui, golden};
+    use mypaper_ui::Ui;
     let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-create\shots"));
+        .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\create-v2\shots"));
     let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut ui = Ui::new().unwrap();
-    for dark in [true, false] {
-        let mut app = fixture(dark, &ui);
-        for (name, page) in [
-            ("create", Page::Create),
-            ("create-effects", Page::Effects),
-            ("create-params", Page::Create),
-            ("create-shader-error", Page::Shader),
-        ] {
-            if name == "create-params" {
-                state(&mut app).selected = Some(0);
-            }
-            if page == Page::Shader {
-                state(&mut app).selected = None;
-                execute(&mut app, Command::Base("shader")).unwrap();
-                execute(&mut app, Command::Shader).unwrap();
-                state(&mut app).source="// @param amount float 0..1 = 0.5 \"Amount\"\n\nfn wallpaper(frag: vec2f) -> vec4f {\n    let uv = frag / paper.resolution;\n    let glow = smoothstep(0.8, 0.0, length(uv - 0.5));\n    return vec4f(uv, glow * intensity, 1.0);\n}\n".into();
-                validate_code(&mut app);
-                assert!(!active(&app).unwrap().diagnostics.is_empty());
-            }
-            app.panel.as_mut().unwrap().page = page;
-            let image = crate::goldens::shot(&mut app, &mut ui);
-            let file = format!(
-                "{name}-1440x960-{}.png",
-                if dark { "dark" } else { "light" }
-            );
-            golden::write(&image, &out.join(&file)).unwrap();
-            if std::env::var_os("MYPAPER_BLESS").is_some() {
-                golden::write(&image, &baseline.join(&file)).unwrap();
-            } else {
-                golden::check(&image, &baseline.join(&file)).unwrap();
-            }
+    for size in [(1440, 960), (1920, 1080)] {
+        for dark in [true, false] {
+            let shoot = |app: &mut App, ui: &mut Ui, name: &str| {
+                app.size = size;
+                let image = crate::goldens::shot(app, ui);
+                let file = format!(
+                    "{name}-{}x{}-{}.png",
+                    size.0,
+                    size.1,
+                    if dark { "dark" } else { "light" }
+                );
+                mypaper_ui::golden::write(&image, &out.join(&file)).unwrap();
+                crate::goldens::check(&image, &baseline.join(&file)).unwrap();
+            };
+            // A new wallpaper: what to start from.
+            let mut app = crate::goldens::window_app(dark, &ui, size);
+            begin(&mut app, None).unwrap();
+            shoot(&mut app, &mut ui, "create-empty");
+            drop(app);
+            // A video background.
+            let mut app = crate::goldens::window_app(dark, &ui, size);
+            begin(&mut app, None).unwrap();
+            import(&mut app, &repo.join("themes/spring-forest/loop.mp4"), false).unwrap();
+            app.set(&edit(&app, "/name", "Name"), json!("Spring stream"));
+            shoot(&mut app, &mut ui, "create-video");
+            drop(app);
+            // Edit of a built-in shader: its theme is the background, as it is.
+            let mut app = crate::goldens::window_app(dark, &ui, size);
+            let amber = app.library.items.iter().position(|w| w.id == "rain-city-amber").unwrap();
+            begin(&mut app, Some(amber)).unwrap();
+            assert_eq!(raw(&app)["wallpaper"]["base"]["kind"], "theme");
+            assert_eq!(raw(&app)["name"], "Amber Downpour (edited)");
+            shoot(&mut app, &mut ui, "create-theme");
+            drop(app);
+            // A photo with fit and position, then a selected layer, the gallery and a hover.
+            let mut app = fixture(dark, &ui);
+            app.size = size;
+            shoot(&mut app, &mut ui, "create-image");
+            state(&mut app).selected = Some(0);
+            shoot(&mut app, &mut ui, "create-layer");
+            state(&mut app).selected = None;
+            app.panel.as_mut().unwrap().page = Page::Effects;
+            shoot(&mut app, &mut ui, "create-gallery");
+            state(&mut app).hover = Some("blur".into());
+            shoot(&mut app, &mut ui, "create-hover");
+            state(&mut app).hover = None;
+            execute(&mut app, Command::Base("shader")).unwrap();
+            execute(&mut app, Command::Shader).unwrap();
+            state(&mut app).source = "// @param amount float 0..1 = 0.5 \"Amount\"\n\nfn wallpaper(frag: vec2f) -> vec4f {\n    let uv = frag / paper.resolution;\n    let glow = smoothstep(0.8, 0.0, length(uv - 0.5));\n    return vec4f(uv, glow * intensity, 1.0);\n}\n".into();
+            validate_code(&mut app);
+            assert!(!active(&app).unwrap().diagnostics.is_empty());
+            app.panel.as_mut().unwrap().page = Page::Shader;
+            shoot(&mut app, &mut ui, "create-shader-error");
         }
     }
 }
-
 #[test]
 fn draft_edits_reorder_and_undo_without_changing_desktop() {
     let ui = mypaper_ui::Ui::new().unwrap();
@@ -126,13 +150,16 @@ fn save_packages_assets_credits_and_defaults_without_overwriting_unknown_themes(
     let existing = root.join("after-the-rain");
     std::fs::create_dir_all(&existing).unwrap();
     std::fs::write(existing.join("theme.json"), "newer-format-do-not-touch").unwrap();
+    // The effect's own default, written explicitly: Save strips it again.
+    let default = active(&app).unwrap().effects.iter().find(|e| e.id == "drizzle").unwrap().schemas()
+        .into_iter().find(|s| s["id"] == "amount").unwrap()["default"].clone();
     app.docs
         .edit(
             "Default",
             &[crate::docs::Op {
                 doc: active(&app).unwrap().doc,
                 path: "/wallpaper/layers/0/params/amount".into(),
-                value: Some(json!(0.4)),
+                value: Some(default),
             }],
         )
         .unwrap();
@@ -446,7 +473,7 @@ fn cost_counts_only_what_runs_every_frame() {
         );
         estimate(&serde_json::from_str(&json).unwrap(), &effects, 1920.0 * 1080.0)
     };
-    let line = |ms: f64| format!("about {:.1}% GPU at 30 fps", ms * 30.0 / 10.0);
+    let line = |ms: f64| format!("Moving: about {:.1}% GPU at 30 fps", ms * 30.0 / 10.0);
     assert_eq!(
         estimate_of(&[fx("looks"), fx("bloom"), fx("drizzle")]),
         line(cost("drizzle")),

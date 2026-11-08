@@ -96,6 +96,17 @@ pub fn publish(app: &App, root: &Path) -> Result<PathBuf> {
     Ok(target)
 }
 
+/// Saves over your own theme `dir`: packaged exactly like a new theme (in a hidden scratch
+/// folder beside it), then copied over. Files the draft no longer uses are left in place.
+pub fn save_in_place(app: &App, root: &Path, dir: &Path) -> Result<PathBuf> {
+    let scratch = root.join(format!(".draft-save-{}", unique()));
+    let result = publish(app, &scratch).and_then(|packaged| copy_tree(&packaged, dir));
+    let _ = std::fs::remove_dir_all(&scratch);
+    result?;
+    mypaper_theme::LoadedTheme::load(dir)?;
+    Ok(dir.to_path_buf())
+}
+
 fn strip_defaults(params: Option<&mut Value>, schemas: &[Value]) {
     if let Some(params) = params.and_then(Value::as_object_mut) {
         params.retain(|id, value| {

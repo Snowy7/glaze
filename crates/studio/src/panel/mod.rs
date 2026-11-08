@@ -508,6 +508,7 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
     if editors::widgets::on_key(app, vk, ctrl, shift, alt) { return true; }
     if choosers::on_key(app, vk, ctrl, shift, alt) { return true; }
     if vk == 0x1B && choosers::end(app) { app.dirty = true; return true; }
+    if !ctrl && !alt && crate::builder::on_key(app, vk) { return true; }
     if pick_client::on_key(app, vk) {
         return true;
     }

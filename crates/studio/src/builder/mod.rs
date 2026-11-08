@@ -31,13 +31,26 @@ pub struct Editor {
     shader_origin: Option<PathBuf>,
     pub source: String,
     pub diagnostics: Vec<Diagnostic>,
-    pub base_gallery: bool,
     pending_code: Option<Instant>,
     next_poll: Instant,
     version: u64,
     preview_stamp: Option<std::time::SystemTime>,
     validation_key: Option<u64>,
     drag: Option<usize>,
+    /// Your own stack being edited: Save writes back here. `None` saves a new theme.
+    pub origin: Option<PathBuf>,
+    /// The draft as opened, for Revert.
+    initial: Value,
+    /// Studio's picture budget before the editor raised it.
+    images_budget: Option<usize>,
+    /// The document as last saved (`None` until a new wallpaper's first save).
+    pub saved: Option<Value>,
+    /// A new, untouched draft shows the "start from" choices.
+    pub fresh: bool,
+    /// The gallery card under the pointer, previewed on the canvas (never in undo history).
+    pub hover: Option<String>,
+    hover_since: Option<Instant>,
+    hover_shown: Option<String>,
     owns_folder: bool,
     _drop_target: Option<drop_target::Target>,
     pub preview: preview::Preview,
@@ -116,9 +129,24 @@ pub enum Command {
     Save(bool),
     CustomEffect,
     Credits,
-    Builtins,
-    BuiltinShader(usize),
     GradientStop(bool),
+    /// Close the effect gallery sheet.
+    CloseGallery,
+    SaveCopy,
+    Revert,
+    Discard,
+    /// Base fit: cover, contain, stretch or center.
+    Fit(&'static str),
+    /// Base focus from the 3x3 anchor picker, as fractions.
+    Focus(u8, u8),
+    /// An existing wallpaper (library index) as the base.
+    BaseTheme(usize),
+    /// Import a base of one kind: photo, video or scene.
+    Pick(&'static str),
+    /// The layer menu's actions, on the layer at this index.
+    DuplicateAt(usize),
+    RemoveAt(usize),
+    MoveAt(usize, i32),
 }
 
 pub fn active(app: &App) -> Option<&Editor> {
@@ -205,6 +233,7 @@ fn begin(app: &mut App, from: Option<usize>) -> Result<()> {
         .duration_since(std::time::UNIX_EPOCH)?
         .as_nanos();
     let dir = root.join(format!(".draft-{}-{stamp}", std::process::id()));
+    let mut origin = None;
     let result = (|| -> Result<Editor> {
         let mut value = json!({"name":"Untitled wallpaper","hidden":true,"wallpaper":{"kind":"stack","fps":30,"scale":1.0,"base":{"kind":"color","color":"#202124"},"layers":[]}});
         if let Some(index) = from {
@@ -215,11 +244,26 @@ fn begin(app: &mut App, from: Option<usize>) -> Result<()> {
                 .context("wallpaper is no longer in the library")?;
             let text = std::fs::read_to_string(wallpaper.dir.join("theme.json"))?;
             validate_theme(&text)?;
-            value = serde_json::from_str(&text)?;
-            if value.pointer("/wallpaper/kind").and_then(Value::as_str) != Some("stack") {
-                bail!("only stack wallpapers open in Create");
+            let theme: Value = serde_json::from_str(&text)?;
+            if let Some(reason) = cannot_edit(wallpaper) {
+                bail!(reason);
             }
-            copy_tree(&wallpaper.dir, &dir)?;
+            if theme.pointer("/wallpaper/kind").and_then(Value::as_str) == Some("stack") {
+                value = theme;
+                copy_tree(&wallpaper.dir, &dir)?;
+                if wallpaper.editable() {
+                    origin = Some(wallpaper.dir.clone());
+                } else {
+                    value["name"] = json!(format!("{} (edited)", wallpaper.name));
+                }
+            } else {
+                // The wallpaper as it is becomes the base; its own fps and scale carry over.
+                let fps = theme.pointer("/wallpaper/fps").and_then(Value::as_u64).unwrap_or(30);
+                let scale = theme.pointer("/wallpaper/scale").and_then(Value::as_f64).unwrap_or(1.0);
+                value = json!({"name": format!("{} (edited)", wallpaper.name), "hidden": true,
+                    "wallpaper": {"kind": "stack", "fps": fps, "scale": scale.clamp(0.25, 1.0),
+                        "base": {"kind": "theme", "theme": wallpaper.apply_as}, "layers": []}});
+            }
             value["hidden"] = json!(true);
         }
         std::fs::create_dir_all(dir.join("media"))?;
@@ -244,13 +288,20 @@ fn begin(app: &mut App, from: Option<usize>) -> Result<()> {
             shader_origin: None,
             source: String::new(),
             diagnostics: vec![],
-            base_gallery: false,
             pending_code: None,
             next_poll: Instant::now(),
             version: u64::MAX,
             preview_stamp: None,
             validation_key: None,
             drag: None,
+            images_budget: app.images.borrow().budget(),
+            origin: origin.clone(),
+            initial: app.docs.doc(doc).raw.clone(),
+            saved: origin.is_some().then(|| app.docs.doc(doc).raw.clone()),
+            fresh: from.is_none(),
+            hover: None,
+            hover_since: None,
+            hover_shown: None,
             owns_folder: true,
             _drop_target: None,
             preview: preview::Preview::default(),
@@ -259,6 +310,9 @@ fn begin(app: &mut App, from: Option<usize>) -> Result<()> {
     match result {
         Ok(editor) => {
             app.panel.as_mut().unwrap().builder = Some(editor);
+            // The canvas shows the engine's 1280x720 frame; the gallery a page of thumbnails.
+            // Both fit in this budget, so nothing a frame paints is evicted while it paints.
+            app.images.borrow_mut().set_budget(EDITOR_IMAGES);
             if !app.fixture {
                 state(app)._drop_target = app
                     .window
@@ -322,33 +376,9 @@ fn execute(app: &mut App, command: Command) -> Result<()> {
                 }
                 _ => json!({"kind":"color","color":"#202124"}),
             };
-            app.set(&edit(app, "/wallpaper/base", "Base"), base);
+            app.set(&edit(app, "/wallpaper/base", "Background"), base);
+            state(app).fresh = false;
             state(app).selected = None;
-            state(app).base_gallery = false;
-        }
-        Command::Builtins => {
-            state(app).base_gallery = !active(app).unwrap().base_gallery;
-        }
-        Command::BuiltinShader(index) => {
-            let wallpaper = app
-                .library
-                .items
-                .get(index)
-                .context("shader is no longer available")?
-                .clone();
-            let loaded = mypaper_theme::LoadedTheme::load(&wallpaper.dir)?;
-            let mypaper_theme::Wallpaper::Shader(shader) = loaded.theme.wallpaper else {
-                bail!("choose a shader wallpaper");
-            };
-            if !shader.images.is_empty() {
-                bail!(
-                    "this shader needs texture bindings; import a standalone WGSL shader instead"
-                );
-            }
-            let folder = format!("media/shader-{}", unique());
-            copy_tree(&wallpaper.dir, &active(app).unwrap().dir.join(&folder))?;
-            app.set(&edit(app,"/wallpaper/base","Shader preset"),json!({"kind":"shader","source":format!("{folder}/{}",shader.source.to_string_lossy().replace('\\',"/")),"params":{}}));
-            state(app).base_gallery = false;
         }
         Command::GradientStop(add) => {
             let mut base = raw(app)["wallpaper"]["base"].clone();
@@ -379,6 +409,9 @@ fn execute(app: &mut App, command: Command) -> Result<()> {
             let name = layer_label(&layers, &name);
             layers.push(json!({"id":name,"kind":"effect","effect":id,"enabled":true,"mix":1.0,"blend":"normal","params":{}}));
             set_layers(app, layers, "Add effect");
+            // The document write above replaced any hover preview on disk.
+            state(app).hover = None;
+            state(app).hover_shown = None;
             state(app).selected = Some(layers_len(app).saturating_sub(1));
             app.run(Action::Panel(crate::panel::Command::Open(Page::Create)));
         }
@@ -501,9 +534,105 @@ fn execute(app: &mut App, command: Command) -> Result<()> {
             execute(app, Command::AddEffect(id))?;
             execute(app, Command::Shader)?;
         }
+        Command::CloseGallery => {
+            app.run(Action::Panel(crate::panel::Command::Open(Page::Create)));
+        }
+        Command::SaveCopy => {
+            let name = raw(app)["name"].as_str().unwrap_or("Wallpaper").to_owned();
+            state(app).origin = None;
+            app.set(&edit(app, "/name", "Name"), json!(format!("{name} copy")));
+            save(app, false)?;
+        }
+        Command::Revert => {
+            let initial = active(app).unwrap().initial.clone();
+            app.set(&edit(app, "", "Revert"), initial);
+            state(app).selected = None;
+        }
+        Command::Discard => {
+            // Leaving the builder pages drops the draft (see `tick`).
+            app.run(Action::Panel(crate::panel::Command::Open(Page::Wallpapers)));
+        }
+        Command::Fit(fit) => app.set(&edit(app, "/wallpaper/base/fit", "Fit"), json!(fit)),
+        Command::Focus(x, y) => app.set(
+            &edit(app, "/wallpaper/base/focus", "Position"),
+            json!([f32::from(x) / 2.0, f32::from(y) / 2.0]),
+        ),
+        Command::BaseTheme(index) => {
+            let wallpaper = app.library.items.get(index).context("wallpaper is no longer in the library")?;
+            if let Some(reason) = cannot_be_base(wallpaper) {
+                bail!(reason);
+            }
+            let base = json!({"kind": "theme", "theme": wallpaper.apply_as});
+            app.set(&edit(app, "/wallpaper/base", "Background"), base);
+            state(app).fresh = false;
+        }
+        Command::Pick(kind) => {
+            let (title, filter) = match kind {
+                "video" => ("Choose a video", "*.mp4;*.webm;*.mov"),
+                "scene" => ("Choose a 3D model", "*.glb;*.gltf"),
+                _ => ("Choose a photo", "*.png;*.jpg;*.jpeg;*.webp"),
+            };
+            if let Some(path) = crate::dialogs::pick(app.window, title, false, &[(title, filter)]) {
+                import(app, &path, false)?;
+                state(app).fresh = false;
+            }
+        }
+        Command::DuplicateAt(i) | Command::RemoveAt(i) | Command::MoveAt(i, _) => {
+            state(app).selected = Some(i);
+            let then = match command {
+                Command::DuplicateAt(_) => Command::Duplicate,
+                Command::RemoveAt(_) => Command::Remove,
+                Command::MoveAt(_, by) => Command::Move(by),
+                _ => unreachable!(),
+            };
+            execute(app, then)?;
+        }
         Command::New | Command::Edit(_) => {}
     }
     Ok(())
+}
+
+/// Why `wallpaper` can't open in the editor, or `None` when it can.
+pub fn cannot_edit(wallpaper: &crate::library::Wallpaper) -> Option<&'static str> {
+    use crate::library::Kind;
+    match wallpaper.kind {
+        None => Some("This wallpaper doesn't load, so it can't be edited."),
+        Some(Kind::Web | Kind::App) => {
+            Some("Web pages and apps draw in their own window, so they can't be edited.")
+        }
+        Some(_) => None,
+    }
+}
+
+/// Why `wallpaper` can't be a background, or `None`. A composition is edited directly instead.
+fn cannot_be_base(wallpaper: &crate::library::Wallpaper) -> Option<&'static str> {
+    if wallpaper.kind == Some(crate::library::Kind::Stack) {
+        return Some("A composition can't be the background of another; edit it instead.");
+    }
+    cannot_edit(wallpaper)
+}
+
+/// Wallpapers that can be a background, by library index.
+pub fn base_choices(app: &App) -> Vec<usize> {
+    (0..app.library.items.len())
+        .filter(|&i| cannot_be_base(&app.library.items[i]).is_none())
+        .collect()
+}
+
+/// Decoded-picture budget while the editor is open (Studio keeps 2 MB otherwise).
+const EDITOR_IMAGES: usize = 24 << 20;
+
+/// Delete, Escape: the editor's own keys. Ctrl+Z / Ctrl+Y are Studio's undo and redo.
+pub fn on_key(app: &mut App, vk: u16) -> bool {
+    if active(app).is_none() || app.field.is_some() {
+        return false;
+    }
+    match (vk, crate::panel::current_page(app)) {
+        (0x1B, Page::Effects | Page::Shader) => run(app, Command::CloseGallery),
+        (0x2E, Page::Create) if active(app).unwrap().selected.is_some() => run(app, Command::Remove),
+        _ => return false,
+    }
+    true
 }
 
 fn unique() -> u128 {
@@ -667,7 +796,8 @@ pub fn import(app: &mut App, path: &Path, layer: bool) -> Result<()> {
         set_layers(app, layers, "Import layer");
         state(app).selected = Some(layers_len(app) - 1);
     } else {
-        app.set(&edit(app, "/wallpaper/base", "Import base"), value);
+        app.set(&edit(app, "/wallpaper/base", "Background"), value);
+        state(app).fresh = false;
         state(app).selected = None;
     }
     let credits = active(app).unwrap().dir.join("credits.json");
@@ -819,7 +949,11 @@ pub fn tick(app: &mut App) {
     }
     if !is_page(crate::panel::current_page(app)) {
         let doc = active(app).unwrap().doc;
+        let budget = active(app).unwrap().images_budget;
         app.panel.as_mut().unwrap().builder.take();
+        if let Some(budget) = budget {
+            app.images.borrow_mut().set_budget(budget);
+        }
         // Reloading the removed transient file also retires its undo/redo steps.
         app.docs.reload(doc);
         return;
@@ -883,24 +1017,74 @@ pub fn tick(app: &mut App) {
             app.dirty = true;
         }
     }
-    let stamp = std::fs::metadata(active(app).unwrap().dir.join("preview.jpg"))
-        .ok()
-        .and_then(|m| m.modified().ok());
-    if crate::panel::current_page(app) == Page::Create
-        && stamp != active(app).unwrap().preview_stamp
-    {
+    hover_preview(app, now);
+    let snapshot = active(app).unwrap().dir.join("preview.jpg");
+    let stamp = std::fs::metadata(&snapshot).ok().and_then(|m| m.modified().ok());
+    if stamp != active(app).unwrap().preview_stamp {
         state(app).preview_stamp = stamp;
-        app.images.borrow_mut().clear_page();
+        // Only the canvas picture is decoded again; it stays on screen until the new one lands.
+        // (Clearing the whole cache here blanked every picture at the engine's 10 fps.)
+        app.images.borrow_mut().reload(&snapshot);
         app.dirty = true;
     }
     validate_code(app);
+}
+
+/// Runs the gallery card under the pointer on the canvas after a short pause, by writing the
+/// draft's file with that effect on top. Undo history never sees it; leaving the card writes
+/// the document back.
+fn hover_preview(app: &mut App, now: Instant) {
+    let hovered = (crate::panel::current_page(app) == Page::Effects)
+        .then(|| app.input.hover)
+        .flatten()
+        .and_then(|k| {
+            active(app)?
+                .effects
+                .iter()
+                .find(|e| view::effect_key(&e.id) == k)
+                .map(|e| e.id.clone())
+        });
+    if hovered != active(app).unwrap().hover {
+        state(app).hover = hovered;
+        state(app).hover_since = Some(now);
+        app.dirty = true;
+    }
+    let editor = active(app).unwrap();
+    let settled = editor.hover_since.is_none_or(|t| now >= t + Duration::from_millis(140));
+    if editor.hover == editor.hover_shown || !settled {
+        return;
+    }
+    let shown = editor.hover.clone();
+    let result = match &shown {
+        Some(id) => {
+            let mut value = raw(app);
+            if let Some(layers) = value["wallpaper"]["layers"].as_array_mut() {
+                layers.push(json!({"id": "Preview", "kind": "effect", "effect": id}));
+            }
+            serde_json::to_string_pretty(&value).map_err(anyhow::Error::from).and_then(|text| {
+                crate::docs::write_atomic(&active(app).unwrap().dir.join("theme.json"), text.as_bytes())
+            })
+        }
+        None => app.docs.preview_live(active(app).unwrap().doc),
+    };
+    if let Err(error) = result {
+        log::warn!("effect hover preview: {error:#}");
+    }
+    state(app).hover_shown = shown;
 }
 
 fn save(app: &mut App, apply: bool) -> Result<()> {
     if active(app).unwrap().pending_code.is_some() {
         flush_code(app)?;
     }
-    let target = storage::publish(app, &mypaper_config::user_themes_dir()?)?;
+    let root = mypaper_config::user_themes_dir()?;
+    let target = match active(app).unwrap().origin.clone() {
+        Some(dir) => storage::save_in_place(app, &root, &dir)?,
+        None => storage::publish(app, &root)?,
+    };
+    // Later saves update this theme rather than making another.
+    state(app).origin = Some(target.clone());
+    state(app).saved = Some(raw(app));
     app.library = crate::library::Library::scan(crate::app::theme_name(&app.docs).as_deref());
     if apply {
         app.set(
@@ -1095,9 +1279,13 @@ fn estimate(stack: &mypaper_theme::StackWallpaper, effects: &[Effect], pixels: f
             Layer::Image(_) | Layer::Model(_) => None,
         })
         .sum();
+    if ms <= 0.0 {
+        // Only the background moves; its own cost isn't measured per effect.
+        return format!("Moving: the background runs at {} fps", stack.fps);
+    }
     let resolution = pixels / (1920.0 * 1080.0);
     let percent = ms * f64::from(stack.fps) * f64::from(stack.scale).powi(2) * resolution / 10.0;
-    format!("about {percent:.1}% GPU at {} fps", stack.fps)
+    format!("Moving: about {percent:.1}% GPU at {} fps", stack.fps)
 }
 
 /// Reordering consumes only events addressed to our own layer handles.
