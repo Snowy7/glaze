@@ -94,11 +94,37 @@ struct Studio {
     /// The selects' menu (the kit's), made on first use so it costs nothing at startup, and
     /// the options it is showing.
     menu: Option<glaze_ui::Menu<usize>>,
-    picking: Option<actions::Choices>,
+    picking: Option<Picking>,
     /// The DWM frame last set: dark, border colour.
     frame: Option<(bool, glaze_ui::Rgba)>,
     /// The full-screen first run, while it covers the displays.
     onboarding: Option<onboarding::Session>,
+}
+
+/// What the open menu answers to: a select's choices, or an action menu's rows by index.
+enum Picking {
+    Choices(actions::Choices),
+    Actions(Vec<actions::Action>),
+}
+
+/// The kit's rows for an action menu; each chosen row's index finds its action in `actions`.
+fn menu_entries(items: &[actions::MenuItem], actions: &mut Vec<actions::Action>) -> Vec<glaze_ui::menu::Entry<usize>> {
+    use glaze_ui::menu::{Entry, MenuIcon};
+    items
+        .iter()
+        .map(|item| match item {
+            actions::MenuItem::Separator => Entry::Separator,
+            actions::MenuItem::Submenu { label, items } => Entry::Submenu { label: label.clone(), items: menu_entries(items, actions) },
+            actions::MenuItem::Item { label, icon, checked, enabled, action } => {
+                actions.push(action.clone());
+                let entry = Entry::Action { label: label.clone(), command: actions.len() - 1, checked: *checked, enabled: *enabled };
+                match (icon, checked) {
+                    (Some(glyph), None) => entry.with_icon(MenuIcon::Glyph(*glyph)),
+                    _ => entry,
+                }
+            }
+        })
+        .collect()
 }
 
 impl Studio {
@@ -170,7 +196,19 @@ impl Studio {
 
     /// Opens the kit's menu under the select that asked for it.
     fn open_picker(&mut self) {
-        let Some((rect, choices)) = self.app.picking.take() else {
+        let (rect, picking, items) = if let Some((rect, choices)) = self.app.picking.take() {
+            let items = choices
+                .options
+                .iter()
+                .enumerate()
+                .map(|(i, (value, label))| glaze_ui::menu::Entry::check(label, i, choices.current.as_ref() == Some(value)))
+                .collect();
+            (rect, Picking::Choices(choices), items)
+        } else if let Some((rect, rows)) = self.app.menu.take() {
+            let mut actions = Vec::new();
+            let items = menu_entries(&rows, &mut actions);
+            (rect, Picking::Actions(actions), items)
+        } else {
             return;
         };
         if self.menu.is_none() {
@@ -179,26 +217,25 @@ impl Studio {
                 .ok();
         }
         let Some(menu) = self.menu.as_mut() else { return };
-        let items = choices
-            .options
-            .iter()
-            .enumerate()
-            .map(|(i, (value, label))| glaze_ui::menu::Entry::check(label, i, choices.current.as_ref() == Some(value)))
-            .collect();
+        let p = panel::palette_for(&self.app);
+        let mut tokens = p.theme().tokens();
+        // A popover over the window: the card fill, Studio's selected wash, no hairline in dark.
+        tokens.material.tint = p.panel;
+        tokens.colors.hover = p.selected;
+        // Menus line up with their control's right edge: dropdown values sit at a row's end and
+        // "…" buttons at a panel's, so the menu opens over the page instead of past it.
         let mut at = windows::Win32::Foundation::POINT {
             x: rect.left as i32,
             y: (rect.bottom + self.app.px(4.0)) as i32,
         };
         // SAFETY: our own window; `at` is a valid out pointer.
         let _ = unsafe { windows::Win32::Graphics::Gdi::ClientToScreen(self.surface.hwnd(), &mut at) };
-        let p = panel::palette_for(&self.app);
-        let mut tokens = p.theme().tokens();
-        // A popover over the window: the card fill, Studio's selected wash, no hairline in dark.
-        tokens.material.tint = p.panel;
-        tokens.colors.hover = p.selected;
         let screen = glaze_ui::menu::screen_at(at.x, at.y);
+        let scale = screen.dpi.max(96) as f32 / 96.0 * tokens.scale.clamp(0.5, 2.0);
+        let width = glaze_ui::menu::layout(&items, &tokens, scale, &mut self.ui.text).size().0;
+        at.x += rect.width() as i32 - width;
         match menu.open(&mut self.ui, items, (at.x, at.y), screen, &tokens) {
-            Ok(()) => self.picking = Some(choices),
+            Ok(()) => self.picking = Some(picking),
             Err(e) => log::error!("select menu: {e:#}"),
         }
     }
@@ -206,9 +243,14 @@ impl Studio {
     /// The select menu closed: apply the choice and give the window its focus back (unless
     /// the user clicked into another app).
     fn picked(&mut self, outcome: glaze_ui::menu::Outcome<usize>) {
-        let choices = self.picking.take();
-        if let (glaze_ui::menu::Outcome::Chosen(i), Some(choices)) = (&outcome, &choices) {
-            self.app.chose(choices, *i);
+        match (&outcome, self.picking.take()) {
+            (glaze_ui::menu::Outcome::Chosen(i), Some(Picking::Choices(choices))) => self.app.chose(&choices, *i),
+            (glaze_ui::menu::Outcome::Chosen(i), Some(Picking::Actions(actions))) => {
+                if let Some(action) = actions.get(*i) {
+                    self.app.run(action.clone());
+                }
+            }
+            _ => {}
         }
         use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
         // SAFETY: plain window queries; activating our own window while it is ours to give.

@@ -173,6 +173,8 @@ pub struct App {
     /// A select asked for its menu: the control's rect (client pixels) and its options. The
     /// window's loop opens the kit's menu there and answers with [`App::chose`].
     pub picking: Option<(Rect, Choices)>,
+    /// An action menu asked to open under its control; the loop opens it like a select's.
+    pub menu: Option<(Rect, Vec<crate::actions::MenuItem>)>,
     pub dirty: bool,
     pub quit: bool,
     /// Goldens fix the clock and leave out live data.
@@ -285,6 +287,7 @@ impl App {
             places_query: 0,
             window: None,
             picking: None,
+            menu: None,
             dirty: true,
             quit: false,
             fixture,
@@ -1527,6 +1530,11 @@ impl App {
                 value: None,
             }]),
             Action::Choose(choices) => self.choose(choices),
+            Action::Menu(items) => {
+                if let Some(rect) = self.input.focus.and_then(|k| self.target(k)).map(|t| t.rect) {
+                    self.menu = Some((rect, items));
+                }
+            }
             Action::Field(id) => self.focus_field(id),
             Action::Dismiss => {
                 if matches!(self.overlay, Some(Overlay::PluginConsent)) { self.plugins.pending = None; }

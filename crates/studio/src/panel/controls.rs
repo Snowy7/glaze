@@ -687,7 +687,7 @@ fn row_content(
     let h = row_height(b, caption);
     let r = Rect::new(c.x, c.y, c.w, h);
     let k = key(("panel-row", c.view, label, caption));
-    let choice = matches!(&action, Action::Choose(_));
+    let choice = matches!(&action, Action::Choose(_) | Action::Menu(_));
     let on = checked == Some(true);
     let area = b.list_row_area(r);
     if on {
@@ -713,7 +713,26 @@ fn row_content(
         x += gw + b.px(if boxed { 12.0 } else { 10.0 });
     }
     let tail_w = height(b, 16.0);
-    let tail = Rect::new(r.right - tail_w, r.top, tail_w, h);
+    let mut tail = Rect::new(r.right - tail_w, r.top, tail_w, h);
+    // A select's value and chevron sit in a dropdown box at the row's end.
+    let dropdown = choice && checked.is_none() && !value.is_empty();
+    if dropdown {
+        tail = Rect::new(r.right - tail_w - b.px(10.0), r.top, tail_w, h);
+    }
+    let end = tail.left - b.px(8.0);
+    let value_w = if value.is_empty() {
+        0.0
+    } else {
+        let style = font(b, 13.0, 400);
+        b.measure(value, &style)
+            .0
+            .min((end - x - b.px(140.0)).max(0.0))
+    };
+    if dropdown {
+        let left = end - value_w - b.px(12.0);
+        let boxed = Rect::new(left, r.top + (h - height(b, 32.0)) / 2.0, r.right - left, height(b, 32.0));
+        b.fill(boxed, b.px(radius::CONTROL), b.p.fill);
+    }
     if let Some(checked) = checked {
         if checked {
             b.icon(tail, glyph::CHECK, 16.0, b.p.ink1);
@@ -730,15 +749,6 @@ fn row_content(
             b.p.ink3,
         );
     }
-    let end = tail.left - b.px(8.0);
-    let value_w = if value.is_empty() {
-        0.0
-    } else {
-        let style = font(b, 13.0, 400);
-        b.measure(value, &style)
-            .0
-            .min((end - x - b.px(140.0)).max(0.0))
-    };
     let label_end = end - value_w - if value_w > 0.0 { b.px(12.0) } else { 0.0 };
     let label_h = if caption.is_empty() {
         h

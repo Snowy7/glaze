@@ -6,6 +6,22 @@ use serde_json::json;
 use super::{Command, Page, State};
 use crate::actions::Action;
 use crate::app::App;
+
+/// The action a dropdown runs for the option `pick` accepts: a select's `Set` of that value.
+fn dropdown_option(built: &super::Built, path: &str, pick: impl Fn(&serde_json::Value) -> bool) -> Action {
+    built
+        .targets
+        .iter()
+        .find_map(|t| match &t.action {
+            Action::Choose(choices) if choices.edit.path.as_ref() == path => choices
+                .options
+                .iter()
+                .find(|(value, _)| pick(value))
+                .map(|(value, _)| Action::Set(choices.edit.clone(), value.clone())),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("a dropdown for {path}"))
+}
 use crate::docs::DocId;
 
 fn app(ui: &Ui, dark: bool) -> App {
@@ -495,7 +511,7 @@ fn panel_controls_use_the_existing_validated_documents_and_undo() {
         app.get(DocId::Config, "/pause_on_battery"),
         Some(&json!(false))
     );
-    let gpu = built.targets.iter().find(|t| matches!(&t.action, Action::Set(edit, value) if edit.path.as_ref() == "/engine/gpu" && value == "auto")).unwrap().action.clone();
+    let gpu = dropdown_option(&built, "/engine/gpu", |value| value == "auto");
     app.run(gpu);
     assert_eq!(app.get(DocId::Config, "/engine/gpu"), Some(&json!("auto")));
     app.monitors.truncate(1);
@@ -566,8 +582,13 @@ fn panel_controls_stay_inside_laptop_and_scaled_widths() {
             }
             let built = super::build(&app, &mut ui.text);
             if page == Page::Performance && text_scale == 1.0 {
+                // Three or more choices are a dropdown: its menu lists every label.
+                let labels: Vec<_> = built.targets.iter().filter_map(|t| match &t.action {
+                    Action::Choose(choices) => Some(choices.options.iter().map(|(_, l)| l.clone()).collect::<Vec<_>>()),
+                    _ => None,
+                }).flatten().collect();
                 for label in ["On battery", "Like Windows", "Always", "Never"] {
-                    assert!(built.list.ops.iter().any(|op| matches!(op, glaze_ui::Op::Text { text, .. } if text.as_ref() == label)), "{label} is readable at {width}/{scale}");
+                    assert!(labels.iter().any(|l| l == label), "{label} is offered at {width}/{scale}");
                 }
             }
             for target in built.targets {
@@ -724,7 +745,7 @@ fn windows_as_is_is_explicit_and_escape_leaves_the_add_page() {
     let mut app = app(&ui, true);
     super::run(&mut app, Command::Open(Page::Windows));
     let built = super::build(&app, &mut ui.text);
-    let action = built.targets.iter().find(|t| matches!(&t.action, Action::Set(edit, value) if edit.path.as_ref() == "/panel/windows/corners" && value.is_null())).unwrap().action.clone();
+    let action = dropdown_option(&built, "/panel/windows/corners", serde_json::Value::is_null);
     app.run(action);
     assert_eq!(
         app.docs

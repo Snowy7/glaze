@@ -569,7 +569,7 @@ mod tests {
     }
 
     #[test]
-    fn short_segment_labels_have_the_same_selected_fill() {
+    fn short_choices_open_a_dropdown_that_shows_the_current_value() {
         let mut ui = glaze_ui::Ui::new().unwrap();
         for dark in [true, false] {
             let mut app = crate::goldens::app(dark, &ui);
@@ -578,18 +578,11 @@ mod tests {
             app.nav.widget = Some("system-monitor-1".into());
             app.size = (480, 2200);
             let built = super::super::build(&app, &mut ui.text);
-            let selected = built
-                .list
-                .hits
-                .iter()
-                .find(|hit| hit.label.as_ref() == "Update every: 2 s")
-                .unwrap();
-            assert_eq!(selected.checked, Some(true));
-            assert!(built.list.ops.iter().any(|op| matches!(
-                op,
-                glaze_ui::Op::Fill { rect, color, .. }
-                    if *rect == selected.rect && *color == super::super::palette_for(&app).selected
-            )));
+            // Three or more choices: the row shows the current one, the menu offers the rest.
+            let row = built.list.hits.iter().find(|hit| hit.label.as_ref().starts_with("Update every 2 s")).unwrap();
+            assert_eq!(row.role, glaze_ui::Role::ComboBox);
+            assert!(built.targets.iter().any(|t| matches!(&t.action,
+                Action::Choose(choices) if choices.options.iter().any(|(_, l)| l == "2 s") && choices.options.len() >= 3)));
         }
     }
 

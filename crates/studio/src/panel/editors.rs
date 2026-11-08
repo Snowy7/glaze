@@ -307,7 +307,7 @@ pub fn select(
     row(b, c, None, label, &shown, "", None, action);
 }
 
-/// Small, finite choices use the kit's single page layout.
+/// Two choices are a segment; three or more (or labels that do not fit) open a dropdown.
 pub fn segments(
     b: &mut B,
     c: &mut Col,
@@ -322,7 +322,7 @@ pub fn segments(
         .iter()
         .map(|label| b.measure(label, &style).0 + b.px(20.0))
         .sum();
-    if options.len() > 4 || needed > c.w - b.px(4.0) {
+    if options.len() > 2 || needed > c.w - b.px(4.0) {
         select(b, c, label, value, edit, options);
         return;
     }
