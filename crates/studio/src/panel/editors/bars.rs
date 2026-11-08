@@ -1396,7 +1396,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         .plugins
         .installed
         .iter()
-        .filter(|plugin| super::connections::visible_plugin(plugin))
+        .filter(|plugin| super::connections::visible_plugin(plugin) && super::connections::connected(app, &plugin.id))
         .flat_map(|plugin| plugin.bars.iter().map(move |module| (plugin, module)))
         .filter(|(plugin, module)| {
             !present.contains(&format!("custom:{}--{}", plugin.id, module.id).as_str())

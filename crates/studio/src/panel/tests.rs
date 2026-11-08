@@ -1185,3 +1185,32 @@ fn edit_mode_requests_and_leaves_without_quitting() {
     super::on_key(&mut app, 0x1B, (false, false, false));
     assert_eq!(app.panel.as_ref().unwrap().edit_request, None);
 }
+
+/// An installed plugin that isn't set up offers no widgets in the gallery or search; once it
+/// runs, it does. Connections still lists it, as the place to set it up.
+#[test]
+fn plugin_widgets_appear_only_once_the_plugin_is_set_up() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    app.plugins.installed.push(glaze_widgets::manifest::PluginManifest::parse(
+        &json!({"id":"discord","name":"Discord","version":"1.0.0","component":"fixture.wasm","api":"0.1"}).to_string(), "discord").unwrap());
+    let id = "discord--status";
+    let manifest = glaze_widgets::manifest::WidgetManifest::parse(
+        &json!({"id": id, "name": "Discord · Status", "size": {"default": [3, 2]}, "settings": []}).to_string(), id).unwrap();
+    app.registry.widgets.insert(id.into(), glaze_widgets::registry::Installed { manifest });
+    let offered = |app: &mut App, ui: &mut Ui| {
+        super::run(app, Command::Open(Page::AddWidget));
+        let built = super::build(app, &mut ui.text);
+        // The card is named for its face; the plugin heads its section.
+        let in_gallery = built.list.hits.iter().any(|hit| hit.label.trim() == "Status");
+        app.texts.insert(crate::actions::FieldId::Palette, "Discord".into());
+        let in_search = crate::search::results(app).iter().any(|entry| entry.action == Action::AddWidget(id.into()));
+        (in_gallery, in_search)
+    };
+    assert_eq!(offered(&mut app, &mut ui), (false, false));
+    super::run(&mut app, Command::Open(Page::Connections));
+    let built = super::build(&app, &mut ui.text);
+    assert!(built.list.hits.iter().any(|hit| hit.label.starts_with("Discord")), "Connections lists it to set up");
+    app.plugins.snapshot.plugins.insert("discord".into(), glaze_widgets::plugin_manager::Metrics { status: "Live".into(), ..Default::default() });
+    assert_eq!(offered(&mut app, &mut ui), (true, true));
+}

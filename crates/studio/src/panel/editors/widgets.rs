@@ -1555,6 +1555,9 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
             {
                 continue;
             }
+            if !super::connections::connected(app, plugin) {
+                continue;
+            }
             (2, name.to_owned())
         } else {
             if !developer_mode(app) && development_plugin(id, &manifest.name) {

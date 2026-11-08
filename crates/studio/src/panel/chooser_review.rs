@@ -447,6 +447,8 @@ fn render_retained_plugin_face_and_transparent_widget() {
         ).unwrap();
         app.registry.widgets.clear();
         app.registry.widgets.insert(id.into(), glaze_widgets::registry::Installed { manifest });
+        // Its plugin is set up and running: only then are its faces offered.
+        app.plugins.snapshot.plugins.insert("t3".into(), glaze_widgets::plugin_manager::Metrics { status: "Live".into(), ..Default::default() });
         super::begin(&app);
         app.panel.as_ref().unwrap().chooser.borrow_mut().plugin_faces = Some(json!({
             id: {"title":"Running now","icon":"terminal","status":"live","face":trees["running"]["small"]}

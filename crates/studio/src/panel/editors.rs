@@ -6,6 +6,7 @@ pub use bars::{
     overview as bars_overview, same_bars, selected_module_name,
 };
 pub use connections::{
+    connected,
     connect, connection_module, disconnect, hide_connection_widget, summary as connections_summary,
 };
 mod look;

@@ -20,6 +20,12 @@ fn plugin_status<'a>(app: &'a App, id: &str) -> &'a str {
         })
 }
 
+/// Set up (running, starting or needing attention), not merely installed: only then are its
+/// widgets and bar modules offered. Connections is where an available one gets set up.
+pub fn connected(app: &App, id: &str) -> bool {
+    plugin_status(app, id) != "Available"
+}
+
 pub fn visible_plugin(plugin: &glaze_widgets::manifest::PluginManifest) -> bool {
     !["hello", "hello-ts", "demo", "experimental"].contains(&plugin.id.as_str())
         && !plugin
