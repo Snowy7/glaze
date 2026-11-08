@@ -194,7 +194,7 @@ fn run(
             t.command(Op::Maximize);
             t.command(Op::Maximize);
         }
-        pump(&mut tiler, Duration::from_millis(200));
+        settle(&mut tiler)?;
         if let Some(t) = &tiler {
             verify_placements(t)?;
             let monitors = glaze_desktop::monitors();
@@ -427,6 +427,21 @@ fn cpu() -> Result<u64> {
         (u64::from(kernel.dwHighDateTime) << 32 | u64::from(kernel.dwLowDateTime))
             + (u64::from(user.dwHighDateTime) << 32 | u64::from(user.dwLowDateTime)),
     )
+}
+/// Wait for both projection completion and its queued readback reconciliation.
+fn settle(tiler: &mut Option<Tiler>) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let mut quiet = 0;
+    while quiet < 2 {
+        ensure!(Instant::now() < deadline, "projection did not settle");
+        pump(tiler, Duration::from_millis(50));
+        quiet = if glaze_shell::tiling::animation::busy() {
+            0
+        } else {
+            quiet + 1
+        };
+    }
+    Ok(())
 }
 fn pump(tiler: &mut Option<Tiler>, duration: Duration) -> u64 {
     let end = Instant::now() + duration;
