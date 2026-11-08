@@ -51,6 +51,28 @@ fn defaults_and_bindings_are_valid() {
     Settings::default().validate().unwrap();
 }
 #[test]
+fn full_width_retains_gaps_and_restores_the_previous_width() {
+    let mut l = layout();
+    open(&mut l, 1);
+    let before = l.targets()[0].rect;
+    l.command(Command::FullWidth);
+    assert_eq!(
+        l.targets()[0].rect,
+        Rect {
+            x: 16.0,
+            y: 16.0,
+            w: 1168.0,
+            h: 768.0
+        }
+    );
+    l.command(Command::FullWidth);
+    assert_eq!(l.targets()[0].rect, before);
+    l.command(Command::Maximize);
+    assert_eq!(l.targets()[0].rect, area());
+    l.command(Command::Maximize);
+    assert_eq!(l.targets()[0].rect.w, before.w);
+}
+#[test]
 fn on_overflow_keeps_two_half_width_columns_together() {
     let mut l = layout();
     l.settings.center_focused_column = Center::OnOverflow;
@@ -190,6 +212,8 @@ fn minimum_wins_over_maximum() {
         None,
         true,
     );
+    assert_eq!(l.targets()[0].rect.w, 900.0);
+    l.command(Command::FullWidth);
     assert_eq!(l.targets()[0].rect.w, 900.0);
 }
 #[test]

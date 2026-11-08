@@ -66,6 +66,7 @@ impl Axis {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Normal,
+    FullWidth,
     Maximized,
     Fullscreen,
 }
@@ -502,7 +503,7 @@ impl Layout {
     }
     fn width(settings: &Settings, m: &Monitor, c: &Column) -> f64 {
         let length = m.axis.length(m.area) / m.scale;
-        if c.mode != Mode::Normal {
+        if matches!(c.mode, Mode::Maximized | Mode::Fullscreen) {
             return length;
         }
         let min = c
@@ -524,9 +525,12 @@ impl Layout {
             .filter(|v| v.is_finite())
             .fold(length, f64::min)
             .max(min);
-        ((length - settings.gaps) * c.width - settings.gaps)
-            .max(1.0)
-            .clamp(min.max(1.0), max.max(1.0))
+        let requested = if c.mode == Mode::FullWidth {
+            length - settings.gaps * 2.0
+        } else {
+            (length - settings.gaps) * c.width - settings.gaps
+        };
+        requested.max(1.0).clamp(min.max(1.0), max.max(1.0))
     }
     fn start(&self, mi: usize, wi: usize, ci: usize) -> f64 {
         let m = &self.monitors[mi];
@@ -576,7 +580,7 @@ impl Layout {
                     + self.settings.gaps * 3.0
                     > length + 0.001
             });
-        let view = if width >= length || c.mode != Mode::Normal {
+        let view = if width >= length || matches!(c.mode, Mode::Maximized | Mode::Fullscreen) {
             start
         } else if self.settings.center_focused_column == Center::Always
             || (self.settings.center_focused_column == Center::OnOverflow && pair_overflows)
@@ -736,6 +740,7 @@ impl Layout {
             }
             Command::CycleWidth
             | Command::CycleHeight
+            | Command::FullWidth
             | Command::Maximize
             | Command::Fullscreen
             | Command::Tabbed => {
@@ -743,6 +748,9 @@ impl Layout {
                     let c = &mut self.monitors[mi].workspaces[wi].columns[ci];
                     match command {
                         Command::CycleWidth => {
+                            if c.mode == Mode::FullWidth {
+                                c.mode = Mode::Normal;
+                            }
                             let next = self
                                 .settings
                                 .preset_widths
@@ -755,6 +763,13 @@ impl Layout {
                         Command::CycleHeight => {
                             let t = &mut c.tiles[c.active];
                             t.height = if t.height < 2.0 { t.height + 0.5 } else { 0.5 };
+                        }
+                        Command::FullWidth => {
+                            c.mode = if c.mode == Mode::FullWidth {
+                                Mode::Normal
+                            } else {
+                                Mode::FullWidth
+                            };
                         }
                         Command::Maximize => {
                             c.mode = if c.mode == Mode::Maximized {
@@ -950,7 +965,7 @@ impl Layout {
                     } else {
                         m.area
                     };
-                    let cross_gap = if c.mode == Mode::Normal {
+                    let cross_gap = if matches!(c.mode, Mode::Normal | Mode::FullWidth) {
                         self.settings.gaps
                     } else {
                         0.0
