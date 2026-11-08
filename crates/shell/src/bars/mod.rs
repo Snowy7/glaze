@@ -1724,6 +1724,7 @@ impl Bars {
                                     system::activate(system::hwnd(next));
                                 }
                             } else {
+                                crate::tiling::dock_click(w.hwnd);
                                 system::activate(system::hwnd(w.hwnd));
                             }
                         } else {
