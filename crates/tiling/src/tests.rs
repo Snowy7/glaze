@@ -113,6 +113,66 @@ fn floating_windows_follow_the_work_area_and_dpi_through_zero_outputs() {
     check(&l);
 }
 #[test]
+fn floating_toggle_remembers_geometry_and_constraints() {
+    let mut l = layout();
+    let original = Rect {
+        x: 200.0,
+        y: 150.0,
+        w: 400.0,
+        h: 300.0,
+    };
+    let constraints = Constraints {
+        min_w: 300.0,
+        min_h: 200.0,
+        ..Constraints::default()
+    };
+    l.insert(WindowId(1), constraints, None, Some(original), true);
+    l.command(Command::Floating);
+    assert!(!l.is_floating(WindowId(1)));
+    l.command(Command::Floating);
+    assert_eq!(l.targets()[0].rect, original);
+    let (mi, wi) = l.locate(WindowId(1)).unwrap();
+    assert_eq!(
+        l.monitors[mi].workspaces[wi].floating[0].constraints,
+        constraints
+    );
+    l.command(Command::Floating);
+    l.remove(WindowId(1));
+    assert!(!l.floating_memory.contains_key(&WindowId(1)));
+    check(&l);
+}
+#[test]
+fn fullscreen_float_returns_to_its_geometry_even_after_maximizing() {
+    let mut l = layout();
+    let original = Rect {
+        x: 200.0,
+        y: 150.0,
+        w: 400.0,
+        h: 300.0,
+    };
+    let constraints = Constraints {
+        min_w: 300.0,
+        ..Constraints::default()
+    };
+    l.insert(WindowId(1), constraints, None, Some(original), true);
+    l.command(Command::Fullscreen);
+    assert!(!l.is_floating(WindowId(1)));
+    assert_eq!(l.targets()[0].rect, area());
+    l.command(Command::Maximize);
+    l.command(Command::Fullscreen);
+    l.command(Command::Fullscreen);
+    assert!(l.is_floating(WindowId(1)));
+    assert_eq!(l.targets()[0].rect, original);
+    let saved = l.suspend(WindowId(1)).unwrap();
+    l.resume(saved, true);
+    let (mi, wi) = l.locate(WindowId(1)).unwrap();
+    assert_eq!(
+        l.monitors[mi].workspaces[wi].floating[0].constraints,
+        constraints
+    );
+    check(&l);
+}
+#[test]
 fn game_bar_screenshot_and_recording_timer_remain_reserved() {
     for key in [0x2C, 0x54] {
         let mut settings = Settings::default();

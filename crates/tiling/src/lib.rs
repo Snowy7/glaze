@@ -100,6 +100,29 @@ pub struct Floating {
     pub id: WindowId,
     pub rect: Rect,
     pub owner: Option<WindowId>,
+    pub constraints: Constraints,
+}
+#[derive(Debug, Clone)]
+struct FloatingMemory {
+    window: Floating,
+    area: Rect,
+    scale: f64,
+    fullscreen: bool,
+}
+impl FloatingMemory {
+    /// Restore logical size and work-area-relative position on the current output.
+    fn rect(&self, area: Rect, scale: f64) -> Rect {
+        let r = self.window.rect;
+        let mut r = Rect {
+            x: area.x + (r.x - self.area.x) / self.area.w.max(1.0) * area.w,
+            y: area.y + (r.y - self.area.y) / self.area.h.max(1.0) * area.h,
+            w: r.w * scale / self.scale,
+            h: r.h * scale / self.scale,
+        };
+        r.x = r.x.clamp(area.x, (area.x + area.w - r.w).max(area.x));
+        r.y = r.y.clamp(area.y, (area.y + area.h - r.h).max(area.y));
+        r
+    }
 }
 /// The previous column is an anchor, so deleting columns to its left cannot corrupt the view.
 #[derive(Debug, Clone)]
@@ -191,6 +214,7 @@ pub struct Layout {
     pub focused_monitor: Option<String>,
     next_workspace: u64,
     remembered_active: std::collections::HashMap<String, WorkspaceId>,
+    floating_memory: std::collections::HashMap<WindowId, FloatingMemory>,
 }
 
 impl Layout {
@@ -249,6 +273,7 @@ impl Layout {
             focused_monitor: None,
             next_workspace: 1,
             remembered_active: std::collections::HashMap::new(),
+            floating_memory: std::collections::HashMap::new(),
         }
     }
     fn workspace(&mut self, output: &str) -> Workspace {
@@ -411,7 +436,12 @@ impl Layout {
         let old_view = w.view;
         w.original_output = output;
         if let Some(rect) = floating {
-            w.floating.push(Floating { id, rect, owner });
+            w.floating.push(Floating {
+                id,
+                rect,
+                owner,
+                constraints,
+            });
         } else {
             let index = owner
                 .or(old)
@@ -460,6 +490,11 @@ impl Layout {
     }
     /// Close without shifting an unrelated focused tile; one temporary view is restored.
     pub fn remove(&mut self, id: WindowId) -> Vec<Target> {
+        self.floating_memory.remove(&id);
+        self.remove_inner(id)
+    }
+    /// Temporary transfers preserve per-window floating preferences until an actual close.
+    fn remove_inner(&mut self, id: WindowId) -> Vec<Target> {
         if let Some((mi, wi)) = self.locate(id) {
             let before = self.focus_position(mi, wi);
             let mut restored_position = None;
@@ -711,6 +746,24 @@ impl Layout {
             return self.targets();
         };
         let focused = self.monitors[mi].workspaces[wi].focused;
+        if command == Command::Fullscreen
+            && let Some(id) = focused
+        {
+            if self.is_floating(id) {
+                self.remember_float(mi, wi, id, true);
+                let memory = self.floating_memory[&id].clone();
+                self.remove_inner(id);
+                self.insert(id, memory.window.constraints, None, None, true);
+            } else if self.floating_memory.get(&id).is_some_and(|m| m.fullscreen)
+                && self.monitors[mi].workspaces[wi]
+                    .column(id)
+                    .is_some_and(|ci| {
+                        self.monitors[mi].workspaces[wi].columns[ci].mode == Mode::Fullscreen
+                    })
+            {
+                return self.restore_float(mi, wi, id);
+            }
+        }
         let mut ci = focused.and_then(|id| self.monitors[mi].workspaces[wi].column(id));
         if matches!(command, Command::Maximize | Command::Fullscreen)
             && let Some(id) = focused
@@ -973,11 +1026,18 @@ impl Layout {
                             .find(|t| t.id == id)
                             .unwrap()
                             .constraints;
-                        self.remove(id);
-                        return self.insert(id, constraints, None, Some(rect), true);
+                        let rect = self.floating_memory.get(&id).map_or(rect, |memory| {
+                            memory.rect(self.monitors[mi].area, self.monitors[mi].scale)
+                        });
+                        let owner = self.floating_memory.get(&id).and_then(|m| m.window.owner);
+                        self.remove_inner(id);
+                        self.floating_memory.remove(&id);
+                        return self.insert(id, constraints, owner, Some(rect), true);
                     } else {
-                        self.remove(id);
-                        return self.insert(id, Constraints::default(), None, None, true);
+                        self.remember_float(mi, wi, id, false);
+                        let constraints = self.floating_memory[&id].window.constraints;
+                        self.remove_inner(id);
+                        return self.insert(id, constraints, None, None, true);
                     }
                 }
             }
@@ -1026,7 +1086,7 @@ impl Layout {
             return self.drop_on_workspace(window, monitor, index, false);
         };
         for tile in column.tiles.iter().filter(|t| t.id != window) {
-            self.remove(tile.id);
+            self.remove_inner(tile.id);
         }
         self.drop_on_workspace(window, monitor, index, false);
         if let Some((mi, wi)) = self.locate(window) {
@@ -1157,6 +1217,33 @@ pub struct Suspended {
     learned_min: f64,
 }
 impl Layout {
+    /// Remember a float before moving it into the strip, including its minimum size.
+    fn remember_float(&mut self, mi: usize, wi: usize, window: WindowId, fullscreen: bool) {
+        let m = &self.monitors[mi];
+        if let Some(window) = m.workspaces[wi].floating.iter().find(|f| f.id == window) {
+            self.floating_memory.insert(
+                window.id,
+                FloatingMemory {
+                    window: window.clone(),
+                    area: m.area,
+                    scale: m.scale,
+                    fullscreen,
+                },
+            );
+        }
+    }
+    fn restore_float(&mut self, mi: usize, _wi: usize, window: WindowId) -> Vec<Target> {
+        let memory = self.floating_memory.remove(&window).unwrap();
+        let rect = memory.rect(self.monitors[mi].area, self.monitors[mi].scale);
+        self.remove_inner(window);
+        self.insert(
+            window,
+            memory.window.constraints,
+            memory.window.owner,
+            Some(rect),
+            true,
+        )
+    }
     /// niri expels a maximized/fullscreen window from a stack, while retaining tabbed columns.
     fn extract_for_mode(&mut self, mi: usize, wi: usize, window: WindowId) -> usize {
         let w = &mut self.monitors[mi].workspaces[wi];
@@ -1198,7 +1285,14 @@ impl Layout {
             width: column.map_or(self.settings.default_width, |i| w.columns[i].width),
             constraints: column
                 .and_then(|i| w.columns[i].tiles.iter().find(|t| t.id == window))
-                .map_or(Constraints::default(), |t| t.constraints),
+                .map(|t| t.constraints)
+                .or_else(|| {
+                    w.floating
+                        .iter()
+                        .find(|f| f.id == window)
+                        .map(|f| f.constraints)
+                })
+                .unwrap_or_default(),
             floating: w.floating.iter().find(|f| f.id == window).map(|f| f.rect),
             neighbor: source
                 .and_then(|c| c.tiles.iter().find(|t| t.id != window))
@@ -1213,7 +1307,7 @@ impl Layout {
             mode: source.map_or(Mode::Normal, |c| c.mode),
             learned_min: source.map_or(0.0, |c| c.learned_min),
         };
-        self.remove(window);
+        self.remove_inner(window);
         Some(saved)
     }
     pub fn resume(&mut self, saved: Suspended, activate: bool) -> Vec<Target> {
