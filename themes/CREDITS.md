@@ -313,3 +313,12 @@ These are excluded from the curated filesystem gallery, but old IDs and old `the
 | `examples/webdemo/theme.json` | mypaper contributors | [MIT](https://opensource.org/license/mit/) | [Source](../LICENSE) | Existing manifest moved under examples/; hidden=true added. Wallpaper content and selected IDs preserved. |
 
 The manifests, local adapter HTML and original mypaper example code use the repository [MIT license](../LICENSE). This document and `catalog.json` are original mypaper attribution/metadata files under the same license; their factual credit records do not relicense any referenced content.
+
+
+### 3D builder samples
+
+| File | Author | License | Original source | Changes |
+|---|---|---|---|---|
+| `examples/ringed-planet/planet.glb`, `generate.py` | mypaper contributors (2026) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | Original procedural asset; reproducible with the included generator | Original geometry, PBR maps, translucent rings, node and morph clips. |
+| `examples/fox-model/Fox.glb` | PixelMannen (model, 2014); tomkranis (rig/animation, 2014); AsoboStudio and scurest (glTF conversion, 2017) | Model: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/); rig/animation/conversion: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | [Khronos Fox](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox) | Unmodified GLB. Full upstream attribution retained beside the model. |
+| `examples/simple-skin/SimpleSkin.gltf` and `.bin` files | Marco Hutter (2017) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | [Khronos SimpleSkin](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/SimpleSkin) | Unmodified glTF and buffers. Full upstream attribution retained beside the model. |

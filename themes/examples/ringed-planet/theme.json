@@ -1,0 +1,10 @@
+{
+  "name": "Ringed planet — 3D example",
+  "hidden": true,
+  "wallpaper": {
+    "kind": "scene", "source": "planet.glb", "orbit": 4,
+    "parallax": 0.12, "scale": 1, "fps": 30,
+    "environment": "sky", "exposure": 1,
+    "background": [0.008, 0.014, 0.032]
+  }
+}
