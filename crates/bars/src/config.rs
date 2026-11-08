@@ -1092,6 +1092,15 @@ impl<'de> Deserialize<'de> for Monitors {
 const GLOBAL_ONLY: &[&str] = &["version", "taskbar", "overrides", "vars", "icons"];
 
 impl BarsConfig {
+    /// What the native taskbar actually gets. Auto-hide would pop Explorer's taskbar up at the edge
+    /// the dock already owns (the dock reveals itself there), so with a dock it is hidden instead.
+    pub fn taskbar_mode(&self) -> TaskbarMode {
+        match self.taskbar.mode {
+            TaskbarMode::Autohide if self.dock.enabled => TaskbarMode::Hide,
+            mode => mode,
+        }
+    }
+
     pub fn parse(json: &str) -> Result<Self> {
         // The user's own text first, strictly: typos and wrong types come with their line.
         let _: Self = serde_json::from_str(json)?;
@@ -1409,6 +1418,17 @@ mod tests {
 
     use super::*;
     use crate::style::Family;
+
+    #[test]
+    fn an_enabled_dock_hides_an_auto_hiding_native_taskbar() {
+        let mut config = BarsConfig::parse(r#"{"taskbar":{"mode":"autohide"}}"#).unwrap();
+        config.dock.enabled = false;
+        assert_eq!(config.taskbar_mode(), TaskbarMode::Autohide);
+        config.dock.enabled = true;
+        assert_eq!(config.taskbar_mode(), TaskbarMode::Hide);
+        config.taskbar.mode = TaskbarMode::Keep;
+        assert_eq!(config.taskbar_mode(), TaskbarMode::Keep, "an explicit keep stays kept");
+    }
 
     #[test]
     fn no_file_and_empty_object_mean_the_defaults() {

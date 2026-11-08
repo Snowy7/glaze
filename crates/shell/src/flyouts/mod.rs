@@ -596,7 +596,7 @@ impl Flyouts {
         WinKey::set_files_enabled(files_shortcut_enabled());
         let hidden = mypaper_bars::config::path()
             .and_then(|p| mypaper_bars::BarsConfig::load(&p))
-            .is_ok_and(|c| c.taskbar.mode == mypaper_bars::TaskbarMode::Hide);
+            .is_ok_and(|c| c.taskbar_mode() == mypaper_bars::TaskbarMode::Hide);
         let wanted = self.look.win_key && hidden;
         if wanted != self.winkey.is_some() {
             self.winkey = wanted

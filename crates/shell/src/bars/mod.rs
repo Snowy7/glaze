@@ -616,12 +616,12 @@ impl Bars {
                 self.subscribe();
             }
         }
-        if changes.taskbar && self.config.taskbar.mode == TaskbarMode::Hide {
+        if changes.taskbar && self.config.taskbar_mode() == TaskbarMode::Hide {
             self.rehide_due
                 .get_or_insert(now + Duration::from_millis(50));
         }
         if services::take_due(&mut self.rehide_due, now)
-            && self.config.taskbar.mode == TaskbarMode::Hide
+            && self.config.taskbar_mode() == TaskbarMode::Hide
         {
             providers::taskbar::hide_visible();
         }
@@ -2238,7 +2238,7 @@ impl Bars {
             .bars
             .iter()
             .any(|b| !self.game_active && b.topics().contains(&providers::actions::Topic::Tray))
-            && (self.config.tray.host || self.config.taskbar.mode == TaskbarMode::Hide);
+            && (self.config.tray.host || self.config.taskbar_mode() == TaskbarMode::Hide);
         self.services.subscribe(topics, &configs, seconds, tray);
         crate::integrations::bar_subscriptions(
             self.bars
@@ -2273,7 +2273,7 @@ impl Bars {
             mode: if self.bars.is_empty() {
                 TaskbarMode::Keep
             } else {
-                self.config.taskbar.mode
+                self.config.taskbar_mode()
             },
             alignment: self.config.taskbar.alignment,
         };
