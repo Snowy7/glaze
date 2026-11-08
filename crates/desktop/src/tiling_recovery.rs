@@ -105,9 +105,10 @@ impl Journal {
     /// Persist the unmodified outer rectangle before any layout or parking call.
     pub fn remember(&mut self, identity: Identity) -> Result<()> {
         if self.data.windows.iter().any(|e| {
-            e.identity == identity
-                && unsafe { GetPropW(identity.window(), w!("mypaper.tiling.recovery")) }.0 as usize
-                    == e.cookie
+            // SAFETY: read-only property query on the window before any mutation.
+            let cookie =
+                unsafe { GetPropW(identity.window(), w!("mypaper.tiling.recovery")) }.0 as usize;
+            e.identity == identity && cookie == e.cookie
         }) {
             return Ok(());
         }
@@ -157,6 +158,7 @@ impl Journal {
         self.save()?;
         // SAFETY: our token is removed only from the same live window identity.
         if identity.valid() {
+            // SAFETY: this property was installed by our journal on this live identity.
             let _ = unsafe { RemovePropW(identity.window(), w!("mypaper.tiling.recovery")) };
         }
         Ok(())
@@ -183,117 +185,31 @@ impl Journal {
         }
         Ok(())
     }
+    /// Restore a tray/transient window while hidden, without releasing the session Snap lease.
+    pub fn restore_window(&mut self, identity: Identity) -> Result<()> {
+        if !self.data.windows.iter().any(|e| e.identity == identity) {
+            return Ok(());
+        }
+        let monitors = crate::monitors();
+        let mut failed = Vec::new();
+        self.data
+            .windows
+            .retain(|e| e.identity != identity || restore_entry(e, &monitors, &mut failed));
+        self.save()?;
+        ensure!(
+            failed.is_empty(),
+            "window recovery deferred: {}",
+            failed.join(", ")
+        );
+        Ok(())
+    }
     /// Restore live identities only. Failed moves remain journaled for the next recovery.
     pub fn restore(&mut self) -> Result<()> {
         let monitors = crate::monitors();
         let mut failed = Vec::new();
-        self.data.windows.retain(|e| {
-            // SAFETY: properties are tied to the window lifetime, unlike a numeric HWND.
-            if !e.identity.valid()
-                || unsafe { GetPropW(e.identity.window(), w!("mypaper.tiling.recovery")) }.0
-                    as usize
-                    != e.cookie
-            {
-                return false;
-            }
-            // An app that became fullscreen or PiP has already rescued itself. Hand it back
-            // without changing its game/presentation rectangle, including after a shell crash.
-            let h = e.identity.window();
-            let mut actual = windows::Win32::Foundation::RECT::default();
-            // SAFETY: read-only native state and a valid output rectangle.
-            let leave_alone = unsafe {
-                GetWindowRect(h, &mut actual).is_ok() && {
-                    let on_screen = monitors.iter().any(|m| {
-                        actual.right > m.x
-                            && actual.bottom > m.y
-                            && actual.left < m.x + m.width
-                            && actual.top < m.y + m.height
-                    });
-                    let topmost = GetWindowLongPtrW(h, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST.0 != 0;
-                    let fullscreen = GetWindowLongPtrW(h, GWL_STYLE) as u32 & WS_CAPTION.0 == 0
-                        && monitors.iter().any(|m| {
-                            actual.left <= m.x
-                                && actual.top <= m.y
-                                && actual.right >= m.x + m.width
-                                && actual.bottom >= m.y + m.height
-                        });
-                    on_screen && (topmost || fullscreen)
-                }
-            };
-            if leave_alone {
-                let _ = unsafe { RemovePropW(h, w!("mypaper.tiling.recovery")) };
-                return false;
-            }
-            let [mut x, mut y, mut w, mut h] = e.rect;
-            if !monitors.iter().any(|m| m.contains_point(x, y)) {
-                let Some(m) = monitors.first() else {
-                    return true;
-                };
-                w = w.min(m.width).max(1);
-                h = h.min(m.height).max(1);
-                x = m.x + (m.width - w) / 2;
-                y = m.y + (m.height - h) / 2;
-            }
-            // SAFETY: identity and property validated above. Minimized windows keep their state
-            // while their normal placement is rescued; a hung app retains its journal entry.
-            let result = unsafe {
-                if IsIconic(e.identity.window()).as_bool() {
-                    let mut placement = WINDOWPLACEMENT {
-                        length: size_of::<WINDOWPLACEMENT>() as u32,
-                        ..Default::default()
-                    };
-                    GetWindowPlacement(e.identity.window(), &mut placement).and_then(|()| {
-                        let [left, top, right, bottom] = e.normal;
-                        placement.rcNormalPosition = windows::Win32::Foundation::RECT {
-                            left,
-                            top,
-                            right,
-                            bottom,
-                        };
-                        SetWindowPlacement(e.identity.window(), &placement)
-                    })
-                } else {
-                    let mut response = 0;
-                    let hung = SendMessageTimeoutW(
-                        e.identity.window(),
-                        WM_NULL,
-                        Default::default(),
-                        Default::default(),
-                        SMTO_ABORTIFHUNG | SMTO_BLOCK,
-                        20,
-                        Some(&mut response),
-                    )
-                    .0 == 0;
-                    let result = SetWindowPos(
-                        e.identity.window(),
-                        None,
-                        x,
-                        y,
-                        w,
-                        h,
-                        SWP_NOACTIVATE
-                            | SWP_NOZORDER
-                            | if hung {
-                                SWP_ASYNCWINDOWPOS
-                            } else {
-                                SET_WINDOW_POS_FLAGS(0)
-                            },
-                    );
-                    if hung {
-                        failed.push("unresponsive window recovery queued".into());
-                        return true;
-                    }
-                    result
-                }
-            };
-            if let Err(error) = result {
-                failed.push(error.to_string());
-                return true;
-            }
-            // SAFETY: remove only our recovery token after successful restoration.
-            let _ = unsafe { RemovePropW(e.identity.window(), w!("mypaper.tiling.recovery")) };
-            false
-        });
+        self.data
+            .windows
+            .retain(|e| restore_entry(e, &monitors, &mut failed));
         if let Some(on) = self.data.snap {
             // SAFETY: SPI's pvParam is a boolean value for this action, session-only.
             unsafe {
@@ -320,6 +236,115 @@ impl Journal {
         );
         Ok(())
     }
+}
+/// Returns true only when recovery must be retried; ownership is retired after success.
+fn restore_entry(e: &Entry, monitors: &[crate::Rect], failed: &mut Vec<String>) -> bool {
+    // SAFETY: properties are tied to the window lifetime, unlike a numeric HWND.
+    if !e.identity.valid() || {
+        // SAFETY: read-only property query; the token is tied to the HWND lifetime.
+        unsafe { GetPropW(e.identity.window(), w!("mypaper.tiling.recovery")) }.0 as usize
+            != e.cookie
+    } {
+        return false;
+    }
+    // An app that became fullscreen or PiP has already rescued itself. Hand it back
+    // without changing its game/presentation rectangle, including after a shell crash.
+    let h = e.identity.window();
+    let mut actual = windows::Win32::Foundation::RECT::default();
+    // SAFETY: read-only native state and a valid output rectangle.
+    let leave_alone = unsafe {
+        GetWindowRect(h, &mut actual).is_ok() && {
+            let on_screen = monitors.iter().any(|m| {
+                actual.right > m.x
+                    && actual.bottom > m.y
+                    && actual.left < m.x + m.width
+                    && actual.top < m.y + m.height
+            });
+            let topmost = GetWindowLongPtrW(h, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST.0 != 0;
+            let fullscreen = GetWindowLongPtrW(h, GWL_STYLE) as u32 & WS_CAPTION.0 == 0
+                && monitors.iter().any(|m| {
+                    actual.left <= m.x
+                        && actual.top <= m.y
+                        && actual.right >= m.x + m.width
+                        && actual.bottom >= m.y + m.height
+                });
+            on_screen && (topmost || fullscreen)
+        }
+    };
+    if leave_alone {
+        // SAFETY: remove only our journal property before handing back the window.
+        let _ = unsafe { RemovePropW(h, w!("mypaper.tiling.recovery")) };
+        return false;
+    }
+    let [mut x, mut y, mut w, mut h] = e.rect;
+    if !monitors.iter().any(|m| m.contains_point(x, y)) {
+        let Some(m) = monitors.first() else {
+            return true;
+        };
+        w = w.min(m.width).max(1);
+        h = h.min(m.height).max(1);
+        x = m.x + (m.width - w) / 2;
+        y = m.y + (m.height - h) / 2;
+    }
+    // SAFETY: identity and property validated above. Minimized windows keep their state
+    // while their normal placement is rescued; a hung app retains its journal entry.
+    let result = unsafe {
+        if IsIconic(e.identity.window()).as_bool() {
+            let mut placement = WINDOWPLACEMENT {
+                length: size_of::<WINDOWPLACEMENT>() as u32,
+                ..Default::default()
+            };
+            GetWindowPlacement(e.identity.window(), &mut placement).and_then(|()| {
+                let [left, top, right, bottom] = e.normal;
+                placement.rcNormalPosition = windows::Win32::Foundation::RECT {
+                    left,
+                    top,
+                    right,
+                    bottom,
+                };
+                SetWindowPlacement(e.identity.window(), &placement)
+            })
+        } else {
+            let mut response = 0;
+            let hung = SendMessageTimeoutW(
+                e.identity.window(),
+                WM_NULL,
+                Default::default(),
+                Default::default(),
+                SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                20,
+                Some(&mut response),
+            )
+            .0 == 0;
+            let result = SetWindowPos(
+                e.identity.window(),
+                None,
+                x,
+                y,
+                w,
+                h,
+                SWP_NOACTIVATE
+                    | SWP_NOZORDER
+                    | if hung {
+                        SWP_ASYNCWINDOWPOS
+                    } else {
+                        SET_WINDOW_POS_FLAGS(0)
+                    },
+            );
+            if hung {
+                failed.push("unresponsive window recovery queued".into());
+                return true;
+            }
+            result
+        }
+    };
+    if let Err(error) = result {
+        failed.push(error.to_string());
+        return true;
+    }
+    // SAFETY: remove only our recovery token after successful restoration.
+    let _ = unsafe { RemovePropW(e.identity.window(), w!("mypaper.tiling.recovery")) };
+    false
 }
 impl Drop for Journal {
     fn drop(&mut self) {
