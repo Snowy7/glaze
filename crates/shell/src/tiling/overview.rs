@@ -217,6 +217,7 @@ impl Overview {
             }
             if SetWindowRgn(window, Some(region), true) == 0 {
                 let _ = DeleteObject(HGDIOBJ(region.0));
+                anyhow::bail!("clipping the overview to its outputs failed");
             }
             let _ = SetWindowPos(
                 window,
