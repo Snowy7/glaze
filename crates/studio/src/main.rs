@@ -310,7 +310,7 @@ impl Studio {
         if on {
             let state = self.app.panel.as_mut().unwrap();
             // Settings pages have nothing on the desktop: start at its overview.
-            if !crate::view::has_stage(state.page) && state.page != panel::Page::Wallpapers {
+            if !crate::view::on_desktop(state.page) && state.page != panel::Page::Wallpapers {
                 state.page = panel::Page::Root;
             }
             state.windowed = false;

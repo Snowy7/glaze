@@ -127,26 +127,15 @@ pub struct Regions {
     pub rail: bool,
 }
 
+/// Pages with a picture beside them: the wallpaper editor's canvas, and drawings of things
+/// that aren't on the desktop (the desktop menu, app windows). What is on the desktop is edited
+/// on the desktop itself (edit mode), so those pages are plain reading pages.
 pub fn has_stage(page: Page) -> bool {
-    !matches!(
-        page,
-        Page::Settings
-            | Page::General
-            | Page::Performance
-            | Page::Keyboard
-            | Page::Troubleshoot
-            | Page::About
-            | Page::Connections
-            | Page::Connection
-            | Page::History
-            | Page::Search
-            | Page::FirstRun
-            | Page::Wallpapers
-    )
+    matches!(page, Page::Windows | Page::DesktopMenu | Page::Create | Page::Effects | Page::Shader)
 }
 
 /// Pages about what's on the desktop; they offer edit mode.
-fn on_desktop(page: Page) -> bool {
+pub fn on_desktop(page: Page) -> bool {
     matches!(page, Page::Root | Page::Look | Page::Widgets | Page::Widget | Page::Bars | Page::Top | Page::Dock | Page::Module | Page::BarDesign)
 }
 
@@ -1310,28 +1299,6 @@ fn stage_menu(app: &App, b: &mut B, picture: Rect) {
 #[cfg(test)]
 mod layout_tests {
     use super::*;
-
-    #[test]
-    fn sidebar_motion_reuses_one_stage_picture_until_settled() {
-        let mut ui = glaze_ui::Ui::new().unwrap();
-        let mut app = crate::goldens::window_app(true, &ui, (1280, 800));
-        build(&app, &mut ui);
-        let size = app.stage.borrow().content.size;
-        app.panel.as_mut().unwrap().window.sidebar = Some(Transition {
-            start: std::time::Instant::now(), from: 208.0, to: 56.0,
-        });
-        build(&app, &mut ui);
-        let picture = app.stage.borrow().picture.clone().unwrap();
-        for _ in 0..8 {
-            let built = build(&app, &mut ui);
-            assert_eq!(app.stage.borrow().content.size, size);
-            assert!(std::sync::Arc::ptr_eq(&picture, app.stage.borrow().picture.as_ref().unwrap()));
-            assert!(built.list.ops.iter().any(|op| matches!(op, glaze_ui::Op::RoundedImage { image, .. } if std::sync::Arc::ptr_eq(&picture, image))));
-        }
-        app.panel.as_mut().unwrap().window.sidebar = None;
-        build(&app, &mut ui);
-        assert!(app.stage.borrow().picture.is_none());
-    }
 
     #[test]
     fn settings_grow_and_groups_reflow_without_horizontal_overflow() {

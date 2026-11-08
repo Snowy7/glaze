@@ -440,7 +440,7 @@ fn playback_status(app: &App) -> String {
 fn root(app: &App, b: &mut B, c: &mut Col) {
     let windowed = app.panel.as_ref().is_some_and(|state| state.windowed);
     if windowed {
-        title(b, c, "Your desktop", "Select anything on the stage to edit it");
+        title(b, c, "Your desktop", "Edit on desktop to pick anything where it is");
     }
     if app.system.running() && !app.system.parts[2].running {
         ui::feedback(
@@ -529,7 +529,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
     if !windowed {
         ui::search(app, b, c);
     }
-    group(b, c, if windowed { "On the stage" } else { "Your desktop" }, |b, c| {
+    group(b, c, if windowed { "On your desktop" } else { "Your desktop" }, |b, c| {
         row(
             b,
             c,
