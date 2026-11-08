@@ -441,6 +441,81 @@ impl Tiler {
                 }
             }
         }
+        let mut learned_changed = false;
+        for result in animation::results() {
+            let window = WindowId(result.identity.hwnd as u64);
+            let Some(w) = self.windows.get(&window) else {
+                continue;
+            };
+            if w.admission.identity != result.identity || w.fullscreen || w.minimized {
+                continue;
+            }
+            // A previous animation can complete after a newer action. Never learn stale geometry.
+            if !w.expected.is_some_and(|r| near(r, result.expected)) {
+                continue;
+            }
+            if result.actual.w + 16.0 < result.expected.w
+                || result.actual.h + 16.0 < result.expected.h
+            {
+                if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                    l.float_at(window, result.actual);
+                    let _ = self.learned.record(&w.admission.exe, 0.0, 0.0, true);
+                    learned_changed = true;
+                }
+                continue;
+            }
+            if result.actual.w > result.expected.w + 16.0
+                || result.actual.h > result.expected.h + 16.0
+            {
+                if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                    if let Some((mi, _)) = l.locate(window) {
+                        let m = &l.monitors[mi];
+                        let scale = m.scale;
+                        let width = result.actual.w / scale;
+                        let height = result.actual.h / scale;
+                        let along = match m.axis {
+                            mypaper_tiling::Axis::Horizontal => width,
+                            mypaper_tiling::Axis::Vertical => height,
+                        };
+                        let axis = m.axis;
+                        let area = m.area;
+                        let before = l
+                            .targets()
+                            .into_iter()
+                            .find(|t| t.window == window)
+                            .map(|t| t.rect);
+                        l.learn_minimum(window, along);
+                        let after = l
+                            .targets()
+                            .into_iter()
+                            .find(|t| t.window == window)
+                            .map(|t| t.rect);
+                        if before == after {
+                            let mut rect = result.actual;
+                            rect.x = rect.x.clamp(area.x, (area.x + area.w - rect.w).max(area.x));
+                            rect.y = rect.y.clamp(area.y, (area.y + area.h - rect.h).max(area.y));
+                            l.float_at(window, rect);
+                            let _ = self.learned.record(&w.admission.exe, 0.0, 0.0, true);
+                        } else {
+                            let _ = match axis {
+                                mypaper_tiling::Axis::Horizontal => {
+                                    self.learned.record(&w.admission.exe, width, 0.0, false)
+                                }
+                                mypaper_tiling::Axis::Vertical => {
+                                    self.learned.record(&w.admission.exe, 0.0, height, false)
+                                }
+                            };
+                        }
+                        learned_changed = true;
+                    }
+                }
+            }
+        }
+        if learned_changed {
+            if let Err(e) = self.commit(false) {
+                log::warn!("learned minimum: {e:#}");
+            }
+        }
         let events = std::mem::take(&mut self.queue.lock().unwrap().events);
         if events.is_empty() {
             return;
