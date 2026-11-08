@@ -433,6 +433,32 @@ fn native_fullscreen_returns_to_its_original_stack_and_tab() {
     check(&l);
 }
 #[test]
+fn keyboard_output_and_workspace_moves_carry_the_entire_column() {
+    let mut l = layout();
+    let second = Rect {
+        x: 2000.0,
+        ..area()
+    };
+    l.add_monitor("b".into(), second, second, 1.0);
+    open(&mut l, 1);
+    open(&mut l, 2);
+    l.command(Command::Consume);
+    l.command(Command::Tabbed);
+    l.command(Command::CycleWidth);
+    l.command(Command::MoveMonitor(Direction::Right));
+    let (mi, wi) = l.locate(WindowId(2)).unwrap();
+    assert_eq!(l.monitors[mi].id, "b");
+    assert_eq!(l.locate(WindowId(1)), Some((mi, wi)));
+    assert_eq!(l.monitors[mi].workspaces[wi].columns[0].width, 2.0 / 3.0);
+    assert!(l.monitors[mi].workspaces[wi].columns[0].tabbed);
+    let workspace = l.monitors[mi].workspaces[wi].id;
+    l.command(Command::MoveWorkspace(Direction::Down));
+    let (mi, wi) = l.locate(WindowId(2)).unwrap();
+    assert_eq!(l.locate(WindowId(1)), Some((mi, wi)));
+    assert_ne!(l.monitors[mi].workspaces[wi].id, workspace);
+    check(&l);
+}
+#[test]
 fn fullscreen_shows_only_the_active_tile_of_a_stack() {
     let mut l = layout();
     open(&mut l, 1);

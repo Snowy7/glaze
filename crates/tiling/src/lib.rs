@@ -813,7 +813,7 @@ impl Layout {
                 };
                 if let (Command::MoveWorkspace(_), Some(id)) = (command, focused) {
                     let monitor = self.monitors[mi].id.clone();
-                    return self.drop_on_workspace(id, &monitor, next, false);
+                    return self.move_column_to_workspace(id, &monitor, next);
                 }
                 self.monitors[mi].active = self.monitors[mi].workspaces[next].id;
             }
@@ -845,7 +845,7 @@ impl Layout {
                             .iter()
                             .position(|w| w.id == self.monitors[next].active)
                             .unwrap_or(0);
-                        return self.drop_on_workspace(id, &monitor, index, false);
+                        return self.move_column_to_workspace(id, &monitor, index);
                     }
                     self.focused_monitor = Some(monitor);
                 }
@@ -928,6 +928,44 @@ impl Layout {
                     self.focus(id);
                 }
             }
+        }
+        self.normalize();
+        self.targets()
+    }
+    /// Keyboard transfers carry the entire column; pointer drops still move one tile.
+    fn move_column_to_workspace(
+        &mut self,
+        window: WindowId,
+        monitor: &str,
+        index: usize,
+    ) -> Vec<Target> {
+        let Some((mi, wi)) = self.locate(window) else {
+            return self.targets();
+        };
+        let source = &self.monitors[mi].workspaces[wi];
+        if self
+            .monitors
+            .iter()
+            .find(|m| m.id == monitor)
+            .and_then(|m| m.workspaces.get(index))
+            .is_some_and(|w| w.id == source.id)
+        {
+            return self.targets();
+        }
+        let column = source.column(window).map(|ci| source.columns[ci].clone());
+        let Some(column) = column else {
+            return self.drop_on_workspace(window, monitor, index, false);
+        };
+        for tile in column.tiles.iter().filter(|t| t.id != window) {
+            self.remove(tile.id);
+        }
+        self.drop_on_workspace(window, monitor, index, false);
+        if let Some((mi, wi)) = self.locate(window) {
+            let w = &mut self.monitors[mi].workspaces[wi];
+            if let Some(ci) = w.column(window) {
+                w.columns[ci] = column;
+            }
+            self.fit(mi, wi);
         }
         self.normalize();
         self.targets()
