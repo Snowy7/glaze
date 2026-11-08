@@ -65,6 +65,54 @@ fn defaults_and_bindings_are_valid() {
     Settings::default().validate().unwrap();
 }
 #[test]
+fn floating_windows_follow_the_work_area_and_dpi_through_zero_outputs() {
+    let mut l = layout();
+    let b = Rect {
+        x: 1200.0,
+        ..area()
+    };
+    l.add_monitor("b".into(), b, b, 2.0);
+    l.focused_monitor = Some("b".into());
+    let original = Rect {
+        x: 1500.0,
+        y: 200.0,
+        w: 600.0,
+        h: 400.0,
+    };
+    l.insert(
+        WindowId(1),
+        Constraints::default(),
+        None,
+        Some(original),
+        true,
+    );
+    l.remove_monitor("b");
+    assert_eq!(
+        l.targets()[0].rect,
+        Rect {
+            x: 300.0,
+            y: 200.0,
+            w: 300.0,
+            h: 200.0
+        }
+    );
+    l.remove_monitor("a");
+    assert!(l.targets().is_empty());
+    l.add_monitor("b".into(), b, b, 2.0);
+    assert_eq!(l.targets()[0].rect, original);
+    let small = Rect {
+        x: -800.0,
+        w: 800.0,
+        h: 600.0,
+        ..area()
+    };
+    l.add_monitor("b".into(), small, small, 1.0);
+    let r = l.targets()[0].rect;
+    assert!(small.contains(r.x + r.w / 2.0, r.y + r.h / 2.0));
+    assert_eq!((r.w, r.h), (300.0, 200.0));
+    check(&l);
+}
+#[test]
 fn game_bar_screenshot_and_recording_timer_remain_reserved() {
     for key in [0x2C, 0x54] {
         let mut settings = Settings::default();

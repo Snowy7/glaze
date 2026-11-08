@@ -120,8 +120,29 @@ pub struct Workspace {
     remembered: Option<RememberedView>,
     tiled_focus: Option<WindowId>,
     floating_focus: Option<WindowId>,
+    floating_output: Option<(Rect, f64)>,
 }
 impl Workspace {
+    /// Keep floating positions relative to the work area across migration, resolution and DPI changes.
+    fn reflow_floating(&mut self, area: Rect, scale: f64) {
+        let previous = self.floating_output.replace((area, scale));
+        let Some((old, old_scale)) = previous.filter(|old| *old != (area, scale)) else {
+            return;
+        };
+        for f in &mut self.floating {
+            let r = &mut f.rect;
+            r.x = area.x + (r.x - old.x) / old.w.max(1.0) * area.w;
+            r.y = area.y + (r.y - old.y) / old.h.max(1.0) * area.h;
+            r.w *= scale / old_scale;
+            r.h *= scale / old_scale;
+            let visible_x = (r.w / 4.0).clamp(10.0 * scale, 75.0 * scale);
+            let visible_y = (r.h / 4.0).clamp(10.0 * scale, 75.0 * scale);
+            r.x =
+                r.x.clamp(area.x - r.w + visible_x, area.x + area.w - visible_x);
+            r.y =
+                r.y.clamp(area.y - r.h + visible_y, area.y + area.h - visible_y);
+        }
+    }
     /// Keep the selected tab and each layer's return focus aligned with the focused identity.
     fn sync_focus(&mut self) {
         let Some(window) = self.focused else {
@@ -243,6 +264,7 @@ impl Layout {
             remembered: None,
             tiled_focus: None,
             floating_focus: None,
+            floating_output: None,
         }
     }
     /// Update by stable output identity. Portrait outputs use a vertical strip.
@@ -1023,6 +1045,7 @@ impl Layout {
             let active = m.active;
             m.workspaces.retain(|w| !w.empty() || w.id == active);
             for w in &mut m.workspaces {
+                w.reflow_floating(m.area, m.scale);
                 w.sync_focus();
             }
             if !m.workspaces.iter().any(|w| w.id == m.active) {
