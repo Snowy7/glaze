@@ -437,11 +437,11 @@ fn run(
         commit(changes)?;
         return Ok(Outcome::Finished);
     }
-    // SAFETY: show without activation and above the windows being represented; never makes them topmost.
+    // SAFETY: raise within the normal band, leaving PiP, topmost applications and shell bars above it.
     unsafe {
         let _ = SetWindowPos(
             window,
-            Some(HWND_TOPMOST),
+            Some(HWND_TOP),
             0,
             0,
             0,

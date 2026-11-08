@@ -220,7 +220,7 @@ impl Overview {
             }
             let _ = SetWindowPos(
                 window,
-                Some(HWND_TOPMOST),
+                Some(HWND_TOP),
                 0,
                 0,
                 0,
