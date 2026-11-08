@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn corrupt_recovery_is_preserved_instead_of_silently_discarded() {
         let path = std::env::temp_dir().join(format!(
-            "mypaper-tiling-corrupt-{}.json",
+            "glaze-tiling-corrupt-{}.json",
             std::process::id()
         ));
         let bytes = b"{interrupted recovery";
@@ -385,7 +385,7 @@ mod tests {
     #[test]
     fn stale_process_identity_is_retired_without_moving_a_recycled_handle() {
         let path =
-            std::env::temp_dir().join(format!("mypaper-tiling-stale-{}.json", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-tiling-stale-{}.json", std::process::id()));
         let journal = Journal {
             path: path.clone(),
             data: Data {

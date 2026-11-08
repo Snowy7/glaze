@@ -1,5 +1,5 @@
 //! Change-driven top-bar position track. No ticker or allocation before tiling is enabled.
-use mypaper_tiling::{Axis, Layout};
+use glaze_tiling::{Axis, Layout};
 use std::sync::{
     Mutex, OnceLock,
     atomic::{AtomicU64, Ordering},
@@ -16,7 +16,7 @@ pub fn clear() {
         REVISION.fetch_add(1, Ordering::Relaxed);
     }
 }
-pub fn publish(layout: &Layout, displays: &[mypaper_desktop::Monitor]) {
+pub fn publish(layout: &Layout, displays: &[glaze_desktop::Monitor]) {
     let targets = layout.targets();
     let mut tracks = Vec::new();
     for m in &layout.monitors {
@@ -73,7 +73,7 @@ pub fn draw(frame: &mut crate::bars::view::Frame, device: &str, scale: f32) {
     let width = (72.0 * scale).min(body.width() * 0.3);
     let x = body.left + (body.width() - width) / 2.0;
     let y = body.bottom - 3.0 * scale;
-    use mypaper_ui::{Op, Rect, Rgba};
+    use glaze_ui::{Op, Rect, Rgba};
     frame.list.ops.push(Op::Fill {
         rect: Rect::new(x, y, width, 2.0 * scale),
         radius: scale,

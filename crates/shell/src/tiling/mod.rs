@@ -8,11 +8,11 @@ mod parking;
 use parking::{bounds, monitor_rect, park};
 mod rules;
 use anyhow::Result;
-use mypaper_desktop::{
+use glaze_desktop::{
     tiling_recovery::{self, Journal},
     win_events::{self, Subscription, TilingHooks},
 };
-use mypaper_tiling::{Command, Constraints, Layout, Rect, Settings, WindowId};
+use glaze_tiling::{Command, Constraints, Layout, Rect, Settings, WindowId};
 use platform::hwnd;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -36,14 +36,14 @@ static COMMANDS: Mutex<VecDeque<Command>> = Mutex::new(VecDeque::new());
 static DOCK_FOCUS: Mutex<VecDeque<WindowId>> = Mutex::new(VecDeque::new());
 /// A dock click reveals its column even if Windows refuses foreground activation.
 pub fn dock_click(raw: isize) {
-    if mypaper_bars::flyouts::winkey::tiling_enabled() {
+    if glaze_bars::flyouts::winkey::tiling_enabled() {
         DOCK_FOCUS.lock().unwrap().push_back(WindowId(raw as u64));
         crate::inbox::post(crate::inbox::WM_CONFIG + 24, 0);
     }
 }
 /// Only config reload installs the callback. The disabled keyboard path reads one atomic.
 pub fn configure_keys(settings: Option<&Settings>) {
-    mypaper_bars::flyouts::winkey::configure_tiling(settings.map(|s| {
+    glaze_bars::flyouts::winkey::configure_tiling(settings.map(|s| {
         (
             s.keybindings.clone(),
             Arc::new(|command| {
@@ -87,7 +87,7 @@ struct Managed {
     offences: u8,
     minimized: bool,
     fullscreen: bool,
-    suspended: Option<mypaper_tiling::Suspended>,
+    suspended: Option<glaze_tiling::Suspended>,
     maximized: bool,
     scale: f64,
 }
@@ -104,7 +104,7 @@ pub struct Tiler {
     scope: Option<HashSet<u32>>,
     desktops: Option<IVirtualDesktopManager>,
     current: String,
-    displays: Vec<mypaper_desktop::Monitor>,
+    displays: Vec<glaze_desktop::Monitor>,
     changed_at: Instant,
     dragging: Option<WindowId>,
     animation: animation::Animator,
@@ -408,7 +408,7 @@ impl Tiler {
     }
     fn make_layout(&self) -> Layout {
         let mut l = Layout::new(self.settings.clone());
-        let paths = mypaper_desktop::display_paths();
+        let paths = glaze_desktop::display_paths();
         for m in &self.displays {
             let key = paths
                 .iter()
@@ -424,13 +424,13 @@ impl Tiler {
         l
     }
     fn refresh_displays(&mut self) {
-        let displays = mypaper_desktop::monitor_infos();
+        let displays = glaze_desktop::monitor_infos();
         if displays == self.displays {
             return;
         }
         self.displays = displays;
         self.changed_at = Instant::now();
-        let paths = mypaper_desktop::display_paths();
+        let paths = glaze_desktop::display_paths();
         let ids: HashSet<_> = self
             .displays
             .iter()
@@ -527,8 +527,8 @@ impl Tiler {
                         let width = result.actual.w / scale;
                         let height = result.actual.h / scale;
                         let along = match m.axis {
-                            mypaper_tiling::Axis::Horizontal => width,
-                            mypaper_tiling::Axis::Vertical => height,
+                            glaze_tiling::Axis::Horizontal => width,
+                            glaze_tiling::Axis::Vertical => height,
                         };
                         let axis = m.axis;
                         let area = m.area;
@@ -551,10 +551,10 @@ impl Tiler {
                             let _ = self.learned.record(&w.admission.exe, 0.0, 0.0, true);
                         } else {
                             let _ = match axis {
-                                mypaper_tiling::Axis::Horizontal => {
+                                glaze_tiling::Axis::Horizontal => {
                                     self.learned.record(&w.admission.exe, width, 0.0, false)
                                 }
-                                mypaper_tiling::Axis::Vertical => {
+                                glaze_tiling::Axis::Vertical => {
                                     self.learned.record(&w.admission.exe, 0.0, height, false)
                                 }
                             };
@@ -837,8 +837,8 @@ impl Tiler {
                                 if let Some((mi, _)) = l.locate(window) {
                                     let m = &l.monitors[mi];
                                     let along = match m.axis {
-                                        mypaper_tiling::Axis::Horizontal => actual.w / m.scale,
-                                        mypaper_tiling::Axis::Vertical => actual.h / m.scale,
+                                        glaze_tiling::Axis::Horizontal => actual.w / m.scale,
+                                        glaze_tiling::Axis::Vertical => actual.h / m.scale,
                                     };
                                     if l.is_floating(window) {
                                         l.move_floating(window, actual);
@@ -923,10 +923,10 @@ impl Tiler {
                                 let along = l
                                     .locate(window)
                                     .map(|(mi, _)| match l.monitors[mi].axis {
-                                        mypaper_tiling::Axis::Horizontal => {
+                                        glaze_tiling::Axis::Horizontal => {
                                             actual.w / l.monitors[mi].scale
                                         }
-                                        mypaper_tiling::Axis::Vertical => {
+                                        glaze_tiling::Axis::Vertical => {
                                             actual.h / l.monitors[mi].scale
                                         }
                                     })
@@ -965,7 +965,7 @@ impl Tiler {
                     match overview::Overview::open(l, self.scope.is_some()) {
                         Ok(o) => {
                             self.overview = Some(o);
-                            mypaper_bars::flyouts::winkey::set_overview(true);
+                            glaze_bars::flyouts::winkey::set_overview(true);
                         }
                         Err(e) => log::warn!("overview: {e:#}"),
                     }
@@ -1000,7 +1000,7 @@ impl Tiler {
     fn close_overview(&mut self) {
         self.focus_settle = Instant::now();
         self.overview = None;
-        mypaper_bars::flyouts::winkey::set_overview(false);
+        glaze_bars::flyouts::winkey::set_overview(false);
     }
     fn drag_hint(&mut self, window: WindowId) {
         let Some(point) = platform::cursor() else {
@@ -1030,7 +1030,7 @@ impl Tiler {
             }
             let horizontal = l
                 .locate(t.window)
-                .is_none_or(|(mi, _)| l.monitors[mi].axis == mypaper_tiling::Axis::Horizontal);
+                .is_none_or(|(mi, _)| l.monitors[mi].axis == glaze_tiling::Axis::Horizontal);
             let fraction = if horizontal {
                 (x - t.rect.x) / t.rect.w
             } else {
@@ -1071,18 +1071,18 @@ impl Tiler {
         }
         if self.edge_at.elapsed() > Duration::from_millis(150) {
             if let Some(m) = l.monitors.iter().find(|m| m.area.contains(x, y)) {
-                let direction = if m.axis == mypaper_tiling::Axis::Horizontal {
+                let direction = if m.axis == glaze_tiling::Axis::Horizontal {
                     if x < m.area.x + 30.0 {
-                        Some(mypaper_tiling::Direction::Left)
+                        Some(glaze_tiling::Direction::Left)
                     } else if x > m.area.x + m.area.w - 30.0 {
-                        Some(mypaper_tiling::Direction::Right)
+                        Some(glaze_tiling::Direction::Right)
                     } else {
                         None
                     }
                 } else if y < m.area.y + 30.0 {
-                    Some(mypaper_tiling::Direction::Up)
+                    Some(glaze_tiling::Direction::Up)
                 } else if y > m.area.y + m.area.h - 30.0 {
-                    Some(mypaper_tiling::Direction::Down)
+                    Some(glaze_tiling::Direction::Down)
                 } else {
                     None
                 };
@@ -1105,7 +1105,7 @@ impl Tiler {
             if let Some(l) = self.layouts.get(&self.current) {
                 self.overview = overview::Overview::open(l, self.scope.is_some()).ok();
             }
-            mypaper_bars::flyouts::winkey::set_overview(self.overview.is_some());
+            glaze_bars::flyouts::winkey::set_overview(self.overview.is_some());
         }
     }
     pub fn displays_changed(&mut self) {
@@ -1203,7 +1203,7 @@ impl Tiler {
 impl Drop for Tiler {
     fn drop(&mut self) {
         indicator::clear();
-        mypaper_bars::flyouts::winkey::set_overview(false);
+        glaze_bars::flyouts::winkey::set_overview(false);
         self.animation.cancel();
         if let Err(e) = self.journal.restore() {
             log::error!("tiling restore: {e:#}");

@@ -48,7 +48,7 @@ impl Rules {
     /// User rules follow the shipped defaults. Regexes are compiled once on enable.
     pub fn load() -> anyhow::Result<Self> {
         let mut rules: Vec<Rule> = serde_json::from_str(include_str!("applications.json"))?;
-        let path = mypaper_config::dir()?.join("tiling-rules.json");
+        let path = glaze_config::dir()?.join("tiling-rules.json");
         if path.exists() {
             rules.extend(serde_json::from_slice::<Vec<Rule>>(&std::fs::read(path)?)?);
         }

@@ -1,6 +1,6 @@
 //! Off-view placement is outside the bounding box of every connected output.
-use mypaper_tiling::Rect;
-pub(super) fn monitor_rect(r: mypaper_desktop::Rect) -> Rect {
+use glaze_tiling::Rect;
+pub(super) fn monitor_rect(r: glaze_desktop::Rect) -> Rect {
     Rect {
         x: f64::from(r.x),
         y: f64::from(r.y),
@@ -8,7 +8,7 @@ pub(super) fn monitor_rect(r: mypaper_desktop::Rect) -> Rect {
         h: f64::from(r.height),
     }
 }
-pub(super) fn bounds(monitors: &[mypaper_desktop::Monitor]) -> Option<Rect> {
+pub(super) fn bounds(monitors: &[glaze_desktop::Monitor]) -> Option<Rect> {
     let first = monitors.first()?;
     let mut r = monitor_rect(first.rect);
     for m in monitors {

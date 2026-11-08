@@ -15,7 +15,7 @@ pub use system::{PowerMode, SystemConfig};
 pub use apps::{AppRules, AppsStyle};
 pub use look::Look;
 pub use windows::{Backdrop, Color, Corners, Paint, WindowsStyle};
-pub use mypaper_tiling::Settings as Tiling;
+pub use glaze_tiling::Settings as Tiling;
 
 use std::path::PathBuf;
 

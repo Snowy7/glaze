@@ -10,7 +10,7 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-mypaper-tiling.workspace = true
+glaze-tiling.workspace = true
 glaze-config.workspace = true
 glaze-desktop.workspace = true
 glaze-theme.workspace = true

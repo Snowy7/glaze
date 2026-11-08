@@ -1,15 +1,15 @@
 //! Medium-integrity, PID-scoped desktop fixture. It never injects input or requests foreground.
 #![windows_subsystem = "windows"]
 use anyhow::{Result, ensure};
-use mypaper_desktop::{
+use glaze_desktop::{
     tiling_recovery::{self, Identity},
     win_events::WinEvents,
 };
-use mypaper_shell::tiling::{
+use glaze_shell::tiling::{
     Tiler,
     animation::{Animator, Change},
 };
-use mypaper_tiling::{Command as Op, Direction, Rect, Settings};
+use glaze_tiling::{Command as Op, Direction, Rect, Settings};
 use std::{
     path::{Path, PathBuf},
     process::{Child, Command},
@@ -33,7 +33,7 @@ fn main() {
     let output = args
         .get(2)
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("C:/mypaper-targets/tiling/evidence"));
+        .unwrap_or_else(|| PathBuf::from("C:/glaze-targets/tiling/evidence"));
     let _ = std::fs::create_dir_all(&output);
     let log = std::fs::OpenOptions::new()
         .create(true)
@@ -44,7 +44,7 @@ fn main() {
         .filter_level(log::LevelFilter::Info)
         .target(env_logger::Target::Pipe(Box::new(log)))
         .init();
-    mypaper_desktop::enable_dpi_awareness();
+    glaze_desktop::enable_dpi_awareness();
     let result = if args.get(1).is_some_and(|s| s == "--child") {
         child(
             &output,
@@ -88,7 +88,7 @@ fn run(
     benchmark: bool,
 ) -> Result<()> {
     ensure!(
-        mypaper_shell::tiling::current_integrity()? == 0x2000,
+        glaze_shell::tiling::current_integrity()? == 0x2000,
         "fixture must run at medium integrity"
     );
     let foreground = unsafe { GetForegroundWindow() };
@@ -132,7 +132,7 @@ fn run(
         std::env::set_var("APPDATA", output);
         std::env::set_var("MYPAPER_TILING_STATS", "1");
     }
-    let _com = mypaper_desktop::desktop_view::Com::init();
+    let _com = glaze_desktop::desktop_view::Com::init();
     let _source = WinEvents::install();
     let mut tiler = if off {
         None
@@ -197,7 +197,7 @@ fn run(
         pump(&mut tiler, Duration::from_millis(200));
         if let Some(t) = &tiler {
             verify_placements(t)?;
-            let monitors = mypaper_desktop::monitors();
+            let monitors = glaze_desktop::monitors();
             let placements = t.placements();
             let mut visible = Vec::new();
             for (identity, r) in placements {
@@ -285,7 +285,7 @@ fn run(
             }
         }
         report["animation"] =
-            serde_json::to_value(mypaper_shell::tiling::animation::measurements())?;
+            serde_json::to_value(glaze_shell::tiling::animation::measurements())?;
     }
     drop(tiler);
     tiling_recovery::restore_pending()?;
@@ -332,7 +332,7 @@ fn verify_placements(tiler: &Tiler) -> Result<()> {
 }
 fn recover(output: &Path) -> Result<()> {
     ensure!(
-        mypaper_shell::tiling::current_integrity()? == 0x2000,
+        glaze_shell::tiling::current_integrity()? == 0x2000,
         "recovery fixture must be medium integrity"
     );
     let originals: Vec<(Identity, [i32; 4])> =
@@ -438,7 +438,7 @@ fn child(output: &Path, count: usize) -> Result<()> {
     CHILD_OUTPUT.with(|path| *path.borrow_mut() = output.into());
     std::fs::write(output.join("child.pid"), std::process::id().to_string())?;
     let front = unsafe { GetForegroundWindow() };
-    let monitors = mypaper_desktop::monitor_infos();
+    let monitors = glaze_desktop::monitor_infos();
     let monitor = monitors
         .iter()
         .find(|m| {

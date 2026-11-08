@@ -1,5 +1,5 @@
 [package]
-name = "mypaper-tiling"
+name = "glaze-tiling"
 description = "Pure scrolling layout and input vocabulary for mypaper"
 version.workspace = true
 edition.workspace = true

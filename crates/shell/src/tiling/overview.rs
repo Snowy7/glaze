@@ -1,7 +1,7 @@
 //! Event-driven workspace overview. DWM owns thumbnail liveness; a stationary overview has no timer.
 use super::platform;
 use anyhow::Result;
-use mypaper_tiling::{Layout, Rect, WindowId};
+use glaze_tiling::{Layout, Rect, WindowId};
 use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
@@ -60,7 +60,7 @@ pub struct Overview {
     state: Box<State>,
     thumbnails: Vec<isize>,
     worker: Option<JoinHandle<()>>,
-    signature: Vec<mypaper_tiling::Target>,
+    signature: Vec<glaze_tiling::Target>,
 }
 impl Overview {
     pub fn open(layout: &Layout, scoped: bool) -> Result<Self> {

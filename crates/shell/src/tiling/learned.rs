@@ -15,7 +15,7 @@ pub struct Learned {
 }
 impl Learned {
     pub fn load() -> Result<Self> {
-        let path = mypaper_config::dir()?.join("tiling-learned.json");
+        let path = glaze_config::dir()?.join("tiling-learned.json");
         let apps = match std::fs::read(&path) {
             Ok(bytes) => serde_json::from_slice(&bytes)?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => HashMap::new(),

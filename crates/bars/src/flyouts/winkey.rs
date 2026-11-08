@@ -26,7 +26,7 @@ use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, Ordering};
 use std::thread::JoinHandle;
 use std::time::Instant;
 use std::sync::{Arc, Mutex, OnceLock};
-use mypaper_tiling::{Binding, Command};
+use glaze_tiling::{Binding, Command};
 
 type TilingHandler = Arc<dyn Fn(Command) + Send + Sync>;
 type TilingConfig = (Vec<Binding>, TilingHandler);

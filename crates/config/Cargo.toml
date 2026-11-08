@@ -6,7 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-mypaper-tiling.workspace = true
+glaze-tiling.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

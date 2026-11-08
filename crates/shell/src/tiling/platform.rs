@@ -1,8 +1,8 @@
 //! Read-only admission checks and the single batched Win32 placement boundary.
 use super::rules::Rules;
 use anyhow::{Context, Result, ensure};
-use mypaper_desktop::tiling_recovery::Identity;
-use mypaper_tiling::{Rect, WindowId};
+use glaze_desktop::tiling_recovery::Identity;
+use glaze_tiling::{Rect, WindowId};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use windows::{
@@ -494,7 +494,7 @@ pub fn fullscreen(h: HWND) -> bool {
         }
     }
     frame(h).is_some_and(|r| {
-        mypaper_desktop::monitors().iter().any(|m| {
+        glaze_desktop::monitors().iter().any(|m| {
             r.x <= f64::from(m.x) + 1.0
                 && r.y <= f64::from(m.y) + 1.0
                 && r.x + r.w >= f64::from(m.x + m.width) - 1.0

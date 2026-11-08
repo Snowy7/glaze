@@ -1,8 +1,8 @@
 //! Transient DWM proxy animations. The worker and overlay die as soon as the spring settles.
 use super::platform::{self, Placement};
 use anyhow::Result;
-use mypaper_desktop::tiling_recovery::Identity;
-use mypaper_tiling::Rect;
+use glaze_desktop::tiling_recovery::Identity;
+use glaze_tiling::Rect;
 use std::sync::Mutex;
 use std::{
     sync::{
@@ -313,7 +313,7 @@ fn run(
     jobs: &Mutex<Jobs>,
     mut previous: Option<Overlay>,
 ) -> Result<Outcome> {
-    let monitors = mypaper_desktop::monitors();
+    let monitors = glaze_desktop::monitors();
     let Some(first) = monitors.first() else {
         return Ok(Outcome::Finished);
     };
