@@ -50,10 +50,16 @@ struct State {
     tiles: Vec<Tile>,
     slots: Vec<Slot>,
     events: RefCell<VecDeque<Event>>,
-    drag: RefCell<Option<(WindowId, (f64, f64), (f64, f64))>>,
+    drag: RefCell<Option<Drag>>,
     thumbnails: RefCell<HashMap<WindowId, isize>>,
     started: Instant,
     cancel: Arc<AtomicBool>,
+}
+#[derive(Clone, Copy)]
+struct Drag {
+    window: WindowId,
+    start: (f64, f64),
+    offset: (f64, f64),
 }
 pub struct Overview {
     window: HWND,
@@ -233,9 +239,8 @@ impl Overview {
         }
         for tile in &overview.state.tiles {
             // SAFETY: top-level source and shell-owned top-level destination; unregistered on drop.
-            if let Ok(thumbnail) =
-                unsafe { DwmRegisterThumbnail(window, platform::hwnd(tile.window)) }
-            {
+            let registered = unsafe { DwmRegisterThumbnail(window, platform::hwnd(tile.window)) };
+            if let Ok(thumbnail) = registered {
                 overview.thumbnails.push(thumbnail);
                 overview
                     .state
@@ -255,6 +260,7 @@ impl Overview {
                     fVisible: true.into(),
                     ..Default::default()
                 };
+                // SAFETY: this thumbnail belongs to the overview and remains registered until drop.
                 let _ = unsafe { DwmUpdateThumbnailProperties(thumbnail, &properties) };
             }
         }
@@ -356,7 +362,12 @@ unsafe extern "system" fn procedure(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -> 
                     .tiles
                     .iter()
                     .find(|t| interpolate(t.from, t.rect, progress).contains(x, y))
-                    .map(|t| (t.window, (x, y), (x - t.rect.x, y - t.rect.y))); /* SAFETY: capture our own pointer drag until release. */
+                    .map(|t| Drag {
+                        window: t.window,
+                        start: (x, y),
+                        offset: (x - t.rect.x, y - t.rect.y),
+                    });
+                // SAFETY: capture our own pointer drag until release.
                 unsafe {
                     windows::Win32::UI::Input::KeyboardAndMouse::SetCapture(h);
                 }
@@ -364,7 +375,7 @@ unsafe extern "system" fn procedure(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -> 
             }
             WM_MOUSEMOVE => {
                 let (x, y) = point(l);
-                if let Some((window, _, offset)) = *state.drag.borrow() {
+                if let Some(Drag { window, offset, .. }) = *state.drag.borrow() {
                     state.cancel.store(true, Ordering::Release);
                     if let Some(tile) = state.tiles.iter().find(|t| t.window == window)
                         && let Some(thumbnail) = state.thumbnails.borrow().get(&window)
@@ -386,7 +397,7 @@ unsafe extern "system" fn procedure(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -> 
             }
             WM_LBUTTONUP => {
                 let (x, y) = point(l);
-                if let Some((window, start, _)) = state.drag.borrow_mut().take() {
+                if let Some(Drag { window, start, .. }) = state.drag.borrow_mut().take() {
                     if (x - start.0).hypot(y - start.1) < 6.0 {
                         state.events.borrow_mut().push_back(Event::Select(window));
                     } else if let Some(slot) = state.slots.iter().find(|s| s.rect.contains(x, y)) {

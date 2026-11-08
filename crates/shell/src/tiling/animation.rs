@@ -545,7 +545,6 @@ fn run(
                     opacity: 255,
                     fVisible: true.into(),
                     fSourceClientAreaOnly: false.into(),
-                    ..Default::default()
                 };
                 let properties = DWM_THUMBNAIL_PROPERTIES {
                     dwFlags: properties.dwFlags | DWM_TNP_RECTSOURCE,
@@ -598,7 +597,7 @@ fn run(
         }
     }
     commit(changes)?;
-    // One composed frame covers the final commit; bounded repaint wait, never an idle timer.
+    // SAFETY: one composition frame covers the final commit. This does not acknowledge app repaint.
     unsafe {
         let _ = DwmFlush();
     }
