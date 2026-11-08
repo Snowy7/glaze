@@ -32,6 +32,47 @@ use windows::{
 pub fn current_integrity() -> Result<u32> {
     platform::integrity(std::process::id())
 }
+static COMMANDS: Mutex<VecDeque<Command>> = Mutex::new(VecDeque::new());
+static DOCK_FOCUS: Mutex<VecDeque<WindowId>> = Mutex::new(VecDeque::new());
+/// A dock click reveals its column even if Windows refuses foreground activation.
+pub fn dock_click(raw: isize) {
+    if mypaper_bars::flyouts::winkey::tiling_enabled() {
+        DOCK_FOCUS.lock().unwrap().push_back(WindowId(raw as u64));
+        crate::inbox::post(crate::inbox::WM_CONFIG + 24, 0);
+    }
+}
+/// Only config reload installs the callback. The disabled keyboard path reads one atomic.
+pub fn configure_keys(settings: Option<&Settings>) {
+    mypaper_bars::flyouts::winkey::configure_tiling(settings.map(|s| {
+        (
+            s.keybindings.clone(),
+            Arc::new(|command| {
+                let mut queue = COMMANDS.lock().unwrap();
+                if queue.len() < 64 {
+                    queue.push_back(command);
+                    crate::inbox::post(crate::inbox::WM_CONFIG + 20, 0);
+                }
+            }) as Arc<dyn Fn(Command) + Send + Sync>,
+        )
+    }));
+}
+pub fn process_commands(tiler: &mut Tiler) {
+    let focus = std::mem::take(&mut *DOCK_FOCUS.lock().unwrap());
+    for window in focus {
+        if let Some(w) = tiler.windows.get(&window) {
+            tiler.current = w.desktop.clone();
+            if let Some(l) = tiler.layouts.get_mut(&w.desktop) {
+                l.focus(window);
+            }
+            let _ = tiler.commit(true);
+        }
+    }
+    let commands = std::mem::take(&mut *COMMANDS.lock().unwrap());
+    for command in commands {
+        tiler.command(command);
+    }
+}
+
 #[derive(Default)]
 struct Queue {
     events: VecDeque<win_events::Event>,
@@ -437,7 +478,10 @@ impl Tiler {
             let deferred = std::mem::take(&mut queue.deferred);
             for window in deferred {
                 if queue.known.contains(&window) {
-                    queue.events.push_back(win_events::Event { event: EVENT_OBJECT_LOCATIONCHANGE, window });
+                    queue.events.push_back(win_events::Event {
+                        event: EVENT_OBJECT_LOCATIONCHANGE,
+                        window,
+                    });
                 }
             }
         }
@@ -519,6 +563,40 @@ impl Tiler {
         if learned_changed {
             if let Err(e) = self.commit(false) {
                 log::warn!("learned minimum: {e:#}");
+            }
+        }
+        let overview_events = self
+            .overview
+            .as_ref()
+            .map(|o| o.events())
+            .unwrap_or_default();
+        for event in overview_events {
+            match event {
+                overview::Event::Select(id) => {
+                    if let Some(l) = self.layouts.get_mut(&self.current) {
+                        l.focus(id);
+                    }
+                    self.close_overview();
+                    let _ = self.commit(true);
+                    self.activate_focused();
+                }
+                overview::Event::Drop {
+                    window,
+                    monitor,
+                    index,
+                    insert,
+                } => {
+                    if let Some(l) = self.layouts.get_mut(&self.current) {
+                        l.drop_on_workspace(window, &monitor, index, insert);
+                    }
+                    self.refresh_overview();
+                    let _ = self.commit(false);
+                }
+                overview::Event::Close => {
+                    self.close_overview();
+                    let _ = self.commit(false);
+                    self.activate_focused();
+                }
             }
         }
         if self.display_events.changed() {
@@ -659,7 +737,7 @@ impl Tiler {
                     let game = platform::notification_game();
                     self.animation.pause(game || platform::fullscreen(h));
                     if game || platform::fullscreen(h) {
-                        self.overview = None;
+                        self.close_overview();
                         self.hint = None;
                     }
                     if let Some(desktop) = self.desktop(h) {
@@ -868,7 +946,57 @@ impl Tiler {
             if let Err(e) = self.commit(true) {
                 log::error!("tiling layout: {e:#}");
             }
+            self.refresh_overview();
         }
+    }
+    pub fn command(&mut self, command: Command) {
+        if command == Command::Overview {
+            if self.overview.is_some() {
+                self.close_overview();
+                let _ = self.commit(false);
+                self.activate_focused();
+            } else {
+                self.cancel_projection();
+                if let Some(l) = self.layouts.get(&self.current) {
+                    match overview::Overview::open(l, self.scope.is_some()) {
+                        Ok(o) => {
+                            self.overview = Some(o);
+                            mypaper_bars::flyouts::winkey::set_overview(true);
+                        }
+                        Err(e) => log::warn!("overview: {e:#}"),
+                    }
+                }
+            }
+            return;
+        }
+        if let Some(l) = self.layouts.get_mut(&self.current) {
+            l.command(command);
+        }
+        if let Err(e) = self.commit(true) {
+            log::error!("tiling shortcut: {e:#}");
+            return;
+        }
+        if self.overview.is_some() {
+            self.refresh_overview();
+            return;
+        }
+        self.activate_focused();
+    }
+    /// Only a real user shortcut or overview click can request native foreground rights.
+    fn activate_focused(&self) {
+        if self.scope.is_none() && !self.animation.paused() {
+            if let Some(id) = self.layouts.get(&self.current).and_then(Layout::focused) {
+                /* SAFETY: only a real user shortcut asks for foreground, never a fixture. */
+                unsafe {
+                    let _ = SetForegroundWindow(hwnd(id));
+                }
+            }
+        }
+    }
+    fn close_overview(&mut self) {
+        self.focus_settle = Instant::now();
+        self.overview = None;
+        mypaper_bars::flyouts::winkey::set_overview(false);
     }
     fn drag_hint(&mut self, window: WindowId) {
         let Some(point) = platform::cursor() else {
@@ -962,11 +1090,42 @@ impl Tiler {
             }
         }
     }
+    fn refresh_overview(&mut self) {
+        if let (Some(overview), Some(layout)) = (&self.overview, self.layouts.get(&self.current)) {
+            if overview.matches(layout) {
+                return;
+            }
+        }
+        if self.overview.is_some() {
+            self.overview = None;
+            if let Some(l) = self.layouts.get(&self.current) {
+                self.overview = overview::Overview::open(l, self.scope.is_some()).ok();
+            }
+            mypaper_bars::flyouts::winkey::set_overview(self.overview.is_some());
+        }
+    }
     pub fn displays_changed(&mut self) {
         self.cancel_projection();
         self.refresh_displays();
         if let Err(e) = self.commit(false) {
             log::error!("tiling displays: {e:#}");
+        }
+    }
+    /// Core's game signal also reaches us while the shared WinEvent source is suspended.
+    pub fn set_game_activity(&mut self, on: bool) {
+        self.animation.pause(on);
+        if on {
+            for window in self.windows.values_mut() {
+                window.expected = None;
+            }
+            self.close_overview();
+            self.hint = None;
+            self.display_events.dragging(false);
+            self.dragging = None;
+        } else {
+            self.refresh_displays();
+            self.enumerate();
+            let _ = self.commit(false);
         }
     }
     /// Cancelled previews never make their uncommitted targets look like native window state.
