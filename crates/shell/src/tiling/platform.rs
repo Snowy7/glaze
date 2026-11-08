@@ -528,22 +528,47 @@ pub struct Placement {
     pub border: [f64; 4],
     pub hung: bool,
 }
-/// All changed HWNDs are committed once. Hung clients receive asynchronous positioning.
+/// Responsive HWNDs share one commit; hung clients use SetWindowPos's async-only flag.
 pub fn apply(placements: &[Placement]) -> Result<()> {
+    let placements: Vec<_> = placements
+        .iter()
+        .filter(|p| {
+            // SAFETY: cached USER state and identity checks do not call the client procedure.
+            unsafe {
+                p.identity.valid()
+                    && IsWindowVisible(p.identity.window()).as_bool()
+                    && !IsIconic(p.identity.window()).as_bool()
+                    && !hands_off(p.identity.window())
+            }
+        })
+        .collect();
     if placements.is_empty() {
         return Ok(());
     }
-    // SAFETY: each window is revalidated immediately before adding it to the owned HDWP.
+    // SAFETY: targets were identity-checked above; no operation activates or raises a client.
     unsafe {
-        let mut batch = BeginDeferWindowPos(placements.len() as i32)?;
-        for p in placements {
-            if !p.identity.valid()
-                || !IsWindowVisible(p.identity.window()).as_bool()
-                || IsIconic(p.identity.window()).as_bool()
-                || hands_off(p.identity.window())
-            {
-                continue;
-            }
+        // DeferWindowPos does not accept SWP_ASYNCWINDOWPOS (ERROR_INVALID_PARAMETER).
+        // Keep unresponsive clients out of the synchronous batch so they cannot block it.
+        for p in placements.iter().filter(|p| p.hung) {
+            let r = p.rect;
+            let b = p.border;
+            SetWindowPos(
+                p.identity.window(),
+                None,
+                (r.x + b[0]).round() as i32,
+                (r.y + b[1]).round() as i32,
+                (r.w + b[2]).round().max(1.0) as i32,
+                (r.h + b[3]).round().max(1.0) as i32,
+                SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS,
+            )
+            .context("posting a hung client's placement")?;
+        }
+        let count = placements.iter().filter(|p| !p.hung).count();
+        if count == 0 {
+            return Ok(());
+        }
+        let mut batch = BeginDeferWindowPos(count as i32)?;
+        for p in placements.iter().filter(|p| !p.hung) {
             let r = p.rect;
             let b = p.border;
             batch = DeferWindowPos(
@@ -554,16 +579,11 @@ pub fn apply(placements: &[Placement]) -> Result<()> {
                 (r.y + b[1]).round() as i32,
                 (r.w + b[2]).round().max(1.0) as i32,
                 (r.h + b[3]).round().max(1.0) as i32,
-                SWP_NOACTIVATE
-                    | SWP_NOZORDER
-                    | if p.hung {
-                        SWP_ASYNCWINDOWPOS
-                    } else {
-                        SET_WINDOW_POS_FLAGS(0)
-                    },
-            )?;
+                SWP_NOACTIVATE | SWP_NOZORDER,
+            )
+            .context("deferring a responsive client's placement")?;
         }
-        EndDeferWindowPos(batch)?;
+        EndDeferWindowPos(batch).context("committing responsive client placements")?;
     }
     Ok(())
 }
