@@ -38,6 +38,30 @@ static HOOKS: AtomicUsize = AtomicUsize::new(0);
 static NOTIFIED: AtomicBool = AtomicBool::new(false);
 /// The thread that installed the source (0: none), woken after a batch that [`notify`]d.
 static CONSUMER: AtomicU32 = AtomicU32::new(0);
+static SOURCE: AtomicU32 = AtomicU32::new(0);
+static TILING: Mutex<Option<Vec<u32>>> = Mutex::new(None);
+
+/// Optional move/size and managed-process location hooks on the existing source thread.
+/// Dropping the lease removes only these hooks; disabled tiling adds no native hook.
+pub struct TilingHooks;
+impl TilingHooks {
+    pub fn enable() -> Self { Self::processes(Vec::new()); Self }
+    pub fn processes(processes: Vec<u32>) {
+        *TILING.lock().unwrap() = Some(processes);
+        refresh_hooks();
+    }
+}
+impl Drop for TilingHooks {
+    fn drop(&mut self) { *TILING.lock().unwrap() = None; refresh_hooks(); }
+}
+fn refresh_hooks() {
+    SCOPES_DIRTY.store(true, Ordering::Relaxed);
+    let thread = SOURCE.load(Ordering::Relaxed);
+    if thread != 0 {
+        // SAFETY: an existing source queue; this only requests hook reconciliation.
+        let _ = unsafe { PostThreadMessageW(thread, WM_NULL, WPARAM(0), LPARAM(0)) };
+    }
+}
 
 /// How long the hook thread lets events gather after taking a batch: at most this much later
 /// the consumer hears of a window change, and a moving mouse wakes the hook thread at most
@@ -126,11 +150,12 @@ fn hook_thread(started: &std::sync::mpsc::Sender<u32>) {
     .collect();
     let mut scopes = Scopes::default();
     scopes.refresh();
-    HOOKS.store(hooks.len() + scopes.locations.len(), Ordering::Relaxed);
+    HOOKS.store(hooks.len() + scopes.locations.len()+scopes.moves.len(), Ordering::Relaxed);
     let mut msg = MSG::default();
     // SAFETY: messages of this thread's own queue; WM_QUIT ends the loop before unhooking.
     unsafe {
         let _ = PeekMessageW(&mut msg, None, 0, 0, PM_NOREMOVE);
+        SOURCE.store(GetCurrentThreadId(), Ordering::Relaxed);
         let _ = started.send(GetCurrentThreadId());
         'run: loop {
             MsgWaitForMultipleObjectsEx(None, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
@@ -141,7 +166,7 @@ fn hook_thread(started: &std::sync::mpsc::Sender<u32>) {
                 DispatchMessageW(&msg);
             }
             scopes.refresh();
-            HOOKS.store(hooks.len() + scopes.locations.len(), Ordering::Relaxed);
+            HOOKS.store(hooks.len() + scopes.locations.len()+scopes.moves.len(), Ordering::Relaxed);
             if NOTIFIED.swap(false, Ordering::Relaxed) {
                 let consumer = CONSUMER.load(Ordering::Relaxed);
                 if consumer != 0 {
@@ -153,6 +178,8 @@ fn hook_thread(started: &std::sync::mpsc::Sender<u32>) {
     }
     unhook(&mut hooks);
     unhook(&mut scopes.locations);
+    unhook(&mut scopes.moves);
+    SOURCE.store(0, Ordering::Relaxed);
 }
 
 /// The location hooks, scoped to the foreground app's and Explorer's processes.
@@ -160,6 +187,7 @@ fn hook_thread(started: &std::sync::mpsc::Sender<u32>) {
 struct Scopes {
     locations: Vec<HWINEVENTHOOK>,
     processes: Vec<u32>,
+    moves: Vec<HWINEVENTHOOK>,
 }
 impl Scopes {
     fn refresh(&mut self) {
@@ -176,6 +204,11 @@ impl Scopes {
             .into_iter()
             .filter(|&pid| pid != 0 && pid != std::process::id())
             .collect();
+        let tiling = TILING.lock().unwrap().clone();
+        if let Some(extra) = &tiling { processes.extend(extra); }
+        if tiling.is_some() && self.moves.is_empty() {
+            self.moves.extend(hook(EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND, 0));
+        } else if tiling.is_none() { unhook(&mut self.moves); }
         processes.sort_unstable();
         processes.dedup();
         if processes != self.processes {
