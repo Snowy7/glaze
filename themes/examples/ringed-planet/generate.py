@@ -18,11 +18,19 @@ for y in range(128):
         u,v=x/256,y/128; phase=v*85+math.sin(u*math.tau*3)*.7+math.sin(u*math.tau*8+v*10)*.22
         band=(math.sin(phase)+math.sin(phase*.43)*.6)/1.6; blue=.5+band*.5
         base.putpixel((x,y),(int(65+blue*100),int(115+blue*90),int(150+blue*80),255)); normal.putpixel((x,y),(128,int(128+math.cos(phase)*15),253,255)); mr.putpixel((x,y),(255,int(155+35*blue),40,255)); glow=max(0,band-.7)*.15; emissive.putpixel((x,y),(int(glow*40),int(glow*160),int(glow*240),255))
-ring=Image.new('RGBA',(16,256))
-for y in range(256):
-    r=y/255; alpha=(.5+.5*math.sin(r*190))*.35+.45
-    if .46<r<.51 or r<.015 or r>.985:alpha=0
-    for x in range(16):ring.putpixel((x,y),(220,178+int(r*35),134+int(r*55),int(alpha*255)))
+ring=Image.new('RGBA',(4,1024))
+def smoothstep(a,b,x):
+    t=max(0,min(1,(x-a)/(b-a))); return t*t*(3-2*t)
+for y in range(1024):
+    r=y/1023
+    # Broad, irregular optical-depth bands survive minification. The old 30 equally spaced
+    # high-contrast bands were themselves stripes, even with real mips and 16x anisotropy.
+    bands=sum(weight*math.exp(-((r-center)/width)**2) for center,width,weight in
+              [(.09,.06,.17),(.24,.09,.24),(.38,.045,.12),(.62,.08,.20),(.80,.12,.27),(.94,.035,.10)])
+    gap=1-smoothstep(.43,.46,r)*(1-smoothstep(.51,.54,r))
+    edge=smoothstep(0,.025,r)*(1-smoothstep(.965,1,r))
+    alpha=(.28+bands)*gap*edge
+    for x in range(4):ring.putpixel((x,y),(220,178+int(r*35),134+int(r*55),round(alpha*255)))
 materials=[dict(name='Icy banded world',pbrMetallicRoughness=dict(baseColorTexture=tex(base),metallicRoughnessTexture=tex(mr),metallicFactor=.6,roughnessFactor=.85),normalTexture=tex(normal),emissiveTexture=tex(emissive),emissiveFactor=[.15,.3,.5]),dict(name='Translucent ice rings',pbrMetallicRoughness=dict(baseColorTexture=tex(ring),metallicFactor=.4,roughnessFactor=.48),alphaMode='BLEND',doubleSided=True)]
 pos=[]; normals=[]; uv=[]; indices=[]; morph=[]; segments=64; rows=32
 for y in range(rows+1):
@@ -34,10 +42,10 @@ for y in range(rows):
         a=y*(segments+1)+x; b=a+segments+1; indices.extend([a,a+1,b,a+1,b+1,b])
 sphere=dict(attributes=dict(POSITION=acc(pos,'VEC3',bounds=True),NORMAL=acc(normals,'VEC3'),TEXCOORD_0=acc(uv,'VEC2')),indices=acc(indices,'SCALAR',5125),material=0,targets=[dict(POSITION=acc(morph,'VEC3',bounds=True))])
 pos=[]; normals=[]; uv=[]; indices=[]
-for x in range(129):
-    phi=x/128*math.tau
-    for edge,r in enumerate([1.35,2.1]):pos.append([math.cos(phi)*r,0,math.sin(phi)*r]); normals.append([0,1,0]); uv.append([x/128,edge])
-for x in range(128):
+for x in range(257):
+    phi=x/256*math.tau
+    for edge,r in enumerate([1.35,2.1]):pos.append([math.cos(phi)*r,0,math.sin(phi)*r]); normals.append([0,1,0]); uv.append([x/256,edge])
+for x in range(256):
     a=x*2; indices.extend([a,a+2,a+1,a+1,a+2,a+3])
 rings=dict(attributes=dict(POSITION=acc(pos,'VEC3',bounds=True),NORMAL=acc(normals,'VEC3'),TEXCOORD_0=acc(uv,'VEC2')),indices=acc(indices,'SCALAR',5125),material=1)
 times=acc([0,2,4,6,8],'SCALAR'); accessors[times].update(min=[0],max=[8]); rotations=acc([[0,math.sin(t/8*math.pi),0,math.cos(t/8*math.pi)] for t in [0,2,4,6,8]],'VEC4'); weights=acc([0,1,0,1,0],'SCALAR')
