@@ -130,6 +130,10 @@ impl Tiler {
             {
                 return;
             }
+            if event.event == EVENT_OBJECT_LOCATIONCHANGE && animation::busy() {
+                q.deferred.insert(event.window);
+                return;
+            }
             if q.events
                 .iter()
                 .any(|e| e.event == event.event && e.window == event.window)
@@ -428,6 +432,15 @@ impl Tiler {
     }
     /// Process at most one coalesced event batch; empty queues do no Win32 work.
     pub fn process(&mut self) {
+        if !animation::busy() {
+            let mut queue = self.queue.lock().unwrap();
+            let deferred = std::mem::take(&mut queue.deferred);
+            for window in deferred {
+                if queue.known.contains(&window) {
+                    queue.events.push_back(win_events::Event { event: EVENT_OBJECT_LOCATIONCHANGE, window });
+                }
+            }
+        }
         let events = std::mem::take(&mut self.queue.lock().unwrap().events);
         if events.is_empty() {
             return;
@@ -605,6 +618,91 @@ impl Tiler {
                     self.admit(window);
                     changed = true;
                     processes_changed = true;
+                }
+                EVENT_OBJECT_LOCATIONCHANGE => {
+                    if animation::busy() {
+                        self.queue.lock().unwrap().deferred.insert(event.window);
+                        continue;
+                    }
+                    if !self.current_desktop(h) {
+                        continue;
+                    }
+                    let Some(w) = self.windows.get_mut(&window) else {
+                        continue;
+                    };
+                    if !w.admission.identity.valid() || w.minimized {
+                        continue;
+                    }
+                    let fullscreen = platform::fullscreen(h) || platform::topmost(h);
+                    if fullscreen != w.fullscreen {
+                        w.fullscreen = fullscreen;
+                        w.expected = None;
+                        if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                            if fullscreen {
+                                w.suspended = l.suspend(window);
+                                let _ = self.journal.release(w.admission.identity);
+                            } else if let Some(saved) = w.suspended.take() {
+                                l.resume(saved, platform::foreground() == h);
+                            }
+                        }
+                        changed = true;
+                        continue;
+                    }
+                    if fullscreen {
+                        continue;
+                    }
+                    let Some(actual) = platform::frame(h) else {
+                        continue;
+                    };
+                    let maximized = platform::zoomed(h);
+                    if maximized != w.maximized {
+                        w.maximized = maximized;
+                        if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                            l.set_maximized(window, maximized);
+                        }
+                        changed = true;
+                        continue;
+                    }
+                    if w.expected.is_some_and(|r| near(r, actual)) {
+                        continue;
+                    }
+                    if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                        if l.is_floating(window) {
+                            l.move_floating(window, actual);
+                            w.expected = Some(actual);
+                            continue;
+                        }
+                    }
+                    // An external move must force re-application even if the model is unchanged.
+                    w.expected = None;
+                    let now = Instant::now();
+                    w.moves
+                        .retain(|at| now.duration_since(*at) < Duration::from_secs(1));
+                    w.moves.push_back(now);
+                    if w.moves.len() >= 4 {
+                        w.moves.clear();
+                        w.offences += 1;
+                        if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                            if w.offences == 1 {
+                                let along = l
+                                    .locate(window)
+                                    .map(|(mi, _)| match l.monitors[mi].axis {
+                                        mypaper_tiling::Axis::Horizontal => {
+                                            actual.w / l.monitors[mi].scale
+                                        }
+                                        mypaper_tiling::Axis::Vertical => {
+                                            actual.h / l.monitors[mi].scale
+                                        }
+                                    })
+                                    .unwrap_or(actual.w);
+                                l.resize_column(window, along);
+                            } else {
+                                l.float_at(window, actual);
+                                let _ = self.learned.record(&w.admission.exe, 0.0, 0.0, true);
+                            }
+                        }
+                    }
+                    changed = true;
                 }
                 _ => {}
             }
