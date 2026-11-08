@@ -1,6 +1,6 @@
 use crate::panel::tokens::radius;
-use mypaper_ui::controls::{Align, Behavior, key};
-use mypaper_ui::{Rect, Role};
+use glaze_ui::controls::{Align, Behavior, key};
+use glaze_ui::{Rect, Role};
 use serde_json::{Value, json};
 
 use super::*;
@@ -122,7 +122,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
         categories_button,
         &format!("Categories: {}", category.as_deref().unwrap_or("All")),
         Some(glyph::CHEVRON_DOWN),
-        mypaper_ui::controls::ButtonKind::Ghost,
+        glaze_ui::controls::ButtonKind::Ghost,
         true,
         Action::More(key("panel-wallpaper-categories")),
     );
@@ -561,7 +561,7 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                 r,
                 "Remove",
                 None,
-                mypaper_ui::controls::ButtonKind::Ghost,
+                glaze_ui::controls::ButtonKind::Ghost,
                 true,
                 Action::RemoveWallpaper(i),
             );
@@ -616,7 +616,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                 ),
                 (
                     Source::Web,
-                    mypaper_ui::icons::Icon::Globe.into(),
+                    glaze_ui::icons::Icon::Globe.into(),
                     "A web page",
                     "A link or an HTML file",
                 ),
@@ -769,7 +769,7 @@ fn source_preview(app: &App, b: &mut B, r: Rect, source: Source, value: &str) {
         } else {
             let fit = app.text(&FieldId::Text(DocId::Studio, "/add_fit".into()));
             if fit == "stretch" {
-                b.list.ops.push(mypaper_ui::Op::RoundedImage {
+                b.list.ops.push(glaze_ui::Op::RoundedImage {
                     rect: r,
                     image,
                     opacity: 1.0,
@@ -837,7 +837,7 @@ mod tests {
     use super::*;
     #[test]
     fn use_now_changes_the_only_creation_primary_without_saving_a_preference() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(crate::panel::State::default());
         app.size = (480, 760);
@@ -888,7 +888,7 @@ fn source_image(
     source: Source,
     value: &str,
     size: (u32, u32),
-) -> Option<std::sync::Arc<mypaper_ui::Image>> {
+) -> Option<std::sync::Arc<glaze_ui::Image>> {
     let path = std::path::Path::new(value);
     let file = if source == Source::Folder {
         let mut pictures: Vec<_> = std::fs::read_dir(path)

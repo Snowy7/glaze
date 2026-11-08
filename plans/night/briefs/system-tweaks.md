@@ -6,7 +6,7 @@ measurably helps, what doesn't, what needs admin).
 
 ## Goal
 
-A small set of **honest** system settings mypaper can apply and fully undo, without admin, each
+A small set of **honest** system settings Glaze can apply and fully undo, without admin, each
 backed by a primary source in the research. No "boost" presets, no placebo, no registry piles.
 
 - `config.json` › `system` (new section, every field optional, absent = leave Windows alone, the
@@ -23,7 +23,7 @@ backed by a primary source in the research. No "boost" presets, no placebo, no r
   them**. List them in `docs/system.md` with what they do and why they need admin, and add
   launcher entries that open the right Settings page (`ms-settings:` URIs) for each: Graphics,
   Gaming, Captures, Power, Dev Drive (`ms-settings:disksandvolumes`), For developers.
-- A "game is running" signal for the rest of mypaper: a small pure function plus a watcher in
+- A "game is running" signal for the rest of Glaze: a small pure function plus a watcher in
   `crates/tweaks` (or a new tiny module in `crates/desktop` if it fits better, additive) based on
   `SHQueryUserNotificationState` (`QUNS_RUNNING_D3D_FULL_SCREEN`, `QUNS_BUSY`,
   `QUNS_PRESENTATION_MODE`) and the foreground window covering a monitor, published so other
@@ -44,7 +44,7 @@ in `crates/config`, the Settings-page entries in the launcher's Settings vocabul
 - Live: apply each setting on, verify with `reg query` and the Settings page state, then undo and
   verify the original values came back byte for byte. Leave the user's machine exactly as it was
   (don't keep any setting on).
-- `CARGO_TARGET_DIR=C:\mypaper-targets\system-tweaks` for check/test.
+- `CARGO_TARGET_DIR=C:\glaze-targets\system-tweaks` for check/test.
 
 ## Stop when
 

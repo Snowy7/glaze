@@ -13,7 +13,7 @@ name = "t3"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-mypaper-plugin-sdk = { path = "../../crates/plugin-sdk" }
+glaze-plugin-sdk = { path = "../../crates/plugin-sdk" }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }

@@ -3,7 +3,7 @@
   "name": "Blur",
   "category": "camera",
   "description": "A soft Gaussian blur, drawn at half resolution.",
-  "author": "mypaper",
+  "author": "Glaze",
   "license": "MIT",
   "url": null,
   "animated": false,

@@ -1,12 +1,12 @@
-cargo :    Compiling mypaper-ui v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\ui)
+cargo :    Compiling glaze-ui v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\ui)
 At line:2 char:192
 + ... gets\main'; cargo build --release --workspace *> crates/shell/evidenc ...
 +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (   Compiling my...aper\crates\ui):String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
-   Compiling mypaper-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
-   Compiling mypaper-files v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\files)
+   Compiling glaze-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
+   Compiling glaze-files v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\files)
 warning: struct `Layout` is never constructed
   --> crates\shell\src\widgets\views\integrations\mod.rs:19:19
    |
@@ -51,8 +51,8 @@ warning: function `icon_action` is never used
 144 | pub(super) fn icon_action(
     |               ^^^^^^^^^^^
 
-warning: `mypaper-shell` (lib) generated 7 warnings
-   Compiling mypaper-studio v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\studio)
+warning: `glaze-shell` (lib) generated 7 warnings
+   Compiling glaze-studio v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\studio)
 warning: constant `PULSE` is never used
    --> crates\studio\src\theme.rs:232:15
     |
@@ -171,5 +171,5 @@ warning: function `color_hook` is never used
 503 | unsafe extern "system" fn color_hook(
     |                           ^^^^^^^^^^
 
-warning: `mypaper-studio` (bin "mypaper-studio") generated 17 warnings
+warning: `glaze-studio` (bin "glaze-studio") generated 17 warnings
     Finished `release` profile [optimized] target(s) in 1m 13s

@@ -85,7 +85,7 @@ pub fn request_access_once(completed: impl Fn() + Send + Sync + 'static) -> Resu
         std::env::var_os("LOCALAPPDATA")
             .ok_or_else(|| anyhow::anyhow!("LOCALAPPDATA is missing"))?,
     )
-    .join("mypaper/notification-consent");
+    .join("glaze/notification-consent");
     std::fs::create_dir_all(&directory)?;
     let marker = directory.join(family);
     match std::fs::OpenOptions::new()
@@ -130,7 +130,7 @@ pub fn read(listener: &UserNotificationListener, show_text: bool) -> Result<Snap
 fn read_scoped(listener:&UserNotificationListener,show_text:bool,discord_previews:bool)->Result<Snapshot>{
     ensure!(
         listener.GetAccessStatus()? == UserNotificationListenerAccessStatus::Allowed,
-        "notification access is off; allow mypaper in Windows Settings > Privacy & security > Notifications"
+        "notification access is off; allow Glaze in Windows Settings > Privacy & security > Notifications"
     );
     let list = listener
         .GetNotificationsAsync(NotificationKinds::Toast)?
@@ -196,7 +196,7 @@ pub(crate) async fn run(
     let listener = UserNotificationListener::Current()?;
     ensure!(
         listener.GetAccessStatus()? == UserNotificationListenerAccessStatus::Allowed,
-        "notification access is off; allow mypaper in Windows Settings > Privacy & security > Notifications"
+        "notification access is off; allow Glaze in Windows Settings > Privacy & security > Notifications"
     );
     let changed = Arc::new(Notify::new());
     let notify = changed.clone();

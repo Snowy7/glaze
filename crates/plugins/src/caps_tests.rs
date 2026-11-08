@@ -9,9 +9,9 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use mypaper_plugin_api::SizeClass;
-use mypaper_plugin_api::wire::{self, HelperMsg, HostMsg, SystemEvent, WindowChange};
-use mypaper_plugin_sdk::view::Face;
+use glaze_plugin_api::SizeClass;
+use glaze_plugin_api::wire::{self, HelperMsg, HostMsg, SystemEvent, WindowChange};
+use glaze_plugin_sdk::view::Face;
 
 use crate::host::{Host, Input};
 use crate::runtime::Runtime;
@@ -52,7 +52,7 @@ struct Rig {
 
 impl Rig {
     fn new(name: &str) -> Self {
-        let root = std::env::temp_dir().join(format!("mypaper-caps-{name}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("glaze-caps-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let rt = Runtime::new(root.join("cache"), root.join("data")).unwrap();
         let (tx, rx) = mpsc::channel();
@@ -301,7 +301,7 @@ fn game_pause_keeps_socket_connected_and_delivers_replies_in_order() {
     let mut incoming = Vec::new();
     for _ in 0..2 {
         let input = rig.rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).unwrap();
-        assert!(matches!(input, Input::Socket { event: crate::runtime::mypaper::plugin::websocket::SocketEvent::Message(_), .. }));
+        assert!(matches!(input, Input::Socket { event: crate::runtime::glaze::plugin::websocket::SocketEvent::Message(_), .. }));
         incoming.push(input);
     }
     rig.host.on_host(HostMsg::GameActivity(true), Instant::now());
@@ -376,7 +376,7 @@ mod pipe_server {
 
 #[test]
 fn pipes_round_trip_and_refuse_undeclared_names() {
-    let name = format!("mypaper-probe-{}", std::process::id());
+    let name = format!("glaze-probe-{}", std::process::id());
     let server = pipe_server::listen(&name);
     std::thread::spawn(move || {
         server.accept();
@@ -398,8 +398,8 @@ fn pipes_round_trip_and_refuse_undeclared_names() {
 
 #[test]
 fn game_pause_pipe_writes_resume_without_peer_traffic() {
-    use crate::runtime::mypaper::plugin::{pipes::PipeEvent, websocket::Message};
-    let name = format!("mypaper-game-pipe-{}", std::process::id());
+    use crate::runtime::glaze::plugin::{pipes::PipeEvent, websocket::Message};
+    let name = format!("glaze-game-pipe-{}", std::process::id());
     let server = pipe_server::listen(&name);
     let (seen, received) = mpsc::channel();
     std::thread::spawn(move || {
@@ -428,7 +428,7 @@ fn game_pause_pipe_writes_resume_without_peer_traffic() {
 
 #[test]
 fn http_over_a_pipe_reads_chunked_replies() {
-    let name = format!("mypaper-probe-http-{}", std::process::id());
+    let name = format!("glaze-probe-http-{}", std::process::id());
     let server = pipe_server::listen(&name);
     let seen = Arc::new(Mutex::new(String::new()));
     let head = Arc::clone(&seen);
@@ -551,7 +551,7 @@ fn notification_permission_demand_and_visibility() {
 fn native_echo() -> &'static PathBuf {
     static DLL: OnceLock<PathBuf> = OnceLock::new();
     DLL.get_or_init(|| {
-        let dir = std::env::temp_dir().join(format!("mypaper-caps-echo-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("glaze-caps-echo-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let dll = dir.join("native_echo.dll");
         let status = Command::new("rustc")
@@ -568,10 +568,10 @@ fn native_echo() -> &'static PathBuf {
 
 #[test]
 fn native_modules_round_trip_end_to_end() {
-    let status = Command::new("cargo").args(["build", "-q", "-p", "mypaper-native-host", "--target-dir"]).arg(target_dir()).current_dir(repo()).status().unwrap();
-    assert!(status.success(), "building mypaper-native-host");
+    let status = Command::new("cargo").args(["build", "-q", "-p", "glaze-native-host", "--target-dir"]).arg(target_dir()).current_dir(repo()).status().unwrap();
+    assert!(status.success(), "building glaze-native-host");
     // SAFETY: set before any lane starts; only the native lane reads it.
-    unsafe { std::env::set_var("MYPAPER_NATIVE_HOST", target_dir().join("debug/mypaper-native-host.exe")) };
+    unsafe { std::env::set_var("GLAZE_NATIVE_HOST", target_dir().join("debug/glaze-native-host.exe")) };
     let mut rig = Rig::new("native");
     rig.install("bare", &[], &[]).install("probe", &["native-code"], &["native_echo.dll"]);
     rig.act("bare", "native", "echo");
@@ -598,7 +598,7 @@ fn measure_memory_per_connection() {
     }
     const N: usize = 8;
     let (port, heads) = ws_server(false);
-    let name = format!("mypaper-probe-measure-{}", std::process::id());
+    let name = format!("glaze-probe-measure-{}", std::process::id());
     let servers: Vec<_> = (0..N).map(|_| pipe_server::listen(&name)).collect();
     let mut rig = Rig::new("measure");
     rig.install("probe", &[&format!("network:ws://127.0.0.1:{port}"), &format!("pipe:{name}")], &[]);

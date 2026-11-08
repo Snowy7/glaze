@@ -1,6 +1,6 @@
-use mypaper_config::desktop_menu::{Builtin, Entry, default_items};
-use mypaper_ui::Rect;
-use mypaper_ui::controls::Align;
+use glaze_config::desktop_menu::{Builtin, Entry, default_items};
+use glaze_ui::Rect;
+use glaze_ui::controls::Align;
 use serde_json::Value;
 
 use super::*;
@@ -99,7 +99,7 @@ mod frame_cap_tests {
 
     #[test]
     fn custom_frame_rate_is_staged_and_the_slider_spans_the_supported_range() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(crate::panel::State::default());
         let before = app.docs.version;
@@ -127,7 +127,7 @@ mod frame_cap_tests {
 }
 
 pub fn general(app: &App, b: &mut B, c: &mut Col) {
-    page_title(app, b, c, "General", "mypaper and Studio");
+    page_title(app, b, c, "General", "Glaze and Studio");
     columns(
         b,
         c,
@@ -233,7 +233,7 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
                     r,
                     "Clear history",
                     None,
-                    mypaper_ui::controls::ButtonKind::Ghost,
+                    glaze_ui::controls::ButtonKind::Ghost,
                     app.panel.as_ref().unwrap().history.borrow().error.is_none(),
                     Action::Panel(Command::ClearHistory),
                 );
@@ -344,28 +344,28 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
         b,
         c,
         |b, c| {
-            group(b, c, "mypaper", |b, c| {
+            group(b, c, "Glaze", |b, c| {
                 notice(
                     b,
                     c,
                     if app.system.running() {
                         "Running · changes apply live"
                     } else {
-                        "Off · changes apply when mypaper starts"
+                        "Off · changes apply when Glaze starts"
                     },
                 );
                 action_button(
                     b,
                     c,
                     if app.system.running() {
-                        "Stop mypaper"
+                        "Stop Glaze"
                     } else {
-                        "Start mypaper"
+                        "Start Glaze"
                     },
                     if app.system.running() {
-                        Action::StopMypaper
+                        Action::StopGlaze
                     } else {
-                        Action::StartMypaper
+                        Action::StartGlaze
                     },
                 );
             });
@@ -494,12 +494,12 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
 }
 
 pub fn about(app: &App, b: &mut B, c: &mut Col) {
-    page_title(app, b, c, "About", "mypaper Studio");
+    page_title(app, b, c, "About", "Glaze Studio");
     columns(
         b,
         c,
         |b, c| {
-            group(b, c, "mypaper", |b, c| {
+            group(b, c, "Glaze", |b, c| {
                 notice(b, c, &format!("Version {}", env!("CARGO_PKG_VERSION")));
                 notice(
                     b,
@@ -557,7 +557,7 @@ fn menu_name(entry: &Entry) -> String {
             Builtin::Wallpaper => "Change wallpaper",
             Builtin::Widgets => "Edit widgets",
             Builtin::AddWidget => "Add widget",
-            Builtin::Studio => "mypaper Studio",
+            Builtin::Studio => "Glaze Studio",
             Builtin::Display => "Display settings",
             Builtin::Personalize => "Personalize",
             Builtin::Terminal => "Open terminal here",
@@ -594,7 +594,7 @@ pub fn add_menu_item(app: &mut App) {
         .get(DocId::Config, "/desktop_menu/items")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_else(default_items);
-    items.push(Entry::Custom(mypaper_config::desktop_menu::Custom {
+    items.push(Entry::Custom(glaze_config::desktop_menu::Custom {
         label,
         command,
         args,
@@ -613,7 +613,7 @@ pub fn add_menu_item(app: &mut App) {
 pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
     page_title(app, b, c, "Desktop menu", "Right-click on bare wallpaper");
     group(b, c, "", |b, c| {
-        setting(app, b, c, "desktop_menu", "Use mypaper's menu", "")
+        setting(app, b, c, "desktop_menu", "Use Glaze's menu", "")
     });
     let items: Vec<Entry> = app
         .get(DocId::Config, "/desktop_menu/items")
@@ -755,32 +755,32 @@ pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
 
 /// The shell's actual menu drawing, reduced over the active wallpaper.
 fn menu_preview(app: &App, b: &mut B, c: &mut Col, items: &[Entry]) {
-    let config = mypaper_config::DesktopMenu {
+    let config = glaze_config::DesktopMenu {
         enabled: true,
         items: items.to_vec(),
     };
-    let items = mypaper_shell::preview::menu::build(
+    let items = glaze_shell::preview::menu::build(
         &config,
-        mypaper_shell::preview::menu::ViewState {
+        glaze_shell::preview::menu::ViewState {
             icons_visible: true,
             ..Default::default()
         },
     );
-    let mut tokens = mypaper_shell::preview::menu::tokens(
+    let mut tokens = glaze_shell::preview::menu::tokens(
         &crate::app::theme_name(&app.docs).unwrap_or_default(),
         b.text,
     );
     tokens.shadow = false;
-    let layout = mypaper_ui::menu::layout(&items, &tokens, b.s, b.text);
+    let layout = glaze_ui::menu::layout(&items, &tokens, b.s, b.text);
     let r = Rect::new(c.x, c.y + b.px(12.0), c.w, layout.height + b.px(16.0));
     crate::panel::specimens::backdrop(app, b, r);
-    let list = mypaper_ui::menu::view(&items, &layout, None, &tokens);
-    b.list.ops.push(mypaper_ui::Op::Clip { rect: r });
+    let list = glaze_ui::menu::view(&items, &layout, None, &tokens);
+    b.list.ops.push(glaze_ui::Op::Clip { rect: r });
     b.list.ops.extend(crate::stage::offset(
         &list.ops,
         (r.left + (r.width() - layout.width) / 2.0).round(),
         (r.top + b.px(8.0)).round(),
     ));
-    b.list.ops.push(mypaper_ui::Op::Unclip);
+    b.list.ops.push(glaze_ui::Op::Unclip);
     c.y = r.bottom + b.px(4.0);
 }

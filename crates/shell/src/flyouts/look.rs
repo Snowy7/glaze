@@ -4,13 +4,13 @@
 
 use std::sync::Arc;
 
-use mypaper_bars::accent::{self, System};
-use mypaper_bars::config::{self, BarsConfig};
-use mypaper_bars::style::{Family, Look as BarLook, NativeStyle};
-use mypaper_config::Config;
-use mypaper_theme::{Appearance, LoadedTheme};
-use mypaper_ui::theme::{Knobs, Radii};
-use mypaper_ui::{GlassMaterial, Rgba, Style, Text, Theme, icons};
+use glaze_bars::accent::{self, System};
+use glaze_bars::config::{self, BarsConfig};
+use glaze_bars::style::{Family, Look as BarLook, NativeStyle};
+use glaze_config::Config;
+use glaze_theme::{Appearance, LoadedTheme};
+use glaze_ui::theme::{Knobs, Radii};
+use glaze_ui::{GlassMaterial, Rgba, Style, Text, Theme, icons};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Look {
@@ -22,7 +22,7 @@ pub struct Look {
     pub fill: Rgba,
     /// The glass under the body, for the blurred styles.
     pub glass: Option<GlassMaterial>,
-    pub glass_style: mypaper_ui::glass::GlassStyle,
+    pub glass_style: glaze_ui::glass::GlassStyle,
     /// The kit style: the bar's `look.style`, else its family's.
     pub style: Style,
     /// Corner radius in design pixels.
@@ -42,10 +42,10 @@ pub struct Look {
     /// An explicit surface radius is shared with menus, instead of the style's inset default.
     pub menu_radius: Option<f32>,
     resolved: Theme,
-    pub opening: mypaper_ui::transition::Timing,
-    pub hover_motion: mypaper_ui::transition::Timing,
-    pub press_motion: mypaper_ui::transition::Timing,
-    pub opening_style: mypaper_bars::style::MotionStyle,
+    pub opening: glaze_ui::transition::Timing,
+    pub hover_motion: glaze_ui::transition::Timing,
+    pub press_motion: glaze_ui::transition::Timing,
+    pub opening_style: glaze_bars::style::MotionStyle,
 }
 
 impl Look {
@@ -61,7 +61,7 @@ impl Look {
             .unwrap_or_default();
         let desktop = Config::load().unwrap_or_default().look;
         let loaded = Config::load()
-            .and_then(|c| mypaper_theme::locate(Some(&c.theme)))
+            .and_then(|c| glaze_theme::locate(Some(&c.theme)))
             .and_then(LoadedTheme::load)
             .ok();
         let appearance = crate::bars::look::theme_appearance(loaded.as_ref());
@@ -94,7 +94,7 @@ impl Look {
         let system = accent::read();
         crate::look::settings::bar(&desktop, crate::glass::Family::Menus, &bars, "top", &mut bar_look, &mut appearance, &system, text);
         let mut look = Self::resolve_settings(&bar_look, &appearance, &system, &knobs, &desktop, text);
-        let performance = bars.performance.active(mypaper_desktop::on_battery());
+        let performance = bars.performance.active(glaze_desktop::on_battery());
         look.opening = crate::bars::motion::resolve(
             &bars.top.animation,
             false,
@@ -166,21 +166,21 @@ impl Look {
     }
 
     pub fn install(&self) {
-        mypaper_ui::glass::set_style(self.glass);
-        mypaper_ui::menu::set_style(Some(self.menu_tokens()));
-        mypaper_ui::menu::set_interaction_motion(Some((self.hover_motion, self.press_motion)));
-        mypaper_ui::menu::set_open_motion(Some(mypaper_ui::menu::MenuMotion {
+        glaze_ui::glass::set_style(self.glass);
+        glaze_ui::menu::set_style(Some(self.menu_tokens()));
+        glaze_ui::menu::set_interaction_motion(Some((self.hover_motion, self.press_motion)));
+        glaze_ui::menu::set_open_motion(Some(glaze_ui::menu::MenuMotion {
             timing: self.opening,
             style: crate::bars::motion::reveal(self.opening_style),
         }));
     }
 
     /// The shared desktop controls, applied once on reload to both flyouts and their menus.
-    pub fn apply_settings(&mut self, desktop: &mypaper_config::Look, text: &Text) {
+    pub fn apply_settings(&mut self, desktop: &glaze_config::Look, text: &Text) {
         self.font = crate::look::settings::font(&self.font, |f| text.has_family(f)).into();
         self.resolved.font.family = self.font.clone();
         if let Some(set) = crate::look::settings::icons(desktop, text) {
-            if let mypaper_ui::icons::IconSet::Font(family) = &set { self.icons = family.clone(); }
+            if let glaze_ui::icons::IconSet::Font(family) = &set { self.icons = family.clone(); }
             self.resolved.icons = set;
         }
         if let Some(edge) = desktop.shape.edge {
@@ -193,7 +193,7 @@ impl Look {
     }
 
     /// Runtime tokens, preserving literal family names (including Segoe's installed cuts).
-    pub fn resolve_settings(bar: &BarLook, appearance: &Appearance, system: &System, knobs: &Knobs, desktop: &mypaper_config::Look, text: &Text) -> Self {
+    pub fn resolve_settings(bar: &BarLook, appearance: &Appearance, system: &System, knobs: &Knobs, desktop: &glaze_config::Look, text: &Text) -> Self {
         let mut look = Self::resolve_with(bar, appearance, system, knobs);
         if let Some(name) = bar.font.family.as_deref().or(appearance.font.as_deref()) {
             look.font = crate::look::settings::font(name, |f| text.has_family(f)).into();
@@ -231,16 +231,16 @@ impl Look {
                 },
             ))
         });
-        let glass_tint = appearance.tint.unwrap_or(mypaper_widgets::look::DEFAULT_TINT);
+        let glass_tint = appearance.tint.unwrap_or(glaze_widgets::look::DEFAULT_TINT);
         // Start with the widgets' material. A bar's surface fill is not a popup tint colour.
         let liquid = crate::glass::liquid_material(glass_tint);
-        let glass = mypaper_ui::theme::material(kit, liquid.tint)
+        let glass = glaze_ui::theme::material(kit, liquid.tint)
             .filter(|_| {
-                bar.glass.style != Some(mypaper_bars::style::GlassKind::None)
-                    && appearance.surface != Some(mypaper_theme::Surface::Solid)
+                bar.glass.style != Some(glaze_bars::style::GlassKind::None)
+                    && appearance.surface != Some(glaze_theme::Surface::Solid)
             })
             .map(|base| {
-                let own = if mypaper_ui::theme::lensed(kit) {
+                let own = if glaze_ui::theme::lensed(kit) {
                     liquid
                 } else {
                     base
@@ -263,11 +263,11 @@ impl Look {
                 glass.highlight *= intensity;
                 glass.blur *= intensity;
                 glass.blur += match &bar.background {
-                    Some(mypaper_bars::style::Fill::Wallpaper(fill)) => fill.blur,
-                    Some(mypaper_bars::style::Fill::Blur(fill)) => fill.blur,
+                    Some(glaze_bars::style::Fill::Wallpaper(fill)) => fill.blur,
+                    Some(glaze_bars::style::Fill::Blur(fill)) => fill.blur,
                     _ => 0.0,
                 };
-                if bar.glass.style == Some(mypaper_bars::style::GlassKind::Frosted) {
+                if bar.glass.style == Some(glaze_bars::style::GlassKind::Frosted) {
                     glass.refraction = 0.0;
                     glass.highlight = 0.0;
                 }
@@ -296,7 +296,7 @@ impl Look {
             }
         }
         if let Some(size) = bar.font.size {
-            let factor = size / resolved.font.font(mypaper_ui::TextRole::Body).size;
+            let factor = size / resolved.font.font(glaze_ui::TextRole::Body).size;
             for role in &mut resolved.font.roles {
                 role.size *= factor;
                 role.line *= factor;
@@ -346,7 +346,7 @@ impl Look {
                 system.animations,
                 false,
             ),
-            opening_style: mypaper_bars::style::MotionStyle::Slide,
+            opening_style: glaze_bars::style::MotionStyle::Slide,
         }
     }
 
@@ -358,8 +358,8 @@ impl Look {
     }
 
     /// Menus share the active family, font, colors and material with the panels.
-    pub fn menu_tokens(&self) -> mypaper_ui::Tokens {
-        mypaper_ui::Tokens {
+    pub fn menu_tokens(&self) -> glaze_ui::Tokens {
+        glaze_ui::Tokens {
             radius: self.menu_radius.unwrap_or_else(|| Radii::concentric(self.radius, 6.0, 8.0)),
             icons: self.icons.clone(),
             icon_set: Some(self.resolved.icons.clone()),
@@ -390,14 +390,14 @@ pub fn fixed_system() -> System {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mypaper_bars::style::NativeStyle;
+    use glaze_bars::style::NativeStyle;
 
     #[test]
     fn only_the_blurred_style_has_glass() {
         let system = fixed_system();
         let liquid = Look::resolve(&BarLook::default(), &Appearance::default(), &system);
         let glass = liquid.glass.expect("liquid is the default and has glass");
-        assert_eq!(glass, crate::glass::liquid_material(mypaper_widgets::look::DEFAULT_TINT));
+        assert_eq!(glass, crate::glass::liquid_material(glaze_widgets::look::DEFAULT_TINT));
         for style in [NativeStyle::Solid, NativeStyle::Mono] {
             let bar = BarLook {
                 style: Some(style),

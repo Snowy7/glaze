@@ -1,5 +1,5 @@
 [package]
-name = "mypaper-app-styler"
+name = "glaze-app-styler"
 description = "Experimental: restyles the XAML inside File Explorer and Settings through XAML Diagnostics (docs/windows-styling.md, \"App styler\")."
 version.workspace = true
 edition.workspace = true
@@ -7,12 +7,12 @@ license.workspace = true
 
 # The TAP DLL that XAML Diagnostics loads into Explorer and Settings, and the rules both sides share.
 [lib]
-name = "mypaper_app_styler"
+name = "glaze_app_styler"
 crate-type = ["cdylib", "rlib"]
 
 # The on-demand helper core starts while `experimental.app_styler` is on.
 [[bin]]
-name = "mypaper-styler"
+name = "glaze-styler"
 path = "src/main.rs"
 
 [lints]
@@ -21,11 +21,11 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 log.workspace = true
-mypaper-config.workspace = true
-mypaper-desktop.workspace = true
-mypaper-inject.workspace = true
-mypaper-theme.workspace = true
-mypaper-tweaks.workspace = true
+glaze-config.workspace = true
+glaze-desktop.workspace = true
+glaze-inject.workspace = true
+glaze-theme.workspace = true
+glaze-tweaks.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 windows-core = "0.62"

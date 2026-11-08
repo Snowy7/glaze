@@ -31,7 +31,7 @@ call site is needed, make it one small additive commit and say so).
 - Live: switch styles in a copy of the user's config, check title bars, accent and dark mode change
   and come back. Restore the user's `config.json` byte for byte afterwards (hash before and after).
   Desktop lock: one action at a time.
-- `CARGO_TARGET_DIR=C:\mypaper-targets\style-sync`.
+- `CARGO_TARGET_DIR=C:\glaze-targets\style-sync`.
 
 ## Stop when
 

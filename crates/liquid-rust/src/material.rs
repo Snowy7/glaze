@@ -1,5 +1,5 @@
 // Vendored from liquid-rust (https://github.com/al1h3n/liquid-rust, commit 2073cd9) by al1h3n,
-// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "mypaper:".
+// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "Glaze:".
 //! Glass materials: Apple's presets (regular, clear, tinted, identity) and the knobs
 //! behind them, named after Figma's GLASS panel so values can be copied from a design.
 
@@ -135,13 +135,13 @@ pub struct Material {
     pub tint: Option<Color>,
     /// Localised dimming of the backdrop, `0..=1` (Apple: 0.35 for Clear over bright media).
     pub dim: f32,
-    /// mypaper: brightness of what's behind, a multiplier before tone mapping (1: as is).
+    /// Glaze: brightness of what's behind, a multiplier before tone mapping (1: as is).
     pub brightness: f32,
-    /// mypaper: saturation of what's behind (1: as is, 0: grey), with brightness.
+    /// Glaze: saturation of what's behind (1: as is, 0: grey), with brightness.
     pub saturation: f32,
-    /// mypaper: independent bottom inner-shadow strength; zero skips its shader work.
+    /// Glaze: independent bottom inner-shadow strength; zero skips its shader work.
     pub inner_shadow: f32,
-    /// mypaper: the shape's own coverage clips overlays, with no outer shadow/hairline.
+    /// Glaze: the shape's own coverage clips overlays, with no outer shadow/hairline.
     pub clip_to_shape: bool,
 }
 
@@ -346,12 +346,12 @@ pub(crate) struct Resolved {
     pub contrast: f32,
 }
 
-/// mypaper: how much of its smaller side the bevel of thin glass may take. The kit's 30 pt
+/// Glaze: how much of its smaller side the bevel of thin glass may take. The kit's 30 pt
 /// lens is deeper than a 24 pt menu bar is tall, so the rim's refraction and light covered the
 /// whole bar; iOS gives thin glass (menu bars, pills, small buttons) a shallow lens.
 pub(crate) const LENS_PER_SIDE: f32 = 0.2;
 
-/// mypaper: the bevel depth of glass whose smaller side is `min_side` points, at most the
+/// Glaze: the bevel depth of glass whose smaller side is `min_side` points, at most the
 /// material's `depth` (resolved, so adaptive glass's thicker lens counts), and the factor its
 /// rim light, rim shade and inner-shadow offset scale by: exactly 1 once the cap applies, from
 /// about 166 pt for regular glass, so large glass draws exactly as before.
@@ -459,7 +459,7 @@ impl Material {
         Resolved { material: m, adapt, contrast }
     }
 
-    /// mypaper: how far past its frame glass whose smaller side is `min_side` points draws its
+    /// Glaze: how far past its frame glass whose smaller side is `min_side` points draws its
     /// drop shadow, or samples its backdrop (the bevel's refraction plus two sigmas of frost),
     /// in points, as the renderer's `pack` bounds a group. An overlay's window grows by this.
     pub fn outset(&self, min_side: f32, appearance: &Appearance) -> f32 {

@@ -1,6 +1,6 @@
 {
   "animated": false,
-  "author": "mypaper",
+  "author": "Glaze",
   "category": "camera",
   "cost": 1.538,
   "cost_estimated": false,
@@ -51,5 +51,5 @@
       "source": "diffuse.wgsl"
     }
   ],
-  "url": "https://github.com/Snowy7/mypaper"
+  "url": "https://github.com/Snowy7/__GLAZE_REPO__"
 }

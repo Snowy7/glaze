@@ -9,9 +9,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use mypaper_plugin_sdk::View;
-use mypaper_ui::kit::Frame;
-use mypaper_ui::{HitId, Point, Rect, Scroll};
+use glaze_plugin_sdk::View;
+use glaze_ui::kit::Frame;
+use glaze_ui::{HitId, Point, Rect, Scroll};
 
 /// One scroll view as last drawn.
 struct Pane {
@@ -127,7 +127,7 @@ pub fn next(instance: &str, now: Instant) -> Option<Instant> {
             .filter(|(k, _)| k.0 == instance)
             .filter_map(|(_, p)| {
                 let (moving, next) = p.scroll.tick(now);
-                next.or(moving.then(|| now + mypaper_ui::display_frame()))
+                next.or(moving.then(|| now + glaze_ui::display_frame()))
             })
             .min()
     })
@@ -143,16 +143,16 @@ pub fn offset(instance: &str, id: &str) -> Option<f32> {
 mod tests {
     use super::*;
     use crate::widgets::views::plugin::{ACTION, Hit, action_at, draw as face};
-    use mypaper_plugin_sdk::Face;
-    use mypaper_ui::{Interaction, Scheme, Style, Theme};
-    use mypaper_ui::{Rgba, Ui};
+    use glaze_plugin_sdk::Face;
+    use glaze_ui::{Interaction, Scheme, Style, Theme};
+    use glaze_ui::{Rgba, Ui};
 
     /// A face with a fixed header and 30 clickable rows in a scroll.
     fn chats() -> Face {
         let rows = (0..30).map(|i| View::Item { title: format!("Thread {i}"), detail: None, tag: None, tone: None, action: Some(format!("open-{i}")), nested: false });
         let list = View::List { children: rows.collect(), gap: Some(2.0) };
         let scroll = View::Scroll { id: "chats".into(), child: Box::new(list), on_reach_end: Some("more".into()) };
-        View::stack([View::text("Header", mypaper_plugin_sdk::Role::Headline), scroll]).face()
+        View::stack([View::text("Header", glaze_plugin_sdk::Role::Headline), scroll]).face()
     }
 
     /// Draws `face` as widget `instance` in a 300×240 tile; the hits' actions, top to bottom.
@@ -160,7 +160,7 @@ mod tests {
         let theme = Theme::new(Style::Liquid, Scheme::Dark, Rgba::rgb8([10, 132, 255], 1.0));
         let input = Interaction::default();
         let mut f = Frame::new(&mut ui.text, &theme, 1.0, &input);
-        scope(instance, || face(&mut f, Rect::new(0.0, 0.0, 300.0, 240.0), "T3", mypaper_ui::icons::Icon::Terminal, Some(face_), super::super::Status::Live));
+        scope(instance, || face(&mut f, Rect::new(0.0, 0.0, 300.0, 240.0), "T3", glaze_ui::icons::Icon::Terminal, Some(face_), super::super::Status::Live));
         f.list
             .hits
             .iter()
@@ -208,7 +208,7 @@ mod tests {
         // A new view (a row's text changed) keeps the pane where it was.
         let mut update = chats();
         if let View::Stack { children, .. } = &mut update.body {
-            children[0] = View::text("Header · 3 running", mypaper_plugin_sdk::Role::Headline);
+            children[0] = View::text("Header · 3 running", glaze_plugin_sdk::Role::Headline);
         }
         draw(&mut ui, "keep", &update);
         assert_eq!(offset("keep", "chats"), before);
@@ -220,7 +220,7 @@ mod tests {
         }
         assert_eq!(sent, ["more"]);
         // A face without the scroll forgets the pane.
-        draw(&mut ui, "keep", &View::text("gone", mypaper_plugin_sdk::Role::Body).face());
+        draw(&mut ui, "keep", &View::text("gone", glaze_plugin_sdk::Role::Body).face());
         assert_eq!(offset("keep", "chats"), None);
     }
 }

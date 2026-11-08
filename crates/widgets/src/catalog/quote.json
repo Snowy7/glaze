@@ -3,7 +3,7 @@
   "name": "Quote",
   "category": "Info",
   "version": "1.1.0",
-  "author": "mypaper",
+  "author": "Glaze",
   "description": "A short quote, new every day. Click for another.",
   "size": {
     "default": [6, 2],

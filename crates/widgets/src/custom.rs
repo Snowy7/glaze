@@ -368,7 +368,7 @@ pub fn evaluate(id: &str, definition: &Definition) -> Result<Value> {
     let (bytes, json_path) = match &definition.source {
         Source::Static { value } => return Ok(value.clone()),
         Source::Url { url, path } => (
-            mypaper_integrations::calendar_http::request("GET", url, &[], &[], LIMIT)?,
+            glaze_integrations::calendar_http::request("GET", url, &[], &[], LIMIT)?,
             Some(path.as_str()),
         ),
         Source::File { path, json_path } => {

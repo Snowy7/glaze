@@ -21,8 +21,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{PCWSTR, w};
 
-pub const CLASS: PCWSTR = w!("mypaper.shell.inbox");
-/// `config.json` changed. (Clear of `mypaper_desktop::WM_FACT`, `WM_APP + 2`, which the control
+pub const CLASS: PCWSTR = w!("glaze.shell.inbox");
+/// `config.json` changed. (Clear of `glaze_desktop::WM_FACT`, `WM_APP + 2`, which the control
 /// window posts to the thread.)
 pub const WM_CONFIG: u32 = WM_APP + 10;
 /// The wallpaper wrote a new `palette.json`.
@@ -66,7 +66,7 @@ impl Inbox {
             CreateWindowExW(
                 Default::default(),
                 CLASS,
-                w!("mypaper shell"),
+                w!("Glaze shell"),
                 Default::default(),
                 0,
                 0,

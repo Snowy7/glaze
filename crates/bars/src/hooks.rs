@@ -12,7 +12,7 @@ use std::{
     },
 };
 
-use mypaper_desktop::win_events::{self, Subscription};
+use glaze_desktop::win_events::{self, Subscription};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Accessibility::HWINEVENTHOOK;
 use windows::Win32::UI::WindowsAndMessaging::{

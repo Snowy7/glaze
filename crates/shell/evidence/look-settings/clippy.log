@@ -1,6 +1,6 @@
-cargo :     Checking mypaper-ui v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\ui)
+cargo :     Checking glaze-ui v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\ui)
 At line:2 char:50
-+ ... gets\main'; cargo clippy -p mypaper-shell -p mypaper-ui --lib -- -D c ...
++ ... gets\main'; cargo clippy -p glaze-shell -p glaze-ui --lib -- -D c ...
 +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (    Checking my...aper\crates\ui):String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
@@ -11,8 +11,8 @@ warning: file is loaded as a module multiple times: `crates\ui\src\interaction_m
   = help: for further information visit https://clippy.rust-lang.org/main/index.html#duplicate_mod
   = note: `#[warn(clippy::duplicate_mod)]` on by default
 
-warning: `mypaper-ui` (lib) generated 1 warning
-    Checking mypaper-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
+warning: `glaze-ui` (lib) generated 1 warning
+    Checking glaze-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
 warning: struct `Layout` is never constructed
   --> crates\shell\src\widgets\views\integrations\mod.rs:19:19
    |
@@ -122,6 +122,6 @@ help: collapse nested if block
 865 ~             }
     |
 
-warning: `mypaper-shell` (lib) generated 10 warnings (run `cargo clippy --fix --lib -p mypaper-shell -- -D 
+warning: `glaze-shell` (lib) generated 10 warnings (run `cargo clippy --fix --lib -p glaze-shell -- -D 
 clippy::correctness` to apply 3 suggestions)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.54s

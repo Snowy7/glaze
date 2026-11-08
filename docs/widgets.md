@@ -1,6 +1,6 @@
 # Native desktop widgets
 
-N4 hosts all 17 built-in widget ids in `mypaper-shell`, using `mypaper_ui`. `crates/widgets` is a
+N4 hosts all 17 built-in widget ids in `glaze-shell`, using `glaze_ui`. `crates/widgets` is a
 services library. There is no widget executable, HTML entry point, widget WebView environment,
 SDK, shell page, CSS plate renderer, backdrop file request or HTML-widget fallback. Web and app
 wallpapers retain their own WebViews/capture path (D-W).
@@ -35,8 +35,8 @@ widget still needs the engine's overlay consumer; the wallpaper plate seam does 
 
 ## Edit mode
 
-Ctrl+Alt+Shift+W toggles edit mode. The existing registered `mypaper.widgets.edit` message to the
-message-only `mypaper.widgets.host` window still works for Studio/core callers (wParam: 0 off,
+Ctrl+Alt+Shift+W toggles edit mode. The existing registered `glaze.widgets.edit` message to the
+message-only `glaze.widgets.host` window still works for Studio/core callers (wParam: 0 off,
 1 on, 2 toggle). Drag and all eight resize edges/corners snap to the per-monitor grid, one cell at
 a time, with a ghost showing the target and a spring on drop. Moves first try to swap a single neighbor into the original cell; otherwise
 overlapping neighbors shift down, then right in reading order. If they cannot fit, the entire edit
@@ -93,7 +93,7 @@ body). A click gives no focus ring; the keyboard does.
 | Widget ids | Native behavior |
 |---|---|
 | `clock` | digital, dial, flip, greeting and world clocks; minute default, optional seconds |
-| `calendar` | reusable `mypaper_ui::calendar::MonthGrid`, month navigation, day/agenda and local event entry |
+| `calendar` | reusable `glaze_ui::calendar::MonthGrid`, month navigation, day/agenda and local event entry |
 | `now-playing`, `media-pill` | one media view, session metadata/artwork and transport controls; ids retained |
 | `quick-toggles` | native action grid with pages |
 | `launcher` | real app icons, launches, editable web search |
@@ -142,7 +142,7 @@ with one layered-window present. Text bounds follow measured glyphs rather than 
 changing the shared `TextStyle` contract. RichEdit remains responsible for editing, selection,
 clipboard, IME and undo; wheel coordinates are converted to client pixels for its hit testing.
 
-`mypaper-shell` initializes `Widgets` after `Bars::new` has presented and after a message-loop turn.
+`glaze-shell` initializes `Widgets` after `Bars::new` has presented and after a message-loop turn.
 The initialization cannot run ahead of the first visible bar. Facts arriving before it are applied
 before the first widget paint or provider request.
 `widgets_init_ms` and `widgets_ready_ms` are separate startup markers; they can be compared with the
@@ -156,7 +156,7 @@ changed something (cursor moves over the foreground app never reach it).
 
 ## Layout and existing data
 
-`%APPDATA%\mypaper\widgets.json` (version 2): `grid`, `appearance`, and `instances`, with each
+`%APPDATA%\glaze\widgets.json` (version 2): `grid`, `appearance`, and `instances`, with each
 instance's `instance`, `widget`, `monitor`, `cell`, `size`, `appearance`, and `settings`. Instance ids
 are stable. `now-playing` and `media-pill` are not renamed. The library's `layout.rs` owns grid
 conversion, placement, migration and atomic saves. Missing files get six widgets: clock, calendar,
@@ -165,10 +165,10 @@ Version 1 files (cells of the icon grid) are upgraded once by the shell (`Layout
 and sizes double, which keeps every rectangle exactly, since the fine grid subdivides the icon
 grid) and saved; parsing alone never upgrades, so Studio's raw edits stay in the file's own units.
 The version-1 file is kept byte for byte as `widgets.json.v1` before the first version-2 write.
-A layout from a newer mypaper is never "unreadable": Studio says "This layout was saved by a newer
-mypaper. Restart Studio to update." with only Restart (no Start over, no edits), and the write
+A layout from a newer Glaze is never "unreadable": Studio says "This layout was saved by a newer
+glaze. Restart Studio to update." with only Restart (no Start over, no edits), and the write
 guard refuses to write over a newer file or to write an older version over a newer one. If an
-older mypaper still writes a version-1 layout over the upgraded one, the shell keeps that file
+older Glaze still writes a version-1 layout over the upgraded one, the shell keeps that file
 beside it and puts its own layout back. Start over always asks first and keeps
 `<file>.<YYYYMMDD-HHMMSS>.bak`. Deploys swap an open Studio's exe so a restart updates it.
 Invalid live reloads retain the last valid layout. Every layout save also parses the current file
@@ -195,7 +195,7 @@ appearance paths are retained as data but are not loaded. Native views use theme
 
 ## Services API
 
-The `mypaper-widgets` library exports `layout`, `storage`, `registry`, `manifest`, `look`, `media`,
+The `glaze-widgets` library exports `layout`, `storage`, `registry`, `manifest`, `look`, `media`,
 `stats`, `audio`, `appicon`, `plugins`, `rpc`, `wake`, `display`, `files`, `pick`, `userinfo` and feed
 parsing. `bridge` contains typed service replies/errors, not a web message bridge.
 `Waker::for_window(Sender<Msg>, HWND, message: u32)` posts service completions to the UI inbox;
@@ -276,7 +276,7 @@ desktop lock. `src/widgets/validate-live.ps1 [-Samples 3]` runs this worktree's 
 and actual shell with rain-city, production bars/dock and six production widgets, captures
 `docs/media/`, and uses the official 60-second measurement tool. A sleeping fixture helper seeds
 the layout and holds paused-media, display-awake and visible-desktop guards; it creates no product
-surfaces. The measured CPU/RAM row is `mypaper-shell`. The script then launches the shell three
+surfaces. The measured CPU/RAM row is `glaze-shell`. The script then launches the shell three
 times with those six configured instances and records spawn/first-bar/widget-init markers. Original
 processes, arguments and desktop state are restored in `finally`. Raw evidence lives under
 `crates/shell/src/widgets/evidence/production/`; `-Interactions -Samples 0` records interaction checks separately
@@ -331,7 +331,7 @@ DisplayList::damage_regions(&self, old: &DisplayList) -> Vec<Rect>;
 Surface::present_sparse(&mut self, ui: &mut Ui, origin: (i32, i32),
     size: (u32, u32), list: DisplayList) -> anyhow::Result<bool>;
 // A sleeping worker; changed runs on that worker after the watched file's bytes change.
-mypaper_ui::FileWatch::new(path: &Path, changed: impl Fn() + Send + 'static)
+glaze_ui::FileWatch::new(path: &Path, changed: impl Fn() + Send + 'static)
     -> anyhow::Result<FileWatch>;
 ```
 
@@ -378,7 +378,7 @@ The additional read-only inbox message `WM_DIAGNOSTICS = WM_APP + 104` (payload 
 present counters, visibility/rectangles and `WorkCosts`; the host never schedules it. Existing
 `WM_EDIT`/`WM_OVERLAY`/`WM_LAYOUT`/`WM_DATA` remain `WM_APP + 100` through `+103`; edit/overlay
 payloads in `lParam` are 0 off, 1 on, 2 toggle. Registered control names remain
-`mypaper.widgets.edit` and `mypaper.widgets.overlay` on `mypaper.widgets.host`.
+`glaze.widgets.edit` and `glaze.widgets.overlay` on `glaze.widgets.host`.
 
 The additive rendering operations have these exact fields (existing `Clip`/`Unclip` remain supported):
 
@@ -439,7 +439,7 @@ Necessary edits outside widget ownership are limited to these consumers and star
   writes and the one-time unused-heap-cache release.
 - `crates/integrations/src/media.rs`, `crates/shell/src/integrations/media.rs`: optional timeline
   fields and event-driven reads/artwork reuse shared with bars.
-- `crates/shell/src/integrations/mod.rs`: reuse the signal-driven `mypaper_ui::FileWatch` for
+- `crates/shell/src/integrations/mod.rs`: reuse the signal-driven `glaze_ui::FileWatch` for
   shared configuration so it adds no 100 ms idle worker.
 - `crates/integrations/src/notifications.rs`, `crates/integrations/Cargo.toml`: native package
   identity probing fixes the Studio-test COM factory lifetime crash after the native merge.

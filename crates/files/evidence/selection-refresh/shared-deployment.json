@@ -3,7 +3,7 @@
     "note":  "Another shared deployment replaced the on-disk binaries after the successful Enter check. The same Files test process retained its original image until close.",
     "enter_verified_utc":  "2026-11-06T07:52:27.7092562Z",
     "replacement_local_time":  "2026-11-06T10:53:46+03:00",
-    "tested_files_preserved_path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-files.exe.old-20261106105346",
+    "tested_files_preserved_path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\glaze-files.exe.old-20261106105346",
     "tested_files_preserved_sha256":  "4D6CF5EACDFE644243DC3B9E0CD3152BCA17CBA0CDB404B230E08C260C135E94",
     "matches_our_deployment":  true,
     "current_files_sha256":  "BC95347E45336F53D80D4BCD80C3D91C22B11F889B703ACBEAF036B10C72E203",

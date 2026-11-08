@@ -3,11 +3,11 @@
 //! window's title, a close button on hover) over DWM's live thumbnail, flush to its sides.
 use super::look::Tokens;
 use anyhow::Result;
-use mypaper_bars::{
+use glaze_bars::{
     apps::Item,
     preview::{Previews, SourceSize},
 };
-use mypaper_ui::{
+use glaze_ui::{
     Align, DisplayList, Frame, Image, Interaction, Kind, Op, Point, Rect, Rgba, Role, Surface,
     SurfaceId, TextRole, Ui, icons::Icon,
 };
@@ -100,10 +100,10 @@ fn corner(tokens: &Tokens, scale: f32) -> f32 {
 /// What lies under a thumbnail's bottom corners, opaque: the popup's body (on glass, its tint
 /// over the surface color), under the cell's fill when the thumbnail is narrower than its cell.
 fn under(tokens: &Tokens, cell: &Cell) -> Rgba {
-    use mypaper_ui::theme::over;
+    use glaze_ui::theme::over;
     let c = tokens.theme.color;
     let black = Rgba::new(0.0, 0.0, 0.0, 1.0);
-    let body = match tokens.material.filter(|_| mypaper_ui::glass::available()) {
+    let body = match tokens.material.filter(|_| glaze_ui::glass::available()) {
         Some(m) => over(m.tint, over(c.surface, black)),
         None => over(c.surface, black),
     };
@@ -139,14 +139,14 @@ fn masks(cells: &[Cell], tokens: &Tokens, scale: f32) -> DisplayList {
     list
 }
 
-fn glass(tokens: &Tokens, scale: f32, size: (u32, u32)) -> Option<mypaper_ui::Glass> {
+fn glass(tokens: &Tokens, scale: f32, size: (u32, u32)) -> Option<glaze_ui::Glass> {
     tokens
         .material
-        .filter(|_| mypaper_ui::glass::available())
-        .map(|m| mypaper_ui::Glass {
+        .filter(|_| glaze_ui::glass::available())
+        .map(|m| glaze_ui::Glass {
             body: Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32),
             radius: (tokens.radius * scale).round(),
-            material: mypaper_ui::GlassMaterial {
+            material: glaze_ui::GlassMaterial {
                 clarity: m.clarity,
                 blur: m.blur * scale,
                 refraction: m.refraction,
@@ -254,7 +254,7 @@ fn view(
             );
         }
     }
-    mypaper_ui::geom::continuous::surface(&mut f.list, body, tokens.glass_style.smoothing);
+    glaze_ui::geom::continuous::surface(&mut f.list, body, tokens.glass_style.smoothing);
     f.list
 }
 
@@ -333,7 +333,7 @@ impl Preview {
             .map(|w| w.hwnd)
             .collect();
         self.sizes = self.thumbnails.open(self.surface.hwnd(), &hwnds);
-        let screen = mypaper_ui::screen_at(self.anchor.left as i32, self.anchor.top as i32);
+        let screen = glaze_ui::screen_at(self.anchor.left as i32, self.anchor.top as i32);
         let room = (
             (screen.work.2 - screen.work.0) as f32 - 16.0,
             (screen.work.3 - screen.work.1) as f32 / 2.0,
@@ -451,43 +451,43 @@ mod tests {
     use super::*;
 
     /// Opt-in live fixture: only our Files HWND is read, and both popups are nonactivating.
-    /// Run under the desktop lock with MYPAPER_PREVIEW_CAPTURE set to an output directory.
+    /// Run under the desktop lock with GLAZE_PREVIEW_CAPTURE set to an output directory.
     #[test]
-    #[ignore = "requires the desktop lock and a live mypaper-files window"]
+    #[ignore = "requires the desktop lock and a live glaze-files window"]
     fn capture_live_files_preview_without_input() {
         use windows::Win32::UI::{HiDpi::*, WindowsAndMessaging::*};
         struct Backdrop;
-        impl mypaper_ui::glass::Backdrop for Backdrop {
+        impl glaze_ui::glass::Backdrop for Backdrop {
             fn available(&self) -> bool {
                 true
             }
             fn open(
                 &self,
                 _: windows::Win32::Foundation::HWND,
-                _: mypaper_ui::glass::Shape,
+                _: glaze_ui::glass::Shape,
                 _: f32,
-                _: &mypaper_ui::GlassMaterial,
+                _: &glaze_ui::GlassMaterial,
             ) -> bool {
                 false
             }
             fn place(
                 &self,
                 _: windows::Win32::Foundation::HWND,
-                _: mypaper_ui::glass::Shape,
+                _: glaze_ui::glass::Shape,
                 _: f32,
             ) {
             }
-            fn material(&self, _: windows::Win32::Foundation::HWND, _: &mypaper_ui::GlassMaterial) {
+            fn material(&self, _: windows::Win32::Foundation::HWND, _: &glaze_ui::GlassMaterial) {
             }
             fn close(&self, _: windows::Win32::Foundation::HWND) {}
         }
-        let output = std::path::PathBuf::from(std::env::var_os("MYPAPER_PREVIEW_CAPTURE").unwrap());
+        let output = std::path::PathBuf::from(std::env::var_os("GLAZE_PREVIEW_CAPTURE").unwrap());
         std::fs::create_dir_all(&output).unwrap();
         // SAFETY: DPI context is established before the fixture creates any HWND.
         unsafe {
             let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         }
-        let mut apps = mypaper_bars::apps::Apps::default();
+        let mut apps = glaze_bars::apps::Apps::default();
         apps.refresh();
         let group = apps
             .groups
@@ -495,7 +495,7 @@ mod tests {
             .find(|g| {
                 g.exe
                     .as_ref()
-                    .is_some_and(|e| e.ends_with("\\mypaper-files.exe"))
+                    .is_some_and(|e| e.ends_with("\\glaze-files.exe"))
             })
             .expect("live Files window");
         let window = &group.windows[0];
@@ -507,7 +507,7 @@ mod tests {
             pinned: false,
             aumid: None,
             exe: group.exe.clone(),
-            windows: vec![mypaper_bars::apps::ItemWindow {
+            windows: vec![glaze_bars::apps::ItemWindow {
                 hwnd: window.hwnd,
                 title: window.title.clone(),
                 active: false,
@@ -516,27 +516,27 @@ mod tests {
             }],
         };
         let mut ui = Ui::new().unwrap();
-        mypaper_ui::glass::install(std::rc::Rc::new(Backdrop));
-        let config = mypaper_bars::config::path()
-            .and_then(|p| mypaper_bars::BarsConfig::load(&p))
+        glaze_ui::glass::install(std::rc::Rc::new(Backdrop));
+        let config = glaze_bars::config::path()
+            .and_then(|p| glaze_bars::BarsConfig::load(&p))
             .unwrap_or_default();
         let tokens = Tokens::resolve(
             &config.dock.look,
             &config.appearance,
-            &mypaper_bars::accent::read(),
+            &glaze_bars::accent::read(),
         );
         // Resolve through the dock's real worker and disk cache, rather than bypassing
         // executable lookup with a supplied bitmap.
         let (tx, rx) = std::sync::mpsc::channel();
-        let mut icons = mypaper_bars::icons::Icons::new(
-            mypaper_bars::wake::Waker::new(tx, 0),
-            mypaper_bars::files::local("icons").unwrap(),
+        let mut icons = glaze_bars::icons::Icons::new(
+            glaze_bars::wake::Waker::new(tx, 0),
+            glaze_bars::files::local("icons").unwrap(),
         );
-        icons.get(&mypaper_bars::icons::Source::App {
+        icons.get(&glaze_bars::icons::Source::App {
             aumid: group.aumid.clone(),
             exe: group.exe.clone(),
         });
-        let mypaper_bars::wake::Msg::Described(_, described) =
+        let glaze_bars::wake::Msg::Described(_, described) =
             rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap()
         else {
             panic!("icon worker did not describe Files");
@@ -547,7 +547,7 @@ mod tests {
             .and_then(|p| Image::load(&ui, std::path::Path::new(p)).ok())
             .map(Arc::new);
         if let Some(icon) = &icon {
-            mypaper_ui::golden::write(icon, &output.join("dock-icon.png")).unwrap();
+            glaze_ui::golden::write(icon, &output.join("dock-icon.png")).unwrap();
         }
         let preview = Preview::open(
             &mut ui,
@@ -559,14 +559,14 @@ mod tests {
             icon,
         )
         .unwrap();
-        let image = mypaper_ui::render(
+        let image = glaze_ui::render(
             &mut ui,
             preview.surface.shown(),
             preview.size.0,
             preview.size.1,
         )
         .unwrap();
-        mypaper_ui::golden::write(&image, &output.join("backing.png")).unwrap();
+        glaze_ui::golden::write(&image, &output.join("backing.png")).unwrap();
         let thumb = preview.cells[0].thumb;
         std::fs::write(
             output.join("preview.json"),
@@ -639,7 +639,7 @@ mod tests {
             path: "app.exe".into(),
             icon: None,
             pinned: true,
-            windows: vec![mypaper_bars::apps::ItemWindow {
+            windows: vec![glaze_bars::apps::ItemWindow {
                 hwnd: 1,
                 title: "A document".into(),
                 active: true,
@@ -652,12 +652,12 @@ mod tests {
         let tokens = Tokens::resolve(
             &Default::default(),
             &Default::default(),
-            &mypaper_bars::accent::read(),
+            &glaze_bars::accent::read(),
         );
         let (cells, size) = layout(&[1.6], (2000.0, 800.0), 1.0, false);
         // Hovered, so its close button is drawn too.
         let list = view(&app, &cells, 0, size, &tokens, 1.0, &mut ui, None, Some(1));
-        let image = mypaper_ui::render(&mut ui, &list, size.0, size.1).unwrap();
+        let image = glaze_ui::render(&mut ui, &list, size.0, size.1).unwrap();
         assert_eq!(list.hits.len(), 2);
         for hit in &list.hits {
             let p = Point::new(
@@ -676,7 +676,7 @@ mod tests {
             key: "app".into(),
             name: "App".into(),
             path: "app.exe".into(),
-            windows: vec![mypaper_bars::apps::ItemWindow {
+            windows: vec![glaze_bars::apps::ItemWindow {
                 hwnd: 1,
                 title: "Translucent window".into(),
                 active: false,
@@ -691,7 +691,7 @@ mod tests {
         let mut tokens = Tokens::resolve(
             &Default::default(),
             &Default::default(),
-            &mypaper_bars::accent::read(),
+            &glaze_bars::accent::read(),
         );
         // A theme can make both the popup and cell translucent. DWM preserves the
         // source window's alpha, so the destination must supply its own backing.
@@ -701,7 +701,7 @@ mod tests {
             let (cells, size) = layout(&[aspect], (2000.0, 800.0), 1.0, false);
             for hover in [None, Some(1)] {
                 let list = view(&app, &cells, 0, size, &tokens, 1.0, &mut ui, None, hover);
-                let image = mypaper_ui::render(&mut ui, &list, size.0, size.1).unwrap();
+                let image = glaze_ui::render(&mut ui, &list, size.0, size.1).unwrap();
                 let t = cells[0].thumb;
                 for fraction in [0.1, 0.5, 0.9] {
                     assert_eq!(

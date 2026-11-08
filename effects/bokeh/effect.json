@@ -1,6 +1,6 @@
 {
   "animated": true,
-  "author": "mypaper",
+  "author": "Glaze",
   "category": "camera",
   "cost": 0.92,
   "cost_estimated": false,
@@ -49,5 +49,5 @@
       "source": "bokeh.wgsl"
     }
   ],
-  "url": "https://github.com/Snowy7/mypaper"
+  "url": "https://github.com/Snowy7/__GLAZE_REPO__"
 }

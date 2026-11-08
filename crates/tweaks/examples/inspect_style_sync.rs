@@ -3,12 +3,12 @@
 //! exact registry bytes and the DWM attributes of open Explorer/Settings windows.
 
 use anyhow::{Result, ensure};
-use mypaper_config::{Backdrop, Config, Corners};
-use mypaper_theme::LoadedTheme;
-use mypaper_tweaks::palette;
-use mypaper_tweaks::plan::{self, WindowStyle};
-use mypaper_tweaks::registry::Registry;
-use mypaper_tweaks::undo::{Store, Undo};
+use glaze_config::{Backdrop, Config, Corners};
+use glaze_theme::LoadedTheme;
+use glaze_tweaks::palette;
+use glaze_tweaks::plan::{self, WindowStyle};
+use glaze_tweaks::registry::Registry;
+use glaze_tweaks::undo::{Store, Undo};
 use serde_json::{Value, json};
 use windows::Win32::Foundation::{HWND, LPARAM};
 use windows::Win32::Graphics::Dwm::{DWMWINDOWATTRIBUTE, DwmGetWindowAttribute};
@@ -46,7 +46,7 @@ const VALUES: [(&str, &str); 8] = [
 fn main() -> Result<()> {
     let check = std::env::args().any(|arg| arg == "--check");
     let config = Config::load()?;
-    let loaded = mypaper_theme::locate(Some(&config.theme))
+    let loaded = glaze_theme::locate(Some(&config.theme))
         .and_then(LoadedTheme::load)
         .or_else(|_| {
             LoadedTheme::load(std::path::absolute(
@@ -56,11 +56,11 @@ fn main() -> Result<()> {
     let palette = palette::read()
         .filter(|p| p.is_for(&loaded.dir))
         .map(|p| p.palette);
-    let resolved = mypaper_theme::windows::resolve(
+    let resolved = glaze_theme::windows::resolve(
         &config.look,
         Some(&loaded.theme),
         palette,
-        mypaper_tweaks::system_prefers_dark(),
+        glaze_tweaks::system_prefers_dark(),
     );
     let expected = resolved
         .windows
@@ -153,7 +153,7 @@ fn expected_attributes(style: WindowStyle) -> Vec<(String, u32)> {
         ("text", style.caption_text),
     ] {
         if let Some(color) = color {
-            attrs.push((name.into(), mypaper_tweaks::color::colorref(color)));
+            attrs.push((name.into(), glaze_tweaks::color::colorref(color)));
         }
     }
     if let Some(corner) = style.corners {

@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use windows::core::{PCWSTR, w};
 
-pub const HOST: PCWSTR = w!("mypaper.shell.tray-menu");
+pub const HOST: PCWSTR = w!("glaze.shell.tray-menu");
 pub const MAGIC: usize = 0x4D50_544D;
 pub const CHOSEN: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 18;
 /// Commit an acknowledged request: wParam is core's HWND, lParam its nonce.

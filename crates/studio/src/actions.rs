@@ -1,10 +1,10 @@
 //! What Studio's controls do: the pages, the places inside them, and every action a hit can
 //! carry. The app runs them in `App::run`.
 
-use mypaper_ui::controls::Glyph;
+use glaze_ui::controls::Glyph;
 use std::sync::Arc;
 
-use mypaper_config::look::Style;
+use glaze_config::look::Style;
 use serde_json::Value;
 
 use crate::docs::DocId;
@@ -244,8 +244,8 @@ pub enum Action {
     Redo,
     Peek,
     Pause,
-    StartMypaper,
-    StopMypaper,
+    StartGlaze,
+    StopGlaze,
     Restart(&'static str),
     RestoreDesktop,
     CopyDiagnostics,
@@ -330,7 +330,7 @@ pub enum Action {
     MenuMove(usize, i32),
     StartOver(DocId),
     ShowFile(DocId),
-    /// Quit and start Studio again (a file was saved by a newer mypaper).
+    /// Quit and start Studio again (a file was saved by a newer Glaze).
     RestartStudio,
     // Integrations
     SelectIntegration(usize),

@@ -542,7 +542,7 @@ mod tests {
     #[test]
     fn replacing_an_executable_invalidates_its_disk_icon() {
         let path =
-            std::env::temp_dir().join(format!("mypaper-icon-cache-{}.exe", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-icon-cache-{}.exe", std::process::id()));
         let key = path.to_str().unwrap();
         std::fs::write(&path, b"before").unwrap();
         let before = file_cache_name(key);

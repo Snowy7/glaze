@@ -652,7 +652,7 @@ mod tests {
     fn disk_cache_survives_a_restart_and_bad_files_are_ignored() {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let directory = std::env::temp_dir().join(format!(
-            "mypaper-weather-test-{}-{}-{}",
+            "glaze-weather-test-{}-{}-{}",
             std::process::id(),
             now(),
             NEXT.fetch_add(1, Ordering::Relaxed)

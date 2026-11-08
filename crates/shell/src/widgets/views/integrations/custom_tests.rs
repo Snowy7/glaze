@@ -1,9 +1,9 @@
 //! Render the actual dispatch at every dense size and inspect representative size sheets.
 use super::*;
 use crate::widgets::{time::Stamp, views};
-use mypaper_integrations::{Data, Snapshot, calendar};
-use mypaper_ui::{DisplayList, Op, Tokens, Ui, golden, render};
-use mypaper_widgets::{
+use glaze_integrations::{Data, Snapshot, calendar};
+use glaze_ui::{DisplayList, Op, Tokens, Ui, golden, render};
+use glaze_widgets::{
     custom::{Definition, Template},
     layout::Placed,
     storage::Storage,
@@ -23,7 +23,7 @@ fn fixture(id: &str) -> Model {
     };
     let mut m = Model::new(
         placed,
-        &mut Storage::new(std::env::temp_dir().join("mypaper-personal-sheets")),
+        &mut Storage::new(std::env::temp_dir().join("glaze-personal-sheets")),
         Stamp::at(NOW),
     )
     .unwrap();
@@ -48,7 +48,7 @@ fn fixture(id: &str) -> Model {
         };
     } else {
         m.integration.custom.definition =
-            Some(Definition::parse(mypaper_widgets::custom::EXAMPLES[0].1).unwrap());
+            Some(Definition::parse(glaze_widgets::custom::EXAMPLES[0].1).unwrap());
         m.integration.custom.value =
             json!("Build complex things as simply as possible.\n\nOne useful thing at a time.");
     }
@@ -120,7 +120,7 @@ fn personal_widgets_dense_sizes_and_size_sheets() {
                         let mut m = fixture(id);
                         m.integration.custom.definition.as_mut().unwrap().layout = template;
                         m.integration.custom.value = json!(68);
-                        m.integration.custom.image = Some(Arc::new(mypaper_ui::Image {
+                        m.integration.custom.image = Some(Arc::new(glaze_ui::Image {
                             width: 2,
                             height: 2,
                             pixels: [80, 120, 220, 255].repeat(4),

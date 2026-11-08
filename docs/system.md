@@ -41,13 +41,13 @@ ABI guarantee. Windows also documents these preferences in its [common settings 
 
 ## Apply and undo
 
-`mypaper_tweaks::system::writes(&SystemConfig)` is the pure plan. `SystemTweaks::new()` first recovers
-`%LOCALAPPDATA%\mypaper\undo-system.json`, then `apply(&config.system)` follows config changes.
+`glaze_tweaks::system::writes(&SystemConfig)` is the pure plan. `SystemTweaks::new()` first recovers
+`%LOCALAPPDATA%\glaze\undo-system.json`, then `apply(&config.system)` follows config changes.
 The theme's `undo.json` and classic-menu behavior are unchanged.
 
 The existing `Undo<Store>` engine saves originals before any write. Registry originals retain the
 exact type and bytes, including absence, unusual string terminators and value types. Created keys
-are removed only if empty. Power entries use a virtual `@mypaper/power-mode` namespace in the same
+are removed only if empty. Power entries use a virtual `@glaze/power-mode` namespace in the same
 journal: AC/DC GUIDs are restored with the supported API, never written to a guessed registry key.
 The complete plan is captured before the first write. A failed read prevents the transaction;
 a failed write attempts full rollback and retains the journal if rollback fails.
@@ -60,9 +60,9 @@ Visibility flags read back live; process isolation applies to newly opened folde
 restores on quit and panic, and RAII covers error returns. A hard kill/abort is recovered on core's
 next start, after the existing single-instance check. A second core cannot undo a live core.
 
-The API restores preferences when mypaper exits. A power preference is not intentionally retained
+The API restores preferences when Glaze exits. A power preference is not intentionally retained
 after exit. A user editing an actively managed preference should first remove that field from
-`system`, so mypaper relinquishes it before the manual edit.
+`system`, so Glaze relinquishes it before the manual edit.
 
 ## Settings shortcuts and deliberate omissions
 
@@ -88,7 +88,7 @@ explain the tradeoffs and evidence limits.
 |---|---|
 | HAGS | Hardware/driver-dependent, system-wide configuration, potentially admin/restart. Use Graphics and benchmark that machine. [Microsoft DirectX team](https://devblogs.microsoft.com/directx/hardware-accelerated-gpu-scheduling/). |
 | Long paths | `HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled` requires admin; the app also needs `longPathAware`. Compatibility, not a build-speed claim. [Microsoft contract](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation). |
-| Defender exclusions / performance configuration | Administrative configuration changes scanning coverage. Diagnose before proposing targeted changes; mypaper neither elevates nor alters protection. [Performance analyzer](https://learn.microsoft.com/en-us/defender-endpoint/tune-performance-defender-antivirus), [exclusions](https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-antivirus-exclusions-overview). |
+| Defender exclusions / performance configuration | Administrative configuration changes scanning coverage. Diagnose before proposing targeted changes; Glaze neither elevates nor alters protection. [Performance analyzer](https://learn.microsoft.com/en-us/defender-endpoint/tune-performance-defender-antivirus), [exclusions](https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-antivirus-exclusions-overview). |
 | Dev Drive creation/trust | Needs admin and a user-chosen new volume/VHD; not an in-place conversion of the user's files. [Dev Drive setup](https://learn.microsoft.com/en-us/windows/dev-drive/). |
 | MPO disabling | An HKLM vendor troubleshooting workaround requiring admin/restart, with composition/power tradeoffs. No generic optimization is offered. [NVIDIA workaround](https://nvidia.custhelp.com/app/answers/detail/a_id/5157/), [MPO benefits](https://nvidia.custhelp.com/app/answers/detail/a_id/5159/). |
 | Historical background capture | Its [WinRT settings API](https://learn.microsoft.com/en-us/uwp/api/windows.media.capture.appcapturesettings.ishistoricalcaptureenabled) is restricted to provisioned developer accounts. The old device policy is not a current per-user capture switch. Use Captures; do not confuse capture with Game Bar installation. |
@@ -97,7 +97,7 @@ explain the tradeoffs and evidence limits.
 
 ## Game activity API
 
-`mypaper_tweaks::game_activity` exports:
+`glaze_tweaks::game_activity` exports:
 
 - `classify(notification_state: Option<i32>, foreground_covers_monitor: bool, foreground_pid: u32) -> Activity`:
   pure policy, prioritizing `QUNS_RUNNING_D3D_FULL_SCREEN`, `QUNS_PRESENTATION_MODE`, `QUNS_BUSY`, then
@@ -110,11 +110,11 @@ explain the tradeoffs and evidence limits.
 - `GameWatcher::start() -> Result<GameWatcher>`: one session publisher, on a thread that pumps
   Win32 messages. It is bound to that thread. Drop removes every hook, hidden window, file and
   publisher lease. `system.game_activity: false` creates none of these resources; absent/null enables it.
-- `path() -> Result<PathBuf>`: `%LOCALAPPDATA%\mypaper\game-activity.json`.
+- `path() -> Result<PathBuf>`: `%LOCALAPPDATA%\glaze\game-activity.json`.
 - `read() -> Option<(Snapshot, Owner)>`, where `Snapshot { publisher_pid, publisher_started,
   activity }` identifies the publisher by PID **and process creation time**. Missing/corrupt data,
   dead publisher or reused PID returns `None`. `Snapshot::open_owner()` also validates identity.
-- `watch(changed) -> Result<mypaper_fswatch::Watch>`: native directory notifications for atomic
+- `watch(changed) -> Result<glaze_fswatch::Watch>`: native directory notifications for atomic
   replacement/removal, released on drop. Callback should post to the consumer's loop.
 - `Owner::handle() -> HANDLE`: add this process handle to the consumer's wait set while holding
   `Owner`. A signaled handle invalidates the signal immediately after a crash. Re-read/replace the
@@ -174,7 +174,7 @@ The desktop menu's mouse hook and the tray-host worker also leave during games, 
 notification-area ownership to Explorer until resume. This avoids handling a game's mouse
 input or third-party tray updates while the shell is quiescent.
 
-The shell relays `mypaper_plugin_api::wire::HostMsg::GameActivity(bool)` to its helper (appended
+The shell relays `glaze_plugin_api::wire::HostMsg::GameActivity(bool)` to its helper (appended
 to the wire enum, preserving existing discriminants). It precedes opens after a helper restart.
 While true, the helper has **no background deadline**: timers, retries, move flushes and idle
 unloads stop. Plugin code receives no background I/O/system events. Queued state coalesces to
@@ -202,12 +202,12 @@ resolution, active copy job or other application's process is changed.
 
 ## Verification (2026-11-06)
 
-Checks use `CARGO_TARGET_DIR=C:\mypaper-targets\system-tweaks`.
+Checks use `CARGO_TARGET_DIR=C:\glaze-targets\system-tweaks`.
 
 - Config tests cover defaults, absent/null, strict names/enum choices and round trips.
 - Tweaks tests cover each setting's desired writes, boolean polarity, exact original type/bytes,
   absence, changed/removed fields, idempotence, drop, crash recovery and partial-write rollback.
-- `cargo check -p mypaper-core -p mypaper-shell` passed. Strict Clippy for config/tweaks passed;
+- `cargo check -p glaze-core -p glaze-shell` passed. Strict Clippy for config/tweaks passed;
   broader strict core Clippy initially encountered an unrelated bars unsafe-comment warning.
 - The real-registry/API probe applied both boolean values for each of the four registry settings
   and all three power modes, then removed each setting. Each pass compared **all six** originals

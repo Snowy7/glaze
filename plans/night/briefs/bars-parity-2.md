@@ -32,5 +32,5 @@ missing something, message the orchestrator in your report). Not `crates/studio`
 
 As round 1: DPI-aware captures of a couple of variants in a copy of `bars.json`, restoring the user's
 file byte for byte (hash before/after), desktop lock one action at a time, deploy live.
-`CARGO_TARGET_DIR=C:\mypaper-targets\bars-parity`. Stop when the six rows are closed, or after 2 hours.
+`CARGO_TARGET_DIR=C:\glaze-targets\bars-parity`. Stop when the six rows are closed, or after 2 hours.
 Report: rows closed with evidence, measurements, commits.

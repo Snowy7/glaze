@@ -19,7 +19,7 @@ use std::sync::Once;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::DirectComposition::{
     IDCompositionAnimation, IDCompositionDesktopDevice, IDCompositionRectangleClip,
@@ -43,7 +43,7 @@ use windows_core::Interface;
 use super::capture::{CaptureDevice, Crop};
 use super::request::{FadeCurve, Layer};
 
-const CLASS: PCWSTR = w!("mypaper.wallpaper.glass");
+const CLASS: PCWSTR = w!("glaze.wallpaper.glass");
 /// The glass's fade-in, matching the shell's open animation.
 pub const FADE: Duration = Duration::from_millis(300);
 
@@ -88,7 +88,7 @@ impl OverlayWindow {
                     | WS_EX_NOREDIRECTIONBITMAP
                     | WS_EX_NOACTIVATE,
                 CLASS,
-                w!("mypaper glass"),
+                w!("Glaze glass"),
                 WS_POPUP,
                 frame.x,
                 frame.y,
@@ -172,7 +172,7 @@ impl OverlayWindow {
         // A client can be raised without moving. Its UI-thread subclass follows this handle
         // in the same message, keeping engine glass paired without a capture or GPU pass.
         // SAFETY: a value property on our own window, removed by Windows when it is destroyed.
-        unsafe { SetPropW(self.hwnd.0, w!("mypaper.glass.client"), Some(HANDLE(client.0)))? };
+        unsafe { SetPropW(self.hwnd.0, w!("glaze.glass.client"), Some(HANDLE(client.0)))? };
         move_under(self.hwnd.0, client, frame, false)?;
         self.set_clip(plate, radius, smoothing)
     }

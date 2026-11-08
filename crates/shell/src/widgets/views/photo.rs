@@ -1,8 +1,8 @@
 //! A photo frame: the picture filling the widget (**bleed**), on a light mount (**matte**), or
 //! as a **polaroid** with its caption. A click shows the next photo; a change crossfades.
 use super::{Ctx, PRIMARY};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Align, Op, Rect, Role, Scheme, Style, TextRole, Theme};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Align, Op, Rect, Role, Scheme, Style, TextRole, Theme};
 use std::sync::Arc;
 
 pub fn draw(c: &mut Ctx, r: Rect) {
@@ -18,7 +18,7 @@ pub fn draw(c: &mut Ctx, r: Rect) {
     let area = match variant.as_str() {
         "matte" => {
             c.f.fill(r, c.px(5.0), paper.knob.with_alpha(0.94));
-            r.inset(mypaper_ui::Insets::all((r.width().min(r.height()) * 0.065).clamp(c.px(6.0), c.px(20.0)).round()))
+            r.inset(glaze_ui::Insets::all((r.width().min(r.height()) * 0.065).clamp(c.px(6.0), c.px(20.0)).round()))
         }
         "polaroid" => {
             c.f.fill(r, c.px(4.0), paper.knob.with_alpha(0.96));
@@ -46,7 +46,7 @@ pub fn draw(c: &mut Ctx, r: Rect) {
 }
 
 /// `image` in `rect`: covering it (a centred crop, never stretched) or contained in it.
-fn picture(c: &mut Ctx, rect: Rect, image: &Arc<mypaper_ui::Image>, opacity: f32, contain: bool) {
+fn picture(c: &mut Ctx, rect: Rect, image: &Arc<glaze_ui::Image>, opacity: f32, contain: bool) {
     let ratio = if contain {
         (rect.width() / image.width as f32).min(rect.height() / image.height as f32)
     } else {

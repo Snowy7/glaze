@@ -9,12 +9,12 @@ if ($Debug -and $Samples -ne 0) {throw 'Performance samples require the release 
 if ($Profile -and ($Samples -ne 0 -or $Interactions)) {throw 'Use -Profile -Samples 0 separately from gates/interactions'}
 if ($Production -and ($Interactions -or $Profile -or $Debug)) {throw 'Production gates use the release shell separately from interactions/profiling'}
 $widgetLiveRoot=(Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
-$widgetLiveLock='C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$widgetLiveLock='C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 $widgetLiveEvidence=Join-Path $PSScriptRoot 'evidence'
 if ($Interactions) {$widgetLiveEvidence=Join-Path $widgetLiveEvidence 'interactions'}
 if ($Profile) {$widgetLiveEvidence=Join-Path $widgetLiveEvidence 'profile'}
 if ($Production) {$widgetLiveEvidence=Join-Path $widgetLiveEvidence $(if ($StatsProfile) {'production-stats-profile'} elseif ($WithoutDesktopMenu) {'production-without-menu'} elseif ($ProductionProfile) {'production-profile'} elseif ($Samples -ne 3) {'production-single'} else {'production'})}
-$widgetLiveData=Join-Path $env:TEMP ('mypaper-widget-parity-'+[Guid]::NewGuid().ToString('N'))
+$widgetLiveData=Join-Path $env:TEMP ('glaze-widget-parity-'+[Guid]::NewGuid().ToString('N'))
 $widgetLiveOldApp=$env:APPDATA
 $widgetLiveOldLocal=$env:LOCALAPPDATA
 $widgetLiveFixture=$null
@@ -60,7 +60,7 @@ public static class WidgetStartup {
    uint owner;GetWindowThreadProcessId(window,out owner);
    if(owner!=pid)return true;
    var name=new System.Text.StringBuilder(256);GetWindowText(window,name,256);
-   if(!name.ToString().StartsWith("mypaper widget "))return true;
+   if(!name.ToString().StartsWith("Glaze widget "))return true;
    Rect rect;
    if(IsWindowVisible(window)&&GetWindowRect(window,out rect)&&WindowFromPoint(new Point{x=(rect.left+rect.right)/2,y=(rect.top+rect.bottom)/2})==window)count++;
    return true;
@@ -83,14 +83,14 @@ public static class WidgetStartup {
  }
  public static void Snapshot(int pid) {
   IntPtr window=IntPtr.Zero;
-  while((window=FindWindowEx(new IntPtr(-3),window,"mypaper.shell.inbox",null))!=IntPtr.Zero) {
+  while((window=FindWindowEx(new IntPtr(-3),window,"glaze.shell.inbox",null))!=IntPtr.Zero) {
    uint owner;GetWindowThreadProcessId(window,out owner);
    if(owner==pid){PostMessage(window,0x8068,IntPtr.Zero,IntPtr.Zero);return;}
   }
  }
  public static void Close(int pid) {
   IntPtr window=IntPtr.Zero;
-  while((window=FindWindowEx(new IntPtr(-3),window,"mypaper.shell.inbox",null))!=IntPtr.Zero) {
+  while((window=FindWindowEx(new IntPtr(-3),window,"glaze.shell.inbox",null))!=IntPtr.Zero) {
    uint owner;GetWindowThreadProcessId(window,out owner);
    if(owner==pid){PostMessage(window,0x10,IntPtr.Zero,IntPtr.Zero);return;}
   }
@@ -101,14 +101,14 @@ try {
     Write-Output 'Waiting for desktop lock for worktree engine + bar/dock + six-widget fixture.'
     Enter-WidgetLiveLock
     $widgetLiveLockOwned=$true
-    New-Item -ItemType Directory -Path $widgetLiveEvidence,(Join-Path $widgetLiveData 'appdata\mypaper'),(Join-Path $widgetLiveData 'local'),(Join-Path $widgetLiveRoot 'docs\media') -Force | Out-Null
+    New-Item -ItemType Directory -Path $widgetLiveEvidence,(Join-Path $widgetLiveData 'appdata\glaze'),(Join-Path $widgetLiveData 'local'),(Join-Path $widgetLiveRoot 'docs\media') -Force | Out-Null
     Remove-Item -LiteralPath (Join-Path $widgetLiveEvidence 'budgets.json') -ErrorAction SilentlyContinue
-    Get-FileHash (Join-Path $widgetLiveRoot 'target\release\mypaper-shell.exe'),(Join-Path $widgetLiveRoot 'target\release\mypaper-wallpaper.exe'),(Join-Path $widgetLiveRoot 'target\release\examples\mypaper-widget-fixture.exe') | Select-Object Path,Hash | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence 'binaries.json')
-    $processes=Get-CimInstance Win32_Process | Where-Object { $_.Name -in 'mypaper-core.exe','mypaper-shell.exe','mypaper-wallpaper.exe' }
-    $widgetLiveCore=$processes | Where-Object Name -eq 'mypaper-core.exe' | Select-Object -First 1
+    Get-FileHash (Join-Path $widgetLiveRoot 'target\release\glaze-shell.exe'),(Join-Path $widgetLiveRoot 'target\release\glaze-wallpaper.exe'),(Join-Path $widgetLiveRoot 'target\release\examples\glaze-widget-fixture.exe') | Select-Object Path,Hash | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence 'binaries.json')
+    $processes=Get-CimInstance Win32_Process | Where-Object { $_.Name -in 'glaze-core.exe','glaze-shell.exe','glaze-wallpaper.exe' }
+    $widgetLiveCore=$processes | Where-Object Name -eq 'glaze-core.exe' | Select-Object -First 1
     $processes | Select-Object Name,ProcessId,ExecutablePath,CommandLine | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence 'original-processes.json')
     # Stop only the processes observed under this lock. The original core is restored in finally.
-    foreach ($process in ($processes | Sort-Object { if ($_.Name -eq 'mypaper-core.exe') {0} else {1} })) {
+    foreach ($process in ($processes | Sort-Object { if ($_.Name -eq 'glaze-core.exe') {0} else {1} })) {
         Stop-Process -Id $process.ProcessId -ErrorAction SilentlyContinue
     }
     Start-Sleep -Seconds 2
@@ -116,24 +116,24 @@ try {
     $env:LOCALAPPDATA=Join-Path $widgetLiveData 'local'
     $config=@{theme=(Join-Path $widgetLiveRoot 'themes\rain-city');paused=$false;pause_on_battery=$false;pause_on_fullscreen=$false;static_snapshot=$false}
     if ($WithoutDesktopMenu) {$config.desktop_menu=@{enabled=$false}}
-    [IO.File]::WriteAllText((Join-Path $env:APPDATA 'mypaper\config.json'),($config | ConvertTo-Json))
+    [IO.File]::WriteAllText((Join-Path $env:APPDATA 'glaze\config.json'),($config | ConvertTo-Json))
     # Floating Liquid bars, both displays; a paused media service and minute clocks.
-    [IO.File]::WriteAllText((Join-Path $env:APPDATA 'mypaper\bars.json'),'{"preset":"macos","taskbar":{"mode":"hide"},"look":{"style":"liquid"},"top":{"monitors":"all","clock":{"seconds":false}},"dock":{"enabled":true,"monitors":"all","autohide":false,"pinned":[]},"performance":"off"}')
-    $engineExe=Join-Path $widgetLiveRoot 'target\release\mypaper-wallpaper.exe'
+    [IO.File]::WriteAllText((Join-Path $env:APPDATA 'glaze\bars.json'),'{"preset":"macos","taskbar":{"mode":"hide"},"look":{"style":"liquid"},"top":{"monitors":"all","clock":{"seconds":false}},"dock":{"enabled":true,"monitors":"all","autohide":false,"pinned":[]},"performance":"off"}')
+    $engineExe=Join-Path $widgetLiveRoot 'target\release\glaze-wallpaper.exe'
     $widgetLiveEngine=Start-Process -FilePath $engineExe -WorkingDirectory $widgetLiveRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $widgetLiveEvidence 'engine-stdout.log') -RedirectStandardError (Join-Path $widgetLiveEvidence 'engine-stderr.log')
-    $env:MYPAPER_N4_FIXTURE='1'
-    $env:MYPAPER_N4_DESKTOP_VISIBLE='1'
-    $env:MYPAPER_N4_BARS='1'
-    $env:MYPAPER_WIDGETS_IGNORE_COVERED='1'
-    if ($Interactions) {$env:MYPAPER_N4_INTERACTIONS='1'}
-    if ($Profile) {$env:MYPAPER_N4_PROFILE='1'}
-    if ($Production) {$env:MYPAPER_N4_SEED_ONLY='1'}
+    $env:GLAZE_N4_FIXTURE='1'
+    $env:GLAZE_N4_DESKTOP_VISIBLE='1'
+    $env:GLAZE_N4_BARS='1'
+    $env:GLAZE_WIDGETS_IGNORE_COVERED='1'
+    if ($Interactions) {$env:GLAZE_N4_INTERACTIONS='1'}
+    if ($Profile) {$env:GLAZE_N4_PROFILE='1'}
+    if ($Production) {$env:GLAZE_N4_SEED_ONLY='1'}
     $fixtureProfile=if ($Debug) {'debug'} else {'release'}
-    $widgetLiveFixture=Start-Process -FilePath (Join-Path $widgetLiveRoot "target\$fixtureProfile\examples\mypaper-widget-fixture.exe") -ArgumentList '300' -WorkingDirectory $widgetLiveRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $widgetLiveEvidence 'fixture.log') -RedirectStandardError (Join-Path $widgetLiveEvidence 'fixture-stderr.log')
+    $widgetLiveFixture=Start-Process -FilePath (Join-Path $widgetLiveRoot "target\$fixtureProfile\examples\glaze-widget-fixture.exe") -ArgumentList '300' -WorkingDirectory $widgetLiveRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $widgetLiveEvidence 'fixture.log') -RedirectStandardError (Join-Path $widgetLiveEvidence 'fixture-stderr.log')
     # Windows PowerShell can lose ExitCode when a PassThru process exits before its handle
     # is retained; open it while alive so the final success check reads the native exit code.
     $null=$widgetLiveFixture.Handle
-    Remove-Item Env:MYPAPER_N4_FIXTURE,Env:MYPAPER_N4_DESKTOP_VISIBLE,Env:MYPAPER_N4_BARS,Env:MYPAPER_WIDGETS_IGNORE_COVERED,Env:MYPAPER_N4_INTERACTIONS,Env:MYPAPER_N4_PROFILE,Env:MYPAPER_N4_SEED_ONLY -ErrorAction SilentlyContinue
+    Remove-Item Env:GLAZE_N4_FIXTURE,Env:GLAZE_N4_DESKTOP_VISIBLE,Env:GLAZE_N4_BARS,Env:GLAZE_WIDGETS_IGNORE_COVERED,Env:GLAZE_N4_INTERACTIONS,Env:GLAZE_N4_PROFILE,Env:GLAZE_N4_SEED_ONLY -ErrorAction SilentlyContinue
     $readyDeadline=(Get-Date).AddSeconds(65)
     $engineRestarts=0
     do {
@@ -148,10 +148,10 @@ try {
     } until ($ready -or (Get-Date) -gt $readyDeadline)
     if (-not $ready) {throw 'Fixture did not become ready'}
     if ($Production) {
-        $productionLog=Join-Path $env:LOCALAPPDATA 'mypaper\mypaper.log'
+        $productionLog=Join-Path $env:LOCALAPPDATA 'glaze\glaze.log'
         $productionOffset=@(Get-Content -LiteralPath $productionLog -ErrorAction SilentlyContinue).Count
         $productionStartedAt=[long]0
-        $widgetLiveShell=[WidgetStartup]::Spawn((Join-Path $widgetLiveRoot 'target\release\mypaper-shell.exe'),[ref]$productionStartedAt)
+        $widgetLiveShell=[WidgetStartup]::Spawn((Join-Path $widgetLiveRoot 'target\release\glaze-shell.exe'),[ref]$productionStartedAt)
         $null=$widgetLiveShell.Handle
         $productionReadyDeadline=(Get-Date).AddSeconds(25)
         do {
@@ -193,7 +193,7 @@ try {
         } finally {$graphics.Dispose();$bitmap.Dispose()}
         Write-Output 'Screenshot saved; starting official 60-second measurements.'
         if (-not $Production) {
-            $snapshot=[System.Threading.EventWaitHandle]::OpenExisting("Local\mypaper-n4-fixture-snapshot-$($widgetLiveFixture.Id)")
+            $snapshot=[System.Threading.EventWaitHandle]::OpenExisting("Local\glaze-n4-fixture-snapshot-$($widgetLiveFixture.Id)")
             try {$snapshot.Set() | Out-Null} finally {$snapshot.Dispose()}
             $snapshotDeadline=(Get-Date).AddSeconds(5)
             do {
@@ -216,29 +216,29 @@ try {
             if ($phaseVisible -ne $phaseExpected) {throw "Diagnostic $phase visibility mismatch: $phaseVisible/$phaseExpected"}
             [WidgetStartup]::Threads($widgetLiveShell.Id) | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence "$phase-threads-before.json")
         }
-        & 'C:\Users\you\AppData\Local\Temp\mypaper-tools\measure.ps1' -Label $measureLabel -Seconds 60
+        & 'C:\Users\you\AppData\Local\Temp\glaze-tools\measure.ps1' -Label $measureLabel -Seconds 60
         if ($widgetLiveFixture.HasExited) {throw 'Fixture exited during a performance sample'}
         if ($Production -and $widgetLiveShell.HasExited) {throw 'Production shell exited during a performance sample'}
         if ($Production) {[WidgetStartup]::Snapshot($widgetLiveShell.Id)}
-        Copy-Item -LiteralPath "C:\Users\you\AppData\Local\Temp\mypaper-tools\measure-$measureLabel.json" -Destination $widgetLiveEvidence
+        Copy-Item -LiteralPath "C:\Users\you\AppData\Local\Temp\glaze-tools\measure-$measureLabel.json" -Destination $widgetLiveEvidence
         if ($ProductionProfile) {
             Enter-WidgetLiveLock
             try {
                 [WidgetStartup]::Threads($widgetLiveShell.Id) | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence "$phase-threads-after.json")
                 if ($StatsProfile -and $sample -lt 3) {
-                    $diagnosticLayout=Join-Path $env:APPDATA 'mypaper\widgets.json'
+                    $diagnosticLayout=Join-Path $env:APPDATA 'glaze\widgets.json'
                     $diagnosticDoc=Get-Content -Raw -LiteralPath $diagnosticLayout | ConvertFrom-Json
                     $diagnosticSystem=$diagnosticDoc.instances | Where-Object widget -eq 'system-monitor'
                     if (-not $diagnosticSystem.settings) {$diagnosticSystem | Add-Member -NotePropertyName settings -NotePropertyValue ([pscustomobject]@{}) -Force}
                     $diagnosticSystem.settings | Add-Member -NotePropertyName $(if ($sample -eq 1) {'gpu'} else {'net'}) -NotePropertyValue $false -Force
                     [IO.File]::WriteAllText($diagnosticLayout,($diagnosticDoc | ConvertTo-Json -Depth 30))
                 } elseif ($sample -eq 1) {
-                    $diagnosticLayout=Join-Path $env:APPDATA 'mypaper\widgets.json'
+                    $diagnosticLayout=Join-Path $env:APPDATA 'glaze\widgets.json'
                     $diagnosticDoc=Get-Content -Raw -LiteralPath $diagnosticLayout | ConvertFrom-Json
                     $diagnosticDoc.instances=@()
                     [IO.File]::WriteAllText($diagnosticLayout,($diagnosticDoc | ConvertTo-Json -Depth 30))
                 } elseif ($sample -eq 2) {
-                    $diagnosticConfig=Join-Path $env:APPDATA 'mypaper\config.json'
+                    $diagnosticConfig=Join-Path $env:APPDATA 'glaze\config.json'
                     $diagnosticDoc=Get-Content -Raw -LiteralPath $diagnosticConfig | ConvertFrom-Json
                     $diagnosticDoc | Add-Member -NotePropertyName desktop_menu -NotePropertyValue @{enabled=$false} -Force
                     [IO.File]::WriteAllText($diagnosticConfig,($diagnosticDoc | ConvertTo-Json -Depth 30))
@@ -260,7 +260,7 @@ try {
         [IO.File]::WriteAllText((Join-Path $widgetLiveEvidence 'production-exit-code.txt'),[string]$widgetLiveShell.ExitCode)
     }
     if (-not $Profile -and -not $widgetLiveFixture.HasExited) {
-        $stop=[System.Threading.EventWaitHandle]::OpenExisting("Local\mypaper-n4-fixture-stop-$($widgetLiveFixture.Id)")
+        $stop=[System.Threading.EventWaitHandle]::OpenExisting("Local\glaze-n4-fixture-stop-$($widgetLiveFixture.Id)")
         try {$stop.Set() | Out-Null} finally {$stop.Dispose()}
     }
     $widgetLiveFixture.WaitForExit(20000) | Out-Null
@@ -271,7 +271,7 @@ try {
     if ($Production -and $Samples -eq 3 -and -not $ProductionProfile) {
         $budgetRows=@(1..3 | ForEach-Object {
             $sampleDoc=Get-Content -Raw -LiteralPath (Join-Path $widgetLiveEvidence "measure-widget-production-$_.json") | ConvertFrom-Json
-            $sampleDoc.rows | Where-Object part -eq 'mypaper-shell'
+            $sampleDoc.rows | Where-Object part -eq 'glaze-shell'
         })
         if ($budgetRows.Count -ne 3) {throw 'Each sample must contain exactly one production shell'}
         $cpuMedian=@($budgetRows.cpu_core_pct | Sort-Object)[1]
@@ -287,11 +287,11 @@ try {
     $desktop=New-Object -ComObject Shell.Application
     try {$desktop.MinimizeAll();$widgetLiveMinimized=$true} finally {[void][Runtime.InteropServices.Marshal]::ReleaseComObject($desktop)}
     $startupRows=@()
-    $log=Join-Path $env:LOCALAPPDATA 'mypaper\mypaper.log'
+    $log=Join-Path $env:LOCALAPPDATA 'glaze\glaze.log'
     foreach ($run in $(if (-not $Interactions -and -not $Profile -and -not $ProductionProfile) {1..3})) {
         $lineOffset=@(Get-Content -LiteralPath $log -ErrorAction SilentlyContinue).Count
         $startedAt=[long]0
-        $widgetLiveShell=[WidgetStartup]::Spawn((Join-Path $widgetLiveRoot 'target\release\mypaper-shell.exe'),[ref]$startedAt)
+        $widgetLiveShell=[WidgetStartup]::Spawn((Join-Path $widgetLiveRoot 'target\release\glaze-shell.exe'),[ref]$startedAt)
         $firstPdh=$null
         $firstModuleObservation=$false
         $until=(Get-Date).AddSeconds(20)
@@ -335,12 +335,12 @@ try {
         $restoreShell=New-Object -ComObject Shell.Application
         try {$restoreShell.UndoMinimizeALL()} finally {[void][Runtime.InteropServices.Marshal]::ReleaseComObject($restoreShell)}
     }
-    if (Test-Path -LiteralPath (Join-Path $widgetLiveData 'local\mypaper')) {
-        Get-ChildItem -LiteralPath (Join-Path $widgetLiveData 'local\mypaper') -Filter '*.log' -Recurse | Copy-Item -Destination $widgetLiveEvidence
+    if (Test-Path -LiteralPath (Join-Path $widgetLiveData 'local\glaze')) {
+        Get-ChildItem -LiteralPath (Join-Path $widgetLiveData 'local\glaze') -Filter '*.log' -Recurse | Copy-Item -Destination $widgetLiveEvidence
     }
     $env:APPDATA=$widgetLiveOldApp
     $env:LOCALAPPDATA=$widgetLiveOldLocal
-    Remove-Item Env:MYPAPER_N4_FIXTURE,Env:MYPAPER_N4_DESKTOP_VISIBLE,Env:MYPAPER_N4_BARS,Env:MYPAPER_WIDGETS_IGNORE_COVERED,Env:MYPAPER_N4_INTERACTIONS,Env:MYPAPER_N4_PROFILE,Env:MYPAPER_N4_SEED_ONLY -ErrorAction SilentlyContinue
+    Remove-Item Env:GLAZE_N4_FIXTURE,Env:GLAZE_N4_DESKTOP_VISIBLE,Env:GLAZE_N4_BARS,Env:GLAZE_WIDGETS_IGNORE_COVERED,Env:GLAZE_N4_INTERACTIONS,Env:GLAZE_N4_PROFILE,Env:GLAZE_N4_SEED_ONLY -ErrorAction SilentlyContinue
     if ($widgetLiveCore) {
         $restoreArgs=$widgetLiveCore.CommandLine -replace '^(?:"[^"]+"|\S+)\s*',''
         if ($restoreArgs) {Start-Process -FilePath $widgetLiveCore.ExecutablePath -ArgumentList $restoreArgs -WorkingDirectory (Split-Path -Parent $widgetLiveCore.ExecutablePath) -WindowStyle Hidden | Out-Null}
@@ -349,7 +349,7 @@ try {
     # Only this run's exact, resolved temporary directory may be removed recursively.
     $resolvedLiveData=[System.IO.Path]::GetFullPath($widgetLiveData)
     $resolvedLiveTemp=[System.IO.Path]::GetFullPath($env:TEMP).TrimEnd('\')+'\'
-    if ($resolvedLiveData.StartsWith($resolvedLiveTemp,[StringComparison]::OrdinalIgnoreCase) -and (Split-Path -Leaf $resolvedLiveData) -like 'mypaper-widget-parity-*') {
+    if ($resolvedLiveData.StartsWith($resolvedLiveTemp,[StringComparison]::OrdinalIgnoreCase) -and (Split-Path -Leaf $resolvedLiveData) -like 'glaze-widget-parity-*') {
         Remove-Item -LiteralPath $resolvedLiveData -Recurse -Force -ErrorAction SilentlyContinue
     }
     } finally {

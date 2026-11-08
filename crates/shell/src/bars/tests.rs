@@ -1,10 +1,10 @@
 //! Goldens and alpha/hit tests use precisely the display lists the live surfaces present.
 use super::*;
-use mypaper_bars::{
+use glaze_bars::{
     apps::{Item, ItemWindow},
     style::{Family, NativeStyle, Scheme},
 };
-use mypaper_ui::{Image, Op, Rgba, render};
+use glaze_ui::{Image, Op, Rgba, render};
 
 #[test]
 fn fullscreen_keeps_dock_reveal_available_except_while_asleep_or_gaming() {
@@ -413,7 +413,7 @@ fn bars_match_goldens_in_each_style_and_keep_glass_bodies_hit_testable() {
         for (surface, frame) in [("top", top), ("dock", dock)] {
             let image = render(&mut ui, &frame.list, frame.size.0, frame.size.1).unwrap();
             assert_shape_hit_pixels(&frame, &image);
-            mypaper_ui::golden::check(&image, &golden.join(format!("{surface}-{name}.png")))
+            glaze_ui::golden::check(&image, &golden.join(format!("{surface}-{name}.png")))
                 .unwrap();
         }
     }
@@ -523,21 +523,21 @@ fn docks_on_all_edges_and_taskbar_module_clicks_have_alpha() {
 /// style. Glass is a stand-in (the style's tint at its strength, a rim line where it has a
 /// highlight); layout, sizes and which material each style picks are exact.
 #[test]
-#[ignore = "writes images: MYPAPER_BAR_GRID=<dir> [MYPAPER_BAR_BACKDROP=<image>]"]
+#[ignore = "writes images: GLAZE_BAR_GRID=<dir> [GLAZE_BAR_BACKDROP=<image>]"]
 fn preset_style_grid() {
-    let Ok(dir) = std::env::var("MYPAPER_BAR_GRID") else {
+    let Ok(dir) = std::env::var("GLAZE_BAR_GRID") else {
         return;
     };
     let dir = std::path::PathBuf::from(dir);
     let mut ui = Ui::new().unwrap();
-    let backdrop = std::env::var("MYPAPER_BAR_BACKDROP")
+    let backdrop = std::env::var("GLAZE_BAR_BACKDROP")
         .ok()
         .and_then(|p| Image::load(&ui, std::path::Path::new(&p)).ok())
         .map(std::sync::Arc::new);
     let mut model = model();
     model.notifications = None;
     let (width, height) = (1280_u32, 300_u32);
-    for preset in mypaper_bars::presets::Preset::ALL {
+    for preset in glaze_bars::presets::Preset::ALL {
         let preset_name = serde_json::to_value(preset).unwrap();
         for style in NativeStyle::ALL {
             let style_name = serde_json::to_value(style).unwrap();
@@ -556,14 +556,14 @@ fn preset_style_grid() {
                 &config, &model, &apps(), &dock_tokens, 1.0, (width, 120), &[], &[], &mut ui,
                 &mut images, None,
             );
-            let mut list = mypaper_ui::DisplayList::default();
+            let mut list = glaze_ui::DisplayList::default();
             if let Some(image) = &backdrop {
                 let k = (image.width as f32 / width as f32).min(image.height as f32 / height as f32);
                 list.ops.push(Op::Image {
-                    rect: mypaper_ui::Rect::new(0.0, 0.0, width as f32, height as f32),
+                    rect: glaze_ui::Rect::new(0.0, 0.0, width as f32, height as f32),
                     image: image.clone(),
                     opacity: 1.0,
-                    source: Some(mypaper_ui::Rect::new(0.0, 0.0, width as f32 * k, height as f32 * k)),
+                    source: Some(glaze_ui::Rect::new(0.0, 0.0, width as f32 * k, height as f32 * k)),
                 });
             }
             let dock_y = height as f32 - dock.size.1 as f32;
@@ -596,25 +596,25 @@ fn preset_style_grid() {
                 preset_name.as_str().unwrap(),
                 style_name.as_str().unwrap()
             );
-            mypaper_ui::golden::write(&image, &dir.join(name)).unwrap();
+            glaze_ui::golden::write(&image, &dir.join(name)).unwrap();
         }
     }
 }
 
 /// The docs' headless renders (`docs/media/native/bar-*.png`): the macOS preset's top bar and
-/// dock at 100 % and 150 %, dark and light, over `MYPAPER_BAR_BACKDROP` (a wallpaper PNG) with a
-/// flat stand-in for the engine's glass. Run with `MYPAPER_BAR_SHOTS=<dir>`.
-/// `MYPAPER_BAR_CONTENT_ONLY=1` draws only the bars' content on transparency, to lay over the
+/// dock at 100 % and 150 %, dark and light, over `GLAZE_BAR_BACKDROP` (a wallpaper PNG) with a
+/// flat stand-in for the engine's glass. Run with `GLAZE_BAR_SHOTS=<dir>`.
+/// `GLAZE_BAR_CONTENT_ONLY=1` draws only the bars' content on transparency, to lay over the
 /// engine's real glass from its frame lab, and prints each bar's glass shapes and material.
 #[test]
-#[ignore = "writes images: MYPAPER_BAR_SHOTS=<dir> [MYPAPER_BAR_BACKDROP=<png>]"]
+#[ignore = "writes images: GLAZE_BAR_SHOTS=<dir> [GLAZE_BAR_BACKDROP=<png>]"]
 fn headless_bar_renders() {
-    let Ok(dir) = std::env::var("MYPAPER_BAR_SHOTS") else {
+    let Ok(dir) = std::env::var("GLAZE_BAR_SHOTS") else {
         return;
     };
     let dir = std::path::PathBuf::from(dir);
     let mut ui = Ui::new().unwrap();
-    let backdrop = std::env::var("MYPAPER_BAR_BACKDROP")
+    let backdrop = std::env::var("GLAZE_BAR_BACKDROP")
         .ok()
         .and_then(|p| Image::load(&ui, std::path::Path::new(&p)).ok())
         .map(std::sync::Arc::new);
@@ -647,25 +647,25 @@ fn headless_bar_renders() {
                 &config, &model, &apps(), &dock_tokens, scale, (width, 400), &[], &[], &mut ui,
                 &mut images, None,
             );
-            let content_only = std::env::var_os("MYPAPER_BAR_CONTENT_ONLY").is_some();
+            let content_only = std::env::var_os("GLAZE_BAR_CONTENT_ONLY").is_some();
             for (name, frame, tokens) in [("top", top, &top_tokens), ("dock", dock, &dock_tokens)] {
                 let (w, h) = frame.size;
-                let mut list = mypaper_ui::DisplayList::default();
+                let mut list = glaze_ui::DisplayList::default();
                 if content_only {
                     eprintln!("{name} {scheme} {scale}: shapes {:?}, material {:?}", frame.shapes, tokens.material);
                     list.ops.extend(frame.list.ops.iter().cloned());
                     let image = render(&mut ui, &list, w, h).unwrap();
                     let pct = (scale * 100.0) as u32;
-                    mypaper_ui::golden::write(&image, &dir.join(format!("content-{name}-{scheme}-{pct}.png")))
+                    glaze_ui::golden::write(&image, &dir.join(format!("content-{name}-{scheme}-{pct}.png")))
                         .unwrap();
                     continue;
                 }
                 if let Some(image) = &backdrop {
                     list.ops.push(Op::Image {
-                        rect: mypaper_ui::Rect::new(0.0, 0.0, w as f32, h as f32),
+                        rect: glaze_ui::Rect::new(0.0, 0.0, w as f32, h as f32),
                         image: image.clone(),
                         opacity: 1.0,
-                        source: Some(mypaper_ui::Rect::new(0.0, 720.0, w as f32 / scale, h as f32 / scale)),
+                        source: Some(glaze_ui::Rect::new(0.0, 720.0, w as f32 / scale, h as f32 / scale)),
                     });
                 }
                 for &(rect, radius) in &frame.shapes {
@@ -675,7 +675,7 @@ fn headless_bar_renders() {
                 list.ops.extend(frame.list.ops.iter().cloned());
                 let image = render(&mut ui, &list, w, h).unwrap();
                 let pct = (scale * 100.0) as u32;
-                mypaper_ui::golden::write(&image, &dir.join(format!("bar-{name}-{scheme}-{pct}.png")))
+                glaze_ui::golden::write(&image, &dir.join(format!("bar-{name}-{scheme}-{pct}.png")))
                     .unwrap();
             }
         }
@@ -684,12 +684,12 @@ fn headless_bar_renders() {
 
 /// The README's desktop scene, bars half (`docs/media/readme`): the macOS preset's top bar and
 /// dock on a 2560×1440 screen at 150 %, dark, content only on transparency, plus their glass
-/// plates in the frame lab's `MYPAPER_LAB_PLATES` form (each bar's own material). Run with
-/// `MYPAPER_README_SCENE=<dir>` (the widgets half is in `widgets::tests`).
+/// plates in the frame lab's `GLAZE_LAB_PLATES` form (each bar's own material). Run with
+/// `GLAZE_README_SCENE=<dir>` (the widgets half is in `widgets::tests`).
 #[test]
-#[ignore = "writes images: MYPAPER_README_SCENE=<dir>"]
+#[ignore = "writes images: GLAZE_README_SCENE=<dir>"]
 fn readme_scene_bars() {
-    let Ok(dir) = std::env::var("MYPAPER_README_SCENE") else {
+    let Ok(dir) = std::env::var("GLAZE_README_SCENE") else {
         return;
     };
     let dir = std::path::PathBuf::from(dir);
@@ -714,15 +714,15 @@ fn readme_scene_bars() {
         &config, &model, &readme_apps(&dir), &dock_tokens, scale, (width, 400), &[], &[], &mut ui,
         &mut images, None,
     );
-    let mut list = mypaper_ui::DisplayList::default();
+    let mut list = glaze_ui::DisplayList::default();
     let mut plates = String::new();
     let dock_y = height as f32 - dock.size.1 as f32;
     for (frame, tokens, dy) in [(&top, &top_tokens, 0.0), (&dock, &dock_tokens, dock_y)] {
         let dx = ((width - frame.size.0) / 2) as f32;
         // The bar's own material where it resolves one (blur in physical pixels), else the
         // engine's default glass.
-        let m = tokens.material.map_or_else(mypaper_glass_ipc::Material::default, |m| {
-            mypaper_glass_ipc::Material {
+        let m = tokens.material.map_or_else(glaze_glass_ipc::Material::default, |m| {
+            glaze_glass_ipc::Material {
                 clarity: m.clarity,
                 blur: m.blur * scale,
                 refraction: m.refraction,
@@ -748,7 +748,7 @@ fn readme_scene_bars() {
     }
     let image = render(&mut ui, &list, width, height).unwrap();
     std::fs::create_dir_all(&dir).unwrap();
-    mypaper_ui::golden::write(&image, &dir.join("bars.png")).unwrap();
+    glaze_ui::golden::write(&image, &dir.join("bars.png")).unwrap();
     std::fs::write(dir.join("bars.plates"), plates).unwrap();
 }
 
@@ -756,7 +756,7 @@ fn readme_scene_bars() {
 /// them (written as PNGs under `dir/icons`); an icon that can't be read drops its app, so the
 /// dock never shows a letter placeholder.
 fn readme_apps(dir: &std::path::Path) -> Vec<Item> {
-    let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
+    let _apartment = glaze_desktop::desktop_wallpaper::Apartment::enter().unwrap();
     let studio = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/logo/png/mark-256.png");
     let apps = [
         ("File Explorer", r"C:\Windows\explorer.exe", true, true),
@@ -771,7 +771,7 @@ fn readme_apps(dir: &std::path::Path) -> Vec<Item> {
         .filter_map(|(i, (name, exe, pinned, open))| {
             let icon = crate::desktop_menu::shell_menu::file_icon(std::path::Path::new(exe), 256)?;
             let png = dir.join("icons").join(format!("{i}.png"));
-            mypaper_ui::golden::write(&icon, &png).ok()?;
+            glaze_ui::golden::write(&icon, &png).ok()?;
             Some(Item {
                 key: name.into(),
                 name: name.into(),
@@ -795,9 +795,9 @@ fn readme_apps(dir: &std::path::Path) -> Vec<Item> {
         })
         .collect();
     items.push(Item {
-        key: "mypaper Studio".into(),
-        name: "mypaper Studio".into(),
-        path: "mypaper-studio.exe".into(),
+        key: "Glaze Studio".into(),
+        name: "Glaze Studio".into(),
+        path: "glaze-studio.exe".into(),
         icon: Some(studio.display().to_string()),
         pinned: true,
         windows: vec![],

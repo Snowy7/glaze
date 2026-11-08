@@ -20,8 +20,8 @@ mod stack;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use mypaper_desktop::Rect;
-use mypaper_ui::glass::{Backdrop, GlassMaterial, GlassStyle, Shape};
+use glaze_desktop::Rect;
+use glaze_ui::glass::{Backdrop, GlassMaterial, GlassStyle, Shape};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
     IsWindow, SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE,
@@ -31,7 +31,7 @@ use self::request::{Channel, Layer, Material, Reply, Request};
 
 /// Sends this thread's glass requests to the engine from now on.
 pub fn install() {
-    mypaper_ui::glass::install(Rc::new(Client::default()));
+    glaze_ui::glass::install(Rc::new(Client::default()));
 }
 
 /// Starts WGC before a possible click. The bounded engine calls run on a worker so input
@@ -240,7 +240,7 @@ impl Backdrop for Client {
 /// Translate the already-resolved kit curve once per style request; names and motion policy
 /// have been resolved with the surface's configuration, never in an animation frame.
 fn fade_curve(style: &GlassStyle) -> request::FadeCurve {
-    use mypaper_ui::transition::Easing;
+    use glaze_ui::transition::Easing;
     match style.fade_curve {
         None => request::FadeCurve::DEFAULT,
         Some(Easing::Bezier(points)) => request::FadeCurve::bezier(points),
@@ -283,7 +283,7 @@ mod tests {
     fn overlay_keeps_the_resolved_stained_tint_strength() {
         let material = GlassMaterial {
             clarity: 0.78, blur: 12.0, refraction: 0.6, highlight: 0.55,
-            tint: mypaper_ui::Rgba::rgb8([200, 141, 60], 0.22),
+            tint: glaze_ui::Rgba::rgb8([200, 141, 60], 0.22),
         };
         assert_eq!(wire(&material).tint, [200, 141, 60, 56]);
     }
@@ -291,14 +291,14 @@ mod tests {
     #[test]
     fn wire_curves_follow_the_resolved_content_transition() {
         use crate::bars::{look::glass_fade, motion};
-        use mypaper_bars::style::{Curve, Motion, MotionStyle};
+        use glaze_bars::style::{Curve, Motion, MotionStyle};
         use std::time::{Duration, Instant};
-        let curves = mypaper_bars::style::NAMED_CURVES
+        let curves = glaze_bars::style::NAMED_CURVES
             .iter()
             .map(|name| Curve::Named((*name).into()))
             .chain([
                 Curve::Bezier([0.13, -0.4, 0.8, 1.7]),
-                Curve::Spring(mypaper_bars::style::Spring {
+                Curve::Spring(glaze_bars::style::Spring {
                     mass: 1.0,
                     stiffness: 80.0,
                     damping: 25.0,

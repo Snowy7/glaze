@@ -1,8 +1,8 @@
-//! Embed the same mypaper artwork used by Studio and the installer.
+//! Embed the same Glaze artwork used by Studio and the installer.
 fn main() {
     let root = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
-    println!("cargo:rerun-if-changed=mypaper-files.rc");
-    println!("cargo:rerun-if-changed=../../assets/logo/mypaper.ico");
+    println!("cargo:rerun-if-changed=glaze-files.rc");
+    println!("cargo:rerun-if-changed=../../assets/logo/glaze.ico");
     println!("cargo:rerun-if-env-changed=RC");
     let resource = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("files.res");
     let compiler = std::env::var_os("RC")
@@ -28,12 +28,12 @@ fn main() {
         .current_dir(root)
         .arg("/nologo")
         .arg(format!("/fo{}", resource.display()))
-        .arg("mypaper-files.rc")
+        .arg("glaze-files.rc")
         .status()
         .expect("compile Files icon resource");
     assert!(status.success(), "Files resource compilation failed");
     println!(
-        "cargo:rustc-link-arg-bin=mypaper-files={}",
+        "cargo:rustc-link-arg-bin=glaze-files={}",
         resource.display()
     );
 }

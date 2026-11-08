@@ -1,6 +1,6 @@
-import type * as Lifecycle from './generated/interfaces/mypaper-plugin-lifecycle.js';
+import type * as Lifecycle from './generated/interfaces/glaze-plugin-lifecycle.js';
 import { fromWit } from './compat.ts';
-export type { Event, Action, FaceOpen, InitInfo } from './generated/interfaces/mypaper-plugin-lifecycle.js';
+export type { Event, Action, FaceOpen, InitInfo } from './generated/interfaces/glaze-plugin-lifecycle.js';
 
 /** One plugin object per component instance. Handlers finish synchronously; I/O replies are
  * events. Returning undefined also prevents async handlers from silently discarding promises. */

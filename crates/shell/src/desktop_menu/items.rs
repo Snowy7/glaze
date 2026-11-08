@@ -1,17 +1,17 @@
 //! The desktop menu's items: which there are (from `desktop_menu` in the config, the desktop's
 //! current state and the shell's own menu, [`super::shell_menu`]) and what each does. Pure, so
-//! it is tested without a window; the menu itself (layout, drawing, input) is `mypaper_ui::Menu`.
+//! it is tested without a window; the menu itself (layout, drawing, input) is `glaze_ui::Menu`.
 //!
 //! The default menu is Windows 11's full desktop menu, with nothing behind "Show more options":
 //! View, Sort by, Refresh | Paste | Open in Terminal and the shell extensions | New (every
-//! registered type) | Display settings, Personalize | mypaper's own items. Every row has an icon:
+//! registered type) | Display settings, Personalize | Glaze's own items. Every row has an icon:
 //! the extension's own bitmap, else the Segoe Fluent glyph Windows 11 uses.
 
 use std::sync::Arc;
 
-use mypaper_config::desktop_menu::{Builtin, DesktopMenu, Entry as Configured};
-use mypaper_desktop::desktop_view::{IconSize, NewItem, SortKey};
-use mypaper_ui::{Entry, Image, MenuIcon};
+use glaze_config::desktop_menu::{Builtin, DesktopMenu, Entry as Configured};
+use glaze_desktop::desktop_view::{IconSize, NewItem, SortKey};
+use glaze_ui::{Entry, Image, MenuIcon};
 
 use super::shell_menu::{ShellIcon, ShellItem, Snapshot};
 
@@ -29,7 +29,7 @@ pub mod glyph {
     pub const DOCUMENT: char = '\u{E8A5}';
     /// An extension that brings no icon of its own.
     pub const APP: char = '\u{ECAA}';
-    // mypaper's own items, each its own glyph (Photo, Tiles, Add, Color), apart from Display
+    // Glaze's own items, each its own glyph (Photo, Tiles, Add, Color), apart from Display
     // settings' monitor, Personalize's brush, View's even grid and New's circled plus.
     pub const WALLPAPER: char = '\u{EB9F}';
     pub const WIDGETS: char = '\u{ECA5}';
@@ -94,8 +94,8 @@ pub struct ViewState {
 pub struct Sources<'a> {
     /// The shell's own menu, once the worker has built it.
     pub shell: Option<&'a Snapshot>,
-    /// mypaper's icon, for mypaper's items only where the icon font lacks their glyphs.
-    pub mypaper: Option<&'a Arc<Image>>,
+    /// Glaze's icon, for Glaze's items only where the icon font lacks their glyphs.
+    pub Glaze: Option<&'a Arc<Image>>,
     /// Plugins' menu items (`crate::widgets::plugin_events::menu_items`), already gated.
     pub plugins: &'a [crate::widgets::plugin_events::Contribution],
 }
@@ -138,10 +138,10 @@ fn sort_label(key: SortKey) -> &'static str {
 /// One slot of the configured menu, in the same order Studio edits it.
 enum Slot<'a> {
     Builtin(Builtin),
-    Custom(&'a mypaper_config::desktop_menu::Custom),
+    Custom(&'a glaze_config::desktop_menu::Custom),
 }
 
-/// The menu for `config` in `state` with mypaper's built-ins only (Studio's preview).
+/// The menu for `config` in `state` with Glaze's built-ins only (Studio's preview).
 pub fn build(config: &DesktopMenu, state: ViewState) -> Vec<Item> {
     build_with(config, state, Sources::default())
 }
@@ -158,7 +158,7 @@ pub fn build_with(config: &DesktopMenu, state: ViewState, sources: Sources) -> V
                 Configured::Custom(c) => Slot::Custom(c),
             })
             .collect::<Vec<_>>();
-    let mypaper = |glyph| match sources.mypaper {
+    let Glaze = |glyph| match sources.Glaze {
         Some(image) => MenuIcon::Image(image.clone()),
         None => MenuIcon::Glyph(glyph),
     };
@@ -167,16 +167,16 @@ pub fn build_with(config: &DesktopMenu, state: ViewState, sources: Sources) -> V
         match slot {
             Slot::Builtin(Builtin::More) => items.extend(extensions(sources.shell)),
             Slot::Builtin(b @ Builtin::Wallpaper) => {
-                items.push(builtin_item(b, state, sources).with_icon(mypaper(glyph::WALLPAPER)))
+                items.push(builtin_item(b, state, sources).with_icon(Glaze(glyph::WALLPAPER)))
             }
             Slot::Builtin(b @ Builtin::Widgets) => {
-                items.push(builtin_item(b, state, sources).with_icon(mypaper(glyph::WIDGETS)))
+                items.push(builtin_item(b, state, sources).with_icon(Glaze(glyph::WIDGETS)))
             }
             Slot::Builtin(b @ Builtin::AddWidget) => {
-                items.push(builtin_item(b, state, sources).with_icon(mypaper(glyph::ADD)))
+                items.push(builtin_item(b, state, sources).with_icon(Glaze(glyph::ADD)))
             }
             Slot::Builtin(b @ Builtin::Studio) => {
-                items.push(builtin_item(b, state, sources).with_icon(mypaper(glyph::STUDIO)))
+                items.push(builtin_item(b, state, sources).with_icon(Glaze(glyph::STUDIO)))
             }
             Slot::Builtin(b) => items.push(builtin_item(b, state, sources)),
             Slot::Custom(c) => items.push(
@@ -213,7 +213,7 @@ fn group_open(items: Vec<Item>) -> Vec<Item> {
         if let Some(short) = short_open_label(item.label()) {
             at.get_or_insert(out.len());
             let item = relabel(item, short);
-            // Two of the same ("Terminal": mypaper's and Windows Terminal's own handler): keep
+            // Two of the same ("Terminal": Glaze's and Windows Terminal's own handler): keep
             // the shell's, which opens exactly what the user installed.
             match group.iter().position(|g| g.label() == item.label()) {
                 Some(i) if is_shell(&item) && !is_shell(&group[i]) => group[i] = item,
@@ -295,7 +295,7 @@ fn tidy(items: Vec<Item>) -> Vec<Item> {
     out
 }
 
-/// Verbs of the shell's menu that mypaper's own items already cover.
+/// Verbs of the shell's menu that Glaze's own items already cover.
 const COVERED: [&str; 5] = ["display", "personalize", "refresh", "paste", "properties"];
 
 /// Is this the shell's "New" submenu?
@@ -304,7 +304,7 @@ fn is_new(item: &ShellItem) -> bool {
         if items.iter().any(|i| matches!(i, ShellItem::Action { verb, .. } if verb == "newfolder")))
 }
 
-/// The shell's items besides "New" and the ones mypaper covers.
+/// The shell's items besides "New" and the ones Glaze covers.
 fn extensions(shell: Option<&Snapshot>) -> Vec<Item> {
     let Some(shell) = shell else {
         return Vec::new();
@@ -460,7 +460,7 @@ fn builtin_item(builtin: Builtin, state: ViewState, sources: Sources) -> Item {
         Builtin::Wallpaper => Entry::action("Change wallpaper", Command::OpenStudio),
         Builtin::Widgets => Entry::action("Edit widgets", Command::EditWidgets),
         Builtin::AddWidget => Entry::action("Add widget", Command::AddWidget),
-        Builtin::Studio => Entry::action("mypaper Studio", Command::OpenStudio),
+        Builtin::Studio => Entry::action("Glaze Studio", Command::OpenStudio),
         Builtin::Display => {
             Entry::action("Display settings", Command::Display).with_icon(icon(glyph::DISPLAY))
         }
@@ -477,8 +477,8 @@ fn builtin_item(builtin: Builtin, state: ViewState, sources: Sources) -> Item {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mypaper_config::desktop_menu::Custom;
-    use mypaper_ui::{Tokens, Ui, icons, menu};
+    use glaze_config::desktop_menu::Custom;
+    use glaze_ui::{Tokens, Ui, icons, menu};
 
     fn config(items: Vec<Configured>) -> DesktopMenu {
         DesktopMenu {
@@ -491,7 +491,7 @@ mod tests {
         items.iter().map(Item::label).collect()
     }
 
-    /// A shell menu like this machine's: two extensions, "New", and verbs mypaper covers.
+    /// A shell menu like this machine's: two extensions, "New", and verbs Glaze covers.
     fn shell() -> Snapshot {
         let action = |label: &str, verb: &str, id| ShellItem::Action {
             label: label.into(),
@@ -527,7 +527,7 @@ mod tests {
 
     #[test]
     fn preview_order_is_the_editable_list_order_even_after_the_first_reorder() {
-        use mypaper_config::desktop_menu::default_items;
+        use glaze_config::desktop_menu::default_items;
         let mut config = DesktopMenu::default();
         for _ in 0..2 {
             let expected: Vec<_> = config.tidy_items().into_iter().filter_map(|entry| {
@@ -552,11 +552,11 @@ mod tests {
     }
 
     #[test]
-    fn the_default_menu_is_windows_full_menu_then_mypapers() {
+    fn the_default_menu_is_windows_full_menu_then_Glazes() {
         let shell = shell();
         let sources = Sources { plugins: &[],
             shell: Some(&shell),
-            mypaper: None,
+            Glaze: None,
         };
         let items = build_with(&DesktopMenu::default(), ViewState::default(), sources);
         assert_eq!(
@@ -580,7 +580,7 @@ mod tests {
                 "Change wallpaper",
                 "Edit widgets",
                 "Add widget",
-                "mypaper Studio",
+                "Glaze Studio",
             ]
         );
         // Every row has an icon; extensions run through the shell's own menu.
@@ -615,7 +615,7 @@ mod tests {
     }
 
     #[test]
-    fn an_installed_terminal_handler_replaces_mypapers_own() {
+    fn an_installed_terminal_handler_replaces_Glazes_own() {
         let mut shell = shell();
         shell.items.insert(
             0,
@@ -629,7 +629,7 @@ mod tests {
         );
         let sources = Sources { plugins: &[],
             shell: Some(&shell),
-            mypaper: None,
+            Glaze: None,
         };
         let items = build_with(&DesktopMenu::default(), ViewState::default(), sources);
         let open = items.iter().find(|i| i.label() == "Open in").unwrap();
@@ -745,10 +745,10 @@ mod tests {
     fn the_default_menu_matches_its_golden_images() {
         let mut ui = Ui::new().unwrap();
         // The bar theme's tokens, as the shell opens it (without the engine's glass here).
-        let theme = mypaper_ui::Theme::new(
-            mypaper_ui::Style::Liquid,
-            mypaper_ui::Scheme::Dark,
-            mypaper_ui::theme::SYSTEM_BLUE,
+        let theme = glaze_ui::Theme::new(
+            glaze_ui::Style::Liquid,
+            glaze_ui::Scheme::Dark,
+            glaze_ui::theme::SYSTEM_BLUE,
         );
         let tokens = Tokens {
             icons: icons::system_family(&ui.text),
@@ -766,7 +766,7 @@ mod tests {
         let shell = shell();
         let sources = Sources { plugins: &[],
             shell: Some(&shell),
-            mypaper: None,
+            Glaze: None,
         };
         let root = build_with(&DesktopMenu::default(), state, sources);
         let Entry::Submenu { items: view, .. } = root[0].plain() else {
@@ -779,7 +779,7 @@ mod tests {
             let edge = tokens.menu.shadow.ceil() as u32;
             let (w, h) = layout.size();
             let (w, h) = (w as u32, h as u32);
-            let image = mypaper_ui::render(&mut ui, &list, w + 2 * edge, h + 2 * edge).unwrap();
+            let image = glaze_ui::render(&mut ui, &list, w + 2 * edge, h + 2 * edge).unwrap();
             // Clicks hit every pixel of the body but its rounded corners (a layered window
             // passes alpha 0 through), and the far corner of the shadow margin is clear.
             let r = tokens.radius.ceil() as u32;
@@ -794,7 +794,7 @@ mod tests {
                 }
             }
             assert_eq!(image.pixel(0, 0)[3], 0);
-            mypaper_ui::golden::check(&image, &golden.join(format!("{name}.png"))).unwrap();
+            glaze_ui::golden::check(&image, &golden.join(format!("{name}.png"))).unwrap();
         }
     }
 }

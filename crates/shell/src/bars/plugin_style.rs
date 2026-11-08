@@ -8,13 +8,13 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use mypaper_bars::style::Look;
-use mypaper_theme::Appearance;
-use mypaper_ui::Rgba;
+use glaze_bars::style::Look;
+use glaze_theme::Appearance;
+use glaze_ui::Rgba;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-/// A token's value, as the plugin API's `token-value` (`mypaper_plugin_api::wire::TokenValue`).
+/// A token's value, as the plugin API's `token-value` (`glaze_plugin_api::wire::TokenValue`).
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub enum TokenValue {
     Color(String),
@@ -114,7 +114,7 @@ pub fn patch_look(surface: &str, bar: &str, raw: &Map<String, Value>, look: &mut
         match (name.as_str(), &value) {
             ("tint", TokenValue::Color(c)) if free(&["appearance", "tint"]) => {
                 if let Some((bytes, _)) = rgb(c) {
-                    appearance.tint = Some(mypaper_theme::Color(bytes));
+                    appearance.tint = Some(glaze_theme::Color(bytes));
                     // A tint needs a body to tint: a transparent design gets its glass back,
                     // unless the user chose transparent themselves.
                     if free(&["transparent"]) && free(&["background"]) {
@@ -146,10 +146,10 @@ pub fn patch_look(surface: &str, bar: &str, raw: &Map<String, Value>, look: &mut
 
 /// Theme colour roles (`accent`, `label`, `secondary`, `tertiary`, `separator`, `surface`, …) set
 /// to a hex colour or another role. `accent` stays the user's when `bars.json` names one.
-pub fn colors(tokens: &[(String, TokenValue)], raw: &Map<String, Value>, palette: &mut mypaper_ui::theme::Palette) {
+pub fn colors(tokens: &[(String, TokenValue)], raw: &Map<String, Value>, palette: &mut glaze_ui::theme::Palette) {
     let user_accent = raw.get("appearance").and_then(|a| a.get("accent")).is_some();
     for (name, value) in tokens {
-        let role = |p: &mypaper_ui::theme::Palette, n: &str| -> Option<Rgba> {
+        let role = |p: &glaze_ui::theme::Palette, n: &str| -> Option<Rgba> {
             Some(match n {
                 "label" => p.label,
                 "secondary" => p.secondary,
@@ -218,7 +218,7 @@ mod tests {
         // The user set the radius; the tint and its strength are free.
         let user = raw(json!({ "top": { "look": { "radius": 9 } } }));
         patch_look("top-bar", "top", &user, &mut look, &mut appearance);
-        assert_eq!(appearance.tint, Some(mypaper_theme::Color([0x3a, 0x6d, 0xf0])));
+        assert_eq!(appearance.tint, Some(glaze_theme::Color([0x3a, 0x6d, 0xf0])));
         assert_eq!(look.glass.tint, Some(0.18));
         assert_eq!(look.transparent, Some(false), "a tint brings the design's glass back");
         assert_eq!(look.radius, None, "the user's radius stays theirs");

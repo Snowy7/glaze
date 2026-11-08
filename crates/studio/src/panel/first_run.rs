@@ -13,8 +13,8 @@ use crate::{
     theme::glyph,
     ui::{B, Col},
 };
-use mypaper_ui::controls::{ButtonKind, Glyph, key};
-use mypaper_ui::{Rect, controls::Align};
+use glaze_ui::controls::{ButtonKind, Glyph, key};
+use glaze_ui::{Rect, controls::Align};
 
 pub const WELCOME: u8 = 0;
 pub const TASKBAR: u8 = 1;
@@ -25,7 +25,7 @@ pub const WALLPAPER: u8 = 5;
 pub const EXTRAS: u8 = 6;
 pub const DONE: u8 = 7;
 
-/// Whether `step` applies to this taskbar choice: bar steps need mypaper's bars, and the look
+/// Whether `step` applies to this taskbar choice: bar steps need Glaze's bars, and the look
 /// step needs bars or widgets to style.
 fn shown(step: u8, taskbar: usize) -> bool {
     match step {
@@ -242,7 +242,7 @@ fn contents(index: usize, taskbar: usize) -> String {
 
 /// A starter's picture: its material, shown as one readable widget over your wallpaper.
 fn starter_preview(app: &App, b: &mut B, index: usize, rect: Rect) {
-    use mypaper_config::look::Style;
+    use glaze_config::look::Style;
     let style = [Style::Liquid, Style::Fluent, Style::Oneui, Style::Mono][index.min(3)];
     super::specimens::material(app, b, rect, style);
 }
@@ -272,12 +272,12 @@ pub fn next_label(app: &App) -> &'static str {
 fn copy(step: u8) -> (&'static str, &'static str) {
     match step {
         WELCOME => (
-            "Welcome to mypaper",
+            "Welcome to Glaze",
             "Live wallpapers, a top bar and dock, and widgets on glass. All native, all light.",
         ),
         TASKBAR => (
             "Your taskbar",
-            "mypaper can replace Windows' taskbar with its own top bar and dock, or work \
+            "Glaze can replace Windows' taskbar with its own top bar and dock, or work \
              alongside it. You can switch any time.",
         ),
         LOOK => (
@@ -295,7 +295,7 @@ fn copy(step: u8) -> (&'static str, &'static str) {
         ),
         EXTRAS => (
             "Extras",
-            "Optional. mypaper does more than looks. Each of these is off until you turn it on, and every one turns off again in Studio.",
+            "Optional. Glaze does more than looks. Each of these is off until you turn it on, and every one turns off again in Studio.",
         ),
         WALLPAPER => (
             "Choose a wallpaper",
@@ -357,7 +357,7 @@ fn choices(app: &App, b: &mut B, c: &mut Col) {
         WELCOME => {}
         TASKBAR => group(b, c, "", |b, c| {
             for (i, (icon, label, caption)) in [
-                (glyph::BARS, "Use mypaper's bars", "A top bar and dock · Windows' taskbar hides"),
+                (glyph::BARS, "Use Glaze's bars", "A top bar and dock · Windows' taskbar hides"),
                 (glyph::APP, "Keep Windows' taskbar", "Add widgets to your Windows desktop"),
                 (glyph::WALLPAPERS, "Just the wallpaper", "No bars or widgets"),
             ]
@@ -408,8 +408,8 @@ fn choices(app: &App, b: &mut B, c: &mut Col) {
     }
 }
 
-/// Windows preferences mypaper can manage. Off removes the setting, so Windows' own value
-/// (journaled when mypaper took over) comes back.
+/// Windows preferences Glaze can manage. Off removes the setting, so Windows' own value
+/// (journaled when Glaze took over) comes back.
 const TWEAKS: [(&str, &str, &str); 3] = [
     ("show_extensions", "Show file extensions", "report.pdf, not just report"),
     ("show_hidden", "Show hidden files", "Leaves protected system files hidden"),
@@ -553,7 +553,7 @@ pub fn deadline(app: &App) -> Option<std::time::Instant> {
     Some(std::time::Instant::now() + std::time::Duration::from_millis(16))
 }
 
-fn centered(b: &mut B, r: Rect, label: &str, size: f32, weight: u16, ink: mypaper_ui::Rgba) {
+fn centered(b: &mut B, r: Rect, label: &str, size: f32, weight: u16, ink: glaze_ui::Rgba) {
     text(b, r, label, size, weight, ink, Align::Center);
 }
 
@@ -581,12 +581,12 @@ fn feature(app: &App, b: &mut B, r: Rect, alpha: f32, index: usize) {
                 photo(app, b, pic, i);
             }
         }
-        1 => super::specimens::material(app, b, pic, mypaper_config::look::Style::Liquid),
+        1 => super::specimens::material(app, b, pic, glaze_config::look::Style::Liquid),
         _ => bars_sketch(app, b, pic),
     });
     if alpha < 1.0 {
         let ops = b.list.ops.split_off(start);
-        b.list.ops.push(mypaper_ui::Op::Clipped {
+        b.list.ops.push(glaze_ui::Op::Clipped {
             rect: Rect::new(pic.left, pic.top, pic.width(), pic.height() * alpha),
             ops: ops.into(),
         });
@@ -607,13 +607,13 @@ fn bars_sketch(app: &App, b: &mut B, pic: Rect) {
     {
         photo(app, b, pic, i);
     }
-    let glass = mypaper_ui::Rgba::new(0.06, 0.07, 0.10, 0.55);
+    let glass = glaze_ui::Rgba::new(0.06, 0.07, 0.10, 0.55);
     let bar = Rect::new(pic.left, pic.top, pic.width(), pic.height() * 0.09);
     b.fill(bar, 0.0, glass);
     let dot = bar.height() * 0.32;
     for (i, x) in [0.04, 0.88, 0.93].into_iter().enumerate() {
         let w = if i == 0 { dot * 3.0 } else { dot };
-        b.fill(Rect::new(pic.left + pic.width() * x, bar.top + (bar.height() - dot) / 2.0, w, dot), dot / 2.0, mypaper_ui::Rgba::new(1.0, 1.0, 1.0, 0.8));
+        b.fill(Rect::new(pic.left + pic.width() * x, bar.top + (bar.height() - dot) / 2.0, w, dot), dot / 2.0, glaze_ui::Rgba::new(1.0, 1.0, 1.0, 0.8));
     }
     let tile = pic.height() * 0.11;
     let gap = tile * 0.35;
@@ -624,7 +624,7 @@ fn bars_sketch(app: &App, b: &mut B, pic: Rect) {
     for i in 0..count as usize {
         let r = Rect::new(dock.left + gap + i as f32 * (tile + gap), dock.top + gap, tile, tile);
         let shade = [0.95, 0.75, 0.85, 0.65, 0.9, 0.7][i];
-        b.fill(r, tile * 0.25, mypaper_ui::Rgba::new(shade, shade, shade, 0.9));
+        b.fill(r, tile * 0.25, glaze_ui::Rgba::new(shade, shade, shade, 0.9));
     }
 }
 
@@ -762,7 +762,7 @@ mod tests {
 
     #[test]
     fn taskbar_precedes_starters_and_every_pick_respects_that_choice() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State {
             page: super::super::Page::FirstRun,

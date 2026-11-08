@@ -8,7 +8,7 @@ use crate::{
     transfer::{self, DropTarget},
 };
 use anyhow::Result;
-use mypaper_ui::{icons::Icon, *};
+use glaze_ui::{icons::Icon, *};
 use std::{
     collections::{BTreeSet, HashMap, HashSet, VecDeque},
     path::Path,
@@ -127,7 +127,7 @@ pub struct App {
     pub active_tab: usize,
     cache: crate::tabs::FolderCache,
     pending_paint: Option<(Instant, bool, String)>,
-    pub layered: mypaper_ui::layered_app::LayeredApp,
+    pub layered: glaze_ui::layered_app::LayeredApp,
     pub surface: Surface,
     pub backdrop: std::rc::Rc<crate::backdrop::Client>,
     pub glass_active: bool,
@@ -193,9 +193,9 @@ pub fn clipboard_has_files() -> bool {
 
 impl App {
     pub fn new(path: String, scheme_override: Option<Scheme>) -> Result<Self> {
-        let surface = Surface::new(Kind::App { min: (900, 560) }, "mypaper Files", Role::Window)?;
+        let surface = Surface::new(Kind::App { min: (900, 560) }, "Glaze Files", Role::Window)?;
         native::install(surface.hwnd())?;
-        let layered = mypaper_ui::layered_app::LayeredApp::new(&surface)?;
+        let layered = glaze_ui::layered_app::LayeredApp::new(&surface)?;
         let backdrop = crate::backdrop::Client::install(surface.hwnd());
         let theme = crate::look::load(scheme_override);
         let s = surface.scale();
@@ -327,7 +327,7 @@ impl App {
     }
 
     pub fn prepare_backdrop(&mut self, bounds: Rect) -> bool {
-        use mypaper_ui::glass::{Backdrop, Shape};
+        use glaze_ui::glass::{Backdrop, Shape};
         let hwnd = self.surface.hwnd();
         let material = self.theme.glass.filter(|_| {
             // SAFETY: the surface owns this HWND; IsIconic only queries its state.
@@ -1617,7 +1617,7 @@ impl App {
                         SetWindowTextW(
                             self.surface.hwnd(),
                             &windows::core::HSTRING::from(format!(
-                                "{} — mypaper Files",
+                                "{} — Glaze Files",
                                 location.name
                             )),
                         )
@@ -1810,7 +1810,7 @@ impl App {
 
 impl Drop for App {
     fn drop(&mut self) {
-        use mypaper_ui::glass::Backdrop;
+        use glaze_ui::glass::Backdrop;
         self.backdrop.close(self.surface.hwnd());
     }
 }
@@ -1824,7 +1824,7 @@ mod tests {
         unsafe {
             windows::Win32::System::Ole::OleInitialize(None).unwrap();
         }
-        let path = std::path::Path::new(r"C:\mypaper-targets\files\scratch")
+        let path = std::path::Path::new(r"C:\glaze-targets\files\scratch")
             .join(format!("navigation-{}", std::process::id()));
         std::fs::create_dir_all(&path).unwrap();
         let path_text = path.to_string_lossy().into_owned();

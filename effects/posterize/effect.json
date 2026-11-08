@@ -1,6 +1,6 @@
 {
   "animated": false,
-  "author": "mypaper",
+  "author": "Glaze",
   "category": "color",
   "cost": 1.081,
   "cost_estimated": false,
@@ -43,5 +43,5 @@
       "source": "posterize.wgsl"
     }
   ],
-  "url": "https://github.com/Snowy7/mypaper"
+  "url": "https://github.com/Snowy7/__GLAZE_REPO__"
 }

@@ -22,8 +22,8 @@ function Invoke-PackageTool([string]$Tool, [string[]]$Arguments) {
 }
 
 # Changing a live process's registration does not change that process's identity.
-function Assert-MypaperStopped {
-    $running = @(Get-Process mypaper-core, mypaper-shell -ErrorAction SilentlyContinue)
+function Assert-GlazeStopped {
+    $running = @(Get-Process glaze-core, glaze-shell -ErrorAction SilentlyContinue)
     if ($running.Count) {
         $running | Select-Object Id, ProcessName, Path | Format-Table -AutoSize | Out-Host
         throw 'Stop core and shell before changing package registration (deploy-local.ps1 does this under the desktop lock).'

@@ -86,14 +86,14 @@ impl Quiet {
             unsafe { CreateEventW(None, false, false, PCWSTR::null())? }.0 as usize,
         ));
         let callback_event = event.clone();
-        let watcher = mypaper_tweaks::game_activity::watch(move || {
+        let watcher = glaze_tweaks::game_activity::watch(move || {
             // SAFETY: callback holds the event alive.
             let _ = unsafe { SetEvent(HANDLE(callback_event.0 as *mut _)) };
         })?;
         let monitor = gate.clone();
         // Apply startup policy before starting a scan, not after the monitor gets scheduled.
         gate.set(
-            mypaper_tweaks::game_activity::read()
+            glaze_tweaks::game_activity::read()
                 .is_some_and(|(snapshot, _)| snapshot.activity.pause_background),
         );
         std::thread::Builder::new()
@@ -101,7 +101,7 @@ impl Quiet {
             .spawn(move || {
                 let _watcher = watcher;
                 loop {
-                    let publisher = mypaper_tweaks::game_activity::read();
+                    let publisher = glaze_tweaks::game_activity::read();
                     let changed = monitor.set(
                         publisher
                             .as_ref()

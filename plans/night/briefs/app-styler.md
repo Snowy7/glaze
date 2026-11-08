@@ -7,7 +7,7 @@ parallel; read it when it lands (check `git log -- docs/research`), but don't wa
 
 ## Decision already made (by the user, 2026-11-04)
 
-mypaper is standalone: no Windhawk or other third-party tool. Restyling the **inside** of File
+Glaze is standalone: no Windhawk or other third-party tool. Restyling the **inside** of File
 Explorer and Settings is our own opt-in styler: a DLL loaded only into `explorer.exe` and
 `SystemSettings.exe` through the documented XAML Diagnostics API (`InitializeXamlDiagnosticsEx` +
 a TAP DLL implementing `IObjectWithSite`, using `IVisualTreeService3` / `IXamlDiagnostics` to walk
@@ -17,7 +17,7 @@ view and nav tree (DirectUI/Win32) are a stretch goal.
 
 ## Goal
 
-Make Explorer's and Settings' XAML parts follow the active mypaper look, and deeply customizable:
+Make Explorer's and Settings' XAML parts follow the active Glaze look, and deeply customizable:
 
 1. **Spike first (prove it, 45 min max):** attach to `SystemSettings.exe`, set one property on one
    element (e.g. the root background to transparent), see it change, detach cleanly. Then the same in
@@ -25,8 +25,8 @@ Make Explorer's and Settings' XAML parts follow the active mypaper look, and dee
    exactly why.
 2. **The styler:**
    - `crates/app-styler`: the TAP DLL (cdylib) and a small on-demand helper process
-     `mypaper-styler` that core starts only while the flag is on. The helper watches for allowlisted
-     processes (`mypaper_inject::evaluate`, never anything else), attaches once per process, and
+     `glaze-styler` that core starts only while the flag is on. The helper watches for allowlisted
+     processes (`glaze_inject::evaluate`, never anything else), attaches once per process, and
      hands it the current rules.
    - **Rules are data**: target elements by type name, `x:Name`, and ancestor path; set any
      dependency property from a string value (Background, Foreground, CornerRadius, Padding, Margin,
@@ -38,7 +38,7 @@ Make Explorer's and Settings' XAML parts follow the active mypaper look, and dee
    - **Live**: a rule change applies without restarting Explorer or Settings; new windows and
      re-created elements are styled as they appear (tree-change callbacks, no polling).
    - **Undo**: every changed value is recorded and restored on detach, theme change, flag off,
-     mypaper quit and the panic hotkey.
+     Glaze quit and the panic hotkey.
    - **Crash guard**: if a styled process dies within 60 s of attaching twice, stop styling that
      process for the session and log it; never attach to a process the allowlist rejects; tolerate
      missing elements across Windows builds without errors.
@@ -58,7 +58,7 @@ section in `docs/windows-styling.md`. Not `crates/studio`.
 ## Safety
 
 - Only `explorer.exe` and `SystemSettings.exe`, only through the allowlist, only with the flag on.
-- Test in Settings first. Explorer hosts the user's desktop: if it crashes it restarts, and mypaper
+- Test in Settings first. Explorer hosts the user's desktop: if it crashes it restarts, and Glaze
   recovers from Explorer restarts, but don't loop. Don't close or move the user's windows; open your
   own Explorer/Settings windows to test and close only those.
 - Leave the flag **off** in the user's `config.json` at the end unless the styler survived at least
@@ -66,7 +66,7 @@ section in `docs/windows-styling.md`. Not `crates/studio`.
 
 ## How
 
-- Use `CARGO_TARGET_DIR=C:\mypaper-targets\app-styler` for check/test; `C:\mypaper-targets\main` for
+- Use `CARGO_TARGET_DIR=C:\glaze-targets\app-styler` for check/test; `C:\glaze-targets\main` for
   the deploy build. Deploy bundling: add the DLL and helper to `scripts/deploy-local.ps1` (additive).
 - Look at DPI-aware captures of styled Explorer and Settings windows before calling anything done.
 

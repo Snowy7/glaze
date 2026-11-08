@@ -1,4 +1,4 @@
-//! The mypaper plugin SDK (docs/plugins.md): the only crate a plugin needs for mypaper.
+//! The Glaze plugin SDK (docs/plugins.md): the only crate a plugin needs for glaze.
 //!
 //! A plugin implements [`Plugin`] and calls [`run`]. The loop reads host messages from stdin,
 //! fires timers, and delivers the plugin's own background messages (`Ctx::sender`), all as typed

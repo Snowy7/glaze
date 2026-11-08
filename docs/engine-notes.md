@@ -64,7 +64,7 @@ really released.
 
 ### The floor: a bare wgpu DX12 device and swapchain
 
-`cargo run --release -p mypaper-wallpaper --example bare_wgpu -- fxc` creates a hidden window,
+`cargo run --release -p glaze-wallpaper --example bare_wgpu -- fxc` creates a hidden window,
 one 1440p swapchain, clears and presents one frame, then idles.
 
 | | Working set | Private |
@@ -169,7 +169,7 @@ played 10-bit video at 8 bits.
 Verification: unit tests render uniform frames through the real pipeline on a headless device
 and read the pixels back (10-bit and 8-bit SDR agree; PQ at 0/100/203/1000/10000 nits; HLG
 reference white; BT.2020 green clipping into BT.709), plus matrix, packing and tag tests.
-`cargo run -p mypaper-wallpaper --example hdr_clip -- out.mp4 [pq|hlg|sdr]` writes a 2-second
+`cargo run -p glaze-wallpaper --example hdr_clip -- out.mp4 [pq|hlg|sdr]` writes a 2-second
 1280x720 Main10 HEVC test clip (grey bars from 0.2 to 10000 nits, colour bars at 203 and 1000
 nits, a moving 4000-nit disc) through Media Foundation's sink writer, about 40 KB, so nothing
 needs committing. This machine's GPU driver supplies a hardware HEVC Main10 encoder; Windows has
@@ -206,7 +206,7 @@ What was wrong, in the order it bites:
    worktree path, the engine's rustc command line passes Windows' 32 KB limit, so cargo hands
    rustc an `@response` file and no capture is written (the libraries are captured, the engine
    binary never is). A short `CARGO_TARGET_DIR` fixes it; the script defaults to
-   `%SystemDrive%\mypaper-hotpatch`. (Fixed; the response-file cause is inferred from this
+   `%SystemDrive%\glaze-hotpatch`. (Fixed; the response-file cause is inferred from this
    behaviour and dx's source, not seen directly.) An `sccache` `rustc-wrapper` in a parent
    `.cargo/config.toml` was not the cause.
 3. **A second `dx serve` over an unchanged tree fails** ("Missing linker args"), and a failed or
@@ -252,7 +252,7 @@ README-ready text: replace the "Rust hot-patching (experimental, not working yet
 ## Native plate engine (N0.3 / N2)
 
 The engine is the only hardware GPU process. Native shell plates arrive through
-`mypaper-glass-ipc`, a session-local page-file mapping protected by a seqlock and a named
+`glaze-glass-ipc`, a session-local page-file mapping protected by a seqlock and a named
 auto-reset wake event. The shell owns all animation. Geometry, including subpixel positions,
 is used directly: there is no engine spring, JSON file, registered glass message, fade timer
 or plate scratch texture. A dead writer clears its plates when its process handle signals;
@@ -277,12 +277,12 @@ The clear material uses a continuous fourth-power rounded corner profile, a circ
 cones coloured by the backdrop. Clarity jointly controls tint strength and luminance
 compression. Clear centres preserve the wallpaper; a caller can supply a dimming tint over bright media.
 The clear default has no shadow,
-matching the Tahoe clear references in `C:\mypaper-targets\refs\liquid-glass`. This pass does
+matching the Tahoe clear references in `C:\glaze-targets\refs\liquid-glass`. This pass does
 not introduce a regular-material drop shadow.
 
 ### Shell writer API
 
-The crate is `mypaper-glass-ipc` (`crates/glass-ipc`); all geometry/blur units are **physical
+The crate is `glaze-glass-ipc` (`crates/glass-ipc`); all geometry/blur units are **physical
 virtual-desktop pixels**, not DIPs. Clarity 1 is clear and 0 is tinted. Colours are straight
 sRGB RGBA in 0..=1. Radii are nonnegative; rect width/height must be positive and finite.
 
@@ -327,14 +327,14 @@ publication. Keep the writer on its creating thread: its lifetime mutex is threa
 Dropping it publishes an empty set and releases the lease. A second writer is rejected,
 including a recursive acquisition on the same thread. There is deliberately one shell writer.
 
-The named objects are `Local\mypaper.glass.v1`, `.wake`, and `.writer`. The 5,784-byte v1
+The named objects are `Local\glaze.glass.v1`, `.wake`, and `.writer`. The 5,784-byte v1
 mapping holds atomic sequence/QPC/PID/count fields and 96 x 15 atomic 32-bit payload words;
 there are no pointers, strings, serde or filesystem operations on this path. The odd/even
 sequence brackets atomic payload accesses, so readers neither tear a snapshot nor create
 Rust data races. Reader retries are bounded; the event remains signalled for a later publish.
 `qpc()` and `qpc_frequency()` expose the common Windows clock for the performance harness.
 
-`cargo run --release -p mypaper-wallpaper --example plates -- --seconds 120` publishes a
+`cargo run --release -p glaze-wallpaper --example plates -- --seconds 120` publishes a
 floating bar, dock and six widgets **on each monitor** (16 plates on this fixture).
 `--animate --hz <display rate>` moves both docks at that rate; no shell or second GPU device
 is created. Run this only under the desktop lock described in `plans/native/IMPLEMENTING.md`.
@@ -346,7 +346,7 @@ a tie; docs/glass.md, GPU default). There is no battery-dependent switch. `integ
 `high-performance` request wgpu's low-power and high-performance adapters. These are preferences when the requested class is unavailable.
 The selected adapter and requested preference are logged. Only the engine opens a device.
 
-Global and per-wallpaper user keys in `%APPDATA%\mypaper\config.json`:
+Global and per-wallpaper user keys in `%APPDATA%\glaze\config.json`:
 
 ```json
 {
@@ -373,7 +373,7 @@ Both files are watched. FPS changes apply in process; GPU changes exit with `EXI
 so the existing core supervisor releases and restarts only the engine on the selected adapter.
 A directly launched development engine exits with that code and needs its launcher to restart
 it. Invalid live config keeps the last valid settings. Studio controls are deferred to N7.
-The shared schema types are `mypaper_config::{GpuPreference, RenderOptions, EngineConfig,
+The shared schema types are `glaze_config::{GpuPreference, RenderOptions, EngineConfig,
 RenderSettings}`; theme `engine` uses `RenderOptions`. See their exact fields in
 `crates/config/src/engine.rs`.
 
@@ -461,7 +461,7 @@ grants, vendor notices and CC BY-NC-SA terms remain; obsolete page/JS hosts are 
 
 ### Timestamp telemetry
 
-`MYPAPER_GPU_TIMINGS=<absolute JSONL path>` enables the adapter's wgpu timestamp-query and
+`GLAZE_GPU_TIMINGS=<absolute JSONL path>` enables the adapter's wgpu timestamp-query and
 encoder-timestamp features. Four GPU stamps measure wallpaper, restore/backdrop and glass
 separately, per screen. Eight asynchronous readback slots avoid waiting for a map; file output
 runs on a worker. Unsupported queries fail explicitly instead of substituting CPU timings.
@@ -469,7 +469,7 @@ With telemetry disabled there are no queries, readback buffers, worker or pollin
 
 Each line contains `screen`, `frame`, `wallpaper_drawn`, `glass_drawn`, `sequence`,
 `wallpaper_ms`, `restore_ms`, `glass_ms`, `publish_to_submit_ms`, and `submit_qpc`.
-Publish-to-submit is a CPU delivery measurement. `MYPAPER_COMPOSITION_TIMING=1` additionally
+Publish-to-submit is a CPU delivery measurement. `GLAZE_COMPOSITION_TIMING=1` additionally
 calls `DwmFlush` after presenting both screens and records `publish_to_composition_ms`, an
 upper bound on display delivery. This benchmark-only wait is excluded from ordinary CPU
 baselines. [Microsoft documents](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/nf-dwmapi-dwmflush)
@@ -568,7 +568,7 @@ final-quality measurements and do not justify a policy change. Users can explici
 
 Raw CPU/RAM samples and GPU/lag summaries are committed under
 [`tools/perf/results/native-2026-11-04`](../tools/perf/results/native-2026-11-04).
-Full JSONL traces and fixed-time images remain in `C:/mypaper-targets/native-engine/`.
+Full JSONL traces and fixed-time images remain in `C:/glaze-targets/native-engine/`.
 The five `visuals/<theme>-web.png` / `-native.png` pairs and `visuals/weather-comparison.png`
 were inspected for photo/crop, preset colour, weather density and blur. WebGL/WGSL hash
 rounding changes individual rain/snow locations; the port is not pixel-identical to WebGL.
@@ -587,11 +587,11 @@ counter sample is excluded from N0.3 gates; its raw output is `restored-product-
 
 Cleanup limitation: automatic approval review rejected removal of the stopped test WebView
 profile, returning only "blocked by policy". No test WebView processes remain, but
-`C:/mypaper-targets/native-engine/release/native-stage/env-0/local/mypaper/webview2` was left
+`C:/glaze-targets/native-engine/release/native-stage/env-0/local/glaze/webview2` was left
 on disk. No user browser profile was targeted.
 
 Desktop cleanup stopped all fixture engines/writers and restarted the original
-`D:/Coding/projects/desktop/wallpaper/target/release/mypaper-core.exe`. The existing user's
+`D:/Coding/projects/desktop/wallpaper/target/release/glaze-core.exe`. The existing user's
 `bars.json` has `taskbar.mode: "hide"`: a final show request left the primary taskbar hidden
 and the secondary visible. That user setting was not changed. Another agent subsequently
 acquired the desktop lock for its own session; its processes/lock were left alone.
@@ -640,7 +640,7 @@ separate CC BY background credits. The other seven selections use MIT or CC BY 4
   default mouse position to avoid cursor-driven camera jumps; its midnight variant only
   grades the output. The existing snapshot tests now reference the relocated Aurora.
 - The ignored `snapshot::tests::still_of_a_theme` helper renders native sources through the
-  actual offscreen DX12 pipeline without changing the desktop. `MYPAPER_STILL` supplies
+  actual offscreen DX12 pipeline without changing the desktop. `GLAZE_STILL` supplies
   `theme;absolute-output.jpg;seconds;widthxheight`; its examples are in the test's comment.
 - Web dependencies are local. Fluids retains the upstream simulation with automatic original
   splats, reduced resolution and a 30 fps ceiling. Removing analytics also fixes its actual
@@ -698,12 +698,12 @@ preserved and the weather clock resets were removed.
 
 ### Checks and visual evidence
 
-With `CARGO_TARGET_DIR=C:\mypaper-targets\wallpapers`:
+With `CARGO_TARGET_DIR=C:\glaze-targets\wallpapers`:
 
-- `cargo test -p mypaper-theme --lib`: **12 passed**. Includes all 23 manifests, referenced
+- `cargo test -p glaze-theme --lib`: **12 passed**. Includes all 23 manifests, referenced
   assets, 15 curated previews, every file's attribution/size, strict hidden parsing and old-ID
   and old-path compatibility.
-- `cargo test -p mypaper-wallpaper sources::shader -- --nocapture`: **2 passed**. All four
+- `cargo test -p glaze-wallpaper sources::shader -- --nocapture`: **2 passed**. All four
   curated WGSL shaders compile through the actual DX12 engine prelude; uniform layout matches.
 - Independent catalog checks: **121 attributed files**, all sizes and SHA-256 hashes match;
   every curated preview is 640×360; independently counted new binaries match 23,947,981 bytes.
@@ -720,7 +720,7 @@ focused or rearranged. The desktop lock was released and the user's original rel
 was restored. Final video verification therefore covers decoded files and source motion,
 not an unobscured end-to-end recording of the engine's decoder restart.
 
-The final contact sheet is `C:\WINDOWS\TEMP\mypaper-curation-aeb50a5e75cd490fb27d58f080e87bfd\gallery-contact-sheet.png`;
+The final contact sheet is `C:\WINDOWS\TEMP\glaze-curation-aeb50a5e75cd490fb27d58f080e87bfd\gallery-contact-sheet.png`;
 the weather desktop contact is `weather-variants.png` in the same directory. These review
 artifacts are temporary and excluded from repository byte totals. Source fetch limits are
 recorded honestly: no current live Shadertoy popularity ranking or complete current Lively
@@ -809,11 +809,11 @@ with timestamp queries for GPU; CPU is % of one core):
 | borderless | `Allowed`, 0 yellow edge pixels | pass |
 
 Running it: take the desktop lock first, then
-`cargo build --release -p mypaper-wallpaper --example overlay_spike --example overlay_spike_popup`
+`cargo build --release -p glaze-wallpaper --example overlay_spike --example overlay_spike_popup`
 and `target/release/examples/overlay_spike popup 20 left`. The `desktop` scenario expects a web
-wallpaper showing, for example a second `mypaper-wallpaper fluids` run with `RUST_LOG=off`.
-`MYPAPER_SPIKE_NO_TIMING=1` leaves out the GPU timestamps (they wait for the GPU). Screenshots go
-to `%TEMP%\mypaper-overlay-spike\`.
+wallpaper showing, for example a second `glaze-wallpaper fluids` run with `RUST_LOG=off`.
+`GLAZE_SPIKE_NO_TIMING=1` leaves out the GPU timestamps (they wait for the GPU). Screenshots go
+to `%TEMP%\glaze-overlay-spike\`.
 
 In the engine since N3 (the shell's flyouts and menus use it; docs/bars.md "Flyouts (N3)"):
 - The engine creates `Overlays` in desktop mode with `Engine::overlay_gpu()` (`gpu.rs` exposes the
@@ -828,5 +828,5 @@ In the engine since N3 (the shell's flyouts and menus use it; docs/bars.md "Flyo
 - **Update rate:** `MIN_INTERVAL` is 1/30 s. With an animated window behind quick settings the
   engine used 1.8-2.1% of a core (~25 updates/s) and 0.12-0.15 ms GPU per update; 0 glass
   passes and no session once closed.
-- `MYPAPER_OVERLAY_TIMINGS=1` (with `MYPAPER_GPU_TIMINGS` for the timestamp feature) times the
+- `GLAZE_OVERLAY_TIMINGS=1` (with `GLAZE_GPU_TIMINGS` for the timestamp feature) times the
   overlays' GPU work; every open logs its open-to-glass time and every close the update totals.

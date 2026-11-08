@@ -1,6 +1,6 @@
 {
   "animated": true,
-  "author": "mypaper",
+  "author": "Glaze",
   "category": "motion",
   "cost": 0.325,
   "cost_estimated": false,
@@ -43,5 +43,5 @@
       "source": "zoom-pan.wgsl"
     }
   ],
-  "url": "https://github.com/Snowy7/mypaper"
+  "url": "https://github.com/Snowy7/__GLAZE_REPO__"
 }

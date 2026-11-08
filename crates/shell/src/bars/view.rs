@@ -1,14 +1,14 @@
 //! The top bar and dock as kit display lists, shared by the live windows, Studio's preview and
 //! the goldens.
 //!
-//! Everything is drawn with [`kit::Frame`] from the bar's [`Theme`](mypaper_ui::Theme)
+//! Everything is drawn with [`kit::Frame`] from the bar's [`Theme`](glaze_ui::Theme)
 //! (`look.rs`): the body is the kit's surface (an invisible hit fill over engine glass, or the
 //! style's own fill), items are washes, the kit's icons and the theme's type, and hover, press
 //! and keyboard focus come from the kit's [`Interaction`]. An explicit edge draws a hairline
 //! on glass too; its specular rim remains the material's own effect.
 //! Items sit on whole device pixels, so text, icons and tray bitmaps stay crisp at every DPI.
 use super::{look::Tokens, services::Model};
-use mypaper_bars::{
+use glaze_bars::{
     BarsConfig, Module, ModuleRef,
     actions::BarKind,
     apps::Item,
@@ -20,7 +20,7 @@ use mypaper_bars::{
     presets::TopDesign,
     style::{Family, Paint},
 };
-use mypaper_ui::{
+use glaze_ui::{
     Align, DisplayList, Image, Insets, Interaction, Op, Point, Rect, Rgba, Role, TextRole,
     TextStyle, Ui, icons::Icon, interact::State, kit,
 };
@@ -339,7 +339,7 @@ fn icon_size(
     module: &ModuleRef,
     config: &BarsConfig,
     kind: BarKind,
-    theme: &mypaper_ui::Theme,
+    theme: &glaze_ui::Theme,
 ) -> f32 {
     if kind == BarKind::Top {
         return config.top.icon.map_or_else(
@@ -497,7 +497,7 @@ fn contents(
                 &config.dock.clock
             };
             add(
-                mypaper_bars::clock::format(c, &model.clock),
+                glaze_bars::clock::format(c, &model.clock),
                 Glyph::None,
                 target,
                 ui,
@@ -521,7 +521,7 @@ fn contents(
             for item in model
                 .tray
                 .iter()
-                .filter(|i| i.pinned && i.id != mypaper_bars::tray::OVERFLOW)
+                .filter(|i| i.pinned && i.id != glaze_bars::tray::OVERFLOW)
             {
                 let glyph = item
                     .icon
@@ -547,7 +547,7 @@ fn contents(
             add(
                 String::new(),
                 glyph,
-                Target::Tray(mypaper_bars::tray::OVERFLOW.into()),
+                Target::Tray(glaze_bars::tray::OVERFLOW.into()),
                 ui,
                 images,
             );
@@ -623,7 +623,7 @@ fn contents(
                 )
             }),
             Module::Tray => match &c.target {
-                Target::Tray(id) if id == mypaper_bars::tray::OVERFLOW => {
+                Target::Tray(id) if id == glaze_bars::tray::OVERFLOW => {
                     Some("Hidden icons".into())
                 }
                 Target::Tray(id) => model
@@ -785,7 +785,7 @@ fn item(
             });
         }
         Glyph::Font(glyph) => {
-            let style = TextStyle::new(&mypaper_ui::icons::system_family(f.text), icon_px);
+            let style = TextStyle::new(&glaze_ui::icons::system_family(f.text), icon_px);
             let (w, h) = f.text.measure(glyph, &style);
             f.push(Op::Text {
                 rect: glyph_rect.place(w, h, Align::Center, Align::Center),

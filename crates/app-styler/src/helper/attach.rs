@@ -8,7 +8,7 @@ use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use mypaper_app_styler::{Attach, CLSID_TAP, Framework};
+use glaze_app_styler::{Attach, CLSID_TAP, Framework};
 use windows::Win32::Foundation::{CloseHandle, ERROR_NOT_FOUND, HMODULE};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, MODULEENTRY32W, Module32FirstW, Module32NextW, TH32CS_SNAPMODULE,

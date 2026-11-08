@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use anyhow::{Result, ensure};
 use bytemuck::{Pod, Zeroable};
-use mypaper_theme::{Fit, LoadedTheme, VideoWallpaper};
+use glaze_theme::{Fit, LoadedTheme, VideoWallpaper};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_NV12, DXGI_FORMAT_P010};
 use windows::Win32::Media::MediaFoundation::{
     MFNominalRange_0_255, MFVideoFormat_NV12, MFVideoFormat_P010, MFVideoPrimaries_BT2020,

@@ -3,14 +3,14 @@
 //! against client processes (`overlay_spike_popup.rs`).
 //!
 //! ```text
-//! cargo build --release -p mypaper-wallpaper --example overlay_spike --example overlay_spike_popup
+//! cargo build --release -p glaze-wallpaper --example overlay_spike --example overlay_spike_popup
 //! target/release/examples/overlay_spike popup [SECONDS]   # popups over app windows
 //! target/release/examples/overlay_spike desktop [SECONDS] # a widget over a web wallpaper (D-W)
 //! ```
 //!
 //! Take the desktop lock first (docs/engine-notes.md, "Glass overlays"). Every window it makes
 //! is in a child process it kills before exiting. `desktop` expects a web wallpaper already
-//! showing on the primary monitor. Pictures go to `%TEMP%\mypaper-overlay-spike\`.
+//! showing on the primary monitor. Pictures go to `%TEMP%\glaze-overlay-spike\`.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, WPARAM};
 use windows::Win32::Graphics::Dwm::{DWM_TIMING_INFO, DwmGetCompositionTimingInfo};
 use windows::Win32::Graphics::Gdi::{
@@ -70,7 +70,7 @@ const fn rect(x: i32, y: i32, width: i32, height: i32) -> Rect {
     }
 }
 
-/// Logs to stderr (not the user's mypaper.log).
+/// Logs to stderr (not the user's glaze.log).
 struct Stderr;
 
 impl log::Log for Stderr {
@@ -88,7 +88,7 @@ impl log::Log for Stderr {
 fn main() -> Result<()> {
     static LOGGER: Stderr = Stderr;
     let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(log::LevelFilter::Info));
-    mypaper_desktop::enable_dpi_awareness();
+    glaze_desktop::enable_dpi_awareness();
     // SAFETY: the engine's apartment (window.rs), kept for the process.
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }.ok()?;
     let mut args = std::env::args().skip(1);
@@ -103,7 +103,7 @@ fn main() -> Result<()> {
             .contains(wgpu::Features::TIMESTAMP_QUERY)
     );
     let mut overlays = Overlays::new(gpu)?;
-    overlays.set_timing(std::env::var_os("MYPAPER_SPIKE_NO_TIMING").is_none());
+    overlays.set_timing(std::env::var_os("GLAZE_SPIKE_NO_TIMING").is_none());
     let mut harness = Harness {
         overlays,
         children: Vec::new(),
@@ -111,7 +111,7 @@ fn main() -> Result<()> {
         record: false,
         rows: Vec::new(),
         notes: Vec::new(),
-        out: std::env::temp_dir().join("mypaper-overlay-spike"),
+        out: std::env::temp_dir().join("glaze-overlay-spike"),
         // SAFETY: a plain query.
         thread: unsafe { GetCurrentThreadId() },
         phase: Duration::from_secs(seconds),
@@ -234,10 +234,10 @@ impl Harness {
         ));
 
         self.measure(
-            "over a small app window, mypaper's animated wallpaper running around it (DWM reports it dirty under the window)",
+            "over a small app window, Glaze's animated wallpaper running around it (DWM reports it dirty under the window)",
         )?;
 
-        // A plain app window over the whole monitor: mypaper's wallpaper pauses there, as under
+        // A plain app window over the whole monitor: Glaze's wallpaper pauses there, as under
         // a maximized app, so what changes from here on is only what the phases make change.
         let cover = self.spawn(&["static", &r(monitor_bounds()), "cover"])?;
         self.idle(Duration::from_secs(2));
@@ -495,7 +495,7 @@ impl Harness {
         self.note(format!(
             "clicks: the glass body hits the popup: {} (WindowFromPoint), received: {clicked}; the overlay's rim outside the popup hits {behind:?} (click-through: {})",
             at_body == hwnd,
-            at_ring != hwnd && behind != "mypaper.wallpaper.glass"
+            at_ring != hwnd && behind != "glaze.wallpaper.glass"
         ));
         Ok(())
     }

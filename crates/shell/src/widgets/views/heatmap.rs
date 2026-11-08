@@ -3,9 +3,9 @@
 //! their numbers) or **streak** (the days in a row, and the last four weeks as a strip).
 //! Squares step from the quiet fill to the accent in four levels.
 use super::{Ctx, ITEM};
-use mypaper_ui::calendar::{Date, MONTHS, MonthGrid, WEEKDAYS};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Align, Rect, Rgba, Role, TextRole};
+use glaze_ui::calendar::{Date, MONTHS, MonthGrid, WEEKDAYS};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Align, Rect, Rgba, Role, TextRole};
 
 /// A day's level, 0..=4, against the busier days (the 85th percentile).
 fn levels(c: &Ctx) -> impl Fn(u32) -> u32 + use<> {

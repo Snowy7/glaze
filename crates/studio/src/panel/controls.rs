@@ -1,8 +1,8 @@
 //! Panel row anatomy on the existing kit's drawing, focus, accessibility and hit machinery.
 
 use crate::panel::tokens::radius;
-use mypaper_ui::controls::{Align, Behavior, Font, Glyph, key};
-use mypaper_ui::{Point, Rect, Rgba, Role, TextStyle};
+use glaze_ui::controls::{Align, Behavior, Font, Glyph, key};
+use glaze_ui::{Point, Rect, Rgba, Role, TextStyle};
 
 use crate::actions::{Action, Edit, FieldId};
 use crate::app::{App, field_key};
@@ -34,7 +34,7 @@ pub fn row_height(b: &B, caption: &str) -> f32 {
     )
 }
 
-pub use mypaper_ui::controls::format_value as unit;
+pub use glaze_ui::controls::format_value as unit;
 
 /// Where a picture card's label starts: flush with the picture, just below it.
 pub fn card_label_top(b: &B, picture: Rect) -> f32 {
@@ -62,11 +62,11 @@ pub fn card_picture(b: &mut B, picture: Rect, hot: bool, draw: impl FnOnce(&mut 
         b.fill(picture, 0.0, wash);
     }
     let mut ops = b.list.ops.split_off(start);
-    fn square_canvas(ops: &mut [mypaper_ui::Op], picture: Rect) {
+    fn square_canvas(ops: &mut [glaze_ui::Op], picture: Rect) {
         for op in ops {
             match op {
-                mypaper_ui::Op::RoundedImage { rect, radius, .. }
-                | mypaper_ui::Op::Fill { rect, radius, .. }
+                glaze_ui::Op::RoundedImage { rect, radius, .. }
+                | glaze_ui::Op::Fill { rect, radius, .. }
                     if (rect.left - picture.left).abs() < 1.0
                         && (rect.top - picture.top).abs() < 1.0
                         && (rect.right - picture.right).abs() < 1.0
@@ -74,7 +74,7 @@ pub fn card_picture(b: &mut B, picture: Rect, hot: bool, draw: impl FnOnce(&mut 
                 {
                     *radius = 0.0
                 }
-                mypaper_ui::Op::Clipped { ops, .. } => {
+                glaze_ui::Op::Clipped { ops, .. } => {
                     square_canvas(std::sync::Arc::make_mut(ops), picture)
                 }
                 _ => {}
@@ -82,10 +82,10 @@ pub fn card_picture(b: &mut B, picture: Rect, hot: bool, draw: impl FnOnce(&mut 
         }
     }
     square_canvas(&mut ops, picture);
-    b.list.ops.push(mypaper_ui::Op::RoundedClipped {
+    b.list.ops.push(glaze_ui::Op::RoundedClipped {
         rect: picture,
         radius: b.px(radius::MEDIUM),
-        ops: vec![mypaper_ui::Op::Clipped {
+        ops: vec![glaze_ui::Op::Clipped {
             rect: picture,
             ops: ops.into(),
         }]
@@ -246,7 +246,7 @@ pub fn first_use_hint(app: &App, b: &mut B, c: &mut Col, page: super::Page) {
     icon_button(
         b,
         Rect::new(c.right() - b.px(24.0), top, b.px(24.0), b.px(24.0)),
-        mypaper_ui::icons::Icon::Close.into(),
+        glaze_ui::icons::Icon::Close.into(),
         &format!("Dismiss {id} hint"),
         true,
         Action::Set(
@@ -263,7 +263,7 @@ mod display_hint_tests {
 
     #[test]
     fn place_names_and_display_actions_follow_physical_order() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         app.monitors[0].rect.x = 1920;
@@ -285,7 +285,7 @@ mod display_hint_tests {
 
     #[test]
     fn dismissing_one_hint_changes_only_studio_settings_and_survives_a_rebuild() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         let before = [
@@ -415,12 +415,12 @@ pub fn feedback(b: &mut B, c: &mut Col, message: &str, actions: Vec<(&str, Actio
     }
     b.icon(
         Rect::new(c.x, c.y + b.px(9.0), b.px(16.0), b.px(16.0)),
-        mypaper_ui::icons::Icon::Warning,
+        glaze_ui::icons::Icon::Warning,
         14.0,
         b.p.ink2,
     );
     let style = font(b, 11.0, 400);
-    let style = mypaper_ui::TextStyle {
+    let style = glaze_ui::TextStyle {
         size: style.size * 12.0 / 11.0,
         ..style
     };
@@ -538,7 +538,7 @@ fn group_heading(b: &mut B, c: &mut Col, heading: &str, icon: Option<Glyph>, con
     // The plate is inserted under its contents after their height is known.
     b.list.ops.insert(
         at,
-        mypaper_ui::Op::Fill {
+        glaze_ui::Op::Fill {
             rect: Rect::new(c.x, start, c.w, inner.y - start + b.px(10.0)),
             radius: b.px(b.kit.radius.card),
             color: b.p.panel,
@@ -615,7 +615,7 @@ pub fn button(
         b.focus_ring(k, r, b.control_radius(r));
     } else {
         // Keep deferred actions discoverable to screen readers without making them focus stops.
-        b.list.hits.push(mypaper_ui::Hit {
+        b.list.hits.push(glaze_ui::Hit {
             id: u32::MAX - b.list.hits.len() as u32,
             rect: r,
             role: Role::Button,
@@ -646,7 +646,7 @@ pub fn icon_button(b: &mut B, r: Rect, icon: Glyph, label: &str, enabled: bool, 
         b.hit(k, r, Role::Button, label, action, Behavior::Click);
         b.focus_ring(k, r, b.control_radius(r));
     } else {
-        b.list.hits.push(mypaper_ui::Hit {
+        b.list.hits.push(glaze_ui::Hit {
             id: u32::MAX - b.list.hits.len() as u32,
             rect: r,
             role: Role::Button,
@@ -674,14 +674,14 @@ pub fn row(
 
 /// App identities reserve a centered 32 DIP box before either line of text.
 pub fn artwork_row(
-    b: &mut B, c: &mut Col, icon: Glyph, image: Option<&std::sync::Arc<mypaper_ui::Image>>,
+    b: &mut B, c: &mut Col, icon: Glyph, image: Option<&std::sync::Arc<glaze_ui::Image>>,
     label: &str, value: &str, caption: &str, action: Action,
 ) {
     row_content(b, c, Some(icon), image, true, label, value, caption, None, action);
 }
 
 fn row_content(
-    b: &mut B, c: &mut Col, icon: Option<Glyph>, image: Option<&std::sync::Arc<mypaper_ui::Image>>,
+    b: &mut B, c: &mut Col, icon: Option<Glyph>, image: Option<&std::sync::Arc<glaze_ui::Image>>,
     boxed: bool, label: &str, value: &str, caption: &str, checked: Option<bool>, action: Action,
 ) {
     let h = row_height(b, caption);
@@ -984,7 +984,7 @@ pub fn search(app: &App, b: &mut B, c: &mut Col) {
     );
     if let Some(f) = app.field.as_ref().filter(|f| f.id == id) {
         f.field.set_rect(inner);
-        b.list.ops.push(mypaper_ui::Op::TextField {
+        b.list.ops.push(glaze_ui::Op::TextField {
             rect: inner,
             field: f.field.clone(),
             revision: f.field.revision(),
@@ -1028,7 +1028,7 @@ pub fn search(app: &App, b: &mut B, c: &mut Col) {
         .filter(|field| field.id == id)
         .and_then(|field| field.field.text().ok())
         .unwrap_or_else(|| app.text(&id).to_owned());
-    b.semantics(k, mypaper_ui::Semantics::Text(value.into()));
+    b.semantics(k, glaze_ui::Semantics::Text(value.into()));
     b.focus_ring(k, r, b.px(radius::CONTROL));
     c.y += r.height();
 }
@@ -1057,7 +1057,7 @@ pub fn more(app: &App, b: &mut B, c: &mut Col, hint: &str) -> bool {
     b.icon(
         Rect::new(r.right - b.px(16.0), r.top, b.px(16.0), r.height()),
         if open {
-            mypaper_ui::icons::Icon::ChevronUp.into()
+            glaze_ui::icons::Icon::ChevronUp.into()
         } else {
             glyph::CHEVRON_DOWN
         },

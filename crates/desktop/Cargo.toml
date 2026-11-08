@@ -1,13 +1,13 @@
 [package]
-name = "mypaper-desktop"
+name = "glaze-desktop"
 description = "Win32 desktop plumbing: attach behind icons, monitors, occlusion, safe exits."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-mypaper-config.workspace = true
-mypaper-fswatch.workspace = true
+glaze-config.workspace = true
+glaze-fswatch.workspace = true
 
 anyhow.workspace = true
 env_logger.workspace = true

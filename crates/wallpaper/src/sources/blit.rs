@@ -5,7 +5,7 @@
 use std::cell::Cell;
 
 use bytemuck::{Pod, Zeroable};
-use mypaper_theme::Fit;
+use glaze_theme::Fit;
 
 /// Mirrors `struct Blit` in blit.wgsl.
 #[repr(C)]

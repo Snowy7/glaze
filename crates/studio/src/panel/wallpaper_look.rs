@@ -1,5 +1,5 @@
 //! The Look editor's wallpaper target, projected into today's theme appearance/glass fields.
-use mypaper_config::look::Style;
+use glaze_config::look::Style;
 use serde_json::{Value, json};
 
 use super::specimens::MaterialSample;
@@ -32,7 +32,7 @@ pub fn edit(wallpaper: &Wallpaper, path: &str, label: &str) -> Edit {
 
 pub fn selected(theme: &Value) -> Option<Style> {
     let style = |family| {
-        let appearance: mypaper_theme::Appearance =
+        let appearance: glaze_theme::Appearance =
             serde_json::from_value(theme.pointer(&format!("/{family}/appearance"))?.clone())
                 .ok()?;
         super::widget_look::selected(&appearance)
@@ -42,24 +42,24 @@ pub fn selected(theme: &Value) -> Option<Style> {
 }
 
 pub fn sample(app: &App, theme: &Value) -> MaterialSample {
-    let appearance: mypaper_theme::Appearance = theme
+    let appearance: glaze_theme::Appearance = theme
         .pointer("/widgets/appearance")
         .and_then(|value| serde_json::from_value(value.clone()).ok())
         .unwrap_or_default();
     let style = super::widget_look::selected(&appearance).unwrap_or(
-        if appearance.style == Some(mypaper_theme::WidgetStyle::Liquid) {
+        if appearance.style == Some(glaze_theme::WidgetStyle::Liquid) {
             Style::Liquid
         } else {
             Style::Mono
         },
     );
     let mut sample = MaterialSample::defaults(app, style);
-    let stored_glass: mypaper_theme::Liquid = theme
+    let stored_glass: glaze_theme::Liquid = theme
         .pointer("/widgets/glass")
         .and_then(|value| serde_json::from_value(value.clone()).ok())
         .unwrap_or_default();
-    let effective = appearance.over(&mypaper_widgets::look::defaults());
-    let glass = stored_glass.over(&mypaper_widgets::look::liquid_defaults());
+    let effective = appearance.over(&glaze_widgets::look::defaults());
+    let glass = stored_glass.over(&glaze_widgets::look::liquid_defaults());
     if style == Style::Liquid {
         sample.clarity = 1.0 - glass.tint.unwrap();
         sample.blur = glass.blur.unwrap();
@@ -73,10 +73,10 @@ pub fn sample(app: &App, theme: &Value) -> MaterialSample {
     }
     sample.tint = effective
         .tint
-        .map_or(sample.tint, |color| mypaper_ui::Rgba::rgb8(color.0, 1.0));
+        .map_or(sample.tint, |color| glaze_ui::Rgba::rgb8(color.0, 1.0));
     sample.radius = effective.radius.unwrap();
     sample.edge = effective.border.unwrap();
-    if appearance.surface == Some(mypaper_theme::Surface::Solid) {
+    if appearance.surface == Some(glaze_theme::Surface::Solid) {
         sample.clarity = 0.0;
     }
     if let Some((edit, value)) = &app.pending_value
@@ -96,9 +96,9 @@ pub fn sample(app: &App, theme: &Value) -> MaterialSample {
             }
         }
         if edit.path == self::edit(wallpaper, "/@both/appearance/tint", "").path
-            && let Some(color) = value.as_str().and_then(mypaper_config::Color::parse)
+            && let Some(color) = value.as_str().and_then(glaze_config::Color::parse)
         {
-            sample.tint = mypaper_ui::Rgba::rgb8(color.0, 1.0);
+            sample.tint = glaze_ui::Rgba::rgb8(color.0, 1.0);
         }
         if edit.path == self::edit(wallpaper, "/@both/appearance/radius", "").path
             && let Some(radius) = value.as_f64()
@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn opening_an_inactive_wallpapers_look_keeps_it_as_the_edit_target() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         app.size = (480, 1600);
@@ -321,14 +321,14 @@ mod tests {
 
     #[test]
     fn every_style_fits_the_theme_format_and_preserves_sources_and_family_css() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let app = crate::goldens::app(true, &ui);
         let original = json!({"name":"Own", "wallpaper":{"kind":"video","source":"clip.mp4","fit":"contain"},
             "widgets":{"css":"widget.css","appearance":{"font":"Segoe UI","tint":"#239569"}},
             "bars":{"css":"bars.css","appearance":{"text":"light","accent":"auto"}}});
         for style in Style::ALL {
             let next = with_style(&app, &original, style);
-            let parsed: mypaper_theme::Theme = serde_json::from_value(next.clone()).unwrap();
+            let parsed: glaze_theme::Theme = serde_json::from_value(next.clone()).unwrap();
             parsed.widgets.unwrap().glass.unwrap().validate().unwrap();
             assert_eq!(selected(&next), Some(style));
             assert_eq!(next["wallpaper"], original["wallpaper"]);

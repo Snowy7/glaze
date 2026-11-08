@@ -1,4 +1,4 @@
-Opened log file 'C:\mypaper-targets\app-styler\round5\diag-background.txt'
+Opened log file 'C:\glaze-targets\app-styler\round5\diag-background.txt'
 
 ************* Preparing the environment for Debugger Extensions Gallery repositories **************
    ExtensionRepository : Implicit
@@ -41,8 +41,8 @@ NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\D
 ************* Path validation summary **************
 Response                         Time (ms)     Location
 Deferred                                       srv*C:\symbols*https://msdl.microsoft.com/download/symbols
-OK                                             C:\mypaper-targets\app-styler\release
-Symbol search path is: srv*C:\symbols*https://msdl.microsoft.com/download/symbols;C:\mypaper-targets\app-styler\release
+OK                                             C:\glaze-targets\app-styler\release
+Symbol search path is: srv*C:\symbols*https://msdl.microsoft.com/download/symbols;C:\glaze-targets\app-styler\release
 Executable search path is: 
 
 +------------------------------------------------------------------------+
@@ -253,7 +253,7 @@ ModLoad: 00007ffe`795b0000 00007ffe`7987f000   C:\Windows\System32\certenroll.dl
 ModLoad: 00007ffe`794d0000 00007ffe`795a6000   C:\WINDOWS\SYSTEM32\certca.dll
 ModLoad: 00007ffe`18af0000 00007ffe`18b34000   C:\WINDOWS\system32\mlang.dll
 ModLoad: 00007ffe`a81f0000 00007ffe`a8215000   C:\WINDOWS\SYSTEM32\gpapi.dll
-ModLoad: 00007ffe`60ea0000 00007ffe`60f0f000   C:\Users\you\AppData\Local\mypaper\app-styler\tap-d31e3356ace3ee7a.dll
+ModLoad: 00007ffe`60ea0000 00007ffe`60f0f000   C:\Users\you\AppData\Local\glaze\app-styler\tap-d31e3356ace3ee7a.dll
 ModLoad: 00007ffe`84cd0000 00007ffe`84cfc000   C:\WINDOWS\SYSTEM32\VCRUNTIME140.dll
 (e2ac.cac): Break instruction exception - code 80000003 (first chance)
 ntdll!DbgBreakPoint:

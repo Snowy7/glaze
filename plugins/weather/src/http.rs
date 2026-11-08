@@ -86,7 +86,7 @@ impl Request {
         // within `chunk`, and the bounded output cannot allocate an unbounded server response.
         unsafe {
             let session = Handle::new(WinHttpOpen(
-                w!("mypaper-native/1.0"),
+                w!("glaze-native/1.0"),
                 WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                 PCWSTR::null(),
                 PCWSTR::null(),

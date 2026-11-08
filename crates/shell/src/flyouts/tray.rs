@@ -4,11 +4,11 @@
 
 use std::sync::Arc;
 
-use mypaper_bars::tray::OVERFLOW;
-use mypaper_bars::tray_data::TrayItem;
-use mypaper_ui::icons::Icon;
-use mypaper_ui::layout::{self, Align};
-use mypaper_ui::{Button, HitId, Image, Op, Role};
+use glaze_bars::tray::OVERFLOW;
+use glaze_bars::tray_data::TrayItem;
+use glaze_ui::icons::Icon;
+use glaze_ui::layout::{self, Align};
+use glaze_ui::{Button, HitId, Image, Op, Role};
 
 use super::kit::Kit;
 use super::{Cx, Effect, LIST, Panel};
@@ -114,7 +114,7 @@ impl Panel for Overflow {
     }
     fn context_owner(&self, id: HitId) -> Option<u32> {
         let item = self.items.get(id.checked_sub(LIST)? as usize)?;
-        mypaper_bars::tray_host::icon_owner(&item.id)
+        glaze_bars::tray_host::icon_owner(&item.id)
     }
     fn middle(&mut self, id: HitId, cx: &mut Cx) -> Effect {
         self.click(id, Button::Middle, cx)

@@ -1,6 +1,6 @@
 param([Parameter(Mandatory=$true)][string]$Out,[switch]$LockHeld)
 $ErrorActionPreference = 'Stop'
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 if (-not $LockHeld) {
   if (Test-Path -LiteralPath $lock) { throw 'Desktop lock is busy' }
   New-Item -ItemType Directory -Path $lock | Out-Null
@@ -21,7 +21,7 @@ public static class CoveredCapture {
   [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
 }
 '@
-  $studio = @(Get-Process mypaper-studio -ErrorAction Stop)
+  $studio = @(Get-Process glaze-studio -ErrorAction Stop)
   if ($studio.Count -ne 1) { throw 'Expected one Studio process' }
   $script:studioPid = [uint32]$studio[0].Id
   $script:windows = @()

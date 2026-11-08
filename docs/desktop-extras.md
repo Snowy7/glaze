@@ -1,7 +1,7 @@
 # Desktop extras: right-click menu, cursors, classic menu, interactive wallpapers
 
 Explorer's own UI (its menus, its title bars' contents, the taskbar's XAML) can only be restyled by
-code that runs *inside* Explorer. mypaper does not do that. This document is what can be done
+code that runs *inside* Explorer. Glaze does not do that. This document is what can be done
 **outside** it, with supported or well-known APIs, always reversible (the right-click menu is on
 by default; everything else is opt-in):
 
@@ -15,7 +15,7 @@ by default; everything else is opt-in):
 | [Desktop icons and icon size in the tray](#tray) | tray, **Desktop** submenu | documented (`IFolderView2`) |
 
 Nothing here injects code into another process. The one hook (the right-click menu's) lives in
-a thread of `mypaper-shell`, the native shell core supervises.
+a thread of `glaze-shell`, the native shell core supervises.
 
 ## Desktop right-click menu
 
@@ -31,7 +31,7 @@ a thread of `mypaper-shell`, the native shell core supervises.
 }
 ```
 
-A right-click on the **bare desktop** opens mypaper's menu (a themed window drawn by the native UI
+A right-click on the **bare desktop** opens Glaze's menu (a themed window drawn by the native UI
 layer, [ui.md](ui.md)) instead of Explorer's. A right-click on an **icon**, on any window, on the taskbar, or with **Shift** held,
 always gets the native menu. **On by default** (no `desktop_menu` key, or one without `enabled`);
 with `"enabled": false` nothing is installed: no hook, no thread. The Studio toggle and the tray's
@@ -40,8 +40,8 @@ with `"enabled": false` nothing is installed: no hook, no thread. The Studio tog
 **Why it's on.** Measured on the test machine (build 26300, two 1440p monitors, injected right
 clicks on the bare desktop, a poll every millisecond for the menu's window), the native Windows 11
 desktop menu takes **130 to 190 ms for its first window and 205 to 320 ms for the full menu with
-mypaper not running at all**, so the slowness is Windows' own (its XAML menu and the shell
-extensions), not ours; with mypaper running (menu off) it's the same with a web wallpaper (about
+Glaze not running at all**, so the slowness is Windows' own (its XAML menu and the shell
+extensions), not ours; with Glaze running (menu off) it's the same with a web wallpaper (about
 230 ms) and 300 to 510 ms in the first seconds after start with an image wallpaper (six clicks;
 a hint of load from the wallpaper's start, not a steady cost). Our menu opened in **17 to 50 ms**
 (median 25) on the same clicks when core hosted it, and in **11 to 15 ms** (median 13) from the
@@ -80,7 +80,7 @@ Windows 10).
 
 ### How it works
 
-Both threads are `mypaper-shell`'s (`crates/shell/src/desktop_menu/`); core only supervises it.
+Both threads are `glaze-shell`'s (`crates/shell/src/desktop_menu/`); core only supervises it.
 
 ```text
 hook thread                              the shell's UI thread
@@ -145,8 +145,8 @@ other programs' hooks (installed after ours) take when we pass the event on is n
 The press is the only event that does real work: `WindowFromPoint` asks the window under the cursor
 to hit-test (a cross-process call), which is most of its cost. It happens once per right-click.
 
-The menu in `mypaper-shell`, 2026-11-04, injected from another process like hardware input
-(`cargo run --release -p mypaper-shell --example menu_live`, with the shell running):
+The menu in `glaze-shell`, 2026-11-04, injected from another process like hardware input
+(`cargo run --release -p glaze-shell --example menu_live`, with the shell running):
 
 | Menu | |
 |---|---|
@@ -185,20 +185,20 @@ All by design or by the limits of a hook that must stay cheap; in each, the next
 ## Cursor themes
 
 ```json
-{ "name": "Midnight", "wallpaper": { ... }, "windows": { "accent": "auto", "cursors": "mypaper-dark" } }
+{ "name": "Midnight", "wallpaper": { ... }, "windows": { "accent": "auto", "cursors": "glaze-dark" } }
 ```
 
 `windows.cursors` takes:
 
-- `mypaper-dark` or `mypaper-light`: the two built-in sets, drawn **in code** (no third-party
+- `glaze-dark` or `glaze-light`: the two built-in sets, drawn **in code** (no third-party
   assets): modern monochrome pointers (a dark one with a white edge, a light one with a dark edge),
   17 cursors each (arrow, help, working in background, busy, precision, text, handwriting,
   unavailable, the four resize arrows, move, alternate, link, person, pin), crisp at 100% to 200%
   (32, 48 and 64 px images, anti-aliased from distance fields), the two busy cursors animated
-  (`.ani`, a 12-dot spinner). They are written to `%LOCALAPPDATA%\mypaper\cursors\<name>` the first time
-  they are used. `cargo run -p mypaper-tweaks --example export_cursors -- <folder>` writes them
+  (`.ani`, a 12-dot spinner). They are written to `%LOCALAPPDATA%\glaze\cursors\<name>` the first time
+  they are used. `cargo run -p glaze-tweaks --example export_cursors -- <folder>` writes them
   wherever you like, to look at or to start your own set from.
-- a **set name**: a folder under `%APPDATA%\mypaper\cursors`, or under the theme folder;
+- a **set name**: a folder under `%APPDATA%\glaze\cursors`, or under the theme folder;
 - a **folder path**: absolute, or relative to the theme folder (`"cursors/mine"`).
 
 A set folder holds `.cur` / `.ani` files named after the cursor they replace, case does not matter:
@@ -210,7 +210,7 @@ A set folder holds `.cur` / `.ani` files named after the cursor they replace, ca
 **How.** The values of `HKCU\Control Panel\Cursors` (what the Mouse control panel writes: one path per
 cursor as `REG_EXPAND_SZ`, the scheme name as the default value, `Scheme Source` = 1) are written,
 then `SystemParametersInfoW(SPI_SETCURSORS)` reloads them. They go through the same undo journal as
-the accent (`%LOCALAPPDATA%\mypaper\undo.json`): each original value, with its exact registry type, is
+the accent (`%LOCALAPPDATA%\glaze\undo.json`): each original value, with its exact registry type, is
 saved first, and restored on theme change, quit, the panic hotkey and after a crash. The journal
 also records which registry keys it had to *create*, and removes those again.
 
@@ -228,12 +228,12 @@ handler registers, and the trick is widely used (Nilesoft Shell and others), but
 promise it. It is also a global, user-visible change, so it is strictly opt-in. It is in the tray
 (**Desktop**, **Classic Windows 11 menu**) and in `config.json`.
 
-- **Journaled** in its own file, `%LOCALAPPDATA%\mypaper\undo-shell.json`. Unlike the styling
+- **Journaled** in its own file, `%LOCALAPPDATA%\glaze\undo-shell.json`. Unlike the styling
   journal it **outlives the run**: the menu stays classic until you turn the option off, and turning
   it off removes exactly what was added, including the registry keys that were created. A key you had
   added by hand is left alone.
-- **Explorer reads the value when it starts.** After a change mypaper shows a notice: restart
-  Explorer (Task Manager, Windows Explorer, Restart) or sign out and back in. **mypaper never
+- **Explorer reads the value when it starts.** After a change Glaze shows a notice: restart
+  Explorer (Task Manager, Windows Explorer, Restart) or sign out and back in. **Glaze never
   restarts Explorer.**
 - By hand: `reg delete "HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}" /f`.
 
@@ -277,7 +277,7 @@ Off by default; when off, nothing is registered and nothing runs.
 
 On recent Windows 11 builds Explorer composes the desktop itself: `Progman` has
 `WS_EX_NOREDIRECTIONBITMAP`, and `SHELLDLL_DefView` (the icons) is a *layered child* of `Progman`
-with the static wallpaper's `WorkerW` below it. mypaper already placed its windows between the two;
+with the static wallpaper's `WorkerW` below it. Glaze already placed its windows between the two;
 `DesktopHost` now also:
 
 - **detects** it (`DesktopHost::raised()`; the engine logs the host at start);
@@ -293,7 +293,7 @@ surface, `SHELLDLL_DefView` (layered), the wallpaper windows, the static `Worker
 ## Tray
 
 **Desktop** submenu: **Show desktop icons**, **Large / Medium / Small icons** (the check shows the
-current size), **mypaper right-click menu**, **Classic Windows 11 menu**. The first four act on
+current size), **Glaze right-click menu**, **Classic Windows 11 menu**. The first four act on
 Explorer's own desktop view (the same as Explorer's View menu); the last two write `config.json`.
 Note: like Explorer's View menu, changing the icon size makes Explorer re-save its icon layout.
 
@@ -302,9 +302,9 @@ Note: like Explorer's View menu, changing the icon size makes Explorer re-save i
 | What | Where |
 |---|---|
 | Menu config | `config.json` → `desktop_menu`, `classic_context_menu` |
-| Cursor sets | `%LOCALAPPDATA%\mypaper\cursors\<built-in>`, `%APPDATA%\mypaper\cursors\<yours>` |
-| Styling journal (accent, dark mode, cursors) | `%LOCALAPPDATA%\mypaper\undo.json` |
-| Classic menu journal | `%LOCALAPPDATA%\mypaper\undo-shell.json` |
+| Cursor sets | `%LOCALAPPDATA%\glaze\cursors\<built-in>`, `%APPDATA%\glaze\cursors\<yours>` |
+| Styling journal (accent, dark mode, cursors) | `%LOCALAPPDATA%\glaze\undo.json` |
+| Classic menu journal | `%LOCALAPPDATA%\glaze\undo-shell.json` |
 | Code | `crates/shell/src/desktop_menu/` (the menu), `crates/ui` (drawing it, [ui.md](ui.md)), `crates/desktop/src/{desktop_hit,desktop_view,raw_input}.rs`, `crates/tweaks/src/{cursors,cursor_art,classic_menu}.rs`, `crates/core/src/desktop_extras.rs` |
 | Live harnesses | `crates/shell/examples/menu_live.rs`, `crates/desktop/examples/{view_live,icons_live}.rs`, `crates/tweaks/examples/live_tweaks.rs` |
 

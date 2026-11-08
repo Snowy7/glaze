@@ -8,7 +8,7 @@
 //!   one) once per render size, then runs the rest at `fps` and `scale`.
 //!
 //! An effect that fails to load or compile is skipped; its error is logged and written, with
-//! the base's, to `%LOCALAPPDATA%\mypaper\stack-errors.json` for Studio.
+//! the base's, to `%LOCALAPPDATA%\glaze\stack-errors.json` for Studio.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -17,8 +17,8 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use bytemuck::{Pod, Zeroable};
-use mypaper_theme::stack::{self, Base, Blend, Diagnostic, Layer, StackWallpaper};
-use mypaper_theme::{LoadedTheme, ShaderWallpaper, VideoWallpaper};
+use glaze_theme::stack::{self, Base, Blend, Diagnostic, Layer, StackWallpaper};
+use glaze_theme::{LoadedTheme, ShaderWallpaper, VideoWallpaper};
 
 use super::scene::{Environment as SceneEnvironment, SceneOptions, SceneRenderer};
 use super::wic::{Budget, Decoder, Picture};
@@ -183,7 +183,7 @@ pub struct StackSource {
     /// This load's errors (also in stack-errors.json); read by the tests.
     #[cfg_attr(not(test), allow(dead_code))]
     pub errors: Vec<StackError>,
-    _watches: Vec<mypaper_fswatch::Watch>,
+    _watches: Vec<glaze_fswatch::Watch>,
 }
 
 /// Pipelines and bindings every stack shares.
@@ -198,7 +198,7 @@ struct Kit {
 }
 
 enum BaseDraw {
-    Picture(Picture, mypaper_theme::Fit, [f32; 2]),
+    Picture(Picture, glaze_theme::Fit, [f32; 2]),
     Color(wgpu::Color),
     Gradient {
         pipeline: wgpu::RenderPipeline,
@@ -1081,16 +1081,16 @@ impl BaseDraw {
     }
 }
 
-fn environment(e: mypaper_theme::Environment) -> SceneEnvironment {
+fn environment(e: glaze_theme::Environment) -> SceneEnvironment {
     match e {
-        mypaper_theme::Environment::Sky => SceneEnvironment::Sky,
-        mypaper_theme::Environment::Color => SceneEnvironment::Color,
-        mypaper_theme::Environment::Transparent => SceneEnvironment::Transparent,
+        glaze_theme::Environment::Sky => SceneEnvironment::Sky,
+        glaze_theme::Environment::Color => SceneEnvironment::Color,
+        glaze_theme::Environment::Transparent => SceneEnvironment::Transparent,
     }
 }
 
 /// A theme color as the frame's (display-encoded, unorm) value.
-fn display(color: mypaper_theme::Color) -> wgpu::Color {
+fn display(color: glaze_theme::Color) -> wgpu::Color {
     let [r, g, b] = color.0.map(|c| f64::from(c) / 255.0);
     wgpu::Color { r, g, b, a: 1.0 }
 }
@@ -1302,9 +1302,9 @@ impl LayerDraw {
                             gpu,
                             &kit.effect_pipeline_layout,
                             &module,
-                            "mypaper_vs",
+                            "glaze_vs",
                             &module,
-                            "mypaper_fx",
+                            "glaze_fx",
                         )
                     })?;
                     passes.push((pipeline, pass.scale));
@@ -1328,7 +1328,7 @@ impl LayerDraw {
             Layer::Image(l) => {
                 let path = theme.asset(&l.source);
                 let decoded = Decoder::new()?
-                    .decode(&path, Budget::new(gpu, mypaper_theme::Fit::Contain))
+                    .decode(&path, Budget::new(gpu, glaze_theme::Fit::Contain))
                     .with_context(|| format!("decoding {}", path.display()))?;
                 let texture = gpu.texture(
                     "stack image",
@@ -1371,9 +1371,9 @@ impl LayerDraw {
     }
 }
 
-/// `%LOCALAPPDATA%\mypaper\stack-errors.json`: this load's errors (empty when it is clean).
+/// `%LOCALAPPDATA%\glaze\stack-errors.json`: this load's errors (empty when it is clean).
 fn write_errors(theme: &LoadedTheme, errors: &[StackError]) {
-    let Some(dir) = std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("mypaper"))
+    let Some(dir) = std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("glaze"))
     else {
         return;
     };
@@ -1399,7 +1399,7 @@ fn write_errors(theme: &LoadedTheme, errors: &[StackError]) {
 
 /// Reloads the theme when a used effect outside its folder changes (the theme folder itself is
 /// watched by the control loop). Posts `WM_RELOAD` to the thread that loaded the stack.
-fn watch(dirs: &[PathBuf], _theme: &Path) -> Vec<mypaper_fswatch::Watch> {
+fn watch(dirs: &[PathBuf], _theme: &Path) -> Vec<glaze_fswatch::Watch> {
     use windows::Win32::Foundation::{LPARAM, WPARAM};
     use windows::Win32::System::Threading::GetCurrentThreadId;
     use windows::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
@@ -1407,7 +1407,7 @@ fn watch(dirs: &[PathBuf], _theme: &Path) -> Vec<mypaper_fswatch::Watch> {
     let thread = unsafe { GetCurrentThreadId() };
     dirs.iter()
         .filter_map(|dir| {
-            mypaper_fswatch::Watch::directory(dir, true, move |_| {
+            glaze_fswatch::Watch::directory(dir, true, move |_| {
                 // SAFETY: posting to a thread id is always safe; failure means it is gone.
                 let _ = unsafe {
                     PostThreadMessageW(thread, crate::window::WM_RELOAD, WPARAM(0), LPARAM(0))
@@ -1437,14 +1437,14 @@ mod tests {
 
     /// A stack theme in a fresh temp folder holding `files`.
     fn stack_in(name: &str, json: &str, files: &[(&str, &str)]) -> (LoadedTheme, StackWallpaper) {
-        let dir = std::env::temp_dir().join(format!("mypaper-stack-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("glaze-stack-{name}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         for (file, text) in files {
             std::fs::write(dir.join(file), text).unwrap();
         }
         let theme =
             LoadedTheme::parse(dir, &format!(r#"{{ "name": "t", "wallpaper": {json} }}"#)).unwrap();
-        let mypaper_theme::Wallpaper::Stack(config) = theme.theme.wallpaper.clone() else {
+        let glaze_theme::Wallpaper::Stack(config) = theme.theme.wallpaper.clone() else {
             unreachable!()
         };
         (theme, config)
@@ -1653,7 +1653,7 @@ mod tests {
     fn the_demo_theme_renders_non_black_moving_frames() {
         let gpu = Gpu::headless().expect("a DX12 GPU");
         let theme = LoadedTheme::load(repo().join("themes/examples/builder-demo")).unwrap();
-        let mypaper_theme::Wallpaper::Stack(config) = &theme.theme.wallpaper else {
+        let glaze_theme::Wallpaper::Stack(config) = &theme.theme.wallpaper else {
             panic!("builder-demo is a stack");
         };
         let mut source = StackSource::new_in(&gpu, &theme, config, &roots()).unwrap();
@@ -1668,7 +1668,7 @@ mod tests {
         assert!(lit > a.len() / 4 / 2, "only {lit} lit pixels");
         let b = render(&gpu, &mut source, size, 1.7);
         assert_ne!(a, b, "the rain moves between frames");
-        if let Ok(out) = std::env::var("MYPAPER_STACK_DUMP") {
+        if let Ok(out) = std::env::var("GLAZE_STACK_DUMP") {
             std::fs::write(&out, &b).unwrap();
             eprintln!("{size:?} BGRA -> {out}");
         }
@@ -1676,7 +1676,7 @@ mod tests {
 
     /// GPU ms of each reference effect at 1920x1080 over the demo photo, minus a layer-free
     /// baseline: the `cost` in effect.json
-    /// (`cargo test -p mypaper-wallpaper --release --bins time_effects -- --ignored --nocapture`).
+    /// (`cargo test -p glaze-wallpaper --release --bins time_effects -- --ignored --nocapture`).
     #[test]
     #[ignore]
     fn time_effects() {
@@ -1689,7 +1689,7 @@ mod tests {
                 "base": {{ "kind": "image", "source": "media/city.jpg" }}, "layers": [{layers}] }} }}"#
             );
             let theme = LoadedTheme::parse(dir.clone(), &json).unwrap();
-            let mypaper_theme::Wallpaper::Stack(config) = &theme.theme.wallpaper else {
+            let glaze_theme::Wallpaper::Stack(config) = &theme.theme.wallpaper else {
                 unreachable!()
             };
             let mut source = StackSource::new_in(&gpu, &theme, config, &roots()).unwrap();
@@ -1762,15 +1762,15 @@ mod tests {
         };
         let baseline = time("");
         eprintln!("baseline (image + copy): {baseline:.3} ms");
-        // `MYPAPER_EFFECTS_ONLY=id,id` times those effects instead.
-        let only = std::env::var("MYPAPER_EFFECTS_ONLY")
+        // `GLAZE_EFFECTS_ONLY=id,id` times those effects instead.
+        let only = std::env::var("GLAZE_EFFECTS_ONLY")
             .unwrap_or_else(|_| "rain,blur,color,vignette,grain".into());
         for id in only.split(',') {
             let ms = time(&format!(r#"{{ "kind": "effect", "effect": "{id}" }}"#));
             eprintln!("{id}: {:.3} ms (total {ms:.3})", (ms - baseline).max(0.0));
         }
         let demo = LoadedTheme::load(&dir).unwrap();
-        let mypaper_theme::Wallpaper::Stack(config) = &demo.theme.wallpaper else {
+        let glaze_theme::Wallpaper::Stack(config) = &demo.theme.wallpaper else {
             unreachable!()
         };
         let layers = serde_json::to_string(&config.layers).unwrap();

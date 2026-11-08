@@ -1,11 +1,11 @@
 # Exercise fixed-drive discovery without touching a physical device: a temporary SUBST alias
 # targets only this fixture's directory. Broadcasts address only the index's hidden window.
-param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\mypaper-index.exe')
+param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\glaze-index.exe')
 $ErrorActionPreference = 'Stop'
-$base = Join-Path $env:USERPROFILE 'mypaper-index-fixtures'
+$base = Join-Path $env:USERPROFILE 'glaze-index-fixtures'
 $scratch = [IO.Path]::GetFullPath((Join-Path $base ('volume-' + [Guid]::NewGuid().ToString('N'))))
 if (-not $scratch.StartsWith($base + '\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe volume fixture path' }
-$service = @(Get-CimInstance Win32_Process -Filter "Name='mypaper-index.exe'" | Where-Object {$_.ExecutablePath -eq $Exe -and $_.CommandLine -match '--parent'})
+$service = @(Get-CimInstance Win32_Process -Filter "Name='glaze-index.exe'" | Where-Object {$_.ExecutablePath -eq $Exe -and $_.CommandLine -match '--parent'})
 if ($service.Count -ne 1) { throw 'Expected one core-owned index' }
 $index = Get-Process -Id $service[0].ProcessId
 $indexStart = $index.StartTime
@@ -22,7 +22,7 @@ public static class IndexVolumeFixture {
  public static string Mapping(string drive) {var s=new StringBuilder(4096);return QueryDosDevice(drive,s,s.Capacity)==0?null:s.ToString();}
  public static void Notify(int process,int change,int letter) {
   IntPtr found=IntPtr.Zero;
-  EnumWindows((h,p)=>{uint id;GetWindowThreadProcessId(h,out id);if(id==(uint)process){var s=new StringBuilder(128);GetClassName(h,s,128);if(s.ToString()=="mypaper.index.volumes")found=h;}return true;},IntPtr.Zero);
+  EnumWindows((h,p)=>{uint id;GetWindowThreadProcessId(h,out id);if(id==(uint)process){var s=new StringBuilder(128);GetClassName(h,s,128);if(s.ToString()=="glaze.index.volumes")found=h;}return true;},IntPtr.Zero);
   if(found==IntPtr.Zero)throw new Exception("index volume notifier unavailable");
   var data=new int[]{20,2,0,1<<letter,0};var block=Marshal.AllocHGlobal(20);
   try{Marshal.Copy(data,0,block,5);SendMessage(found,0x219,new IntPtr(change),block);}finally{Marshal.FreeHGlobal(block);}
@@ -30,7 +30,7 @@ public static class IndexVolumeFixture {
 }
 '@
 function Request-Index([hashtable]$Request) {
-  $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'mypaper-index', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
+  $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'glaze-index', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
   try {
     $pipe.Connect(2000)
     $pipe.ReadMode = [IO.Pipes.PipeTransmissionMode]::Message
@@ -56,7 +56,7 @@ $drive = @('K:','Z:','Y:','X:','W:') | Where-Object { -not [IndexVolumeFixture]:
 if (-not $drive) { throw 'No free fixture drive letter' }
 $root = $drive + '\'
 $letter = [int][char]$drive[0] - [int][char]'A'
-$tag = 'mypaper-volume-' + [Guid]::NewGuid().ToString('N') + '.txt'
+$tag = 'glaze-volume-' + [Guid]::NewGuid().ToString('N') + '.txt'
 $created = $false
 try {
   if ((Request-Index @{method='status'}).scanning) { throw 'Wait for initial reconciliation' }
@@ -96,7 +96,7 @@ try {
     try {
       # Keep four transactions open together, so each native listener must answer.
       for ($i=0; $i -lt 4; $i++) {
-        $client = [IO.Pipes.NamedPipeClientStream]::new('.', 'mypaper-index', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
+        $client = [IO.Pipes.NamedPipeClientStream]::new('.', 'glaze-index', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
         $connections.Add($client)
         $client.Connect(1500)
         $client.ReadMode = [IO.Pipes.PipeTransmissionMode]::Message

@@ -1,8 +1,8 @@
 //! One sleeping worker lane for built-in fetches and file reads. Never an async runtime or a
 //! periodic poller: the UI sends work only when a visible instance's deadline expires.
 use super::model::{Widget, number, string};
-use mypaper_plugin_weather::{client::OpenMeteo, http::Http, service::Service};
-use mypaper_widgets::feed;
+use glaze_plugin_weather::{client::OpenMeteo, http::Http, service::Service};
+use glaze_widgets::feed;
 use serde_json::{Map, Value, json};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -83,9 +83,9 @@ impl Worker {
                 .name("widget-data".into())
                 .spawn(move || {
                     let _apartment =
-                        mypaper_plugin_weather::location::native::Apartment::new().ok();
+                        glaze_plugin_weather::location::native::Apartment::new().ok();
                     let weather = Service::new(OpenMeteo::new(), Duration::from_secs(600));
-                    if let Ok(data_dir) = mypaper_widgets::files::user("plugin-data/weather") {
+                    if let Ok(data_dir) = glaze_widgets::files::user("plugin-data/weather") {
                         let _ = weather.initialize(&json!({"dataDir":data_dir}));
                     }
                     let http = Http::new(Duration::from_secs(8));
@@ -132,7 +132,7 @@ impl Worker {
                                 let result = std::fs::metadata(&path)
                                     .map_err(|e| e.to_string())
                                     .and_then(|m| {
-                                        if m.len() > mypaper_widgets::pick::MAX_BYTES {
+                                        if m.len() > glaze_widgets::pick::MAX_BYTES {
                                             Err("Photo exceeds 64 MB".into())
                                         } else {
                                             std::fs::read(path).map_err(|e| e.to_string())

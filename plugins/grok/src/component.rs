@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use mypaper_plugin_sdk::guest::{self, Event, FaceOpen, Plugin, http, launch, secrets, ui};
-use mypaper_plugin_sdk::{Face, Role, SizeClass, Tone, View};
+use glaze_plugin_sdk::guest::{self, Event, FaceOpen, Plugin, http, launch, secrets, ui};
+use glaze_plugin_sdk::{Face, Role, SizeClass, Tone, View};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -118,7 +118,7 @@ impl Grok {
                         .config
                         .routines
                         .iter()
-                        .map(|r| mypaper_plugin_sdk::view::SelectOption {
+                        .map(|r| glaze_plugin_sdk::view::SelectOption {
                             label: r.title.clone(),
                             value: r.id.clone(),
                         })
@@ -359,4 +359,4 @@ impl Plugin for Grok {
     }
 }
 
-mypaper_plugin_sdk::export!(Grok);
+glaze_plugin_sdk::export!(Grok);

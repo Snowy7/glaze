@@ -1,5 +1,5 @@
 //! File-backed name search. The shell uses only the bounded named-pipe client; scanning and
-//! watches live in the opt-in `mypaper-index` process. See `docs/index.md`.
+//! watches live in the opt-in `glaze-index` process. See `docs/index.md`.
 
 mod backing;
 mod budget;
@@ -19,7 +19,7 @@ pub mod watch;
 
 use serde::{Deserialize, Serialize};
 
-pub const PIPE: &str = r"\\.\pipe\mypaper-index";
+pub const PIPE: &str = r"\\.\pipe\glaze-index";
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "method", rename_all = "snake_case")]

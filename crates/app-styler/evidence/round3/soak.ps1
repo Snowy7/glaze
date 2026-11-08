@@ -5,11 +5,11 @@
 #
 #   soak.ps1 -Minutes 30 [-Log file] [-Pause 45]
 #   soak.ps1 -Minutes 0          one burst
-param([int]$Minutes = 15, [string]$Log = "C:\mypaper-targets\app-styler\round3\soak.log",
+param([int]$Minutes = 15, [string]$Log = "C:\glaze-targets\app-styler\round3\soak.log",
       [int]$Pause = 45, [switch]$Bare)
 $ErrorActionPreference = 'Stop'
-$dir = Join-Path $env:LOCALAPPDATA 'mypaper\app-styler'
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$dir = Join-Path $env:LOCALAPPDATA 'glaze\app-styler'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 $utf8 = New-Object Text.UTF8Encoding($false)
 
 function Note([string]$m) {
@@ -21,7 +21,7 @@ function Write-Rules([string]$app, [string]$text) {
   [IO.File]::WriteAllText($tmp, $text, $utf8); Move-Item -LiteralPath $tmp -Destination $path -Force
 }
 function Sample([string]$tag) {
-  $parts = foreach ($p in Get-Process explorer, SystemSettings, mypaper-styler -ErrorAction SilentlyContinue) {
+  $parts = foreach ($p in Get-Process explorer, SystemSettings, glaze-styler -ErrorAction SilentlyContinue) {
     '{0} {1}: {2:N1} MB priv, {3} handles, {4:N2} s cpu' -f $p.Name, $p.Id, ($p.PrivateMemorySize64 / 1MB), $p.HandleCount, $p.TotalProcessorTime.TotalSeconds
   }
   Note ("[$tag] " + ($parts -join ' | '))
@@ -66,7 +66,7 @@ function Open-Folder([string]$path) {
 }
 $folders = 'C:\Windows', 'C:\Windows\System32', 'C:\Program Files', 'C:\Users\Public',
   'shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}', 'shell:::{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}',
-  'C:\Windows\Fonts', 'C:\mypaper-targets\app-styler\round3'
+  'C:\Windows\Fonts', 'C:\glaze-targets\app-styler\round3'
 $pages = 'display', 'personalization-colors', 'apps-volume', 'privacy', 'windowsupdate', 'about',
   'bluetooth', 'network-status', 'sound', 'taskbar'
 $r = New-Object Random 7
@@ -105,7 +105,7 @@ Note "soak start ($Minutes min)"
 Sample 'start'
 $end = (Get-Date).AddMinutes($Minutes)
 $n = 0
-$hold = 'C:\mypaper-targets\app-styler\round3\pause'
+$hold = 'C:\glaze-targets\app-styler\round3\pause'
 do {
   # Another agent's measurement window: no lock, no windows; keep sampling.
   if (Test-Path -LiteralPath $hold) {

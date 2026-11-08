@@ -1,4 +1,4 @@
-use mypaper_integrations::{config::Config, launcher};
+use glaze_integrations::{config::Config, launcher};
 
 #[test]
 fn configuration_rejects_secrets_remote_endpoints_and_ambiguous_actions() {

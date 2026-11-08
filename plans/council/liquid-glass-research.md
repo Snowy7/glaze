@@ -1,10 +1,10 @@
 # Liquid Glass: what Apple's material does, and how to reproduce it
 
-Research for mypaper's Liquid Glass style (bars, flyouts, desktop widgets), November 2026. Every
+Research for Glaze's Liquid Glass style (bars, flyouts, desktop widgets), November 2026. Every
 claim cites a source from the [list at the end](#sources). Apple's own words come first ([A1]–[A13]).
 Third-party reimplementations come after ([O1]–[O5]); one of them ([O5]) is reverse-engineered from
-macOS and is marked unverified wherever it is used. What mypaper builds from this is in
-[What mypaper takes from this](#what-mypaper-takes-from-this).
+macOS and is marked unverified wherever it is used. What Glaze builds from this is in
+[What Glaze takes from this](#what-glaze-takes-from-this).
 
 ## The material in Apple's words
 
@@ -155,7 +155,7 @@ What carries over:
 
 ## Reference pictures
 
-Saved outside the repository (they are Apple's images) in `C:\mypaper-targets\refs\liquid-glass\`,
+Saved outside the repository (they are Apple's images) in `C:\glaze-targets\refs\liquid-glass\`,
 with each source URL in a `.source.txt` next to the file. Crops are in `crops\`.
 
 | File | Shows | Source |
@@ -179,7 +179,7 @@ What they show, beyond the text:
   and a soft inner brightening at the bottom-right where the bevel meets the light.
 - **The menu bar has no glass**: "The menu bar is now completely transparent" [A13].
 
-## What mypaper takes from this
+## What Glaze takes from this
 
 The spec the implementation follows (docs/bars.md, "Liquid glass", and docs/widgets.md):
 

@@ -1,5 +1,5 @@
 # Read-only measurement of the deployed service; does not hold the desktop/input lock.
-param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\mypaper-index.exe', [int]$Seconds = 900)
+param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\glaze-index.exe', [int]$Seconds = 900)
 $ErrorActionPreference = 'Stop'
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $rows = @()
@@ -7,7 +7,7 @@ $previousPid = 0
 $doneAt = $null
 $interrupted = $false
 while ($clock.Elapsed.TotalSeconds -lt $Seconds) {
-  $service = Get-Process mypaper-index -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Exe } | Select-Object -First 1
+  $service = Get-Process glaze-index -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Exe } | Select-Object -First 1
   if ($service) {
     if ($previousPid -and $previousPid -ne $service.Id) { $interrupted = $true; break }
     $service.Refresh()

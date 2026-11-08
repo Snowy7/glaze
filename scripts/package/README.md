@@ -37,7 +37,7 @@ Borderless graphics capture remains the existing unpackaged engine flow.
 **Windows trust limitation:** on this installation, `Add-AppxPackage -Path <signed.msix>` fails
 `0x800B0109` with current-user-only certificate trust. The Appx deployment service requires machine
 trust, despite the identity guide's current-user example. Local deploy therefore uses the explicit
-`-Development` path: it unpacks the signed MSIX to `%LOCALAPPDATA%\mypaper\identity` and registers
+`-Development` path: it unpacks the signed MSIX to `%LOCALAPPDATA%\glaze\identity` and registers
 that manifest with `-Register -ExternalLocation`. This requires Developer Mode to be **already
 enabled**; the scripts never change the policy. The archive stays signed and the development leaf
 is trusted by the current user, but Windows treats the unpacked layout as development content,
@@ -49,7 +49,7 @@ and [loose-layout registration guidance](https://learn.microsoft.com/en-us/windo
 ## Signing
 
 The default signer creates/reuses a non-exportable code-signing key in `CurrentUser\My`, subject
-`CN=mypaper Development`, friendly name `mypaper sparse package (development only)`. It exports
+`CN=Glaze Development`, friendly name `Glaze sparse package (development only)`. It exports
 only the public `.cer` into the ignored output directory and trusts that leaf in
 `CurrentUser\TrustedPeople`. It never changes `LocalMachine`, `Root`, or system sideload policy,
 and never writes a PFX/password. Unregistration leaves the development key/trust available for
@@ -69,7 +69,7 @@ keys belong in the signing service, not the repo or installer.
 
 Studio's Notifications Enable setting makes the resident shell initiate `RequestAccessAsync` on
 its UI thread. Its completion wakes the UI and reacquires consumers. Allowed/Denied is retained
-by Windows; a per-family marker in `%LOCALAPPDATA%\mypaper\notification-consent` also prevents
+by Windows; a per-family marker in `%LOCALAPPDATA%\glaze\notification-consent` also prevents
 a dismissed first-run prompt from reappearing at every startup. Denial leaves the integration
 unavailable and directs the user to Windows Settings > Privacy & security > Notifications.
 After dismissing, explicitly grant access in Windows Settings (or remove that family's first-run
@@ -90,7 +90,7 @@ The resident shell keeps running. Only test-app IDs/counts/timings and resource 
 written; no notification text is recorded.
 
 ```powershell
-cargo build --release -p mypaper-integrations --example probe
+cargo build --release -p glaze-integrations --example probe
 & scripts/package/verify-provider.ps1 -InstallDirectory C:\path\to\install `
     -ProbePath C:\path\to\this-worktree-build\release\examples\probe.exe
 ```

@@ -4,8 +4,8 @@ fn main() {
     let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let input = root.join(".source/runtime.rs");
     println!("cargo:rerun-if-changed={}", input.display());
-    println!("cargo:rerun-if-env-changed=MYPAPER_PROBE_MEMORY_MB");
-    let cap: usize = env::var("MYPAPER_PROBE_MEMORY_MB").unwrap_or("32".into()).parse().unwrap();
+    println!("cargo:rerun-if-env-changed=GLAZE_PROBE_MEMORY_MB");
+    let cap: usize = env::var("GLAZE_PROBE_MEMORY_MB").unwrap_or("32".into()).parse().unwrap();
     let wit = root.join(".source/plugin-api/wit").to_string_lossy().replace('\\', "/");
     let mut source = fs::read_to_string(input).unwrap().replace("//!", "//")
         .replace("path: \"../plugin-api/wit\"", &format!("path: \"{wit}\""));

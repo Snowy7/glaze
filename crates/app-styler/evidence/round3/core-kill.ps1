@@ -1,21 +1,21 @@
-# Finding 2: end mypaper-core abruptly (TerminateProcess) and check that the app styler exits with
-# it and Explorer/Settings get their look back; then start mypaper again the normal way.
-# Only mypaper-core is ended. Holds the desktop lock for the test.
-param([string]$Out = "C:\mypaper-targets\app-styler\round3\core-kill.txt")
+# Finding 2: end glaze-core abruptly (TerminateProcess) and check that the app styler exits with
+# it and Explorer/Settings get their look back; then start Glaze again the normal way.
+# Only glaze-core is ended. Holds the desktop lock for the test.
+param([string]$Out = "C:\glaze-targets\app-styler\round3\core-kill.txt")
 $ErrorActionPreference = 'Stop'
 $repo = 'D:\Coding\projects\desktop\wallpaper'
 $release = Join-Path $repo 'target\release'
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
-$tapLog = Join-Path $env:LOCALAPPDATA 'mypaper\app-styler\styler.log'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$tapLog = Join-Path $env:LOCALAPPDATA 'glaze\app-styler\styler.log'
 function Note([string]$m) { $l = '{0} {1}' -f (Get-Date -Format 'HH:mm:ss.fff'), $m; Add-Content -LiteralPath $Out -Value $l; Write-Host $l }
-function Procs { (Get-Process mypaper-* -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Name) $($_.Id)" }) -join ', ' }
+function Procs { (Get-Process glaze-* -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Name) $($_.Id)" }) -join ', ' }
 
 for ($i = 0; -not (New-Item -ItemType Directory $lock -ErrorAction SilentlyContinue); $i++) {
   if ($i -gt 240) { throw 'desktop lock busy' }; Start-Sleep -Milliseconds 500
 }
 try {
-  $core = Get-Process mypaper-core
-  $styler = Get-Process mypaper-styler
+  $core = Get-Process glaze-core
+  $styler = Get-Process glaze-styler
   $line = (Get-CimInstance Win32_Process -Filter "ProcessId=$($styler.Id)").CommandLine
   Note "core $($core.Id), styler $($styler.Id) ($line)"
   Note "running: $(Procs)"
@@ -29,12 +29,12 @@ try {
   Note "after: $(Procs)"
   Note '--- TAP log since'
   Get-Content -LiteralPath $tapLog | Select-Object -Skip $mark | ForEach-Object { Note "  $_" }
-  Note '--- starting mypaper again (as deploy-local does)'
-  Start-Process -FilePath (Join-Path $release 'mypaper-core.exe') -WorkingDirectory $release -WindowStyle Hidden
+  Note '--- starting Glaze again (as deploy-local does)'
+  Start-Process -FilePath (Join-Path $release 'glaze-core.exe') -WorkingDirectory $release -WindowStyle Hidden
   $t1 = Get-Date
-  while (-not (Get-Process mypaper-styler -ErrorAction SilentlyContinue) -and ((Get-Date) - $t1).TotalSeconds -lt 20) { Start-Sleep -Milliseconds 200 }
+  while (-not (Get-Process glaze-styler -ErrorAction SilentlyContinue) -and ((Get-Date) - $t1).TotalSeconds -lt 20) { Start-Sleep -Milliseconds 200 }
   Start-Sleep -Seconds 5
-  $new = Get-Process mypaper-styler -ErrorAction SilentlyContinue
+  $new = Get-Process glaze-styler -ErrorAction SilentlyContinue
   if ($new) { Note "new styler $($new.Id) ($((Get-CimInstance Win32_Process -Filter "ProcessId=$($new.Id)").CommandLine))" } else { Note 'FAIL: no new styler' }
   Note "running: $(Procs)"
   $mark2 = $mark

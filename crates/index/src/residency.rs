@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn evicted_dirty_windows_remain_valid_and_only_four_are_retained() {
         let path =
-            std::env::temp_dir().join(format!("mypaper-index-windows-{}.bin", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-index-windows-{}.bin", std::process::id()));
         let file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)

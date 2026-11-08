@@ -1,7 +1,7 @@
 # Desktop customization landscape
 
-Research for mypaper's next steps: how Seelen UI, YASB, Zebar, Rainmeter, Cairo and others get system data and
-style the desktop, and what mypaper can copy under its **no code injection** rule.
+Research for Glaze's next steps: how Seelen UI, YASB, Zebar, Rainmeter, Cairo and others get system data and
+style the desktop, and what Glaze can copy under its **no code injection** rule.
 
 - **Written:** 2026-11-03. GitHub sources were read on their default branches (Seelen `master`, YASB `main`,
   Zebar `main`, ManagedShell `master`). Links point at paths, not commits, so line numbers can drift. Where a line
@@ -27,7 +27,7 @@ Ten findings that change what we build:
    callback message. It has a live caveat: Zebar
    [#301][zebar-301] reports it breaks the native taskbar's menus and Explorer restarts on Windows 11 25H2 (a
    user-reported root cause, not confirmed by the maintainers).
-3. **mypaper's current tray design (UIA, [`docs/bars.md`](../bars.md)) has no shipping precedent as a primary
+3. **Glaze's current tray design (UIA, [`docs/bars.md`](../bars.md)) has no shipping precedent as a primary
    method.** The one open-source UIA user read (`trailist`) keeps UIA only as the fallback behind its Explorer DLL.
    UIA gives names, rectangles and `Invoke`, but not the icon handle or callback message. Keep it as the
    fallback and add the host window plus the `HKCU\Control Panel\NotifyIconSettings` registry for metadata.
@@ -238,7 +238,7 @@ taskbar and tray icons" in 2.8.8: injection into Explorer has real blast radius.
   `OK` on Win11 build 22000+ ([Learn][ms-dwm]).
 - **Steal.** `zpack.json` presets with `anchor`/`dockToEdge`/`monitorSelection`; per-widget `shellCommands`
   allowlist; request caching rules; GlazeWM window effects (accent border, corner style) as a Windows-level toggle
-  (mypaper already does this: [`docs/windows-styling.md`](../windows-styling.md)).
+  (Glaze already does this: [`docs/windows-styling.md`](../windows-styling.md)).
 
 ### 2.4 Rainmeter
 
@@ -251,7 +251,7 @@ Plugins are native DLLs exporting `Initialize`, `Reload`, `Update`, `Finalize` (
 standard but **not stated on that page (unverified here)**.
 **Steal.** `UpdateDivider` (per-item update rates), `IfCondition` actions, skin groups, meter style inheritance,
 `Substitute` for value-to-icon mapping. Rainmeter's retained, declarative "measure then meter" split maps well onto
-mypaper's `bars` modules.
+Glaze's `bars` modules.
 
 ### 2.5 Cairo Desktop and ManagedShell
 
@@ -362,7 +362,7 @@ selectors (`Property@State=value`) as a theming idea.
 | **Lively Wallpaper** | Video/GIF/web/app/screensaver wallpapers; `LivelyProperties.json` customization callback `livelyPropertyListener(name, val)`; mouse input forwarded with **Raw Input `RIDEV_INPUTSINK`**, keyboard opt-in; attaches via `WorkerW`/`Progman`, handles Win11 "raised desktop" layout | [wiki][lively-wiki], [`WinDesktopCore.cs`][lively-core], [`RawInputMsgWindow`][lively-raw] |
 | **Wallpaper Engine** | Web wallpapers get `wallpaperPropertyListener.applyUserProperties`, property types `slider`, `color` ("1.0 0.1 0.25" triples), `bool`, `combo`, `textinput`, `file`, `directory`; audio via `wallpaperRegisterAudioListener` (128 floats: 0-63 left, 64-127 right, ~30 Hz); FPS limiter, RGB devices, media integration page | [properties][we-props], [audio][we-audio] |
 
-**Steal.** Wallpaper Engine's *property schema -> auto-generated UI* (mypaper widgets already follow this idea);
+**Steal.** Wallpaper Engine's *property schema -> auto-generated UI* (Glaze widgets already follow this idea);
 audio spectrum feed at a fixed 128-float contract; Lively's raw-input forwarding; CmdPal Dock's background options
 (none/accent/custom tint/image + brightness/blur/fit); Nexus's per-event effect slots (hover, launch, attention,
 delete) as a naming scheme for dock animation hooks.
@@ -374,7 +374,7 @@ delete) as a naming scheme for dock animation hooks.
 | **Waybar** | JSONC config + GTK CSS (`style.css`, plus `style-light.css` / `style-dark.css` that follow the system theme). Bar options: `layer`, `position`, `exclusive` (reserve space), `passthrough` (pointer events fall through), `margin-*`, `spacing`, `modules-left/center/right`, `reload_style_on_change`, signal-based show/hide. | Live CSS reload; light/dark stylesheets; `exclusive`/`passthrough` toggles. | [Configuration][waybar-cfg], [Styling][waybar-style] |
 | **Polybar** | Only the README was read; its documentation is on the wiki, so no mechanism claims are made here. | (not assessed) | [README][polybar] |
 | **eww** | Own Lisp-like `yuck` for structure + SCSS/CSS; windows have `geometry`, `stacking`, `reserve`/struts, `windowtype`, per-monitor; GTK CSS limits (some animations unsupported, no flexbox). | Window/struts declaration separate from content. | [configuration.md][eww-cfg] |
-| **AGS / Astal** | Astal is "a collection of libraries written in Vala and C" that "handles the backend logic", one library per system service (`apps`, `battery`, `bluetooth`, `network`, `notifd`, `tray`, `wireplumber`, `mpris`, `hyprland`, `powerprofiles`, `brightness`, ...). AGS (a separate project) was not inspected. | **Service-per-library** layering; one crate per system service in mypaper. | [Astal][astal] |
+| **AGS / Astal** | Astal is "a collection of libraries written in Vala and C" that "handles the backend logic", one library per system service (`apps`, `battery`, `bluetooth`, `network`, `notifd`, `tray`, `wireplumber`, `mpris`, `hyprland`, `powerprofiles`, `brightness`, ...). AGS (a separate project) was not inspected. | **Service-per-library** layering; one crate per system service in glaze. | [Astal][astal] |
 | **KDE Plasma** | Widgets are QML packages with `metadata.json`; user config via a configuration page; Plasma Style is SVG. **Only the doc index was read**, so panel-floating and data-source specifics are unverified. | Package layout; SVG theme parts. | [Plasma widgets][kde-widget] |
 | **Kvantum** | SVG-based Qt theme engine; a theme is an SVG + config. | SVG skinning for fixed UI parts. | [README][kvantum] |
 | **Hyprland** | Appearance variables and an animation *tree*; curves are cubic Bezier (two control points) or spring (mass/stiffness/damping); `speed` in deciseconds; window styles `slide`, `popin`, `gnomed`; workspace styles `slide`, `slidevert`, `fade`, `slidefade`. Decoration: `rounding` + `rounding_power` (2.0 circle, 4.0 squircle), `gaps_in`/`gaps_out`, blur (`size`, `passes`, `noise`, `contrast`, `brightness`, `vibrancy`, `variant`), shadow (`range`, `render_power`, `color`), glow, motion blur, wobble. | A leaf-based animation tree where children inherit the parent, named curves, and a *squircle* exponent. (Wiki `main` on 2026-11-03: some entries such as blur variants, glow and wobble may be newer than the last stable release; verify before relying on them.) | [animations][hypr-anim], [config options][hypr-opts] |
@@ -396,7 +396,7 @@ come with it, and clicks are returned to that callback.
 | Hook DLL in Explorer (`WH_CALLWNDPROC` / `WH_GETMESSAGE`, WndProc subclass) | Every NIM message with raw `HICON`, state flags, plus `ITaskbarList3` overlay messages | Callback message | Works; ships in Seelen and YASB; both fixed crash/security issues inside Explorer | Seelen, YASB v2, trailist | `INJECT` |
 | Host/spy `Shell_TrayWnd` window + `TaskbarCreated` broadcast + forwarding | NIM adds/updates/deletes **after** apps re-register; tooltips and an icon handle per message (Zebar's [`IconEventData`][zebar-spy] keeps `icon_handle`; how to copy it safely across processes was not verified) | Callback message via `SendNotifyMessage` | Works in the sources; initial enumeration impossible ("expected on W11"); native taskbar breakage reported on 25H2 ([#301][zebar-301]); misses apps that don't handle `TaskbarCreated` (Seelen: "Some windows fail to re-add their icons ... implementation error on their side", [`util.rs`][slu-util]) | ManagedShell, RetroBar, Cairo, Zebar, YASB legacy | `OK` |
 | `TB_GETBUTTON` + `VirtualAllocEx` in Explorer | Existing icons on the Win10 toolbar tray | n/a | Does not work: Win11 tray is XAML ([`tray_spy.rs`][zebar-spy] `TbButtonItem` doc comment) | ManagedShell `ExplorerTrayService`, Zebar | Excluded (cross-process memory writes) |
-| UI Automation on the taskbar | Button names (tooltips) and bounding rectangles. A web-search summary of the [trailist][trailist] repo says its `win/uia.rs` finds tray icons as Buttons with `AutomationId=NotifyItemIcon` (file itself not read). trailist's README says its DLL path is primary and "the previous UI Automation path remains" as fallback. | `Invoke` / `ExpandCollapse` executed by Explorer | **Unverified** on a hidden or off-screen taskbar; no `HICON`, no callback, no pin state | mypaper today; trailist (fallback only) | `OK` |
+| UI Automation on the taskbar | Button names (tooltips) and bounding rectangles. A web-search summary of the [trailist][trailist] repo says its `win/uia.rs` finds tray icons as Buttons with `AutomationId=NotifyItemIcon` (file itself not read). trailist's README says its DLL path is primary and "the previous UI Automation path remains" as fallback. | `Invoke` / `ExpandCollapse` executed by Explorer | **Unverified** on a hidden or off-screen taskbar; no `HICON`, no callback, no pin state | Glaze today; trailist (fallback only) | `OK` |
 | Read Explorer memory (`NotifyIconItem` structs) | Icon list | Posts callback messages | Offsets "verified on Windows 11 10.0.26300.9711" and must be re-verified per major build ([TrayOrganizer README][trayorg]) | TrayOrganizer | Excluded |
 | `HKCU\Control Panel\NotifyIconSettings` | Per-icon key: `ExecutablePath`, `InitialTooltip`, `UID`, `IconGuid`, `IsPromoted`; plus `UIOrderList` | None | Exists on Win11; Win10 has none ([Greenshot source][greenshot]) | Seelen, Greenshot | `UNDOC` |
 
@@ -453,7 +453,7 @@ Mechanism, from the two codebases that do it:
    empty title in Seelen's filter) ([`get_taskbars_handles`][slu-hide]).
 2. For each, `SHAppBarMessage(ABM_SETSTATE, ABS_AUTOHIDE)` then `ShowWindow(SW_HIDE)`. `ABM_SETSTATE` is documented as
    "Sets the state of the appbar's autohide and always-on-top attributes" ([Learn][ms-abm]); aiming it at Explorer's
-   tray window is the common but **undocumented usage**. mypaper already does this ([`docs/bars.md`](../bars.md)).
+   tray window is the common but **undocumented usage**. Glaze already does this ([`docs/bars.md`](../bars.md)).
 3. Repeat: Seelen loops 10 times with 50 ms sleep ([`hide_native_taskbar`][slu-hide]); ManagedShell checks
    `IsWindowVisible` every 100 ms and also hides the Start button window ([`ExplorerHelper`][ms-explorerhelper]).
 4. Re-hide on events: Seelen's `SetWinEventHook` handler hides again on `EVENT_OBJECT_SHOW` / `EVENT_OBJECT_CREATE`
@@ -461,7 +461,7 @@ Mechanism, from the two codebases that do it:
    and monitor hot-plug (new `Shell_SecondaryTrayWnd`), plus `TaskbarCreated`.
 5. Restore: Seelen delegates hide/restore to the separate service "so we can safely restore on shutdown even if the main
    app crashes" and only restores if it hid ([`weg/mod.rs`][slu-wegmod], [`shutdown.rs`][slu-hide]). ManagedShell
-   remembers the startup `ABM_GETSTATE`. mypaper's journal is the same idea.
+   remembers the startup `ABM_GETSTATE`. Glaze's journal is the same idea.
 6. **Win-key / Start interplay:** the native Start, search, notification center, and volume/brightness flyouts are
    separate Explorer windows that still appear. Seelen hides the notification center/toast window of
    `ShellExperienceHost.exe` when it uncloaks and the `XamlExplorerHostIslandWindow` content windows
@@ -469,7 +469,7 @@ Mechanism, from the two codebases that do it:
    (`SendInput`) to open native UI ([`ShellHelper`][ms-shellhelper]). Where the native Start menu appears when
    its taskbar is hidden is **unverified** from these sources.
 7. **Flash at login:** every tool waits for or reacts to the taskbar appearing (Seelen: `wait_for_native_shell`, up
-   to 5 s, then hide within ~50 ms; mypaper: reacts to `TaskbarCreated`). None prevents the initial paint. Untested
+   to 5 s, then hide within ~50 ms; Glaze: reacts to `TaskbarCreated`). None prevents the initial paint. Untested
    idea: a persisted autohide state in `HKCU\...\Explorer\StuckRects3` (a binary `Settings` value that
    community scripts edit, [example][stuckrects]) before the next sign-in; behavior on 24H2 is unverified, and it is an
    undocumented blob. Treat as an experiment, not a plan.
@@ -501,7 +501,7 @@ here** (spike it). Keep a Run-key fallback. Do not ship the `Serialize` tweak as
 | Add items via a shell extension | `IExplorerCommand` / `IContextMenu` handler DLL | Microsoft: "Apps extend the menu with IExplorerCommand + app identity", unpackaged apps can use sparse manifests; the old model "runs in-process in Explorer" ([blog, 2021-07-19][ms-ctx-blog]). The handler runs inside Explorer and other apps: treat as excluded unless the product decision changes. | `IDENTITY` + in-process | same |
 | Win11 classic menu toggle | Create an empty default value at `HKCU\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32` (name from `Windows.UI.FileExplorer.ContextMenu`) | Undocumented; restores the old full menu everywhere; user-visible global change | `UNDOC` | [moudey/Shell `Globals.h`][nilesoft], scripts such as [winscript](https://github.com/flick9000/winscript/blob/main/docs/content/misc.md) |
 
-**Recommendation:** mypaper already owns the wallpaper layer, so use Raw Input (to know *when* a right-click hit empty
+**Recommendation:** Glaze already owns the wallpaper layer, so use Raw Input (to know *when* a right-click hit empty
 desktop) or a short-lived LL hook, and show the menu in our own WebView2 menu window. If the menu should include native
 entries, build them with `IContextMenu` for the Desktop folder. Never intercept by injection.
 
@@ -521,7 +521,7 @@ entries, build them with `IContextMenu` for the Desktop folder. Never intercept 
 | Night Light | CloudStore blob (Bond-serialized) under the user hive | **Undocumented** | [`nightlight/cloudstore.rs`][slu-night] |
 | Focus / DND read | `FocusSessionManager`, `ToastNotificationManagerForUser.NotificationMode` | Documented | [Learn][ms-focus] |
 | DND write | Quiet-hours profile (undocumented); `FocusSessionManager.TryStartFocusSession` starts a focus *session* (a related, different feature) | Undocumented / partial | [`application.rs`][slu-notif] |
-| Media (now playing) | `GlobalSystemMediaTransportControlsSession` | Documented (mypaper uses it) | `docs/bars.md` |
+| Media (now playing) | `GlobalSystemMediaTransportControlsSession` | Documented (Glaze uses it) | `docs/bars.md` |
 | Window list, cloak state | `SetWinEventHook`, `DWMWA_CLOAKED` | Documented | [`hook.rs`][slu-hookrs] |
 
 ### 4.7 Making the UI appear instantly
@@ -546,7 +546,7 @@ What the sources show:
 - **Start early:** Task Scheduler logon trigger (4.4) + `wait_for_native_shell` + early taskbar hide (4.3).
 - **No-input dock:** Seelen's click-through full-area webview means the page is always loaded and only toggles hit-testing.
 
-## 5. Prioritized catalogue for mypaper
+## 5. Prioritized catalogue for Glaze
 
 Priority: **P0** next to ship, **P1** soon, **P2** later. "Src" = where the technique is shown. Everything marked
 `OK` or `UNDOC` is possible without injection.
@@ -561,7 +561,7 @@ Priority: **P0** next to ship, **P1** soon, **P2** later. "Src" = where the tech
 | Per-monitor overrides (enable, position, size, preset) | P0 | `OK` | Seelen `monitorsV3`; CmdPal Dock per-display position |
 | Theme variables as user-tunable CSS vars with typed controls (color, number slider/dropdown, length, string, URL) | P0 | `OK` | Seelen [theme guide][slu-theme-doc] |
 | Windows accent as CSS variables (7 shades) + light/dark auto | P0 | `OK` | Seelen `--system-accent-*` |
-| Wallpaper-derived palette ("dynamic accent") | P1 | `OK` (mypaper owns the wallpaper pixels). Seelen exposes `useAccentColor` but its exact semantics are unverified | [`settings/mod.rs`][slu-settings] |
+| Wallpaper-derived palette ("dynamic accent") | P1 | `OK` (Glaze owns the wallpaper pixels). Seelen exposes `useAccentColor` but its exact semantics are unverified | [`settings/mod.rs`][slu-settings] |
 | Dynamic states: bar/dock look changes when a window is maximized / Start open / fullscreen app | P2 | `OK` via win events and `IAppVisibility` | TranslucentTB [`taskbarattributeworker.cpp`][ttb] |
 | Performance mode that disables animation/blur by power state | P0 | `OK` | Seelen `performanceMode` |
 
@@ -571,7 +571,7 @@ Priority: **P0** next to ship, **P1** soon, **P2** later. "Src" = where the tech
 |---|---|---|---|
 | Solid, gradient, image background; brightness, blur, fit | P0 | `OK` | CmdPal Dock appearance [Learn][ms-cmdpal-dock]; Windhawk `LinearGradientBrush`/`ImageBrush` |
 | Material: transparent / acrylic / mica | P0 | `OK` for system backdrop (`DWMWA_SYSTEMBACKDROP_TYPE`, Win11 22H2+) on our windows; `UNDOC` for `SetWindowCompositionAttribute` accent policy (YASB, TranslucentTB) | [Learn][ms-dwm]; [`undocumented.py`][yasb-undoc] |
-| Blur of **our own wallpaper** behind bars (sample the wallpaper texture, tint, noise) | P1 | `OK`, bold idea: only mypaper can do it without hooks, and it is not subject to "blur only in rectangles" limits (Nexus) | Hyprland blur params (`size`, `passes`, `noise`, `vibrancy`, `contrast`, `brightness`) |
+| Blur of **our own wallpaper** behind bars (sample the wallpaper texture, tint, noise) | P1 | `OK`, bold idea: only Glaze can do it without hooks, and it is not subject to "blur only in rectangles" limits (Nexus) | Hyprland blur params (`size`, `passes`, `noise`, `vibrancy`, `contrast`, `brightness`) |
 | Tint opacity, luminosity, saturation, noise opacity/density | P1 | `OK` | Windhawk `WindhawkBlur` parameters |
 | Glow / shadow (range, power, color; separate for hovered/active) | P1 | `OK` (CSS) | Hyprland shadow/glow; SketchyBar shadow |
 | Border: width, color, gradient, per-state | P1 | `OK` | YASB `-qproperty-borderwidth`; GlazeWM focused/other borders |
@@ -597,7 +597,7 @@ Priority: **P0** next to ship, **P1** soon, **P2** later. "Src" = where the tech
 | Module | Pri | Feasibility | Notes / src |
 |---|---|---|---|
 | Clock/calendar with custom format and extra time zones | P0 | `OK` | CmdPal Dock custom clocks |
-| Workspaces / virtual desktops | P0 | `UNDOC` for switching APIs (registry for count; keyboard shortcut for switching, as mypaper does) | Seelen `workspaces`; `docs/bars.md` |
+| Workspaces / virtual desktops | P0 | `UNDOC` for switching APIs (registry for count; keyboard shortcut for switching, as Glaze does) | Seelen `workspaces`; `docs/bars.md` |
 | Focused app name/icon, global menu | P1 | `OK` | Seelen `FocusedApp` scope |
 | Tray (pinned + overflow popup grid) | P0 | `OK` via host window (4.1), `UNDOC` for registry | YASB popup options; Seelen pin/order |
 | Network, volume, battery, Bluetooth, brightness | P0 | `OK` (Wi-Fi list needs location consent) | section 4.6 |
@@ -657,7 +657,7 @@ Priority: **P0** next to ship, **P1** soon, **P2** later. "Src" = where the tech
 | Per-state focused/unfocused window border colors | P1 | `OK` (`DWMWA_BORDER_COLOR` cross-process) | GlazeWM `window_effects` |
 | Icon packs (AUMID / path / extension -> icon) applied **to our UI** | P0 | `OK` | Seelen [`icon_pack.rs`][slu-iconpack] |
 | System-wide icon replacement in Explorer | n/a | `INJECT` | excluded |
-| Cursor themes | P1 | `OK`: `SystemParametersInfo(SPI_SETCURSORS)` after writing `HKCU\Control Panel\Cursors`, or `SetSystemCursor` | [Learn][ms-spi], [`SetSystemCursor`][ms-setsyscursor] (mypaper's `crates/tweaks` may already cover; check) |
+| Cursor themes | P1 | `OK`: `SystemParametersInfo(SPI_SETCURSORS)` after writing `HKCU\Control Panel\Cursors`, or `SetSystemCursor` | [Learn][ms-spi], [`SetSystemCursor`][ms-setsyscursor] (Glaze's `crates/tweaks` may already cover; check) |
 | Wallpaper set via system | P2 | `OK` (`IDesktopWallpaper`) | [Learn][ms-idesktopwp] |
 | Classic Win11 context menu toggle | P2 | `UNDOC`, global side effect, reversible via registry key deletion | [Nilesoft][nilesoft] |
 | Taskbar alignment (`TaskbarAl`), hide, autohide | done | `OK`/`UNDOC` | `docs/bars.md` |

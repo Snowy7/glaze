@@ -92,13 +92,13 @@ fn move_glass(client: HWND) {
     loop {
         // SAFETY: read-only enumeration and a property on the engine's windows.
         let Ok(glass) =
-            (unsafe { FindWindowExW(None, previous, w!("mypaper.wallpaper.glass"), None) })
+            (unsafe { FindWindowExW(None, previous, w!("glaze.wallpaper.glass"), None) })
         else {
             break;
         };
         previous = Some(glass);
         // SAFETY: the property holds an HWND value, never a pointer we dereference.
-        if unsafe { GetPropW(glass, w!("mypaper.glass.client")) }.0 != client.0 {
+        if unsafe { GetPropW(glass, w!("glaze.glass.client")) }.0 != client.0 {
             continue;
         }
         pieces.push(glass);
@@ -152,7 +152,7 @@ mod tests {
         }
         // SAFETY: all windows belong to this thread and stay off screen, with no activation.
         unsafe {
-            let class = w!("mypaper.wallpaper.glass");
+            let class = w!("glaze.wallpaper.glass");
             let instance = GetModuleHandleW(None).unwrap();
             RegisterClassExW(&WNDCLASSEXW {
                 cbSize: size_of::<WNDCLASSEXW>() as u32,
@@ -183,7 +183,7 @@ mod tests {
             let lower = make(w!("STATIC"));
             let menu = make(w!("STATIC"));
             let glass = make(class);
-            SetPropW(glass.0, w!("mypaper.glass.client"), Some(HANDLE(menu.0.0))).unwrap();
+            SetPropW(glass.0, w!("glaze.glass.client"), Some(HANDLE(menu.0.0))).unwrap();
             open(lower.0);
             SetWindowPos(
                 lower.0,
@@ -247,7 +247,7 @@ mod tests {
             .unwrap();
             assert_eq!(GetWindow(menu.0, GW_HWNDNEXT).unwrap(), glass.0);
             let second = make(class);
-            SetPropW(second.0, w!("mypaper.glass.client"), Some(HANDLE(menu.0.0))).unwrap();
+            SetPropW(second.0, w!("glaze.glass.client"), Some(HANDLE(menu.0.0))).unwrap();
             SetWindowPos(
                 menu.0,
                 Some(HWND_TOPMOST),

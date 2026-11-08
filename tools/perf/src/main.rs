@@ -1,15 +1,15 @@
-//! mypaper-perf: measures a mypaper build and checks it against `perf/budget.toml`
+//! glaze-perf: measures a Glaze build and checks it against `perf/budget.toml`
 //! (docs/performance.md).
 //!
 //! ```text
-//! mypaper-perf [--build DIR] [--content DIR] [--runs N] [--seconds N] [--label TEXT]
+//! glaze-perf [--build DIR] [--content DIR] [--runs N] [--seconds N] [--label TEXT]
 //!              [--restart EXE] [--hold SECONDS] [--no-write] [SCENARIO...]
-//! mypaper-perf --check perf/results/<report>.json     # a saved run against today's budget
-//! mypaper-perf --list
+//! glaze-perf --check perf/results/<report>.json     # a saved run against today's budget
+//! glaze-perf --list
 //! ```
 //!
-//! It stops the user's mypaper under the desktop lock, runs each scenario in a temporary
-//! `%APPDATA%` / `%LOCALAPPDATA%`, restarts the user's mypaper (always), writes
+//! It stops the user's Glaze under the desktop lock, runs each scenario in a temporary
+//! `%APPDATA%` / `%LOCALAPPDATA%`, restarts the user's Glaze (always), writes
 //! `perf/results/<date>.{md,json}` and `perf/latest.{md,json}`, and exits with 1 when a limit is
 //! broken (listing every one), 2 when it couldn't run.
 //! Native N0.3 measurement mode saves raw CPU/RAM samples and optional GPU JSONL instead;
@@ -43,11 +43,11 @@ use crate::run::Plan;
 use crate::scenario::Scenario;
 use crate::session::Session;
 
-const USAGE: &str = "usage: mypaper-perf [--build DIR] [--content DIR] [--runs N] [--seconds N] \
+const USAGE: &str = "usage: glaze-perf [--build DIR] [--content DIR] [--runs N] [--seconds N] \
                      [--label TEXT] [--restart EXE] [--hold SECONDS] [--no-write] [SCENARIO...] \
                      | --check REPORT.json | --list \
                      | --native --build DIR --content DIR [--timestamps] [--composition] NATIVE_SCENARIO";
-/// Sessions stop the user's mypaper; each stays under this (the lock protocol's 5 minutes,
+/// Sessions stop the user's Glaze; each stays under this (the lock protocol's 5 minutes,
 /// with room for stopping and restarting).
 const SESSION_BUDGET: Duration = Duration::from_secs(4 * 60);
 
@@ -110,7 +110,7 @@ fn real_main() -> Result<bool> {
     }
 
     let stage = args.content.join("target").join("perf-stage");
-    let temp = std::env::temp_dir().join("mypaper-perf");
+    let temp = std::env::temp_dir().join("glaze-perf");
     let lock = lock_path()?;
     let plan = Plan {
         runs: args.runs,
@@ -158,7 +158,7 @@ fn real_main() -> Result<bool> {
                 }
             }
         }
-        drop(session); // restarts the user's mypaper, releases the lock
+        drop(session); // restarts the user's Glaze, releases the lock
     }
 
     let measured: Vec<Measured> = outcomes
@@ -311,9 +311,9 @@ fn check_report(budget: &Budget, path: &Path) -> Result<bool> {
 }
 
 /// Makes the harness's own stdin, stdout and stderr non-inheritable. Children are spawned with
-/// handle inheritance on (for their own null std handles), so the user's restarted mypaper,
+/// handle inheritance on (for their own null std handles), so the user's restarted Glaze,
 /// which outlives the harness, would otherwise keep the harness's output pipe open, and a shell
-/// reading that pipe would wait for mypaper to exit.
+/// reading that pipe would wait for Glaze to exit.
 fn keep_std_handles_private() {
     for which in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
         // SAFETY: our own standard handles; clearing the inherit flag changes nothing else.
@@ -350,7 +350,7 @@ fn stage_exes(build: &Path, stage: &Path, scenario: &Scenario) -> Result<()> {
         std::fs::copy(&from, &to)
             .with_context(|| format!("copying {} (build it first)", from.display()))?;
         // Core's `--autostart` without a command only prints its usage.
-        let probe = if exe == "mypaper-core.exe" {
+        let probe = if exe == "glaze-core.exe" {
             "--autostart"
         } else {
             "--help"
@@ -365,13 +365,13 @@ fn stage_exes(build: &Path, stage: &Path, scenario: &Scenario) -> Result<()> {
     Ok(())
 }
 
-/// `%LOCALAPPDATA%\Temp\mypaper-tools\desktop.lock`, shared by every tool that stops the user's
-/// mypaper.
+/// `%LOCALAPPDATA%\Temp\glaze-tools\desktop.lock`, shared by every tool that stops the user's
+/// glaze.
 fn lock_path() -> Result<PathBuf> {
     let local = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?;
     Ok(PathBuf::from(local)
         .join("Temp")
-        .join("mypaper-tools")
+        .join("glaze-tools")
         .join("desktop.lock"))
 }
 
@@ -388,7 +388,7 @@ fn now() -> (String, String) {
 
 fn machine() -> String {
     let cpus = std::thread::available_parallelism().map_or(0, |n| n.get());
-    let monitors = mypaper_desktop::monitor_infos();
+    let monitors = glaze_desktop::monitor_infos();
     let screens: Vec<String> = monitors
         .iter()
         .map(|m| format!("{}x{}", m.rect.width, m.rect.height))

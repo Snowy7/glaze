@@ -1,11 +1,11 @@
 //! Keyboard layouts: the installed ones, the one the app in front uses checked; choosing one
 //! asks that app's window to switch (`WM_INPUTLANGCHANGEREQUEST`).
 
-use mypaper_bars::flyouts::language::{self, Layout};
-use mypaper_bars::system;
-use mypaper_ui::icons::Icon;
-use mypaper_ui::layout::Stack;
-use mypaper_ui::{Accessory, HitId, Lead, ListRow};
+use glaze_bars::flyouts::language::{self, Layout};
+use glaze_bars::system;
+use glaze_ui::icons::Icon;
+use glaze_ui::layout::Stack;
+use glaze_ui::{Accessory, HitId, Lead, ListRow};
 
 use super::kit::Kit;
 use super::{Cx, Effect, LIST, Panel};

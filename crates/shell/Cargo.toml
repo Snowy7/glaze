@@ -1,29 +1,29 @@
 [package]
-name = "mypaper-shell"
-description = "The native shell: one UI thread on mypaper-ui. Hosts the native bars, dock, desktop widgets and the right-click menu."
+name = "glaze-shell"
+description = "The native shell: one UI thread on glaze-ui. Hosts the native bars, dock, desktop widgets and the right-click menu."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-mypaper-plugin-api = { path = "../plugin-api" }
-mypaper-plugin-sdk = { path = "../plugin-sdk" }
-mypaper-config.workspace = true
-mypaper-fswatch.workspace = true
-mypaper-index.workspace = true
-mypaper-desktop.workspace = true
-mypaper-theme.workspace = true
-mypaper-tweaks.workspace = true
-mypaper-ui.workspace = true
-mypaper-glass-ipc.workspace = true
-mypaper-bars.workspace = true
-mypaper-integrations = { path = "../integrations" }
+glaze-plugin-api = { path = "../plugin-api" }
+glaze-plugin-sdk = { path = "../plugin-sdk" }
+glaze-config.workspace = true
+glaze-fswatch.workspace = true
+glaze-index.workspace = true
+glaze-desktop.workspace = true
+glaze-theme.workspace = true
+glaze-tweaks.workspace = true
+glaze-ui.workspace = true
+glaze-glass-ipc.workspace = true
+glaze-bars.workspace = true
+glaze-integrations = { path = "../integrations" }
 bytemuck.workspace = true
 serde_json.workspace = true
 resvg = { version = "0.45", default-features = false }
 
-mypaper-widgets = { path = "../widgets" }
-mypaper-plugin-weather = { path = "../../plugins/weather" }
+glaze-widgets = { path = "../widgets" }
+glaze-plugin-weather = { path = "../../plugins/weather" }
 serde.workspace = true
 base64 = "0.22"
 windows-core = "0.62"
@@ -63,14 +63,14 @@ features = [
 ]
 
 [dev-dependencies]
-mypaper-ui = { workspace = true, features = ["golden"] }
+glaze-ui = { workspace = true, features = ["golden"] }
 
 [[example]]
-name = "mypaper-widget-fixture"
+name = "glaze-widget-fixture"
 path = "src/widgets/live.rs"
 
 [[example]]
-name = "mypaper-look-fixture"
+name = "glaze-look-fixture"
 path = "examples/look_fixture.rs"
 
 [lints]

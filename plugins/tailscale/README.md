@@ -22,14 +22,14 @@ status replies predating an action cannot overwrite its outcome.
 
 Build with `powershell -NoProfile -File scripts/build-plugins.ps1`. Pure guest tests run with
 `cargo test --manifest-path plugins/tailscale/Cargo.toml`. The real Wasmtime tests run with
-`cargo test -p mypaper-plugins tailscale_`; they inspect preference effects without executing
+`cargo test -p glaze-plugins tailscale_`; they inspect preference effects without executing
 them against Tailscale. The shell size-sheet test is
-`cargo test -p mypaper-shell tailscale_plugin_faces_render_on_the_kit`.
+`cargo test -p glaze-shell tailscale_plugin_faces_render_on_the_kit`.
 
 For a read-only check of the installed service and the helper's memory:
 
 ```powershell
-py -3 plugins/tailscale/tools/verify.py --exe target/release/mypaper-plugins.exe --out-dir C:/mypaper-targets/tailscale-live --seconds 20
+py -3 plugins/tailscale/tools/verify.py --exe target/release/glaze-plugins.exe --out-dir C:/glaze-targets/tailscale-live --seconds 20
 ```
 
 The probe isolates its app data, opens all three faces, waits for successful status data,

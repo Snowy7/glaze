@@ -1,24 +1,24 @@
 [package]
-name = "mypaper-studio"
-description = "mypaper Studio: the settings app, native on mypaper-ui (software Direct2D, no WebView)."
+name = "glaze-studio"
+description = "Glaze Studio: the settings app, native on glaze-ui (software Direct2D, no WebView)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "mypaper-studio"
+name = "glaze-studio"
 path = "src/main.rs"
 
 [dependencies]
-mypaper-bars.workspace = true
-mypaper-config.workspace = true
-mypaper-desktop.workspace = true
-mypaper-theme = { workspace = true, features = ["check"] }
-mypaper-ui.workspace = true
-mypaper-shell = { path = "../shell" }
-mypaper-widgets = { path = "../widgets" }
-mypaper-integrations = { path = "../integrations" }
-mypaper-plugin-weather = { path = "../../plugins/weather" }
+glaze-bars.workspace = true
+glaze-config.workspace = true
+glaze-desktop.workspace = true
+glaze-theme = { workspace = true, features = ["check"] }
+glaze-ui.workspace = true
+glaze-shell = { path = "../shell" }
+glaze-widgets = { path = "../widgets" }
+glaze-integrations = { path = "../integrations" }
+glaze-plugin-weather = { path = "../../plugins/weather" }
 
 anyhow.workspace = true
 log.workspace = true
@@ -54,7 +54,7 @@ features = [
 ]
 
 [dev-dependencies]
-mypaper-ui = { workspace = true, features = ["golden"] }
+glaze-ui = { workspace = true, features = ["golden"] }
 
 [lints]
 workspace = true

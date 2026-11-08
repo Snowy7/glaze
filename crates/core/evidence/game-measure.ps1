@@ -1,4 +1,4 @@
-# CPU, private memory and thread context-switch deltas for every live mypaper process.
+# CPU, private memory and thread context-switch deltas for every live Glaze process.
 # Context switches are a wake proxy (include external events/preemption, not just timers).
 param([string]$Label, [int]$Seconds = 60)
 $ErrorActionPreference = 'Stop'
@@ -42,16 +42,16 @@ public static class GameThreads {
 }
 '@
 $before = @{}
-foreach ($process in Get-Process mypaper-* -ErrorAction SilentlyContinue) {
+foreach ($process in Get-Process glaze-* -ErrorAction SilentlyContinue) {
   $before[$process.Id] = @{ name = $process.ProcessName; cpu = $process.TotalProcessorTime.TotalMilliseconds;
     started = $process.StartTime; private = $process.PrivateMemorySize64; threads = [GameThreads]::Read($process.Id) }
 }
-$signalPath = Join-Path $env:LOCALAPPDATA 'mypaper/game-activity.json'
+$signalPath = Join-Path $env:LOCALAPPDATA 'glaze/game-activity.json'
 $signalBefore = if (Test-Path -LiteralPath $signalPath) { Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json }
 $watch = [Diagnostics.Stopwatch]::StartNew()
 Start-Sleep -Seconds $Seconds
 $elapsed = $watch.Elapsed.TotalSeconds
-$rows = foreach ($process in Get-Process mypaper-* -ErrorAction SilentlyContinue) {
+$rows = foreach ($process in Get-Process glaze-* -ErrorAction SilentlyContinue) {
   $initial = $before[$process.Id]
   if (-not $initial -or $initial.started -ne $process.StartTime) { throw "Process changed during measurement: $($process.ProcessName)" }
   $threads = [GameThreads]::Read($process.Id)

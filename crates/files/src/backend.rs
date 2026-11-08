@@ -159,8 +159,8 @@ impl Backend {
                                     },
                                 );
                                 if location.filesystem
-                                    && let Ok(response) = mypaper_index::pipe::request(
-                                        &mypaper_index::Request::Sizes {
+                                    && let Ok(response) = glaze_index::pipe::request(
+                                        &glaze_index::Request::Sizes {
                                             path: location.path,
                                             limit: 4096,
                                         },
@@ -203,8 +203,8 @@ impl Backend {
                                 }
                                 let indexed = (!text.trim().is_empty())
                                     .then(|| {
-                                        mypaper_index::pipe::request(
-                                            &mypaper_index::Request::Search {
+                                        glaze_index::pipe::request(
+                                            &glaze_index::Request::Search {
                                                 query: text.clone(),
                                                 limit: 2000,
                                             },

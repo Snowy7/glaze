@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, Once};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 use wgpu::hal::api::Dx12;
 use windows::Foundation::TypedEventHandler;
 use windows::Graphics::Capture::{

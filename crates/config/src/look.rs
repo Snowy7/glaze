@@ -2,7 +2,7 @@
 //! the style's defaults (plans/native/studio-redesign.md, D2). Studio's Look page edits it.
 //!
 //! - The desktop half (`style`, `material`, `appearance`, `accent`, `text`, `shape`, and the
-//!   per-family `bars`, `widgets`, `menus` overrides) is what mypaper draws.
+//!   per-family `bars`, `widgets`, `menus` overrides) is what Glaze draws.
 //! - `windows` is how Windows draws its own windows and pointer. It used to live only in a
 //!   theme's `theme.json`; now the theme's section is the layer below this one, so styling no
 //!   longer needs a copy of a built-in theme. Each field here is tri-state: absent follows the
@@ -136,7 +136,7 @@ pub struct TextLook {
     pub tone: Option<Tone>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icons: Option<Icons>,
-    /// An icon pack: a folder under `%APPDATA%\mypaper\icons\`, or a bundled one.
+    /// An icon pack: a folder under `%APPDATA%\glaze\icons\`, or a bundled one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon_pack: Option<String>,
 }
@@ -343,7 +343,7 @@ mod tests {
             accent: Some(Paint::Auto),
             corners: Some(Corners::Small),
             dark_mode: Some(true),
-            cursors: Some("mypaper-dark".into()),
+            cursors: Some("glaze-dark".into()),
             ..Default::default()
         }
     }
@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(style.corners, Some(Corners::Square), "the user's value");
         assert_eq!(style.border, Some(Paint::Color(Color([0x11, 0x22, 0x33]))));
         assert_eq!(style.dark_mode, Some(true), "absent: the wallpaper's");
-        assert_eq!(style.cursors.as_deref(), Some("mypaper-dark"));
+        assert_eq!(style.cursors.as_deref(), Some("glaze-dark"));
         // Round trip keeps the three states apart.
         let text = serde_json::to_string(&look).unwrap();
         assert_eq!(serde_json::from_str::<Look>(&text).unwrap(), look);

@@ -1,7 +1,7 @@
 # Read-only capture of the deployed calendar widget. Never activates a window or injects input.
-param([string]$Out = "$env:TEMP\mypaper-calendar-live.png")
+param([string]$Out = "$env:TEMP\glaze-calendar-live.png")
 $ErrorActionPreference = 'Stop'
-$calendarCaptureLock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$calendarCaptureLock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 $calendarCaptureOwned = $false
 Add-Type -AssemblyName System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
@@ -24,7 +24,7 @@ public static class CalendarCapture {
   public static string Save(int[] processes,string path) {
     SetThreadDpiAwarenessContext(new IntPtr(-4));
     var candidates=new List<IntPtr>();
-    WindowProc collect=(h,p)=>{uint id;GetWindowThreadProcessId(h,out id);if(Array.IndexOf(processes,(int)id)<0)return true;var title=new StringBuilder(512);GetWindowText(h,title,512);if(title.ToString().StartsWith("mypaper widget calendar"))candidates.Add(h);return true;};
+    WindowProc collect=(h,p)=>{uint id;GetWindowThreadProcessId(h,out id);if(Array.IndexOf(processes,(int)id)<0)return true;var title=new StringBuilder(512);GetWindowText(h,title,512);if(title.ToString().StartsWith("Glaze widget calendar"))candidates.Add(h);return true;};
     EnumWindows((h,p)=>{collect(h,p);EnumChildWindows(h,collect,IntPtr.Zero);return true;},IntPtr.Zero);
     foreach(var h in candidates){Rect r;if(!GetWindowRect(h,out r)||r.R-r.L<40||r.B-r.T<40)continue;
       using(var bmp=new Bitmap(r.R-r.L,r.B-r.T))using(var graphics=Graphics.FromImage(bmp)){
@@ -39,7 +39,7 @@ public static class CalendarCapture {
 try {
     New-Item -ItemType Directory -Path $calendarCaptureLock -ErrorAction Stop | Out-Null
     $calendarCaptureOwned = $true
-    $calendarCaptureIds = @(Get-Process mypaper-shell -ErrorAction Stop | ForEach-Object { $_.Id })
+    $calendarCaptureIds = @(Get-Process glaze-shell -ErrorAction Stop | ForEach-Object { $_.Id })
     [CalendarCapture]::Save([int[]]$calendarCaptureIds, [IO.Path]::GetFullPath($Out))
 } finally {
     if ($calendarCaptureOwned) { [IO.Directory]::Delete($calendarCaptureLock) }

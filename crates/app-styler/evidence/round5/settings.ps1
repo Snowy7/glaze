@@ -29,7 +29,7 @@ function Open-Page([string]$uri) {
   }
   return $null
 }
-function Styler { $s = Get-Process mypaper-styler -ErrorAction SilentlyContinue | Select-Object -First 1; if ($s) { 'styler {0}: {1} MB priv' -f $s.Id, (Mb $s) } else { 'no styler' } }
+function Styler { $s = Get-Process glaze-styler -ErrorAction SilentlyContinue | Select-Object -First 1; if ($s) { 'styler {0}: {1} MB priv' -f $s.Id, (Mb $s) } else { 'no styler' } }
 Note "settings rounds start ($Rounds); $(Styler)"
 Sample-Explorers 'start'
 foreach ($n in 1..$Rounds) {

@@ -18,7 +18,7 @@ pub struct Registry {
     pub widgets: BTreeMap<String, Installed>,
 }
 
-/// Where plugins live: `%APPDATA%\mypaper\plugins`, then the bundled `plugins/`.
+/// Where plugins live: `%APPDATA%\glaze\plugins`, then the bundled `plugins/`.
 pub fn plugin_roots() -> Vec<PathBuf> {
     roots(
         crate::files::user("plugins").ok(),
@@ -197,7 +197,7 @@ mod tests {
         assert!(manifest.check_settings(Map::from_iter([("show-subagents".to_owned(), json!("yes"))])).is_err());
         assert!(manifest.check_settings(Map::from_iter([("nope".to_owned(), json!(1))])).is_err());
         // Stored in the instance's settings, beside what was there.
-        let dir = std::env::temp_dir().join(format!("mypaper-face-options-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("glaze-face-options-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("widgets.json");
         let mut layout = Layout::starter(r"\\.\DISPLAY1", 40, 20, &[("t3--running", [8, 5])]);

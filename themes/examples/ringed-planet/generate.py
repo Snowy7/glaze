@@ -1,4 +1,4 @@
-﻿"""Original mypaper CC0 planet fixture; rebuild with Python + Pillow."""
+﻿"""Original Glaze CC0 planet fixture; rebuild with Python + Pillow."""
 import io,json,math,struct
 from pathlib import Path
 from PIL import Image
@@ -49,7 +49,7 @@ for x in range(256):
     a=x*2; indices.extend([a,a+2,a+1,a+1,a+2,a+3])
 rings=dict(attributes=dict(POSITION=acc(pos,'VEC3',bounds=True),NORMAL=acc(normals,'VEC3'),TEXCOORD_0=acc(uv,'VEC2')),indices=acc(indices,'SCALAR',5125),material=1)
 times=acc([0,2,4,6,8],'SCALAR'); accessors[times].update(min=[0],max=[8]); rotations=acc([[0,math.sin(t/8*math.pi),0,math.cos(t/8*math.pi)] for t in [0,2,4,6,8]],'VEC4'); weights=acc([0,1,0,1,0],'SCALAR')
-doc=dict(asset=dict(version='2.0',generator='mypaper CC0 ringed planet'),scene=0,scenes=[dict(nodes=[0,1])],nodes=[dict(name='Planet',mesh=0),dict(name='Rings',mesh=1,rotation=[0,0,math.sin(.22),math.cos(.22)])],meshes=[dict(primitives=[sphere],weights=[0]),dict(primitives=[rings])],materials=materials,textures=textures,images=images,samplers=[dict(magFilter=9729,minFilter=9987,wrapS=10497,wrapT=33071)],animations=[dict(name='Turntable',samplers=[dict(input=times,output=rotations)],channels=[dict(sampler=0,target=dict(node=0,path='rotation'))]),dict(name='Breathe',samplers=[dict(input=times,output=weights)],channels=[dict(sampler=0,target=dict(node=0,path='weights'))])],accessors=accessors,bufferViews=views,buffers=[dict(byteLength=len(blob))])
+doc=dict(asset=dict(version='2.0',generator='Glaze CC0 ringed planet'),scene=0,scenes=[dict(nodes=[0,1])],nodes=[dict(name='Planet',mesh=0),dict(name='Rings',mesh=1,rotation=[0,0,math.sin(.22),math.cos(.22)])],meshes=[dict(primitives=[sphere],weights=[0]),dict(primitives=[rings])],materials=materials,textures=textures,images=images,samplers=[dict(magFilter=9729,minFilter=9987,wrapS=10497,wrapT=33071)],animations=[dict(name='Turntable',samplers=[dict(input=times,output=rotations)],channels=[dict(sampler=0,target=dict(node=0,path='rotation'))]),dict(name='Breathe',samplers=[dict(input=times,output=weights)],channels=[dict(sampler=0,target=dict(node=0,path='weights'))])],accessors=accessors,bufferViews=views,buffers=[dict(byteLength=len(blob))])
 js=json.dumps(doc,separators=(',',':')).encode(); js+=b' '*(-len(js)%4); blob.extend(b'\0'*(-len(blob)%4)); body=struct.pack('<I4s',len(js),b'JSON')+js+struct.pack('<I4s',len(blob),b'BIN\0')+blob
 Path(__file__).with_name('planet.glb').write_bytes(struct.pack('<4sII',b'glTF',2,len(body)+12)+body)
 print(f'Wrote {len(body)+12:,} bytes')

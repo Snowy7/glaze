@@ -1,8 +1,8 @@
 //! Shared Studio columns, manifest fields, picture tiles and list rows.
 
 use crate::panel::tokens::radius;
-use mypaper_ui::controls::{Align, Builder, Font, Glyph, Key, key};
-use mypaper_ui::{Accessory, Lead, Rect, Rgba, Role};
+use glaze_ui::controls::{Align, Builder, Font, Glyph, Key, key};
+use glaze_ui::{Accessory, Lead, Rect, Rgba, Role};
 use serde_json::Value;
 
 use crate::actions::{Action, Edit, FieldId};
@@ -13,14 +13,14 @@ pub type B<'a> = Builder<'a, Action>;
 
 /// Studio uses One UI geometry independently of the style being edited on the desktop.
 pub fn builder<'a>(
-    text: &'a mut mypaper_ui::Text,
-    palette: &'a mypaper_ui::controls::Palette,
-    ty: &'a mypaper_ui::controls::Type,
+    text: &'a mut glaze_ui::Text,
+    palette: &'a glaze_ui::controls::Palette,
+    ty: &'a glaze_ui::controls::Type,
     scale: f32,
-    input: &'a mypaper_ui::controls::Input,
+    input: &'a glaze_ui::controls::Input,
 ) -> B<'a> {
     let mut b = Builder::new(text, palette, ty, scale, input)
-        .with_style(mypaper_ui::Style::OneUi)
+        .with_style(glaze_ui::Style::OneUi)
         .with_filled_controls();
     b.kit.metrics.pad = 18.0;
     b.kit.metrics.row_single = b.kit.metrics.row;
@@ -101,12 +101,12 @@ pub fn text_field(
     let shown = if shown.is_empty() { app.text(&id) } else { shown };
     b.field(k, rect, glyph, placeholder, shown.is_empty() && live.is_none(), live.is_some(), label, Action::Field(id.clone()));
     let value = live.and_then(|field| field.field.text().ok()).unwrap_or_else(|| shown.to_owned());
-    b.semantics(k, mypaper_ui::Semantics::Text(value.into()));
+    b.semantics(k, glaze_ui::Semantics::Text(value.into()));
     let inner = b.field_inner(rect, glyph.is_some());
     match live {
         Some(f) => {
             f.field.set_rect(inner);
-            b.list.ops.push(mypaper_ui::Op::TextField {
+            b.list.ops.push(glaze_ui::Op::TextField {
                 rect: inner,
                 field: f.field.clone(),
                 revision: f.field.revision(),
@@ -155,7 +155,7 @@ pub fn tiles(
                 if *selected { p.ink1 } else { p.ink3 },
                 Align::Center,
             );
-            b.hit_checked(k, Rect::new(x, y, w, h + b.px(24.0)), Role::RadioButton, label, Some(*selected), action.clone(), mypaper_ui::controls::Behavior::Click);
+            b.hit_checked(k, Rect::new(x, y, w, h + b.px(24.0)), Role::RadioButton, label, Some(*selected), action.clone(), glaze_ui::controls::Behavior::Click);
             b.focus_ring(k, pic, b.px(radius::CONTROL));
         }
     });
@@ -192,26 +192,26 @@ pub fn swatches(
             b.fill(r, d / 2.0, auto);
             swatch_frame(b, r, auto, on, p);
             let k = key((group, "auto"));
-            b.hit_checked(k, r, Role::RadioButton, "From wallpaper", Some(on), Action::Set(edit.clone(), Value::String("auto".into())), mypaper_ui::controls::Behavior::Click);
+            b.hit_checked(k, r, Role::RadioButton, "From wallpaper", Some(on), Action::Set(edit.clone(), Value::String("auto".into())), glaze_ui::controls::Behavior::Click);
             b.focus_ring(k, r, d / 2.0);
             x += d + gap;
         }
         for c in presets {
             let r = Rect::new(x, y, d, d);
-            let hex = mypaper_config::Color(*c).hex();
+            let hex = glaze_config::Color(*c).hex();
             let on = current_hex.eq_ignore_ascii_case(&hex);
             let color = Rgba::rgb8(*c, 1.0);
             b.fill(r, d / 2.0, color);
             swatch_frame(b, r, color, on, p);
             let k = key((group, hex.as_str()));
-            b.hit_checked(k, r, Role::RadioButton, &hex, Some(on), Action::Set(edit.clone(), Value::String(hex.clone())), mypaper_ui::controls::Behavior::Click);
+            b.hit_checked(k, r, Role::RadioButton, &hex, Some(on), Action::Set(edit.clone(), Value::String(hex.clone())), glaze_ui::controls::Behavior::Click);
             b.focus_ring(k, r, d / 2.0);
             x += d + gap;
         }
     });
     // The custom colour: a hex field.
     let custom = current_hex.starts_with('#')
-        && !presets.iter().any(|c| mypaper_config::Color(*c).hex().eq_ignore_ascii_case(current_hex));
+        && !presets.iter().any(|c| glaze_config::Color(*c).hex().eq_ignore_ascii_case(current_hex));
     let fw = (col.right() - x).max(b.px(84.0)).min(b.px(110.0));
     let rect = Rect::new(col.right() - fw, y - b.px(4.0), fw, b.px(32.0));
     let id = FieldId::Hex(edit.path.clone());
@@ -223,17 +223,17 @@ pub fn swatches(
 /// A swatch's selection: a check inside it in whichever of black or white reads on the
 /// colour (macOS's accent picker), never a ring. A swatch too close to the inspector behind it
 /// (a near-white on light) gets a faint edge so it doesn't vanish.
-fn swatch_frame(b: &mut B, r: Rect, color: Rgba, on: bool, p: mypaper_ui::controls::Palette) {
-    if mypaper_ui::theme::contrast(color, p.chrome) < 1.35 {
+fn swatch_frame(b: &mut B, r: Rect, color: Rgba, on: bool, p: glaze_ui::controls::Palette) {
+    if glaze_ui::theme::contrast(color, p.chrome) < 1.35 {
         b.stroke(r, r.width() / 2.0, 1.0, p.edge);
     }
     if on {
-        let ink = if mypaper_ui::theme::luminance(color) > 0.4 { Rgba::new(0.0, 0.0, 0.0, 0.85) } else { Rgba::new(1.0, 1.0, 1.0, 1.0) };
-        b.icon(r, mypaper_ui::icons::Icon::Check, 13.0, ink);
+        let ink = if glaze_ui::theme::luminance(color) > 0.4 { Rgba::new(0.0, 0.0, 0.0, 0.85) } else { Rgba::new(1.0, 1.0, 1.0, 1.0) };
+        b.icon(r, glaze_ui::icons::Icon::Check, 13.0, ink);
     }
 }
 
-/// What a file's banner says and offers. A layout saved by a newer mypaper offers only Restart:
+/// What a file's banner says and offers. A layout saved by a newer Glaze offers only Restart:
 /// nothing destructive. A file that can't be read offers Show file and Start over (which asks
 /// first and keeps a timestamped backup).
 pub fn banner_for(docs: &crate::docs::Docs, doc: crate::docs::DocId) -> Option<(String, Vec<(&'static str, Action)>)> {
@@ -290,7 +290,7 @@ pub fn list_row(
     }
     let style = b.font(Font::Body);
     b.text_in(Rect::new(x, rect.top, rect.right - x - b.px(36.0), rect.height()), label, &style, p.ink1, Align::Start);
-    b.hit(k, Rect::new(rect.left, rect.top, rect.width() - b.px(34.0), rect.height()), Role::ListItem, label, select, mypaper_ui::controls::Behavior::Drag);
+    b.hit(k, Rect::new(rect.left, rect.top, rect.width() - b.px(34.0), rect.height()), Role::ListItem, label, select, glaze_ui::controls::Behavior::Drag);
     b.focus_ring(k, rect.inflate(-b.px(2.0)), b.px(radius::SMALL));
     if let Some(remove) = remove
         && hot

@@ -3,8 +3,8 @@
 //! queries did: big numerals, a quiet date under them, nothing else.
 use super::Ctx;
 use crate::widgets::time;
-use mypaper_ui::calendar::{Date, MONTHS, WEEKDAYS};
-use mypaper_ui::{Align, Op, Point, Rect, Rgba, TextRole};
+use glaze_ui::calendar::{Date, MONTHS, WEEKDAYS};
+use glaze_ui::{Align, Op, Point, Rect, Rgba, TextRole};
 use std::f32::consts::{PI, TAU};
 
 pub fn draw(c: &mut Ctx, body: Rect) {
@@ -228,7 +228,7 @@ fn digital(c: &mut Ctx, r: Rect, flip: bool) {
 }
 
 /// The numerals with a half-strength colon, as the web clock.
-fn numerals(c: &mut Ctx, at: Rect, digits: &str, style: &mypaper_ui::TextStyle) {
+fn numerals(c: &mut Ctx, at: Rect, digits: &str, style: &glaze_ui::TextStyle) {
     let color = c.color();
     let mut x = at.left;
     for (i, part) in digits.split(':').enumerate() {
@@ -258,7 +258,7 @@ fn numerals(c: &mut Ctx, at: Rect, digits: &str, style: &mypaper_ui::TextStyle) 
 }
 
 /// Flip cards: each digit on a card with a hinge, the changed ones folding for a moment.
-fn flip_digits(c: &mut Ctx, at: Rect, digits: &str, size: f32, style: &mypaper_ui::TextStyle) {
+fn flip_digits(c: &mut Ctx, at: Rect, digits: &str, size: f32, style: &glaze_ui::TextStyle) {
     let color = c.color();
     let m = c.m;
     let s = c.s();
@@ -271,7 +271,7 @@ fn flip_digits(c: &mut Ctx, at: Rect, digits: &str, size: f32, style: &mypaper_u
         .map(|old| split_time(&old.clock(format24, false), format24).0);
     let count = digits.chars().count() as f32;
     let cell = at.width() / count.max(1.0);
-    let card_style = mypaper_ui::TextStyle {
+    let card_style = glaze_ui::TextStyle {
         size: (style.size * 0.84).round(),
         ..style.clone()
     };
@@ -421,7 +421,7 @@ fn words(c: &mut Ctx, r: Rect) {
     let color = c.color();
     let supplied = m.str("name", "");
     let display = if supplied.is_empty() {
-        mypaper_widgets::userinfo::cached()
+        glaze_widgets::userinfo::cached()
             .map(|u| u.name.clone())
             .unwrap_or_default()
     } else {
@@ -490,7 +490,7 @@ fn world(c: &mut Ctx, r: Rect) {
     let zones = c.m.list("zones");
     let color = c.color();
     if zones.is_empty() {
-        c.empty(r, Some(mypaper_ui::icons::Icon::Globe), "World clocks", Some("Choose cities in Studio"));
+        c.empty(r, Some(glaze_ui::icons::Icon::Globe), "World clocks", Some("Choose cities in Studio"));
         return;
     }
     let now = c.now;

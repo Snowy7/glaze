@@ -1,6 +1,6 @@
 {
   "animated": false,
-  "author": "mypaper",
+  "author": "Glaze",
   "category": "color",
   "cost": 0.564,
   "cost_estimated": false,
@@ -46,5 +46,5 @@
       "source": "duotone.wgsl"
     }
   ],
-  "url": "https://github.com/Snowy7/mypaper"
+  "url": "https://github.com/Snowy7/__GLAZE_REPO__"
 }

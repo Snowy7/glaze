@@ -23,4 +23,4 @@
 
 
 
-10:48:28 ended explorer 51544 (stacks: C:\mypaper-targets\app-styler\round4\hang-design.cdb.txt)
+10:48:28 ended explorer 51544 (stacks: C:\glaze-targets\app-styler\round4\hang-design.cdb.txt)

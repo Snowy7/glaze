@@ -1,6 +1,6 @@
 {
   "animated": false,
-  "author": "mypaper",
+  "author": "Glaze",
   "category": "stylize",
   "cost": 0.254,
   "cost_estimated": false,
@@ -52,5 +52,5 @@
       "source": "crt.wgsl"
     }
   ],
-  "url": "https://github.com/Snowy7/mypaper"
+  "url": "https://github.com/Snowy7/__GLAZE_REPO__"
 }

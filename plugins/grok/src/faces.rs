@@ -4,7 +4,7 @@ use crate::{
     discovery::Discovery,
     routines::{RoutineRun, RoutineState},
 };
-use mypaper_plugin_sdk::{Face, Role, SizeClass, Tone, View};
+use glaze_plugin_sdk::{Face, Role, SizeClass, Tone, View};
 
 fn row(title: &str, detail: &str, icon: &str, action: Option<String>) -> View {
     View::ListRow {

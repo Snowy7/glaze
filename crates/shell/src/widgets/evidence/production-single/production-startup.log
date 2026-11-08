@@ -1,31 +1,31 @@
-[2026-11-05T07:16:57Z INFO  mypaper_wallpaper::engine] Rainy Hong Kong (non-commercial) ready in 161.6ms
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=wallpaper source_ms=869.8 epoch_us=1793863017203050
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=wallpaper loop_ms=871.6 epoch_us=1793863017204895
-[2026-11-05T07:16:57Z INFO  mypaper_wallpaper::overlay::capture] glass overlays: borderless capture allowed
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=wallpaper first_frame_ms=1088.2 epoch_us=1793863017421423
-[2026-11-05T07:16:57Z INFO  mypaper_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
-[2026-11-05T07:16:57Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY1 320x180 (2 screens): ready after 48.8 ms (not waited on), copy 0.09 ms on the frame, write 3.79 ms off it
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=shell main_ms=47.9 epoch_us=1793863017439878
-[2026-11-05T07:16:57Z WARN  mypaper_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=shell config_ms=59.3 epoch_us=1793863017451233
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=shell prepared_ms=59.3 epoch_us=1793863017451239
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=shell factories_ms=62.6 epoch_us=1793863017454547
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=shell services_ms=62.6 epoch_us=1793863017454595
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=shell theme_ms=64.0 epoch_us=1793863017455957
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=shell monitors_ms=64.0 epoch_us=1793863017456000
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=shell first_paint_ms=178.6 epoch_us=1793863017570591
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=shell surfaces_ms=324.9 epoch_us=1793863017716887
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=shell bars_painted_ms=325.0 epoch_us=1793863017716999
-[2026-11-05T07:16:57Z INFO  mypaper_desktop::startup] READY component=shell replayed_ms=548.9 epoch_us=1793863017940867
-[2026-11-05T07:16:58Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
-[2026-11-05T07:16:58Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
-[2026-11-05T07:16:59Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
-[2026-11-05T07:16:59Z INFO  mypaper_bars::flyouts::winkey] launcher: the Windows key opens the launcher
-[2026-11-05T07:16:59Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 118.0201ms
-[2026-11-05T07:16:59Z INFO  mypaper_wallpaper::trim] trimmed the working set
-[2026-11-05T07:16:59Z INFO  mypaper_shell] desktop right-click menu on
-[2026-11-05T07:16:59Z INFO  mypaper_desktop::startup] READY component=shell ready_ms=2159.4 epoch_us=1793863019551402
-[2026-11-05T07:16:59Z INFO  mypaper_shell] running
-[2026-11-05T07:16:59Z INFO  mypaper_desktop::startup] READY component=shell widgets_init_ms=2290.3 epoch_us=1793863019682299
-[2026-11-05T07:17:00Z INFO  mypaper_wallpaper::engine] pausing 2560x1440 screen
-[2026-11-05T07:17:00Z INFO  mypaper_desktop::startup] READY component=shell widgets_ready_ms=3035.2 epoch_us=1793863020427223
+[2026-11-05T07:16:57Z INFO  glaze_wallpaper::engine] Rainy Hong Kong (non-commercial) ready in 161.6ms
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=wallpaper source_ms=869.8 epoch_us=1793863017203050
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=wallpaper loop_ms=871.6 epoch_us=1793863017204895
+[2026-11-05T07:16:57Z INFO  glaze_wallpaper::overlay::capture] glass overlays: borderless capture allowed
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=wallpaper first_frame_ms=1088.2 epoch_us=1793863017421423
+[2026-11-05T07:16:57Z INFO  glaze_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-05T07:16:57Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY1 320x180 (2 screens): ready after 48.8 ms (not waited on), copy 0.09 ms on the frame, write 3.79 ms off it
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=shell main_ms=47.9 epoch_us=1793863017439878
+[2026-11-05T07:16:57Z WARN  glaze_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=shell config_ms=59.3 epoch_us=1793863017451233
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=shell prepared_ms=59.3 epoch_us=1793863017451239
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=shell factories_ms=62.6 epoch_us=1793863017454547
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=shell services_ms=62.6 epoch_us=1793863017454595
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=shell theme_ms=64.0 epoch_us=1793863017455957
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=shell monitors_ms=64.0 epoch_us=1793863017456000
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=shell first_paint_ms=178.6 epoch_us=1793863017570591
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=shell surfaces_ms=324.9 epoch_us=1793863017716887
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=shell bars_painted_ms=325.0 epoch_us=1793863017716999
+[2026-11-05T07:16:57Z INFO  glaze_desktop::startup] READY component=shell replayed_ms=548.9 epoch_us=1793863017940867
+[2026-11-05T07:16:58Z INFO  glaze_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T07:16:58Z INFO  glaze_bars::tray_host] tray: hosting the notification area
+[2026-11-05T07:16:59Z INFO  glaze_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T07:16:59Z INFO  glaze_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T07:16:59Z INFO  glaze_bars::tray_host] tray: WM_COPYDATA 0 took 118.0201ms
+[2026-11-05T07:16:59Z INFO  glaze_wallpaper::trim] trimmed the working set
+[2026-11-05T07:16:59Z INFO  glaze_shell] desktop right-click menu on
+[2026-11-05T07:16:59Z INFO  glaze_desktop::startup] READY component=shell ready_ms=2159.4 epoch_us=1793863019551402
+[2026-11-05T07:16:59Z INFO  glaze_shell] running
+[2026-11-05T07:16:59Z INFO  glaze_desktop::startup] READY component=shell widgets_init_ms=2290.3 epoch_us=1793863019682299
+[2026-11-05T07:17:00Z INFO  glaze_wallpaper::engine] pausing 2560x1440 screen
+[2026-11-05T07:17:00Z INFO  glaze_desktop::startup] READY component=shell widgets_ready_ms=3035.2 epoch_us=1793863020427223

@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn snow_layer(screen: vec2f, z: f32, t: f32, size: f32, amount: f32, seed: f32) -> f32 {
     let cells = mix(38.7, 12.3, z);
     let wind = clamp(params.wind, -1.0, 1.0);

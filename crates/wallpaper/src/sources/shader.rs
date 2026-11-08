@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use bytemuck::{Pod, Zeroable};
-use mypaper_theme::{LoadedTheme, ShaderImageFormat, ShaderPrefilter, ShaderWallpaper};
+use glaze_theme::{LoadedTheme, ShaderImageFormat, ShaderPrefilter, ShaderWallpaper};
 
 use super::wic::{Budget, Decoder};
 use super::{Frame, Redraw, Source, begin};
@@ -102,7 +102,7 @@ impl ShaderSource {
                 let decoded = match &image.source {
                     Some(source) => decoder.decode(
                         &theme.asset(source),
-                        Budget::new(gpu, mypaper_theme::Fit::Cover),
+                        Budget::new(gpu, glaze_theme::Fit::Cover),
                     )?,
                     None => super::wic::Decoded {
                         size: (1, 1),
@@ -161,7 +161,7 @@ impl ShaderSource {
         let mut pipelines = compile(
             gpu,
             &code,
-            std::iter::once((&layout, "mypaper_fs")).chain(
+            std::iter::once((&layout, "glaze_fs")).chain(
                 baked
                     .iter()
                     .filter_map(|image| Some((&bake_layout, image.bake.as_deref()?))),
@@ -371,7 +371,7 @@ fn image_texture(
         let source = view(level - 1);
         let target = view(level);
         let quad = blit.quad(&gpu.device, &source);
-        quad.set(&gpu.queue, (1, 1), (1, 1), mypaper_theme::Fit::Stretch, 1.0);
+        quad.set(&gpu.queue, (1, 1), (1, 1), glaze_theme::Fit::Stretch, 1.0);
         let mut pass = begin(
             &mut encoder,
             &target,
@@ -528,7 +528,7 @@ fn prefilter(
         let source = view(level - 1);
         let target = view(level);
         let quad = blit.quad(&gpu.device, &source);
-        quad.set(&gpu.queue, (1, 1), (1, 1), mypaper_theme::Fit::Stretch, 1.0);
+        quad.set(&gpu.queue, (1, 1), (1, 1), glaze_theme::Fit::Stretch, 1.0);
         let mut pass = begin(
             &mut encoder,
             &target,
@@ -570,7 +570,7 @@ fn compile<'a>(
                         layout: Some(&pipeline_layout),
                         vertex: wgpu::VertexState {
                             module: &module,
-                            entry_point: Some("mypaper_vs"),
+                            entry_point: Some("glaze_vs"),
                             compilation_options: Default::default(),
                             buffers: &[],
                         },
@@ -606,11 +606,11 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../themes");
         let mut compiled = 0;
         for entry in std::fs::read_dir(&root).unwrap().flatten() {
-            if !entry.path().join(mypaper_theme::MANIFEST).is_file() {
+            if !entry.path().join(glaze_theme::MANIFEST).is_file() {
                 continue;
             }
-            let theme = mypaper_theme::LoadedTheme::load(entry.path()).unwrap();
-            if let mypaper_theme::Wallpaper::Shader(config) = &theme.theme.wallpaper {
+            let theme = glaze_theme::LoadedTheme::load(entry.path()).unwrap();
+            if let glaze_theme::Wallpaper::Shader(config) = &theme.theme.wallpaper {
                 super::ShaderSource::new(&gpu, &theme, config)
                     .unwrap_or_else(|error| panic!("{}: {error:#}", theme.dir.display()));
                 compiled += 1;

@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn immutable_array_round_trip_and_delete_on_close() {
         let directory = std::env::temp_dir().join(format!(
-            "mypaper-query-test-{}-{}",
+            "glaze-query-test-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

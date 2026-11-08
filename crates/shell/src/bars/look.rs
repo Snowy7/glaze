@@ -5,19 +5,19 @@
 //!
 //! **Styles.** `look.style` is the kit style one to one (`liquid`, `oneui`, `fluent`, `solid`,
 //! `mono`); a look without one takes its family's (Fluent → Fluent, Material → One UI, else
-//! Liquid). The style alone picks the material (`mypaper_ui::theme::material`): Liquid Glass,
+//! Liquid). The style alone picks the material (`glaze_ui::theme::material`): Liquid Glass,
 //! frosted One UI, Fluent acrylic, or no glass for Solid and Mono. `look.glass` tunes it by the
 //! kit's one rule (`GlassMaterial::tuned`), the same as widgets and flyouts.
 //!
 //! `look.glyphs: fluent` draws the module icons from Segoe Fluent Icons in any style.
 use crate::glass::Material;
-use mypaper_bars::{
+use glaze_bars::{
     accent,
     style::{ColorRef, Family, Fill, GlassKind, Glyphs, Look, NativeStyle, Scheme},
 };
-use mypaper_theme::{Appearance, LoadedTheme, TextTone};
-use mypaper_ui::theme::Knobs;
-use mypaper_ui::{Rgba, Style, TextRole, TextStyle, Theme, icons::IconSet};
+use glaze_theme::{Appearance, LoadedTheme, TextTone};
+use glaze_ui::theme::Knobs;
+use glaze_ui::{Rgba, Style, TextRole, TextStyle, Theme, icons::IconSet};
 
 #[derive(Clone)]
 pub struct Tokens {
@@ -36,10 +36,10 @@ pub struct Tokens {
     /// Engine glass under the body (blur in DIPs); `None` draws the theme's surface.
     pub material: Option<Material>,
     /// Optics resolved once with the look, copied to both plates and overlays.
-    pub glass_style: mypaper_ui::glass::GlassStyle,
-    pub plate_style: mypaper_glass_ipc::Style,
+    pub glass_style: glaze_ui::glass::GlassStyle,
+    pub plate_style: glaze_glass_ipc::Style,
     /// Dock command menus resolve alongside the bar, never while publishing or opening.
-    pub popup: Option<mypaper_ui::Tokens>,
+    pub popup: Option<glaze_ui::Tokens>,
     /// `look.transparent` (or `background: none`): no body at all, the items straight on the
     /// wallpaper with a soft shadow.
     pub bare: bool,
@@ -78,8 +78,8 @@ pub fn material(look: &Look, style: Style, tint: Rgba, opacity: Option<f32>) -> 
     if look.glass.style == Some(GlassKind::None) {
         return None;
     }
-    let base = mypaper_ui::theme::material(style, tint.with_alpha(opacity.unwrap_or(0.12)))?;
-    let base = if mypaper_ui::theme::lensed(style) {
+    let base = glaze_ui::theme::material(style, tint.with_alpha(opacity.unwrap_or(0.12)))?;
+    let base = if glaze_ui::theme::lensed(style) {
         Material {
             clarity: 0.88,
             ..base
@@ -123,7 +123,7 @@ pub fn material(look: &Look, style: Style, tint: Rgba, opacity: Option<f32>) -> 
 
 impl Tokens {
     /// Production resolution under config.json's Look; previews may keep using `resolve`.
-    pub fn resolve_settings(look: &Look, appearance: &Appearance, system: &accent::System, desktop: &mypaper_config::Look, text: &mypaper_ui::Text) -> Self {
+    pub fn resolve_settings(look: &Look, appearance: &Appearance, system: &accent::System, desktop: &glaze_config::Look, text: &glaze_ui::Text) -> Self {
         let mut tokens = Self::resolve(look, appearance, system);
         if let Some(name) = look.font.family.as_deref().or(appearance.font.as_deref()) {
             tokens.font.family = crate::look::settings::font(name, |f| text.has_family(f)).into();
@@ -145,11 +145,11 @@ impl Tokens {
     }
 
     /// Re-evaluate the label roles against the actual material on this monitor.
-    pub fn adapt_ink(&mut self, look: &Look, rect: Option<mypaper_ui::Rect>) {
+    pub fn adapt_ink(&mut self, look: &Look, rect: Option<glaze_ui::Rect>) {
         if self.bare { return; }
-        let under = crate::glass::tone::backdrop(rect, self.theme.scheme == mypaper_ui::Scheme::Dark);
+        let under = crate::glass::tone::backdrop(rect, self.theme.scheme == glaze_ui::Scheme::Dark);
         let surface = self.material.map_or_else(
-            || mypaper_ui::theme::over(self.fill.unwrap_or(self.theme.color.surface), under),
+            || glaze_ui::theme::over(self.fill.unwrap_or(self.theme.color.surface), under),
             |m| crate::glass::tone::face(&m, under, rect.map_or(40.0, |r| r.width().min(r.height()))),
         );
         crate::glass::tone::apply(&mut self.theme, surface);
@@ -168,18 +168,18 @@ impl Tokens {
             None => appearance.text.is_none_or(|t| t == TextTone::Light),
         };
         let accent = match appearance.accent {
-            Some(mypaper_theme::Paint::Color(c)) => Rgba::rgb8(c.0, 1.0),
-            _ => hex(&system.accent[0]).unwrap_or(mypaper_ui::theme::SYSTEM_BLUE),
+            Some(glaze_theme::Paint::Color(c)) => Rgba::rgb8(c.0, 1.0),
+            _ => hex(&system.accent[0]).unwrap_or(glaze_ui::theme::SYSTEM_BLUE),
         };
         let scheme = if dark {
-            mypaper_ui::Scheme::Dark
+            glaze_ui::Scheme::Dark
         } else {
-            mypaper_ui::Scheme::Light
+            glaze_ui::Scheme::Light
         };
         let kit = style(native);
         let mut theme = Theme::new(kit, scheme, accent);
         if look.glyphs == Some(Glyphs::Fluent) {
-            theme.icons = IconSet::Font(mypaper_ui::icons::SYSTEM_FAMILY.into());
+            theme.icons = IconSet::Font(glaze_ui::icons::SYSTEM_FAMILY.into());
         }
         // A tint colour tunes glass; an explicit solid background replaces its material.
         let tint = appearance.tint.map_or(
@@ -194,7 +194,7 @@ impl Tokens {
             std::array::from_fn(|i| hex(&system.accent[i]).unwrap_or(theme.color.accent));
         let fill = match &look.background {
             Some(Fill::Solid { color }) => Some(color_with_system(color, &theme, &system_colors)),
-            _ if appearance.surface == Some(mypaper_theme::Surface::Solid)
+            _ if appearance.surface == Some(glaze_theme::Surface::Solid)
                 || (material.is_none()
                     && (appearance.tint.is_some()
                         || appearance.opacity.is_some()
@@ -240,7 +240,7 @@ impl Tokens {
         let bare = look.transparent.unwrap_or_else(|| match look.background {
             Some(Fill::None) => true,
             Some(_) => false,
-            None => appearance.surface == Some(mypaper_theme::Surface::None),
+            None => appearance.surface == Some(glaze_theme::Surface::None),
         });
         let material = material.filter(|_| !bare && fill.is_none());
         theme.glass = material;
@@ -251,7 +251,7 @@ impl Tokens {
             color_with_system(c, &theme, &system_colors)
         });
         let mut colors = std::collections::HashMap::new();
-        for name in mypaper_bars::style::COLOR_TOKENS.iter().copied().chain([
+        for name in glaze_bars::style::COLOR_TOKENS.iter().copied().chain([
             "var(--fill-1)",
             "var(--fill-2)",
             "var(--fill-3)",
@@ -302,9 +302,9 @@ impl Tokens {
     }
 
     /// The menus this bar opens (dock and tray), drawn with its theme.
-    pub fn menu(&self, text: &mypaper_ui::Text) -> mypaper_ui::Tokens {
-        mypaper_ui::Tokens {
-            icons: mypaper_ui::icons::system_family(text),
+    pub fn menu(&self, text: &glaze_ui::Text) -> glaze_ui::Tokens {
+        glaze_ui::Tokens {
+            icons: glaze_ui::icons::system_family(text),
             font: self.font.clone(),
             scale: self.scale,
             shadow: self.shadow,
@@ -322,7 +322,7 @@ impl Tokens {
             .unwrap_or_else(|| color_with_system(color, &self.theme, &self.system_colors))
     }
 
-    pub fn cache_config(&mut self, look: &Look, config: &mypaper_bars::BarsConfig) {
+    pub fn cache_config(&mut self, look: &Look, config: &glaze_bars::BarsConfig) {
         for (name, value) in &mut self.colors {
             if let Some(color) = ColorRef::parse(name) {
                 *value = color_with_system(&color, &self.theme, &self.system_colors);
@@ -356,12 +356,12 @@ impl Tokens {
     pub fn item(
         &self,
         id: u32,
-        state: mypaper_ui::interact::State,
+        state: glaze_ui::interact::State,
         active: bool,
     ) -> super::styling::Item {
         let (hover, press) = self.interaction.get(&id).copied().unwrap_or((
-            f32::from(state == mypaper_ui::interact::State::Hover),
-            f32::from(state == mypaper_ui::interact::State::Pressed),
+            f32::from(state == glaze_ui::interact::State::Hover),
+            f32::from(state == glaze_ui::interact::State::Pressed),
         ));
         let rest = if active {
             self.styles.items[2]
@@ -380,15 +380,15 @@ impl Tokens {
 
 /// Optional optics shared by a bar and the popups it opens. Legacy `depth` means a bottom
 /// inner shadow, independently of the renderer's broad shade under the lit top rim.
-pub fn glass_style(look: &Look) -> mypaper_ui::glass::GlassStyle {
-    mypaper_ui::glass::GlassStyle {
+pub fn glass_style(look: &Look) -> glaze_ui::glass::GlassStyle {
+    glaze_ui::glass::GlassStyle {
         brightness: match &look.background {
             Some(Fill::Wallpaper(fill)) => fill.brightness,
             Some(Fill::Blur(fill)) => fill.brightness,
             _ => 1.0,
         },
         saturation: look.saturation.unwrap_or(1.0),
-        smoothing: if look.corners == Some(mypaper_bars::style::Corners::Squircle) {
+        smoothing: if look.corners == Some(glaze_bars::style::Corners::Squircle) {
             0.6
         } else {
             0.0
@@ -406,10 +406,10 @@ pub fn glass_style(look: &Look) -> mypaper_ui::glass::GlassStyle {
 }
 
 pub fn fade_ms(
-    timing: mypaper_ui::transition::Timing,
-    style: mypaper_bars::style::MotionStyle,
+    timing: glaze_ui::transition::Timing,
+    style: glaze_bars::style::MotionStyle,
 ) -> f32 {
-    if timing.enabled && style != mypaper_bars::style::MotionStyle::None {
+    if timing.enabled && style != glaze_bars::style::MotionStyle::None {
         (timing.duration.as_secs_f32() * 1000.0).min(5000.0)
     } else {
         0.0
@@ -418,16 +418,16 @@ pub fn fade_ms(
 
 /// Attach the resolved show/open timing to glass alongside the content's transition.
 pub fn glass_fade(
-    glass: &mut mypaper_ui::glass::GlassStyle,
-    timing: mypaper_ui::transition::Timing,
-    style: mypaper_bars::style::MotionStyle,
+    glass: &mut glaze_ui::glass::GlassStyle,
+    timing: glaze_ui::transition::Timing,
+    style: glaze_bars::style::MotionStyle,
 ) {
     glass.fade_ms = fade_ms(timing, style);
     glass.fade_curve = (glass.fade_ms > 0.0).then_some(timing.easing);
 }
 
-pub fn plate_style(style: mypaper_ui::glass::GlassStyle) -> mypaper_glass_ipc::Style {
-    mypaper_glass_ipc::Style {
+pub fn plate_style(style: glaze_ui::glass::GlassStyle) -> glaze_glass_ipc::Style {
+    glaze_glass_ipc::Style {
         brightness: style.brightness,
         saturation: style.saturation,
         smoothing: style.smoothing,
@@ -497,17 +497,17 @@ fn color_with_system(color: &ColorRef, theme: &Theme, system: &[Rgba; 7]) -> Rgb
 
 /// The menu tokens of the top bar's look from `bars.json` and the theme now: the desktop and
 /// tray menus look like the bar's own.
-pub fn menu_tokens(text: &mypaper_ui::Text) -> mypaper_ui::Tokens {
-    let bars = mypaper_bars::config::path()
-        .and_then(|p| mypaper_bars::BarsConfig::load(&p))
+pub fn menu_tokens(text: &glaze_ui::Text) -> glaze_ui::Tokens {
+    let bars = glaze_bars::config::path()
+        .and_then(|p| glaze_bars::BarsConfig::load(&p))
         .map(|mut c| {
             c.resolve(Vec::new);
             c
         })
         .inspect_err(|e| log::debug!("menus: bars.json: {e:#}"))
         .unwrap_or_default();
-    let loaded = mypaper_config::Config::load()
-        .and_then(|c| mypaper_theme::locate(Some(&c.theme)))
+    let loaded = glaze_config::Config::load()
+        .and_then(|c| glaze_theme::locate(Some(&c.theme)))
         .and_then(LoadedTheme::load)
         .ok();
     let mut appearance = bars.appearance.over(&theme_appearance(loaded.as_ref()));
@@ -526,7 +526,7 @@ pub fn menu_tokens(text: &mypaper_ui::Text) -> mypaper_ui::Tokens {
     let mut colors =
         super::plugin_style::patch_look("top-bar", "top", bars.raw(), &mut look, &mut appearance);
     colors.extend(super::plugin_style::tokens("menu"));
-    let desktop = mypaper_config::Config::load().unwrap_or_default().look;
+    let desktop = glaze_config::Config::load().unwrap_or_default().look;
     let system = accent::read();
     popup_font(&bars, "top", &mut look);
     crate::look::settings::bar(&desktop, crate::glass::Family::Menus, &bars, "top", &mut look, &mut appearance, &system, text);
@@ -543,10 +543,10 @@ pub fn theme_appearance(loaded: Option<&LoadedTheme>) -> Appearance {
         .cloned()
         .unwrap_or_default();
     if let Some(t) = loaded
-        && matches!(appearance.accent, Some(mypaper_theme::Paint::Auto))
-        && let Some(snapshot) = mypaper_tweaks::palette::read().filter(|p| p.is_for(&t.dir))
+        && matches!(appearance.accent, Some(glaze_theme::Paint::Auto))
+        && let Some(snapshot) = glaze_tweaks::palette::read().filter(|p| p.is_for(&t.dir))
     {
-        appearance.accent = Some(mypaper_theme::Paint::Color(snapshot.palette.accent));
+        appearance.accent = Some(glaze_theme::Paint::Color(snapshot.palette.accent));
     }
     appearance
 }
@@ -554,7 +554,7 @@ pub fn theme_appearance(loaded: Option<&LoadedTheme>) -> Appearance {
 /// Design bundles supply defaults. Theme/user appearance beats those defaults, while fields
 /// explicitly written in shared/per-bar `look` (including monitor overrides) still win.
 pub fn appearance_layer(
-    config: &mypaper_bars::BarsConfig,
+    config: &glaze_bars::BarsConfig,
     bar: &str,
     look: &mut Look,
     appearance: &Appearance,
@@ -589,7 +589,7 @@ pub fn appearance_layer(
     }
 }
 
-pub(crate) fn explicit_look(config: &mypaper_bars::BarsConfig, bar: &str, path: &str) -> bool {
+pub(crate) fn explicit_look(config: &glaze_bars::BarsConfig, bar: &str, path: &str) -> bool {
     config
         .raw()
         .get(bar)
@@ -601,7 +601,7 @@ pub(crate) fn explicit_look(config: &mypaper_bars::BarsConfig, bar: &str, path: 
 
 /// A bar design's 13 px / 400 label is a bar metric. Popup roles retain their own type ramp
 /// unless the user explicitly overrides the shared/per-bar font size or weight.
-pub fn popup_font(config: &mypaper_bars::BarsConfig, bar: &str, look: &mut Look) {
+pub fn popup_font(config: &glaze_bars::BarsConfig, bar: &str, look: &mut Look) {
     if !explicit_look(config, bar, "/font/size") {
         look.font.size = None;
     }
@@ -611,10 +611,10 @@ pub fn popup_font(config: &mypaper_bars::BarsConfig, bar: &str, look: &mut Look)
 }
 
 pub fn glass_layer(
-    config: &mypaper_bars::BarsConfig,
+    config: &glaze_bars::BarsConfig,
     bar: &str,
     look: &mut Look,
-    glass: Option<mypaper_theme::Liquid>,
+    glass: Option<glaze_theme::Liquid>,
 ) {
     let Some(glass) = glass else { return };
     for (name, value, target) in [
@@ -729,7 +729,7 @@ mod tests {
         assert_eq!(tokens.material.unwrap().blur, 80.0);
         assert_eq!(
             tokens.plate_style,
-            mypaper_glass_ipc::Style {
+            glaze_glass_ipc::Style {
                 brightness: 0.65,
                 saturation: 0.0,
                 smoothing: 0.6,
@@ -757,7 +757,7 @@ mod tests {
     #[test]
     fn overlay_fade_obeys_resolved_motion_policy_and_duration() {
         use super::super::motion::{self, Leaf};
-        use mypaper_bars::style::{Motion, MotionStyle};
+        use glaze_bars::style::{Motion, MotionStyle};
         for (value, system, performance, expected) in [
             (
                 serde_json::json!({"duration": 5000, "curve": "linear"}),
@@ -829,7 +829,7 @@ mod tests {
     fn styles_pick_distinct_materials() {
         let system = crate::flyouts::look::fixed_system();
         let design = Look {
-            glass: mypaper_bars::style::GlassStyle {
+            glass: glaze_bars::style::GlassStyle {
                 refraction: Some(0.6),
                 highlight: Some(0.5),
                 ..Default::default()
@@ -880,7 +880,7 @@ mod tests {
             let at = |clarity: f32, blur: f32| {
                 let look = Look {
                     style: Some(native),
-                    glass: mypaper_bars::style::GlassStyle {
+                    glass: glaze_bars::style::GlassStyle {
                         tint: Some(1.0 - clarity),
                         blur: Some(blur),
                         ..Default::default()
@@ -932,7 +932,7 @@ mod tests {
         let bare = Tokens::resolve(
             &Look::default(),
             &Appearance {
-                surface: Some(mypaper_theme::Surface::None),
+                surface: Some(glaze_theme::Surface::None),
                 ..Default::default()
             },
             &crate::flyouts::look::fixed_system(),
@@ -956,7 +956,7 @@ mod tests {
         let mut system = crate::flyouts::look::fixed_system();
         system.accent = std::array::from_fn(|i| format!("#{i:02x}0000"));
         let tokens = Tokens::resolve(&Look::default(), &Appearance::default(), &system);
-        for (i, name) in mypaper_bars::style::COLOR_TOKENS[3..].iter().enumerate() {
+        for (i, name) in glaze_bars::style::COLOR_TOKENS[3..].iter().enumerate() {
             assert_eq!(
                 tokens.color(&ColorRef::parse(name).unwrap()),
                 Rgba::rgb8([i as u8, 0, 0], 1.0),
@@ -967,7 +967,7 @@ mod tests {
 
     #[test]
     fn appearance_beats_design_defaults_but_explicit_look_and_monitor_fields_win() {
-        let config = mypaper_bars::BarsConfig::parse(r#"{"preset":"macos","appearance":{"font":"Inter","radius":7,"surface":"solid","text":"dark"},"overrides":{"secondary":{"look":{"radius":3}}}}"#).unwrap();
+        let config = glaze_bars::BarsConfig::parse(r#"{"preset":"macos","appearance":{"font":"Inter","radius":7,"surface":"solid","text":"dark"},"overrides":{"secondary":{"look":{"radius":3}}}}"#).unwrap();
         let mut look = config.top.look.clone();
         appearance_layer(&config, "top", &mut look, &config.appearance);
         let system = crate::flyouts::look::fixed_system();
@@ -986,12 +986,12 @@ mod tests {
 
     #[test]
     fn theme_glass_overrides_design_defaults_but_keeps_explicit_user_fields() {
-        let theme = Some(mypaper_theme::Liquid {
+        let theme = Some(glaze_theme::Liquid {
             blur: Some(17.0),
             refraction: Some(0.2),
             ..Default::default()
         });
-        let config = mypaper_bars::BarsConfig::parse(
+        let config = glaze_bars::BarsConfig::parse(
             r#"{"preset":"macos","dock":{"look":{"glass":{"blur":4}}}}"#,
         )
         .unwrap();

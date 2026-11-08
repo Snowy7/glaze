@@ -1,5 +1,5 @@
 //! Manifest-owned visibility and presentation for widget controls.
-use mypaper_widgets::manifest::Setting;
+use glaze_widgets::manifest::Setting;
 use serde_json::{Map, Value};
 
 const FACE_KEYS: [&str; 8] = [
@@ -7,7 +7,7 @@ const FACE_KEYS: [&str; 8] = [
 ];
 
 pub fn face_choice<'a>(
-    manifest: &'a mypaper_widgets::manifest::WidgetManifest,
+    manifest: &'a glaze_widgets::manifest::WidgetManifest,
     values: &'a Map<String, Value>,
 ) -> Option<(&'a str, &'a str)> {
     FACE_KEYS.into_iter().find_map(|key| {
@@ -20,8 +20,8 @@ pub fn face_choice<'a>(
 /// Keep identical widget types distinguishable even when they share a display corner.
 pub fn summary(
     app: &crate::app::App,
-    layout: &mypaper_widgets::layout::Layout,
-    instance: &mypaper_widgets::layout::Instance,
+    layout: &glaze_widgets::layout::Layout,
+    instance: &glaze_widgets::layout::Instance,
 ) -> String {
     let face = app.registry.get(&instance.widget).and_then(|installed| {
         let manifest = &installed.manifest;
@@ -31,10 +31,10 @@ pub fn summary(
             return None;
         };
         options.iter().find_map(|option| match option {
-            mypaper_widgets::manifest::SelectOption::Plain(name) if name == value => {
+            glaze_widgets::manifest::SelectOption::Plain(name) if name == value => {
                 Some(name.clone())
             }
-            mypaper_widgets::manifest::SelectOption::Detailed(option) if option.value == value => {
+            glaze_widgets::manifest::SelectOption::Detailed(option) if option.value == value => {
                 Some(option.label.as_ref().unwrap_or(&option.value).clone())
             }
             _ => None,
@@ -93,7 +93,7 @@ mod tests {
     use super::*;
     #[test]
     fn clock_and_photo_options_follow_the_selected_face() {
-        let widgets = mypaper_widgets::registry::builtins();
+        let widgets = glaze_widgets::registry::builtins();
         let clock = &widgets.get("clock").unwrap().manifest;
         let mut values = clock.resolve_settings(&Map::new());
         let zones = clock.setting("zones").unwrap();
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn media_and_conditional_options_use_the_manifest_rules() {
-        let widgets = mypaper_widgets::registry::builtins();
+        let widgets = glaze_widgets::registry::builtins();
         let media = &widgets.get("now-playing").unwrap().manifest;
         let mut values = media.resolve_settings(&Map::new());
         assert!(!visible(

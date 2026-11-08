@@ -5,8 +5,8 @@
 //! (`tools/perf/diff-frames.py`) before anyone takes the desktop lock.
 //!
 //! ```text
-//! set MYPAPER_LAB=themes\rain-city;%TEMP%\mypaper-lab\before;3,12,30;150
-//! cargo test -p mypaper-wallpaper lab::lab -- --ignored --exact --nocapture
+//! set GLAZE_LAB=themes\rain-city;%TEMP%\glaze-lab\before;3,12,30;150
+//! cargo test -p glaze-wallpaper lab::lab -- --ignored --exact --nocapture
 //! ```
 //!
 //! Fields: theme folder (from the repo root); output folder; capture times in seconds; timed
@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
 
-use mypaper_desktop::Rect;
-use mypaper_glass_ipc::{Material, Plate, Style};
+use glaze_desktop::Rect;
+use glaze_glass_ipc::{Material, Plate, Style};
 
 use crate::glass_pass::GlassPass;
 use crate::gpu::{Gpu, KeptFrame};
@@ -53,7 +53,7 @@ fn fixture(dock_x: f32) -> Vec<Plate> {
 }
 
 /// One plate per line, `x,y,w,h,radius,clarity,blur,refraction,highlight,r,g,b,a` in physical
-/// pixels of the lab's screen (`MYPAPER_LAB_PLATES`; `lab::live_plates` prints this form).
+/// pixels of the lab's screen (`GLAZE_LAB_PLATES`; `lab::live_plates` prints this form).
 fn plates_file(path: &Path) -> Vec<Plate> {
     std::fs::read_to_string(path)
         .unwrap()
@@ -78,16 +78,16 @@ fn plates_file(path: &Path) -> Vec<Plate> {
         .collect()
 }
 
-/// The shell's live plates on the screen at the origin (or monitor `MYPAPER_LAB_SCREEN`, moved to
+/// The shell's live plates on the screen at the origin (or monitor `GLAZE_LAB_SCREEN`, moved to
 /// the origin), in [`plates_file`]'s form (a passive read of the shared snapshot).
 #[test]
 #[ignore = "dev tool: needs a running shell"]
 fn live_plates() {
-    let mut reader = mypaper_glass_ipc::Reader::open().unwrap();
+    let mut reader = glaze_glass_ipc::Reader::open().unwrap();
     let snapshot = reader.read_changed().unwrap().expect("a snapshot");
-    let monitors = mypaper_desktop::monitor_infos();
+    let monitors = glaze_desktop::monitor_infos();
     eprintln!("{} plates; screens: {monitors:?}", snapshot.plates.len());
-    let origin = std::env::var("MYPAPER_LAB_SCREEN")
+    let origin = std::env::var("GLAZE_LAB_SCREEN")
         .ok()
         .and_then(|n| monitors.get(n.parse::<usize>().ok()?))
         .map_or((0.0, 0.0), |m| (m.rect.x as f32, m.rect.y as f32));
@@ -124,7 +124,7 @@ struct Lab {
 impl Lab {
     fn new(theme: &Path) -> Self {
         let gpu = Gpu::headless().expect("a DX12 GPU");
-        let theme = mypaper_theme::LoadedTheme::load(theme).unwrap();
+        let theme = glaze_theme::LoadedTheme::load(theme).unwrap();
         let source = sources::load(&gpu, &theme, &[]).unwrap();
         let kept = KeptFrame::new(&gpu, source.render_size(SIZE));
         // `texture` adds COPY_DST, as the swapchain has, so a full-scale restore copies.
@@ -361,9 +361,9 @@ fn spread(values: &mut [f64]) -> [f64; 3] {
 }
 
 #[test]
-#[ignore = "dev tool: MYPAPER_LAB=<theme>;<out dir>;<t1,t2,..>;<frames>"]
+#[ignore = "dev tool: GLAZE_LAB=<theme>;<out dir>;<t1,t2,..>;<frames>"]
 fn lab() {
-    let spec = std::env::var("MYPAPER_LAB").expect("set MYPAPER_LAB");
+    let spec = std::env::var("GLAZE_LAB").expect("set GLAZE_LAB");
     let parts: Vec<&str> = spec.split(';').collect();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let out = PathBuf::from(parts[1]);
@@ -372,12 +372,12 @@ fn lab() {
         s.split(',').map(|t| t.parse().unwrap()).collect()
     });
     let frames: u32 = parts.get(3).map_or(150, |s| s.parse().unwrap());
-    let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
+    let _apartment = glaze_desktop::desktop_wallpaper::Apartment::enter().unwrap();
     let mut lab = Lab::new(&root.join(parts[0]));
-    let custom = std::env::var_os("MYPAPER_LAB_PLATES").map(|p| plates_file(Path::new(&p)));
+    let custom = std::env::var_os("GLAZE_LAB_PLATES").map(|p| plates_file(Path::new(&p)));
     // Optional optics fixture: brightness,saturation,smoothing,sheen,depth,inner-shadow.
     // Negative sheen/depth retain the highlight-derived defaults, just like the overlay wire.
-    let style = std::env::var("MYPAPER_LAB_STYLE")
+    let style = std::env::var("GLAZE_LAB_STYLE")
         .ok()
         .map(|line| {
             let v: Vec<f32> = line.split(',').map(|x| x.trim().parse().unwrap()).collect();
@@ -492,10 +492,10 @@ use crate::trim::private_mib;
 /// Transparent overlay fixture: proves the continuous edge keeps its own coverage and that
 /// the independent shadow darkens the bottom without changing the top. Dumps inspectable BGRA.
 #[test]
-#[ignore = "dev tool: MYPAPER_PARITY_OUT=<output directory>"]
+#[ignore = "dev tool: GLAZE_PARITY_OUT=<output directory>"]
 fn glass_parity() {
     use liquid_rust as lr;
-    let out = PathBuf::from(std::env::var_os("MYPAPER_PARITY_OUT").expect("output directory"));
+    let out = PathBuf::from(std::env::var_os("GLAZE_PARITY_OUT").expect("output directory"));
     std::fs::create_dir_all(&out).unwrap();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let lab = Lab::new(&root.join("themes/rain-city"));
@@ -625,11 +625,11 @@ fn glass_parity() {
 }
 
 /// Private bytes after each step of a two-screen engine's allocations (no swapchains).
-/// `MYPAPER_LAB_THEME=themes\rain-city cargo test -p mypaper-wallpaper lab::memory -- --ignored --nocapture`
+/// `GLAZE_LAB_THEME=themes\rain-city cargo test -p glaze-wallpaper lab::memory -- --ignored --nocapture`
 #[test]
-#[ignore = "dev tool: MYPAPER_LAB_THEME=<theme>"]
+#[ignore = "dev tool: GLAZE_LAB_THEME=<theme>"]
 fn memory() {
-    let theme = std::env::var("MYPAPER_LAB_THEME").expect("set MYPAPER_LAB_THEME");
+    let theme = std::env::var("GLAZE_LAB_THEME").expect("set GLAZE_LAB_THEME");
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut last = private_mib();
     let mut step = |name: &str, gpu: Option<&Gpu>| {
@@ -654,10 +654,10 @@ fn memory() {
         last = now;
     };
     step("start", None);
-    let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
+    let _apartment = glaze_desktop::desktop_wallpaper::Apartment::enter().unwrap();
     let gpu = Gpu::headless().expect("a DX12 GPU");
     step("device", Some(&gpu));
-    let theme = mypaper_theme::LoadedTheme::load(root.join(theme)).unwrap();
+    let theme = glaze_theme::LoadedTheme::load(root.join(theme)).unwrap();
     let mut source = sources::load(&gpu, &theme, &[]).unwrap();
     step("source loaded", Some(&gpu));
     let size = source.render_size(SIZE);
@@ -734,16 +734,16 @@ fn memory() {
 /// What releasing the GPU frees and what bringing it back costs, on the engine's own device path
 /// (`Opening`, `engine.gpu: auto`): the theme drawn into two screens with glass, then released
 /// down to each level and brought back, three times. Swapchains are measured live (they need
-/// windows). `MYPAPER_LAB_THEME=themes\rain-city cargo test -p mypaper-wallpaper --release
+/// windows). `GLAZE_LAB_THEME=themes\rain-city cargo test -p glaze-wallpaper --release
 /// lab::release -- --ignored --exact --nocapture`
 #[test]
-#[ignore = "dev tool: MYPAPER_LAB_THEME=<theme>"]
+#[ignore = "dev tool: GLAZE_LAB_THEME=<theme>"]
 fn release() {
     use std::time::Instant;
-    let theme = std::env::var("MYPAPER_LAB_THEME").expect("set MYPAPER_LAB_THEME");
+    let theme = std::env::var("GLAZE_LAB_THEME").expect("set GLAZE_LAB_THEME");
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let theme = mypaper_theme::LoadedTheme::load(root.join(theme)).unwrap();
-    let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
+    let theme = glaze_theme::LoadedTheme::load(root.join(theme)).unwrap();
+    let _apartment = glaze_desktop::desktop_wallpaper::Apartment::enter().unwrap();
     let monitor = Rect {
         x: 0,
         y: 0,
@@ -807,7 +807,7 @@ fn release() {
     step("start", Instant::now());
     let t = Instant::now();
     let mut gpu = Gpu::opened(crate::gpu::Opening::start(
-        mypaper_config::GpuPreference::Auto,
+        glaze_config::GpuPreference::Auto,
     ));
     eprintln!("GPU: {}", gpu.adapter.get_info().name);
     step("cold: device opened", t);
@@ -841,7 +841,7 @@ fn release() {
         step(&format!("{round}: everything released"), t);
         let t = Instant::now();
         gpu = Gpu::opened(crate::gpu::Opening::start(
-            mypaper_config::GpuPreference::Auto,
+            glaze_config::GpuPreference::Auto,
         ));
         step(&format!("{round}: warm: device opened"), t);
     }
@@ -849,16 +849,16 @@ fn release() {
 
 /// Private bytes over release/resume cycles on one device (what `Engine::release` drops and
 /// `resume` makes again: the source, a kept frame, two screen-sized targets, glass), on the
-/// integrated GPU, or the discrete one with `MYPAPER_LAB_GPU=high`. Does the memory come back,
-/// and does it grow per cycle? `MYPAPER_LAB_THEME=themes\rain-city cargo test -p
-/// mypaper-wallpaper --release lab::release_cycles -- --ignored --exact --nocapture`
+/// integrated GPU, or the discrete one with `GLAZE_LAB_GPU=high`. Does the memory come back,
+/// and does it grow per cycle? `GLAZE_LAB_THEME=themes\rain-city cargo test -p
+/// glaze-wallpaper --release lab::release_cycles -- --ignored --exact --nocapture`
 #[test]
-#[ignore = "dev tool: MYPAPER_LAB_THEME=<theme>"]
+#[ignore = "dev tool: GLAZE_LAB_THEME=<theme>"]
 fn release_cycles() {
-    let theme = std::env::var("MYPAPER_LAB_THEME").expect("set MYPAPER_LAB_THEME");
+    let theme = std::env::var("GLAZE_LAB_THEME").expect("set GLAZE_LAB_THEME");
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let theme = mypaper_theme::LoadedTheme::load(root.join(theme)).unwrap();
-    let _apartment = mypaper_desktop::desktop_wallpaper::Apartment::enter().unwrap();
+    let theme = glaze_theme::LoadedTheme::load(root.join(theme)).unwrap();
+    let _apartment = glaze_desktop::desktop_wallpaper::Apartment::enter().unwrap();
     let gpu = Gpu::headless().expect("a DX12 GPU");
     let monitor = Rect {
         x: 0,
@@ -920,18 +920,18 @@ fn release_cycles() {
 
 /// Idles 12 s in each of three states, for a wake sampler run alongside on this process: the
 /// device with a frame drawn, the drawing released (device kept), and no device at all.
-/// `cargo test -p mypaper-wallpaper --release lab::idle -- --ignored --exact --nocapture`
+/// `cargo test -p glaze-wallpaper --release lab::idle -- --ignored --exact --nocapture`
 #[test]
 #[ignore = "dev tool: sample this process's thread wakes while it runs"]
 fn idle() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let theme = mypaper_theme::LoadedTheme::load(root.join("themes/rain-city")).unwrap();
+    let theme = glaze_theme::LoadedTheme::load(root.join("themes/rain-city")).unwrap();
     let phase = |name: &str| {
         eprintln!("PHASE {name} pid {} at {:?}", std::process::id(), std::time::SystemTime::now());
         std::thread::sleep(Duration::from_secs(12));
     };
     let gpu = Gpu::opened(crate::gpu::Opening::start(
-        mypaper_config::GpuPreference::Auto,
+        glaze_config::GpuPreference::Auto,
     ));
     let mut source = sources::load(&gpu, &theme, &[]).unwrap();
     let kept = KeptFrame::new(&gpu, source.render_size(SIZE));
@@ -962,7 +962,7 @@ fn idle() {
 /// the swapchain (the engine releases it while every screen is covered, keeping the device). A
 /// hidden window of the engine's class, a few presented frames, then 12 s each: presented,
 /// swapchain released, no device.
-/// `cargo test -p mypaper-wallpaper --release lab::idle_present -- --ignored --exact --nocapture`
+/// `cargo test -p glaze-wallpaper --release lab::idle_present -- --ignored --exact --nocapture`
 #[test]
 #[ignore = "dev tool: sample this process's thread wakes while it runs"]
 fn idle_present() {
@@ -976,7 +976,7 @@ fn idle_present() {
     let hwnd = unsafe {
         CreateWindowExW(
             Default::default(),
-            windows::core::w!("mypaper.wallpaper"),
+            windows::core::w!("glaze.wallpaper"),
             windows::core::w!("lab present"),
             WS_POPUP,
             0,
@@ -991,7 +991,7 @@ fn idle_present() {
     }
     .unwrap();
     let windows = vec![crate::window::Window(hwnd)];
-    let opening = crate::gpu::Opening::start(mypaper_config::GpuPreference::Auto);
+    let opening = crate::gpu::Opening::start(glaze_config::GpuPreference::Auto);
     let (gpu, surfaces) = Gpu::new(opening, &windows).unwrap();
     let window = windows.into_iter().next().unwrap();
     let surface = surfaces.into_iter().next().unwrap();
@@ -1018,13 +1018,13 @@ fn idle_present() {
 }
 
 /// Private bytes for screen-sized textures, freed and allocated again, under
-/// `MYPAPER_LAB_BLOCK=<MiB>` suballocation blocks (`MemoryHints::Manual`), or under
+/// `GLAZE_LAB_BLOCK=<MiB>` suballocation blocks (`MemoryHints::Manual`), or under
 /// `MemoryUsage` without it. On the integrated GPU a freed heap's memory stays committed.
-/// `cargo test -p mypaper-wallpaper lab::memory_hints -- --ignored --exact --nocapture`
+/// `cargo test -p glaze-wallpaper lab::memory_hints -- --ignored --exact --nocapture`
 #[test]
 #[ignore = "dev tool"]
 fn memory_hints() {
-    let hints = std::env::var("MYPAPER_LAB_BLOCK").map_or(wgpu::MemoryHints::MemoryUsage, |mib| {
+    let hints = std::env::var("GLAZE_LAB_BLOCK").map_or(wgpu::MemoryHints::MemoryUsage, |mib| {
         let bytes = mib.parse::<u64>().unwrap() << 20;
         wgpu::MemoryHints::Manual {
             suballocated_device_memory_block_size: bytes..bytes,

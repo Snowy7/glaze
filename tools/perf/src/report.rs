@@ -31,7 +31,7 @@ impl Report {
             Some(label) => format!("{} ({label})", self.when),
             None => self.when.clone(),
         };
-        let _ = writeln!(md, "# mypaper performance: {title}\n");
+        let _ = writeln!(md, "# Glaze performance: {title}\n");
         let _ = writeln!(md, "- Machine: {}", self.machine);
         let _ = writeln!(md, "- Build: `{}`", self.build);
         let _ = writeln!(md, "- {}\n", self.plan);

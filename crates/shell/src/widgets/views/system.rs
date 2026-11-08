@@ -5,8 +5,8 @@
 //! charging green.
 use super::Ctx;
 use crate::widgets::metrics::{self, Metric};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Align, Insets, Op, Point, Rect, Rgba, TextRole};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Align, Insets, Op, Point, Rect, Rgba, TextRole};
 
 pub fn draw(c: &mut Ctx, r: Rect) {
     if c.m.stats.is_none() {

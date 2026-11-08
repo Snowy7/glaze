@@ -2,12 +2,12 @@
 # experimental.app_styler off right away, while those restyles are still landing. Every session
 # must put everything back (its clean-up runs after the in-flight work) and detach; then the flag
 # goes back on. Holds the desktop lock for the test (about 20 s).
-param([string]$Out = "C:\mypaper-targets\app-styler\round3\flag-off.txt")
+param([string]$Out = "C:\glaze-targets\app-styler\round3\flag-off.txt")
 $ErrorActionPreference = 'Stop'
-$dir = Join-Path $env:LOCALAPPDATA 'mypaper\app-styler'
-$config = Join-Path $env:APPDATA 'mypaper\config.json'
+$dir = Join-Path $env:LOCALAPPDATA 'glaze\app-styler'
+$config = Join-Path $env:APPDATA 'glaze\config.json'
 $tapLog = Join-Path $dir 'styler.log'
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 $utf8 = New-Object Text.UTF8Encoding($false)
 function Note([string]$m) { $l = '{0} {1}' -f (Get-Date -Format 'HH:mm:ss.fff'), $m; Add-Content -LiteralPath $Out -Value $l; Write-Host $l }
 function Write-Atomic([string]$path, [string]$text) { $t = "$path.f4.tmp"; [IO.File]::WriteAllText($t, $text, $utf8); Move-Item -LiteralPath $t -Destination $path -Force }
@@ -47,9 +47,9 @@ try {
   $before = @($shell.Windows() | ForEach-Object { [int64]$_.HWND })
   $shell.Open('C:\Windows'); Start-Sleep -Seconds 2
   $win = $shell.Windows() | Where-Object { $before -notcontains [int64]$_.HWND } | Select-Object -First 1
-  $styler = Get-Process mypaper-styler
+  $styler = Get-Process glaze-styler
   Note "styler $($styler.Id); explorer + settings styled; our window $([int64]$win.HWND)"
-  if ($win) { Shot ([int64]$win.HWND) 'C:\mypaper-targets\app-styler\round3\f4-styled.png' }
+  if ($win) { Shot ([int64]$win.HWND) 'C:\glaze-targets\app-styler\round3\f4-styled.png' }
   # Show Settings so its UI thread is awake (a suspended app runs nothing).
   Start-Process 'ms-settings:display'; Start-Sleep -Seconds 2
   $mark = (Get-Content -LiteralPath $tapLog).Count
@@ -66,7 +66,7 @@ try {
   while ((Get-Process -Id $styler.Id -ErrorAction SilentlyContinue) -and ((Get-Date) - $t0).TotalSeconds -lt 15) { Start-Sleep -Milliseconds 50 }
   Note ("styler gone after {0:N0} ms: {1}" -f ((Get-Date) - $t0).TotalMilliseconds, -not (Get-Process -Id $styler.Id -ErrorAction SilentlyContinue))
   Start-Sleep -Seconds 4
-  if ($win) { Shot ([int64]$win.HWND) 'C:\mypaper-targets\app-styler\round3\f4-off.png' }
+  if ($win) { Shot ([int64]$win.HWND) 'C:\glaze-targets\app-styler\round3\f4-off.png' }
   Note '--- TAP log since the flips'
   Get-Content -LiteralPath $tapLog | Select-Object -Skip $mark | Where-Object { $_ -match 'restoring|put back|detached|clean|forgot|gone|abandon|not restored|leaving' } | ForEach-Object { Note "  $_" }
 } finally {
@@ -74,8 +74,8 @@ try {
   foreach ($app in 'explorer', 'settings') { Write-Atomic (Join-Path $dir "$app.json") $original[$app] }
   try { Set-Flag $true } catch { Note "flag: $_" }
   Start-Sleep -Seconds 4
-  $new = Get-Process mypaper-styler -ErrorAction SilentlyContinue
+  $new = Get-Process glaze-styler -ErrorAction SilentlyContinue
   Note "flag back on; styler $(if ($new) { $new.Id } else { 'NOT RUNNING' })"
-  if ($win) { Shot ([int64]$win.HWND) 'C:\mypaper-targets\app-styler\round3\f4-on-again.png'; $win.Quit() }
+  if ($win) { Shot ([int64]$win.HWND) 'C:\glaze-targets\app-styler\round3\f4-on-again.png'; $win.Quit() }
   if (Test-Path -LiteralPath $lock) { Remove-Item -LiteralPath $lock -Recurse -Force }
 }

@@ -125,7 +125,7 @@ pub fn scenario(
         outcome.components.insert("taskbar".into());
     }
 
-    let core_exe = stage.join("mypaper-core.exe");
+    let core_exe = stage.join("glaze-core.exe");
     for run in 0..plan.runs {
         let last = run + 1 == plan.runs;
         let watch = (scenario.bars == Bars::HideTaskbar).then(TaskbarWatch::start);
@@ -193,7 +193,7 @@ fn steady_and_held(
     record(&mut outcome.metrics, "steady", &steady);
 
     let log = core.log_since_start();
-    let screens = mypaper_desktop::monitors().len();
+    let screens = glaze_desktop::monitors().len();
     let paused = screens_paused(&log);
     outcome.metrics.insert(
         "screens.visible".into(),
@@ -285,8 +285,8 @@ fn startup_metrics(outcome: &mut Outcome) {
 /// Net number of wallpaper screens paused for being covered, from the run's log.
 fn screens_paused(log: &str) -> usize {
     let count = |needle: &str| log.lines().filter(|l| l.contains(needle)).count();
-    let paused = count("mypaper_wallpaper::engine] pausing");
-    let resumed = count("mypaper_wallpaper::engine] resuming");
+    let paused = count("glaze_wallpaper::engine] pausing");
+    let resumed = count("glaze_wallpaper::engine] resuming");
     paused.saturating_sub(resumed)
 }
 
@@ -379,14 +379,14 @@ fn sample(root: u32) -> Vec<Sampled> {
     out
 }
 
-/// Which component a process belongs to. mypaper's own executables are themselves; a WebView2
+/// Which component a process belongs to. Glaze's own executables are themselves; a WebView2
 /// process belongs to whoever owns its user data folder (`webview2-<host>`; a folder used by
 /// both hosts is `webview.shared`), or to its parent's group when its command line doesn't
 /// say; anything else (plugins, a wallpaper app) is its parent's `.children`.
 pub fn group_of(name: &str, command_line: Option<&str>, parent: Option<&str>) -> String {
     let name = name.to_ascii_lowercase();
     if let Some(own) = name
-        .strip_prefix("mypaper-")
+        .strip_prefix("glaze-")
         .and_then(|n| n.strip_suffix(".exe"))
     {
         return own.to_owned();
@@ -572,11 +572,11 @@ mod tests {
     fn processes_group_by_component_and_webview_folder() {
         let webview =
             |dir: &str| format!("msedgewebview2.exe --user-data-dir=\"{dir}\\EBWebView\"");
-        assert_eq!(group_of("mypaper-bars.exe", None, Some("core")), "bars");
+        assert_eq!(group_of("glaze-bars.exe", None, Some("core")), "bars");
         assert_eq!(
             group_of(
                 "msedgewebview2.exe",
-                Some(&webview(r"C:\t\mypaper\webview2-widgets")),
+                Some(&webview(r"C:\t\glaze\webview2-widgets")),
                 Some("widgets")
             ),
             "widgets.webview"
@@ -584,7 +584,7 @@ mod tests {
         assert_eq!(
             group_of(
                 "msedgewebview2.exe",
-                Some(&webview(r"C:\t\mypaper\webview2-shell")),
+                Some(&webview(r"C:\t\glaze\webview2-shell")),
                 Some("bars")
             ),
             "webview.shared"
@@ -610,9 +610,9 @@ mod tests {
 
     #[test]
     fn covered_screens_net_out_resumes() {
-        let log = "x mypaper_wallpaper::engine] pausing 2560x1440 screen\n\
-                   x mypaper_wallpaper::engine] pausing 2560x1440 screen\n\
-                   x mypaper_wallpaper::engine] resuming 2560x1440 screen\n";
+        let log = "x glaze_wallpaper::engine] pausing 2560x1440 screen\n\
+                   x glaze_wallpaper::engine] pausing 2560x1440 screen\n\
+                   x glaze_wallpaper::engine] resuming 2560x1440 screen\n";
         assert_eq!(screens_paused(log), 1);
     }
 }

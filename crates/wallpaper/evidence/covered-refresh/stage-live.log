@@ -1,29 +1,29 @@
-[2026-11-07T13:04:06Z INFO  mypaper_wallpaper::engine] Amber Downpour (non-commercial) ready in 66.6ms
-[2026-11-07T13:04:06Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY1 320x180: gpu+readback 0.00 ms, write 2.32 ms
-[2026-11-07T13:04:06Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180: gpu+readback 0.00 ms, write 1.31 ms
-[2026-11-07T13:04:06Z INFO  mypaper_wallpaper::engine] covered refresh: 2 screens, wall 86.0 ms, CPU 46.9 ms, GPU 2.857 ms, private 158.6 -> 203.5 MiB
-[2026-11-07T13:04:06Z INFO  mypaper_wallpaper::engine] covered refresh: temporary drawing dropped, private 221.6 MiB
-[2026-11-07T13:04:07Z INFO  mypaper_wallpaper::engine] Aurora loaded in 3.5ms
-[2026-11-07T13:04:07Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY1 320x180: gpu+readback 0.00 ms, write 2.07 ms
-[2026-11-07T13:04:07Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180: gpu+readback 0.03 ms, write 82.66 ms
-[2026-11-07T13:04:07Z INFO  mypaper_wallpaper::palette] palette: dominant #1d8c5c, accent #15d17f
-[2026-11-07T13:04:07Z INFO  mypaper_wallpaper::snapshot] snapshot: 2 of 2 screens drawn in 9.6ms on the main thread
-[2026-11-07T13:04:07Z INFO  mypaper_wallpaper::engine] covered refresh: 2 screens, wall 208.4 ms, CPU 15.6 ms, GPU 19.702 ms, private 221.6 -> 287.4 MiB
-[2026-11-07T13:04:07Z INFO  mypaper_wallpaper::engine] covered refresh: temporary drawing dropped, private 294.8 MiB
-[2026-11-07T13:04:07Z INFO  mypaper_wallpaper::snapshot] snapshot: GPU draw+copy 8.707 ms
-[2026-11-07T13:04:07Z INFO  mypaper_wallpaper::snapshot] snapshot: GPU draw+copy 8.699 ms
-[2026-11-07T13:04:08Z INFO  mypaper_wallpaper::snapshot] snapshot (worker thread): GPU wait 172.6µs, encode 97.9ms, set 147.5ms
-[2026-11-07T13:04:08Z INFO  mypaper_wallpaper::snapshot] snapshot job: wall 398.2ms, CPU 93.8 ms, private 294.8 MiB (readbacks dropped)
-[2026-11-07T13:04:09Z INFO  mypaper_wallpaper::trim] trimmed the working set
-[2026-11-07T13:04:12Z INFO  mypaper_wallpaper::engine] Amber Downpour (non-commercial) loaded in 29.0ms
-[2026-11-07T13:04:12Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY1 320x180: gpu+readback 0.00 ms, write 1.53 ms
-[2026-11-07T13:04:12Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180: gpu+readback 0.00 ms, write 1.18 ms
-[2026-11-07T13:04:12Z INFO  mypaper_wallpaper::palette] palette: dominant #624331, accent #b8602e
-[2026-11-07T13:04:12Z INFO  mypaper_wallpaper::snapshot] snapshot: 2 of 2 screens drawn in 10.5ms on the main thread
-[2026-11-07T13:04:12Z INFO  mypaper_wallpaper::engine] covered refresh: 2 screens, wall 24.2 ms, CPU 0.0 ms, GPU 1.131 ms, private 220.8 -> 291.8 MiB
-[2026-11-07T13:04:12Z INFO  mypaper_wallpaper::snapshot] snapshot: GPU draw+copy 4.295 ms
-[2026-11-07T13:04:12Z INFO  mypaper_wallpaper::engine] covered refresh: temporary drawing dropped, private 298.7 MiB
-[2026-11-07T13:04:12Z INFO  mypaper_wallpaper::snapshot] snapshot: GPU draw+copy 2.900 ms
-[2026-11-07T13:04:12Z INFO  mypaper_wallpaper::snapshot] snapshot (worker thread): GPU wait 2.3ms, encode 30.3ms, set 11.7ms
-[2026-11-07T13:04:12Z INFO  mypaper_wallpaper::snapshot] snapshot job: wall 50.5ms, CPU 31.2 ms, private 298.7 MiB (readbacks dropped)
-[2026-11-07T13:04:14Z INFO  mypaper_wallpaper::trim] trimmed the working set
+[2026-11-07T13:04:06Z INFO  glaze_wallpaper::engine] Amber Downpour (non-commercial) ready in 66.6ms
+[2026-11-07T13:04:06Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY1 320x180: gpu+readback 0.00 ms, write 2.32 ms
+[2026-11-07T13:04:06Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180: gpu+readback 0.00 ms, write 1.31 ms
+[2026-11-07T13:04:06Z INFO  glaze_wallpaper::engine] covered refresh: 2 screens, wall 86.0 ms, CPU 46.9 ms, GPU 2.857 ms, private 158.6 -> 203.5 MiB
+[2026-11-07T13:04:06Z INFO  glaze_wallpaper::engine] covered refresh: temporary drawing dropped, private 221.6 MiB
+[2026-11-07T13:04:07Z INFO  glaze_wallpaper::engine] Aurora loaded in 3.5ms
+[2026-11-07T13:04:07Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY1 320x180: gpu+readback 0.00 ms, write 2.07 ms
+[2026-11-07T13:04:07Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180: gpu+readback 0.03 ms, write 82.66 ms
+[2026-11-07T13:04:07Z INFO  glaze_wallpaper::palette] palette: dominant #1d8c5c, accent #15d17f
+[2026-11-07T13:04:07Z INFO  glaze_wallpaper::snapshot] snapshot: 2 of 2 screens drawn in 9.6ms on the main thread
+[2026-11-07T13:04:07Z INFO  glaze_wallpaper::engine] covered refresh: 2 screens, wall 208.4 ms, CPU 15.6 ms, GPU 19.702 ms, private 221.6 -> 287.4 MiB
+[2026-11-07T13:04:07Z INFO  glaze_wallpaper::engine] covered refresh: temporary drawing dropped, private 294.8 MiB
+[2026-11-07T13:04:07Z INFO  glaze_wallpaper::snapshot] snapshot: GPU draw+copy 8.707 ms
+[2026-11-07T13:04:07Z INFO  glaze_wallpaper::snapshot] snapshot: GPU draw+copy 8.699 ms
+[2026-11-07T13:04:08Z INFO  glaze_wallpaper::snapshot] snapshot (worker thread): GPU wait 172.6µs, encode 97.9ms, set 147.5ms
+[2026-11-07T13:04:08Z INFO  glaze_wallpaper::snapshot] snapshot job: wall 398.2ms, CPU 93.8 ms, private 294.8 MiB (readbacks dropped)
+[2026-11-07T13:04:09Z INFO  glaze_wallpaper::trim] trimmed the working set
+[2026-11-07T13:04:12Z INFO  glaze_wallpaper::engine] Amber Downpour (non-commercial) loaded in 29.0ms
+[2026-11-07T13:04:12Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY1 320x180: gpu+readback 0.00 ms, write 1.53 ms
+[2026-11-07T13:04:12Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180: gpu+readback 0.00 ms, write 1.18 ms
+[2026-11-07T13:04:12Z INFO  glaze_wallpaper::palette] palette: dominant #624331, accent #b8602e
+[2026-11-07T13:04:12Z INFO  glaze_wallpaper::snapshot] snapshot: 2 of 2 screens drawn in 10.5ms on the main thread
+[2026-11-07T13:04:12Z INFO  glaze_wallpaper::engine] covered refresh: 2 screens, wall 24.2 ms, CPU 0.0 ms, GPU 1.131 ms, private 220.8 -> 291.8 MiB
+[2026-11-07T13:04:12Z INFO  glaze_wallpaper::snapshot] snapshot: GPU draw+copy 4.295 ms
+[2026-11-07T13:04:12Z INFO  glaze_wallpaper::engine] covered refresh: temporary drawing dropped, private 298.7 MiB
+[2026-11-07T13:04:12Z INFO  glaze_wallpaper::snapshot] snapshot: GPU draw+copy 2.900 ms
+[2026-11-07T13:04:12Z INFO  glaze_wallpaper::snapshot] snapshot (worker thread): GPU wait 2.3ms, encode 30.3ms, set 11.7ms
+[2026-11-07T13:04:12Z INFO  glaze_wallpaper::snapshot] snapshot job: wall 50.5ms, CPU 31.2 ms, private 298.7 MiB (readbacks dropped)
+[2026-11-07T13:04:14Z INFO  glaze_wallpaper::trim] trimmed the working set

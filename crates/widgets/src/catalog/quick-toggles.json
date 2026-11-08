@@ -3,7 +3,7 @@
   "name": "Quick toggles",
   "category": "System",
   "version": "1.0.0",
-  "author": "mypaper",
+  "author": "Glaze",
   "description": "Phone-style quick settings tiles that open the matching Windows Settings page, with live Wi-Fi and battery status.",
   "size": {
     "default": [8, 4],

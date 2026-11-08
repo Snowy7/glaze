@@ -11,15 +11,15 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use mypaper_theme::Color;
+use glaze_theme::Color;
 use serde::{Deserialize, Serialize};
 
 use crate::color::hex;
 
-/// `%LOCALAPPDATA%\mypaper`: machine-local state (palette, undo journal, log).
+/// `%LOCALAPPDATA%\glaze`: machine-local state (palette, undo journal, log).
 pub fn local_dir() -> Result<PathBuf> {
     let base = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?;
-    Ok(PathBuf::from(base).join("mypaper"))
+    Ok(PathBuf::from(base).join("glaze"))
 }
 
 const FILE: &str = "palette.json";
@@ -28,7 +28,7 @@ pub fn path() -> Result<PathBuf> {
     Ok(local_dir()?.join(FILE))
 }
 
-pub use mypaper_theme::windows::Palette;
+pub use glaze_theme::windows::Palette;
 
 /// A palette and the theme folder it belongs to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,7 +99,7 @@ pub fn read() -> Option<Snapshot> {
 
 /// Keeps the palette file watch alive; dropping it stops the watch.
 pub struct PaletteWatcher {
-    _watcher: mypaper_fswatch::Watch,
+    _watcher: glaze_fswatch::Watch,
 }
 
 /// Calls `on_change` (on the watcher's thread) whenever `palette.json` is
@@ -107,7 +107,7 @@ pub struct PaletteWatcher {
 pub fn watch(on_change: impl Fn() + Send + 'static) -> Result<PaletteWatcher> {
     let dir = local_dir()?;
     std::fs::create_dir_all(&dir)?;
-    let watcher = mypaper_fswatch::Watch::files(&dir, &[FILE], on_change)?;
+    let watcher = glaze_fswatch::Watch::files(&dir, &[FILE], on_change)?;
     Ok(PaletteWatcher { _watcher: watcher })
 }
 

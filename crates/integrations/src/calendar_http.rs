@@ -56,7 +56,7 @@ pub fn request(
     let result = unsafe {
         (|| -> Result<Vec<u8>> {
             let session = Handle::new(WinHttpOpen(
-                w!("mypaper/1"),
+                w!("glaze/1"),
                 WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                 None,
                 None,

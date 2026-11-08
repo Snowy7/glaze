@@ -20,7 +20,7 @@ fn plugin_status<'a>(app: &'a App, id: &str) -> &'a str {
         })
 }
 
-pub fn visible_plugin(plugin: &mypaper_widgets::manifest::PluginManifest) -> bool {
+pub fn visible_plugin(plugin: &glaze_widgets::manifest::PluginManifest) -> bool {
     !["hello", "hello-ts", "demo", "experimental"].contains(&plugin.id.as_str())
         && !plugin
             .name
@@ -116,7 +116,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                 let image = crate::panel::icons::plugin_image(app, &format!("custom:{}", item.id));
                 let icon = match item.id.as_str() {
                     "rss" => crate::editing::widgets::glyph_of("rss"),
-                    "weather" => mypaper_ui::icons::Icon::CloudSun.into(),
+                    "weather" => glaze_ui::icons::Icon::CloudSun.into(),
                     _ => glyph::INTEGRATIONS,
                 };
                 crate::panel::controls::artwork_row(
@@ -556,7 +556,7 @@ mod tests {
 
     #[test]
     fn home_count_matches_connected_rows_and_sources_are_never_duplicated() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(crate::panel::State::default());
         app.panel.as_mut().unwrap().page = Page::Connections;
@@ -577,7 +577,7 @@ mod tests {
 
     #[test]
     fn disconnect_removes_modules_from_base_and_all_overrides_as_one_undo_step() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(crate::panel::State::default());
         let bars = json!({"version":1,
@@ -591,9 +591,9 @@ mod tests {
         });
         app.docs = crate::docs::Docs::fixture(["{}", &bars.to_string(), "{}", "{}"]);
         assert!(
-            mypaper_bars::BarsConfig::parse(&bars.to_string()).is_ok(),
+            glaze_bars::BarsConfig::parse(&bars.to_string()).is_ok(),
             "{:?}",
-            mypaper_bars::BarsConfig::parse(&bars.to_string()).err()
+            glaze_bars::BarsConfig::parse(&bars.to_string()).err()
         );
         disconnect(&mut app, "t3");
         let after = &app.docs.doc(DocId::Bars).raw;
@@ -630,7 +630,7 @@ mod tests {
 
     #[test]
     fn shows_in_and_toggles_follow_the_selected_display() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(crate::panel::State::default());
         let second = app.monitors[1]
@@ -640,7 +640,7 @@ mod tests {
         let bars = json!({"version":1,"top":{"center":[],"right":["clock"]},"overrides":{
             second: {"top":{"right":["custom:t3--status","clock"]}}
         }});
-        mypaper_bars::BarsConfig::parse(&bars.to_string()).unwrap();
+        glaze_bars::BarsConfig::parse(&bars.to_string()).unwrap();
         app.docs = crate::docs::Docs::fixture(["{}", &bars.to_string(), "{}", "{}"]);
         app.nav.display = 0;
         assert!(!module_shown(

@@ -4,8 +4,8 @@
 //! chrome, so it gets the flyout's glass, motion, Escape and focus like every built-in panel.
 //! While it is on screen the widgets host keeps the instance `panel:<plugin>--<panel>` open
 //! (`bars::plugin_modules`), and closing the flyout closes it.
-use mypaper_plugin_sdk::Face;
-use mypaper_ui::{HitId, Rect, icons::Icon};
+use glaze_plugin_sdk::Face;
+use glaze_ui::{HitId, Rect, icons::Icon};
 
 use super::kit::Kit;
 use super::{Cx, Effect, Panel};
@@ -33,7 +33,7 @@ fn size(cells: [u8; 2]) -> (f32, f32) {
 impl PluginPanel {
     pub fn new(id: String) -> Self {
         let spec = plugin_modules::parse(&id).and_then(|(plugin, panel)| {
-            let (manifest, _) = mypaper_widgets::registry::find_plugin(plugin)?;
+            let (manifest, _) = glaze_widgets::registry::find_plugin(plugin)?;
             manifest.panels.into_iter().find(|p| p.id == panel)
         });
         let (title, icon, cells) = match spec {

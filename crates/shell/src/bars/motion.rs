@@ -1,8 +1,8 @@
 //! Bar motion resolved on configuration changes, sampled only while a value moves.
-use mypaper_bars::style::{Curve, Motion, MotionStyle, ReduceMotion};
-use mypaper_ui::Spring;
-use mypaper_ui::transition::Easing;
-pub use mypaper_ui::transition::{Timing as Settings, Transition};
+use glaze_bars::style::{Curve, Motion, MotionStyle, ReduceMotion};
+use glaze_ui::Spring;
+use glaze_ui::transition::Easing;
+pub use glaze_ui::transition::{Timing as Settings, Transition};
 use std::time::Instant;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -132,8 +132,8 @@ pub fn resolve(root: &Motion, dock: bool, leaf: Leaf, system: bool, performance:
     Settings::new(enabled, duration, easing)
 }
 
-pub fn reveal(style: MotionStyle) -> mypaper_ui::reveal::Reveal {
-    use mypaper_ui::reveal::Reveal;
+pub fn reveal(style: MotionStyle) -> glaze_ui::reveal::Reveal {
+    use glaze_ui::reveal::Reveal;
     match style {
         MotionStyle::Slide => Reveal::Slide,
         MotionStyle::Fade => Reveal::Fade,

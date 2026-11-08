@@ -3,7 +3,7 @@
     "at":  "2026-11-06T09:32:24",
     "rows":  [
                  {
-                     "part":  "mypaper-shell",
+                     "part":  "glaze-shell",
                      "pid":  94016,
                      "cpu_core_pct":  0.52,
                      "gpu3d_pct":  0.01,
@@ -14,7 +14,7 @@
                      "ws_mb":  99
                  },
                  {
-                     "part":  "mypaper-plugins",
+                     "part":  "glaze-plugins",
                      "pid":  20296,
                      "cpu_core_pct":  0,
                      "gpu3d_pct":  0,
@@ -25,7 +25,7 @@
                      "ws_mb":  24
                  },
                  {
-                     "part":  "mypaper-wallpaper",
+                     "part":  "glaze-wallpaper",
                      "pid":  83820,
                      "cpu_core_pct":  1.15,
                      "gpu3d_pct":  9.08,
@@ -36,7 +36,7 @@
                      "ws_mb":  28
                  },
                  {
-                     "part":  "mypaper-core",
+                     "part":  "glaze-core",
                      "pid":  83056,
                      "cpu_core_pct":  0,
                      "gpu3d_pct":  0,
@@ -47,7 +47,7 @@
                      "ws_mb":  18
                  },
                  {
-                     "part":  "mypaper-index",
+                     "part":  "glaze-index",
                      "pid":  75068,
                      "cpu_core_pct":  0.52,
                      "gpu3d_pct":  0,

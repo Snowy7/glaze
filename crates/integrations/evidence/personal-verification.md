@@ -5,15 +5,15 @@ Repository/branch: `D:\Coding\projects\desktop\wallpaper`, `native`, shared chec
 
 | Check | Result |
 |---|---|
-| `cargo check -p mypaper-shell -p mypaper-studio` | Passed after the concurrent owners finished their shared API edits. |
-| `cargo test -p mypaper-integrations` | 18 passed (9 library, 9 integration); includes Credential Manager, provider lifecycle and cancellation-safe Discord IPC frames. |
-| `cargo test -p mypaper-widgets --lib` | 131 passed, 3 ignored. |
+| `cargo check -p glaze-shell -p glaze-studio` | Passed after the concurrent owners finished their shared API edits. |
+| `cargo test -p glaze-integrations` | 18 passed (9 library, 9 integration); includes Credential Manager, provider lifecycle and cancellation-safe Discord IPC frames. |
+| `cargo test -p glaze-widgets --lib` | 131 passed, 3 ignored. |
 | Shell `custom_tests` | 2 passed: imported data stays separate from local events; dense native frames, account scrolling and custom templates at 150% scaling stay within their frames. |
 | Studio `goldens::widgets` | Passed for dark and light; both images were generated, dark was inspected. |
 | Clippy for integrations/widgets/shell | Passed; remaining warnings were in other agents' bars/flyouts/toggles code. No warning remained in owned runtime files. |
 | Four shipped custom examples, real evaluation | All passed in isolated APPDATA: static text, GitHub HTTPS JSON (`1.99.1`), local file and bounded local command (disk gauge `88`). Each was present as a separate multi-instance catalog entry. |
-| `cargo build --release --workspace` | Passed with `CARGO_TARGET_DIR=C:\mypaper-targets\main`; final successful rebuild took 1m17s. |
-| `scripts/deploy-local.ps1` | Completed under its desktop lock. Package `mypaper.Desktop_0.1.0.3_neutral__21v47vsar82ra` is installed. Core/shell/wallpaper resumed from `target\release`. |
+| `cargo build --release --workspace` | Passed with `CARGO_TARGET_DIR=C:\glaze-targets\main`; final successful rebuild took 1m17s. |
+| `scripts/deploy-local.ps1` | Completed under its desktop lock. Package `glaze.Desktop_0.1.0.3_neutral__21v47vsar82ra` is installed. Core/shell/wallpaper resumed from `target\release`. |
 | Open Studio | Left running as required. Deploy swapped its executable without closing the user's window; restart Studio to use the new Widgets entry. |
 | Windows AppointmentStore | The real read-only API succeeded and returned 0 events. This proves the store is accessible here, not that Outlook/Google accounts populate it. See `personal-unpackaged.json`, whose `packaged` field is explicitly false. |
 | Live native calendar | Captured and inspected at 415×313 after deployment, using PrintWindow under the desktop lock. Month layout, date, controls and new Calendars action render. No events were available from the current real Windows store. |

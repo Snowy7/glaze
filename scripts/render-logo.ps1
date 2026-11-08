@@ -12,10 +12,10 @@ $edge = @(
   "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
 ) | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $edge) { throw "Microsoft Edge not found" }
-$profile = Join-Path $env:TEMP "mypaper-logo-edge"
+$profile = Join-Path $env:TEMP "glaze-logo-edge"
 
 function Render([string]$svg, [int]$size, [string]$png) {
-  $html = Join-Path $env:TEMP "mypaper-logo-$size.html"
+  $html = Join-Path $env:TEMP "glaze-logo-$size.html"
   $uri = ([Uri](Join-Path $logo $svg)).AbsoluteUri
   Set-Content -Path $html -Encoding UTF8 -Value @"
 <!doctype html><html><head><style>html,body{margin:0;background:transparent;overflow:hidden}
@@ -26,7 +26,7 @@ img{display:block;width:${size}px;height:${size}px}</style></head><body><img src
     "--default-background-color=00000000", "--force-device-scale-factor=1",
     "--window-size=$size,$size", "--screenshot=`"$png`"", ([Uri]$html).AbsoluteUri)
   Start-Process -FilePath $edge -ArgumentList $args -Wait -NoNewWindow `
-    -RedirectStandardError (Join-Path $env:TEMP "mypaper-logo-edge.log")
+    -RedirectStandardError (Join-Path $env:TEMP "glaze-logo-edge.log")
   $deadline = (Get-Date).AddSeconds(15)
   while (-not (Test-Path $png) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }
   if (-not (Test-Path $png)) { throw "render failed: $png" }
@@ -58,6 +58,6 @@ for ($i = 0; $i -lt $icoSizes.Count; $i++) {
 }
 foreach ($b in $blobs) { $w.Write([byte[]]$b) }
 $w.Flush()
-[IO.File]::WriteAllBytes((Join-Path $logo "mypaper.ico"), $ico.ToArray())
+[IO.File]::WriteAllBytes((Join-Path $logo "glaze.ico"), $ico.ToArray())
 Remove-Item $profile -Recurse -Force -ErrorAction SilentlyContinue
-"rendered: $($sizes -join ', ') px + mypaper.ico"
+"rendered: $($sizes -join ', ') px + glaze.ico"

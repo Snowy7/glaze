@@ -1,43 +1,43 @@
 # Native top bar, dock and taskbar
 
-`mypaper-shell` draws the bars with `mypaper-ui`: software Direct2D/DirectWrite into cropped,
-premultiplied layered windows. `crates/bars` (`mypaper-bars`) is a **library of Windows services**,
+`glaze-shell` draws the bars with `glaze-ui`: software Direct2D/DirectWrite into cropped,
+premultiplied layered windows. `crates/bars` (`glaze-bars`) is a **library of Windows services**,
 configuration and presets. It has no executable, browser, graphics device, page or JSON message bridge.
 `bars/shell` and the old host, capture, blur and first-paint stand-ins have been removed.
 
 ## Processes and recovery
 
 Core waits for Explorer (`wait_for_shell`), stops a leftover shell (`stop_leftover`), then starts
-`mypaper-shell` immediately, before starting the wallpaper or setting up its own tray/styling.
+`glaze-shell` immediately, before starting the wallpaper or setting up its own tray/styling.
 The only supervised children are the wallpaper engine and the native shell.
 
-The shell takes `Local\mypaper-shell`, reads `bars.json` and presents each bar as soon as its
+The shell takes `Local\glaze-shell`, reads `bars.json` and presents each bar as soon as its
 window is created. Remaining window creation, provider hooks, icon workers, battery/network/audio,
 tray hosting, app-bar negotiation and taskbar changes cannot precede the first present. The bars
 use the UI's deferred-accessibility constructor: `WM_GETOBJECT` creates the adapter from the latest
 hit snapshot. WARP and the fonts used in the first display list still belong to the first frame.
 
-After painting, the shell takes `Local\mypaper.taskbar.journal` for its lifetime, replays any stale
+After painting, the shell takes `Local\glaze.taskbar.journal` for its lifetime, replays any stale
 journal and applies the configured taskbar mode. Core takes this lease only after the old shell
 exits. It restores taskbar visibility first, spawns the replacement immediately, then finishes
 restoring auto-hide/alignment while the replacement paints. The replacement waits for the lease
 before touching Explorer or the journal. Startup failure follows the same serialized restoration.
 
-`WM_CLOSE` to the message-only `mypaper.shell.inbox` asks the shell to exit. On an ordinary exit it
+`WM_CLOSE` to the message-only `glaze.shell.inbox` asks the shell to exit. On an ordinary exit it
 stops its tray host, clears plates, removes reservations and restores the taskbar. It also exits if
-its parent process exits. Core replays `%LOCALAPPDATA%\mypaper\taskbar.json` **only after the shell
+its parent process exits. Core replays `%LOCALAPPDATA%\glaze\taskbar.json` **only after the shell
 has exited** (including shutdown/panic), with the replacement held at the journal lease, so both
 processes never write it concurrently. Shell crashes restart with zero backoff, overlapping the
 remaining replay, with the existing five-crashes-in-a-minute
 limit. Already-enabled native auto-hide is left under the user's ownership: its flag is journaled
-only if mypaper changes it. This avoids restoring a setting we never changed.
+only if Glaze changes it. This avoids restoring a setting we never changed.
 Ctrl+Alt+Shift+Backspace remains core's panic hotkey and works independently of the UI thread.
 
 ## Configuration and presets
 
-`%APPDATA%\mypaper\bars.json` is watched live. Unknown fields, invalid ranges and duplicate modules
+`%APPDATA%\glaze\bars.json` is watched live. Unknown fields, invalid ranges and duplicate modules
 remain errors; an invalid edit leaves the last valid configuration running. Writers use
-`mypaper_bars::config::edit`, which validates and writes atomically while preserving unrelated fields.
+`glaze_bars::config::edit`, which validates and writes atomically while preserving unrelated fields.
 Missing configuration uses the existing `monochrome` preset and native **liquid** material.
 
 Layers remain: bar design -> preset -> shared `look`/`animation` -> the bar's own fields -> monitor
@@ -118,7 +118,7 @@ is the theme's or Windows'. `look.glyphs: fluent` draws module icons from Segoe 
   override family, size and weight); colours are the theme's label steps. The minimal design
   (no body, straight on the wallpaper) puts a soft shadow copy under its text.
 - **Icons.** Module glyphs are the kit's icons (Lucide vectors, or the Fluent font). A user icon
-  pack in `%APPDATA%\mypaper\icons` still replaces them by key; the bundled `mono` pack draws app
+  pack in `%APPDATA%\glaze\icons` still replaces them by key; the bundled `mono` pack draws app
   icons only. Every bitmap (tray icons, app icons, pack SVGs) is fetched at the exact device size
   it is drawn (`Images::sized`: SVGs rasterized at that size, larger bitmaps area-averaged down)
   and placed on whole pixels, so icons are crisp at every DPI and tray icons are evenly spaced.
@@ -177,7 +177,7 @@ synchronization is implemented (C25).
 
 Flyout kit controls and menu rows now consume the hover/press leaves too. Their sampled washes
 keep state only for entered controls, remove resting entries, and stop the frame source when
-settled. `mypaper_ui::interact::motion::InteractionMotion`, `Frame::with_motion` and the menu's
+settled. `glaze_ui::interact::motion::InteractionMotion`, `Frame::with_motion` and the menu's
 optional interaction timings add this behavior without changing existing kit callers. Configured
 flat-surface shadows reserve a bounded outset, including for cropped islands and docks; their
 screen anchors remain unchanged.
@@ -229,7 +229,7 @@ These are the transmitted controls; the engine's documented 64-point frost ceili
 The reduced-motion launcher drew twice, with no content transition. Its cold capture took
 615 ms to supply glass, which `fade_ms: 0` does not remove. The timed menu's glass arrived in 99 ms.
 
-Artifacts and reproduction scripts are in `%TEMP%\mypaper-tools\bars-parity-2`: inspect
+Artifacts and reproduction scripts are in `%TEMP%\glaze-tools\bars-parity-2`: inspect
 `desaturated-squircle-{0,1}-{top,dock}.png`, `vivid-round-{0,1}-{top,dock}.png`,
 `{desaturated-squircle,vivid-round}-plates.json`, `launcher-reduced-motion-{opening,settled}.png`,
 and `menu-timed-glass-{opening,settled}.png`. Every experiment restored the original `bars.json`
@@ -248,7 +248,7 @@ not a performance improvement or the native plan's quieter fixed-fixture CPU gat
 | 3 | 0.16 | 0.21 | 36 | 35 |
 | Median | **0.36** | **0.21** | **37** | **35** |
 
-Raw artifacts are `%TEMP%\mypaper-tools\measure-bars2-{before,after}-{1,2,3}.json` and
+Raw artifacts are `%TEMP%\glaze-tools\measure-bars2-{before,after}-{1,2,3}.json` and
 `bars-parity-2\settled-samples.json`. The sampling shell was PID 67424 after deployment.
 The final radius-only fix was deployed as PID 44212. A later agent replaced the executable at
 06:28 (PID 79660, a different hash); two additional post-interaction samples on that build were
@@ -269,7 +269,7 @@ Verified: DPI-aware captures on both 2560x1440 screens show solid/light Georgia 
 frosted/dark glass and the flat performance-mode surface. Guarded input opened the native launcher
 with scale and the dock's commands menu with morph; opening and settled captures were inspected.
 No menu action was invoked. Other bar reveal styles have source/math coverage, not a separate
-live capture. Artifacts and the reproduction scripts are in `%TEMP%\mypaper-tools\bars-parity`:
+live capture. Artifacts and the reproduction scripts are in `%TEMP%\glaze-tools\bars-parity`:
 `solid-light-0-top.png`, `frosted-dark-1-dock.png`, `performance-0-top.png`,
 `launcher-scale-{opening,settled}.png`, and `menu-morph-{opening,settled}.png`.
 
@@ -280,7 +280,7 @@ The user's Studio window stayed open. Engine-owned crates were not edited.
 The prescribed 30-second live sampler produced the following shell results (CPU is percent of
 one core, not the whole 16-core machine):
 
-| State / artifact in `%TEMP%\mypaper-tools` | CPU % one core | Private MB |
+| State / artifact in `%TEMP%\glaze-tools` | CPU % one core | Private MB |
 |---|---:|---:|
 | Before work, `measure-bars-before.json` | 0.42 | 34 |
 | After variants and launcher/menu interaction, `measure-bars-after.json` | 0.31 | 37 |
@@ -320,7 +320,7 @@ floating pills and between islands stays alpha zero and lets clicks through. Doc
 bounded magnification envelope rather than a monitor-sized flyout canvas. Flyouts/previews are their
 own windows; no bar keeps 360 DIPs of transparent backing memory.
 
-Input uses `mypaper_ui::Event`; hits map directly to typed Rust handlers. The dock remembers the
+Input uses `glaze_ui::Event`; hits map directly to typed Rust handlers. The dock remembers the
 pressed item so magnification cannot lose its click between press and release. Pointer capture
 keeps pin dragging working outside the dock. There is no serialized command envelope.
 
@@ -396,7 +396,7 @@ reads Explorer's tray. Icon lists follow native notifications and UI Automation 
 existing tray host retains its three-second z-order/rejoin check (one window lookup); it runs only
 while a tray module is shown. Explorer restart reattaches it and reapplies reservations/taskbar settings after settling.
 
-`mypaper_bars` publicly exposes: appbar, apps, hooks, icons, tray/tray_host/tray_data, media, audio,
+`glaze_bars` publicly exposes: appbar, apps, hooks, icons, tray/tray_host/tray_data, media, audio,
 network, system (battery/stats/window actions), clock, desktops, custom, trash, accent and taskbar.
 `flyouts::{clipboard,index,language,mixer,notifications,quick,wifi,winkey}` retain their plain Rust
 provider APIs for N3. Worker results use this typed channel; no browser/JSON bridge remains:
@@ -425,7 +425,7 @@ outer wait leaves them signalled until `Desktops::changed` resets/rearms and rea
 Every panel-opening bar click calls exactly:
 
 ```rust
-flyouts::open(kind: flyouts::Kind, anchor_rect: mypaper_ui::Rect, monitor: &mypaper_desktop::Monitor)
+flyouts::open(kind: flyouts::Kind, anchor_rect: glaze_ui::Rect, monitor: &glaze_desktop::Monitor)
 ```
 
 The anchor is in physical **screen** pixels. `Kind` is Calendar, Quick, Wifi, Mixer, Notifications,
@@ -482,8 +482,8 @@ engine's existing three-second warm session. Pointer-down does no capture work. 
 `none` or an explicit Windows panel do not warm. Moving away cancels a pending dwell. This shares
 the existing engine request protocol; no new capture mode or wallpaper quality change is involved.
 
-**mypaper's tray.** Core sends a copied typed menu model to the shell's message-only tray inbox.
-The shell acknowledges within a bounded 20 ms exchange, then shows `mypaper_ui::Menu<u32>` using
+**Glaze's tray.** Core sends a copied typed menu model to the shell's message-only tray inbox.
+The shell acknowledges within a bounded 20 ms exchange, then shows `glaze_ui::Menu<u32>` using
 the same material/tokens as flyouts and desktop/dock menus. A selection is posted back with its
 request nonce; core retains and executes the command/theme mapping. Missing or unresponsive
 shells use `TrackPopupMenu`; core and its panic hotkey have no UI-renderer dependency. Configured
@@ -493,7 +493,7 @@ selection stays in view; menu motion stops when settled.
 ### Live N3 measurements (2026-11-05)
 
 Release core, shell and engine from this worktree under the desktop lock; fixture `APPDATA` (a still
-photo, liquid bars on both 1440p monitors, every module), `%TEMP%\mypaper-tools\n3-flyouts-live.ps1`.
+photo, liquid bars on both 1440p monitors, every module), `%TEMP%\glaze-tools\n3-flyouts-live.ps1`.
 Content time is from the injected button release to the flyout window being visible, measured
 from another process; glass is the engine's own open-to-glass log. A cold click comes after 8 s idle
 (capture cold) with an 80 ms press; warm clicks follow 0.4 s after a close.
@@ -509,7 +509,7 @@ from another process; glass is the engine's own open-to-glass log. A cold click 
 | Shell private MB, a flyout open vs closed before it | +0.2 to +2.8 MB (launcher the most) | ≤ +6 MB |
 | Shell private MB vs the pristine shell | 29.4 before any flyout; 35.9 with the first; 36.7 after all closed and lanes stopped | freed on close |
 | Overlay CPU, an animated window behind quick settings | engine 1.8–2.1% of a core (~25 updates/s), shell 0.2–0.4% | ≤3% |
-| Overlay GPU per update | 0.12–0.15 ms (copy, compare, glass; `MYPAPER_OVERLAY_TIMINGS`) | ≤0.5 ms |
+| Overlay GPU per update | 0.12–0.15 ms (copy, compare, glass; `GLAZE_OVERLAY_TIMINGS`) | ≤0.5 ms |
 | Overlay once closed | engine 0–0.47% (no glass pass); +24 MB while open, freed after the 3 s warmth | 0 |
 | Capture border | 0 yellow edge pixels | none |
 | Screenshots | a GDI screenshot shows the popup (mean difference 316 in its rectangle) | shown |
@@ -597,7 +597,7 @@ focus before publication. A later panic test exposed Windows' stock modal menu s
 thread hotkey. Core now installs a scoped `WH_MSGFILTER` during that fallback, calls `EndMenu`, and
 reposts the hotkey to its ordinary supervisor pump; the live suspended-shell test passed afterward.
 
-Reproduce with `%TEMP%\mypaper-tools\native-bars-closure.ps1`: `-Production -Measure -Suffix
+Reproduce with `%TEMP%\glaze-tools\native-bars-closure.ps1`: `-Production -Measure -Suffix
 production-final` for the interaction/idle sequence; `-Production -MaxOnly -Measure -Panic -Suffix
 maximized-qualified` for the corrected maximized diagnostic; `-Production -MaxOnly -TrayCheck -Panic -Suffix
 tray-final` for the short tray/panic check (`tray-trace` retains the clean command-delivery trace). Pass the built shell/core paths using `-ShellTest` and
@@ -605,7 +605,7 @@ tray-final` for the short tray/panic check (`tray-trace` retains the clean comma
 directories; `measure-bars-closure-*.json` contains the raw 60 s samples. Each script restores config
 environment/minimized windows, stops its fixtures and releases the lock in `finally`. After cache
 cleanup removed the old executable, the user requested restoration from this worktree's native
-`target/release/mypaper-core.exe`; no old main-checkout binary is used.
+`target/release/glaze-core.exe`; no old main-checkout binary is used.
 
 Targeted `cargo check` and all-target clippy pass; clippy retains four inherited
 `items_after_test_module` warnings in bars. Tests run per crate: shell 44/2 ignored, UI 23/0,
@@ -623,7 +623,7 @@ every dismissal. No widget, Studio or engine source was changed by these commits
 Exact additive interfaces:
 
 ```rust
-// mypaper_bars::tray_menu; WM_COPYDATA to HWND_MESSAGE class "mypaper.shell.tray-menu".
+// glaze_bars::tray_menu; WM_COPYDATA to HWND_MESSAGE class "glaze.shell.tray-menu".
 // dwData = MAGIC (0x4D50544D), wParam = core callback HWND; reply 1 means copied/accepted.
 pub enum Item {
     Separator,
@@ -636,11 +636,11 @@ pub struct Request { pub nonce: usize, pub point: (i32, i32), pub items: Vec<Ite
 // A copied request cannot open until SHOW. Late requests after a timeout stay uncommitted.
 // Core rejects stale nonces. The request acknowledgement is bounded to 20 ms.
 
-// mypaper_integrations::Action adds RefreshNotifications, valid only for Notifications.
+// glaze_integrations::Action adds RefreshNotifications, valid only for Notifications.
 // shell::overlay_client
-pub fn warm(client: HWND, shape: mypaper_ui::glass::Shape);
-// mypaper_ui
-pub fn set_style(tokens: Option<Tokens>); // mypaper_ui::menu
+pub fn warm(client: HWND, shape: glaze_ui::glass::Shape);
+// glaze_ui
+pub fn set_style(tokens: Option<Tokens>); // glaze_ui::menu
 // DisplayList::translated(dx, dy); MonthGrid::view_with_weekdays(..., &[&str; 7]);
 // Surface::animation_frames(Duration) -> AnimationFrames (cancel on drop); Event::Frame.
 ```
@@ -674,7 +674,7 @@ integrations **10/0**, Studio **24/0**: **227 passed, six deliberately ignored**
 clippy passes for shell/core. Studio's 14 affected light/dark golden images and their documentation
 copies were refreshed for the restored shared bar glyphs and reviewed; no Studio Rust source or
 preview substitute was introduced. These image/doc updates are the additional out-of-ownership
-edits needed to keep `cargo test -p mypaper-studio` passing.
+edits needed to keep `cargo test -p glaze-studio` passing.
 
 The main timing/CPU/memory table above predates the Studio merge. A short current-build probe
 (`studio-merged`) measured content at **4.59 ms**, with no-hover cold glass at **484.2 ms**. The
@@ -705,7 +705,7 @@ replaces that source's list on that monitor; `[]` removes it. The shell publishe
 geometry/material changed, including every moving dock frame, and publishes nothing at rest.
 It clears lists on suspension/removal/shutdown. `Bars::plates(&Monitor) -> Vec<Plate>` exposes the
 current bar list. The merger retains both sources on every monitor and owns one thread-local
-`mypaper_glass_ipc::Writer`. It converts to physical virtual-desktop pixels and replaces the whole
+`glaze_glass_ipc::Writer`. It converts to physical virtual-desktop pixels and replaces the whole
 snapshot atomically. Explicit widget HWND ids are preserved; auto bar ids include the source,
 monitor group and shape index, so they never repeat on a second monitor. Identical combined
 snapshots do not publish. More than `MAX_PLATES = 96` is rejected without truncating a source.
@@ -726,7 +726,7 @@ preview clicks. The UI's separate process verifies no vendor GPU driver loads.
 
 ### Live N2 measurements (2026-11-05)
 
-Release `mypaper-shell` and `mypaper-core`, built in this worktree, under the desktop lock.
+Release `glaze-shell` and `glaze-core`, built in this worktree, under the desktop lock.
 Two visible 2560x1440 screens at 96 DPI, liquid bars on both, minute clock, Spotify paused, no
 flyout open during sampling. The fixture used a still photo and the already-installed wallpaper
 engine: the engine shader/transport and N4 widgets are not in this base. These numbers measure the
@@ -738,7 +738,7 @@ bar slice, not the integrated rain-city + six-widget fixture.
 | Shell idle CPU, percent of one core | median 0.05% (0.05, 0.08, 0.03) | <=0.1% | passes for this fixture |
 | Bars over maximized apps | median 0.08% (0.08, 0.08, 0.13); one later recheck 0% | <=0.05% | **fails**; recheck is not a replacement three-sample median |
 | Shell GPU engine use / GPU memory | 0% / 0 MB in the samples; no vendor GPU DLL | software renderer | passes |
-| mypaper WebView2 processes | 0 | 0 | passes |
+| Glaze WebView2 processes | 0 | 0 | passes |
 | Idle redraws | no dock redraws; two top-bar updates per minute, one per screen | minute tick only | passes between external/config changes |
 | Bars first paint, final startup | 143.9 ms after core's post-spawn marker; process age 164.4 ms | about 73 ms after spawn | **fails** |
 | Kill shell to restored bars | 571.7, 473.3, 369.7 ms; median 473.3 ms | <=300 ms | **fails** |
@@ -756,7 +756,7 @@ shell and image engine. The three maximized samples above remain a failed/provis
 the final single maximized recheck measured 0% and 21 MB. The last journal fix affects recovery,
 not the idle drawing path.
 
-Raw artifacts are under `%TEMP%\mypaper-tools`: `n2-bars/{idle,maximized}-{1,2,3}.txt` and
+Raw artifacts are under `%TEMP%\glaze-tools`: `n2-bars/{idle,maximized}-{1,2,3}.txt` and
 `n2-bars/live.log`, plus `n2-bars-replacement/{idle-1,maximized-1}.txt`, `live.log`,
 `recovery.json`, `panic.txt`, `alpha-hits.txt` and `modules.txt`. The required measurement tool's
 JSON files are alongside those directories (its repeated maximized-1 label was overwritten by
@@ -922,7 +922,7 @@ also above <=2 ms. These are engine follow-ups, not shell CPU measurements or cl
 
 #### Reproduction, checks and handoff
 
-Raw artifacts live under `%TEMP%\mypaper-tools`:
+Raw artifacts live under `%TEMP%\glaze-tools`:
 
 - `n2-gates-ceil-live.ps1 -Measure -Suffix '-gates-ceil'`, its `n2-bars-gates-ceil` directory,
   and `measure-n2-bars-idle-gates-ceil-{1,2,3}.json`,
@@ -970,11 +970,11 @@ pub fn publish(source: Source, monitor: &Monitor, plates: &[Plate]);
 // Material { clarity: f32, blur: f32, refraction: f32, highlight: f32, tint: Rgba }
 // Monitor-local physical pixels; id 0 = auto; explicit HWND ids retained.
 
-// mypaper_ui::Surface:
+// glaze_ui::Surface:
 pub fn new_deferred_accessibility(kind: Kind, name: &str, role: Role) -> anyhow::Result<Self>;
-// mypaper_bars::taskbar::JournalLease:
+// glaze_bars::taskbar::JournalLease:
 pub fn acquire() -> anyhow::Result<Self>;
-// mypaper_bars::taskbar::Taskbar<S>:
+// glaze_bars::taskbar::Taskbar<S>:
 pub fn restore_visibility(&mut self) -> anyhow::Result<bool>;
 // Lease is thread-owned and not Send. Reveal preserves the remaining undo entries.
 // style::GlassStyle adds clarity: Option<f32>, validated in 0..=1.

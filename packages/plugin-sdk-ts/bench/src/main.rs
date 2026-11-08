@@ -5,8 +5,8 @@ mod runtime { include!(concat!(env!("OUT_DIR"), "/runtime.rs")); }
 
 use std::{path::PathBuf, time::Instant};
 use anyhow::{Result, ensure};
-use runtime::{Effect, Manifest, Runtime, exports::mypaper::plugin::lifecycle::{Action, Event, FaceOpen}};
-use runtime::mypaper::plugin::types::SizeClass;
+use runtime::{Effect, Manifest, Runtime, exports::glaze::plugin::lifecycle::{Action, Event, FaceOpen}};
+use runtime::glaze::plugin::types::SizeClass;
 use windows::Win32::{Foundation::FILETIME, System::{ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX}, Threading::{GetCurrentProcess, GetCurrentThread, GetThreadTimes}}};
 
 fn process_memory() -> (usize, usize) {
@@ -43,7 +43,7 @@ fn main() -> Result<()> {
     }
     let dir = PathBuf::from(std::env::args().nth(1).expect("plugin directory"));
     let manifest = Manifest::load(&dir)?;
-    let scratch = std::env::temp_dir().join(format!("mypaper-ts-probe-{}", std::process::id()));
+    let scratch = std::env::temp_dir().join(format!("glaze-ts-probe-{}", std::process::id()));
     std::fs::create_dir_all(&scratch)?;
     let result = measure(dir, manifest, &scratch);
     // Scratch is a uniquely named directory created by this process; no user data lives here.

@@ -1,5 +1,5 @@
 [package]
-name = "mypaper-glass-ipc"
+name = "glaze-glass-ipc"
 description = "Single-writer glass plate snapshots over session-local shared memory."
 version.workspace = true
 edition.workspace = true

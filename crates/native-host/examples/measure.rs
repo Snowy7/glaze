@@ -1,7 +1,7 @@
-//! cargo run --release -p mypaper-native-host --example measure -- HOST_EXE ECHO_DLL [SECONDS]
+//! cargo run --release -p glaze-native-host --example measure -- HOST_EXE ECHO_DLL [SECONDS]
 #[cfg(windows)]
 fn main() -> std::io::Result<()> {
-    use mypaper_native_host::{HostConfig, Isolation, PluginSpec, Supervisor};
+    use glaze_native_host::{HostConfig, Isolation, PluginSpec, Supervisor};
     use std::{
         ffi::c_void,
         os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
@@ -68,7 +68,7 @@ fn main() -> std::io::Result<()> {
         .and_then(|arg| arg.parse().ok())
         .unwrap_or(60);
     let folder =
-        std::env::temp_dir().join(format!("mypaper-native-measure-{}", std::process::id()));
+        std::env::temp_dir().join(format!("glaze-native-measure-{}", std::process::id()));
     std::fs::create_dir_all(&folder)?;
     std::fs::copy(&args[1], folder.join("native_echo.dll"))?;
     let supervisor = Supervisor::new(PathBuf::from(&args[0]), HostConfig::default());

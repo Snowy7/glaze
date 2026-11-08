@@ -31,9 +31,9 @@ list any Studio control a row needs under "Studio follow-ups" in the night plan 
 - One row (or a tight group) per commit, with tests where the logic is pure (config resolution,
   precedence, curve math).
 - Deploy live and look at DPI-aware captures of the bars with a couple of settings changed in a
-  copy of `%APPDATA%\mypaper\bars.json`; restore the user's own `bars.json` exactly afterwards
+  copy of `%APPDATA%\glaze\bars.json`; restore the user's own `bars.json` exactly afterwards
   (back it up first, compare bytes after).
-- Use `CARGO_TARGET_DIR=C:\mypaper-targets\bars-parity` for check/test; `C:\mypaper-targets\main`
+- Use `CARGO_TARGET_DIR=C:\glaze-targets\bars-parity` for check/test; `C:\glaze-targets\main`
   only for the deploy build.
 - Measure the shell before and after (`measure.ps1`, path in the night plan): idle shell CPU must
   stay ~0 and private memory must not grow by more than 1 MB.

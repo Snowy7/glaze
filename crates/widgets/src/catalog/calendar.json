@@ -3,7 +3,7 @@
   "name": "Calendar",
   "category": "Time",
   "version": "2.0.0",
-  "author": "mypaper",
+  "author": "Glaze",
   "description": "Local events and read-only calendars from this PC, Google or Microsoft, merged in month, agenda and week views.",
   "size": {
     "default": [6, 6],

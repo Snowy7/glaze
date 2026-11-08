@@ -1,26 +1,26 @@
 //! Contrast against the visible glass face, resolved when appearance changes, never from a
 //! desktop capture. Backdrop BMPs contain wallpaper only; app windows are never sampled.
-use mypaper_ui::theme::{contrast, over};
-use mypaper_ui::{Rgba, Theme};
+use glaze_ui::theme::{contrast, over};
+use glaze_ui::{Rgba, Theme};
 
 /// Wallpaper colours retain their hue, with restrained chroma and scheme-appropriate lightness.
-pub fn wallpaper_tint(color: mypaper_theme::Color, dark: bool) -> mypaper_theme::Color {
+pub fn wallpaper_tint(color: glaze_theme::Color, dark: bool) -> glaze_theme::Color {
     let mut lab = to_lab(Rgba::rgb8(color.0, 1.0));
     lab[0] = if dark { 0.30 } else { 0.88 };
     lab[1] *= 0.65;
     lab[2] *= 0.65;
     let rgb = from_lab(lab);
-    mypaper_theme::Color([rgb.r, rgb.g, rgb.b].map(|v| (v * 255.0).round() as u8))
+    glaze_theme::Color([rgb.r, rgb.g, rgb.b].map(|v| (v * 255.0).round() as u8))
 }
 
 /// Read the wallpaper under a surface (physical virtual-desktop coordinates). Missing frames
 /// fall back to the scheme; no file is created and no desktop capture is requested.
-pub fn backdrop(rect: Option<mypaper_ui::Rect>, dark: bool) -> Rgba {
+pub fn backdrop(rect: Option<glaze_ui::Rect>, dark: bool) -> Rgba {
     let fallback = Rgba::rgb8(if dark { [38, 38, 42] } else { [220, 220, 224] }, 1.0);
     let Some(root) = std::env::var_os("LOCALAPPDATA") else {
         return fallback;
     };
-    let monitors = mypaper_desktop::monitor_infos();
+    let monitors = glaze_desktop::monitor_infos();
     let monitor = rect
         .and_then(|r| {
             monitors.iter().find(|m| {
@@ -35,7 +35,7 @@ pub fn backdrop(rect: Option<mypaper_ui::Rect>, dark: bool) -> Rgba {
     let Some(m) = monitor else { return fallback };
     let name = m.device.trim_start_matches("\\\\.\\");
     let path = std::path::PathBuf::from(root)
-        .join("mypaper/backdrop")
+        .join("glaze/backdrop")
         .join(format!("{name}.bmp"));
     let Ok(bytes) = std::fs::read(path) else {
         return fallback;
@@ -246,11 +246,11 @@ mod tests {
     }
     #[test]
     fn wallpaper_tint_is_deep_in_dark_scheme_and_light_in_light_scheme() {
-        let source = mypaper_theme::Color([184, 96, 46]);
+        let source = glaze_theme::Color([184, 96, 46]);
         let dark = wallpaper_tint(source, true);
         let light = wallpaper_tint(source, false);
-        assert!(mypaper_ui::theme::luminance(Rgba::rgb8(dark.0, 1.0)) < 0.06);
-        assert!(mypaper_ui::theme::luminance(Rgba::rgb8(light.0, 1.0)) > 0.5);
+        assert!(glaze_ui::theme::luminance(Rgba::rgb8(dark.0, 1.0)) < 0.06);
+        assert!(glaze_ui::theme::luminance(Rgba::rgb8(light.0, 1.0)) > 0.5);
         assert!(dark.0[0] > dark.0[2]);
         assert!(light.0[0] > light.0[2]);
     }

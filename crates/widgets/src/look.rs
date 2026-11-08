@@ -11,7 +11,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 static WARNED_CSS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-use mypaper_theme::{
+use glaze_theme::{
     Appearance, Color, Liquid, LoadedTheme, Paint, Surface, TextTone, WidgetStyle,
 };
 use serde_json::{Map, Value};

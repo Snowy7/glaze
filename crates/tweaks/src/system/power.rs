@@ -2,7 +2,7 @@
 //! Dynamic lookup keeps older Windows versions loadable when the option is absent.
 
 use anyhow::{Context, Result, bail};
-use mypaper_config::PowerMode;
+use glaze_config::PowerMode;
 use windows::Win32::Foundation::{FreeLibrary, WIN32_ERROR};
 use windows::Win32::System::LibraryLoader::{
     GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW,
@@ -12,7 +12,7 @@ use windows::core::{GUID, PCSTR, w};
 use crate::undo::{Value, Write};
 
 /// A virtual Store namespace, not a registry path. The journal names the public API.
-pub(super) const KEY: &str = "@mypaper/power-mode";
+pub(super) const KEY: &str = "@glaze/power-mode";
 
 fn guid(mode: PowerMode) -> GUID {
     GUID::from_u128(match mode {

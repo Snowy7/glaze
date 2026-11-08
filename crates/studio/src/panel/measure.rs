@@ -7,17 +7,17 @@ pub struct Memory {
 
 /// Temporary picture factories; bitmap caches never retain widget models.
 #[derive(Default)]
-pub struct Raster(pub std::cell::RefCell<Option<mypaper_ui::Ui>>);
+pub struct Raster(pub std::cell::RefCell<Option<glaze_ui::Ui>>);
 impl std::fmt::Debug for Raster {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("Raster")
     }
 }
 
-pub fn raster_ui(app: &crate::app::App) -> Option<std::cell::RefMut<'_, mypaper_ui::Ui>> {
+pub fn raster_ui(app: &crate::app::App) -> Option<std::cell::RefMut<'_, glaze_ui::Ui>> {
     let mut raster = app.panel.as_ref()?.raster.0.borrow_mut();
     if raster.is_none() {
-        let mut ui = mypaper_ui::Ui::isolated().ok()?;
+        let mut ui = glaze_ui::Ui::isolated().ok()?;
         ui.text.set_capacity(24);
         *raster = Some(ui);
     }
@@ -34,8 +34,8 @@ pub fn finish_raster(app: &crate::app::App) {
 
 /// Lay out at widget size, then paint those operations once at the displayed pixel size.
 /// This preserves text fitting without allocating a native intermediate bitmap.
-pub fn scale_picture(ops: &mut [mypaper_ui::Op], scale: f32) {
-    use mypaper_ui::{Op, Point, Rect};
+pub fn scale_picture(ops: &mut [glaze_ui::Op], scale: f32) {
+    use glaze_ui::{Op, Point, Rect};
     let rect = |r: &mut Rect| {
         r.left *= scale;
         r.top *= scale;
@@ -156,7 +156,7 @@ pub fn raster_finished(app: &crate::app::App) {
 
 /// A page owns its decoded thumbnails, preview artwork and shaped text.
 /// Keep the image worker connected while dropping its ready pixels, so the next page stays async.
-pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
+pub fn leave_page(app: &crate::app::App, text: &mut glaze_ui::Text) {
     if app.panel.as_ref().unwrap().page != super::Page::History {
         super::history::cancel(app);
     }
@@ -178,7 +178,7 @@ pub fn leave_page(app: &crate::app::App, text: &mut mypaper_ui::Text) {
 }
 
 /// Shared with the hidden memory review so fixture isolation does not change cache policy.
-pub(super) fn release_page_resources(app: &crate::app::App, text: &mut mypaper_ui::Text) {
+pub(super) fn release_page_resources(app: &crate::app::App, text: &mut glaze_ui::Text) {
     let mut images = app.images.borrow_mut();
     images.clear_page();
     drop(images);
@@ -191,7 +191,7 @@ pub(super) fn release_page_resources(app: &crate::app::App, text: &mut mypaper_u
 }
 
 /// Release the previous canvas and retained list before constructing the next page's pictures.
-pub fn prepare_frame(app: &crate::app::App, surface: &mut mypaper_ui::Surface) {
+pub fn prepare_frame(app: &crate::app::App, surface: &mut glaze_ui::Surface) {
     let Some(state) = &app.panel else { return };
     let page =
         if matches!(state.page, super::Page::Top | super::Page::Dock) && app.nav.module.is_some() {

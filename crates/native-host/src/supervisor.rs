@@ -136,7 +136,7 @@ enum Request {
     },
 }
 
-/// Own one supervisor per `mypaper-plugins` process. Construction starts no child.
+/// Own one supervisor per `glaze-plugins` process. Construction starts no child.
 /// Methods block: invoke on a worker lane. Drop kills and reaps every child.
 pub struct Supervisor {
     tx: Sender<Request>,
@@ -254,7 +254,7 @@ impl Connection {
             .unwrap_or_default()
             .as_nanos();
         let name = format!(
-            "\\\\.\\pipe\\mypaper-native-{}-{nonce}-{}",
+            "\\\\.\\pipe\\glaze-native-{}-{nonce}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         );

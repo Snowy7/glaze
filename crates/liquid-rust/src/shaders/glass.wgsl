@@ -1,5 +1,5 @@
 // Vendored from liquid-rust (https://github.com/al1h3n/liquid-rust, commit 2073cd9) by al1h3n,
-// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "mypaper:".
+// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "Glaze:".
 // Liquid Glass surface. One instanced quad per glass group; the group's shapes are
 // smooth-unioned into one signed distance field, so neighbours fuse like liquid. Each shape
 // brings its own material, blended across the liquid neck with the same weights.
@@ -22,7 +22,7 @@ struct Shape {
     center_half: vec4f, // center (px), half size (px)
     params: vec4f,      // corner radius, inward shrink, stretch axis (x, y)
     stretch: vec4f,     // scale along axis, scale across axis, corner exponent, unused
-    extra: vec4f,       // bevel depth (px), rim scale (mypaper: thin glass), unused, unused
+    extra: vec4f,       // bevel depth (px), rim scale (Glaze: thin glass), unused, unused
 };
 
 struct Group {
@@ -36,9 +36,9 @@ struct Material {
     optics: vec4f,      // refraction, light/dark adaptivity, dispersion, frost sigma (px)
     lighting: vec4f,    // splay, specular, rim, rim shade
     edge: vec4f,        // inner hairline, outer edge burn, contrast border, dim
-    shadow: vec4f,      // offset y (px), sigma (px), opacity, scheme (mypaper: 1 light, 0 dark)
+    shadow: vec4f,      // offset y (px), sigma (px), opacity, scheme (Glaze: 1 light, 0 dark)
     light_a: vec4f,     // light tone: lift, luminance, luminance mix, lighten
-    light_b: vec4f,     // light tone: darken to, darken; mypaper: backdrop brightness, saturation
+    light_b: vec4f,     // light tone: darken to, darken; Glaze: backdrop brightness, saturation
     dark_a: vec4f,      // dark tone
     dark_b: vec4f,
     tint: vec4f,        // OKLab L, a, b, strength
@@ -61,7 +61,7 @@ const PYRAMID_SIGMA0: f32 = 1.9;
 struct Varyings {
     @builtin(position) pos: vec4f,
     @location(0) @interpolate(flat) group: u32,
-    // mypaper: what the backdrop at the glass's centre decides (shadow adaptivity, light face),
+    // Glaze: what the backdrop at the glass's centre decides (shadow adaptivity, light face),
     // when it is the same for every pixel of the group (one shape); `z` is 1 when it is.
     @location(1) @interpolate(flat) backdrop: vec4f,
 };
@@ -75,7 +75,7 @@ fn vs_glass(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) ->
     var out: Varyings;
     out.pos = vec4f(px.x * globals.viewport.z * 2.0 - 1.0, 1.0 - px.y * globals.viewport.w * 2.0, 0.0, 1.0);
     out.group = ii;
-    // mypaper: a lone shape's centre and material are the group's, so its pixels all read the
+    // Glaze: a lone shape's centre and material are the group's, so its pixels all read the
     // same two backdrop texels: read them once per vertex instead of once per pixel.
     out.backdrop = vec4f(0.0);
     if grp.info.y == 1u {
@@ -302,7 +302,7 @@ fn frost(q: vec2f, sigma: f32) -> vec3f {
     return mix(bspline(uv, lo - 1.0), bspline(uv, lo), clamp(l - lo, 0.0, 1.0));
 }
 
-// mypaper: the backdrop statistics below, moved out of fs_glass unchanged so the vertex shader
+// Glaze: the backdrop statistics below, moved out of fs_glass unchanged so the vertex shader
 // can evaluate them once for a lone shape.
 
 // Apple: shadows grow over busy content (text), fade over flat light content.
@@ -322,7 +322,7 @@ fn face_lightness(center_uv: vec2f, mat: Material) -> f32 {
     // to flip, until (adaptivity 0) it never does and follows the scheme. Moving the threshold,
     // rather than blending scheme and content by adaptivity, keeps the face fully light or
     // fully dark: a 50/50 blend of the two faces is the flat grey Apple's glass never shows.
-    // mypaper: the scheme is per glass (`mat.shadow.w`), not `globals.misc.z`.
+    // Glaze: the scheme is per glass (`mat.shadow.w`), not `globals.misc.z`.
     let scheme_edge = select(1.2, -0.2, mat.shadow.w > 0.5);
     let flip = mix(scheme_edge, 0.36, mat.optics.y);
     // Narrow, so content only briefly sits in between, where the faces blend toward grey.
@@ -339,7 +339,7 @@ fn bevel_slope(t: f32) -> f32 {
 // Lateral travel (in units of glass thickness) of a vertical ray refracted by a
 // surface tilted by atan(slope).
 fn refract_offset(slope: f32, eta: f32) -> f32 {
-    // mypaper: tan(θ - φ) with tan θ = slope and sin φ = sin θ / η, in closed form instead of
+    // Glaze: tan(θ - φ) with tan θ = slope and sin φ = sin θ / η, in closed form instead of
     // atan, asin and tan (the same value, a fraction of the ALU). sin φ stays below 1 / η, so
     // the square root never sees a negative number, even at the rim's slope of ~5600.
     let sin_phi = slope * inverseSqrt(1.0 + slope * slope) / eta;
@@ -372,7 +372,7 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
     let cov = coverage(d);
     let center_uv = field.attrs.yz * globals.viewport.zw;
 
-    // mypaper: a lone shape's backdrop statistics come from the vertex shader.
+    // Glaze: a lone shape's backdrop statistics come from the vertex shader.
     let lone = v.backdrop.z > 0.5;
 
     // Outside: drop shadow and the darkened hairline edge.
@@ -398,7 +398,7 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
             let side_l = coverage(sdg_group(p + vec2f(1.25 * pt, 0.0), grp).x + grow);
             let side_r = coverage(sdg_group(p - vec2f(1.25 * pt, 0.0), grp).x + grow);
             let burn = mat.edge.y * (ring + 0.92 * max(side_l, side_r) * (1.0 - cov));
-            // mypaper: sampled by uv, not loaded by pixel: the content may be another size.
+            // Glaze: sampled by uv, not loaded by pixel: the content may be another size.
             let under = encode(textureSampleLevel(src, samp, p * globals.viewport.zw, 0.0).rgb);
             let burnt = max(under - vec3f(burn), vec3f(0.0));
             let darkening = 1.0 - luminance(decode(burnt)) / max(luminance(decode(under)), 1e-4);
@@ -434,7 +434,7 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
         col = frost(p, sigma);
     }
     col *= 1.0 - mat.edge.w;
-    // mypaper: the backdrop's brightness and saturation, skipped (exactly) when both are 1.
+    // Glaze: the backdrop's brightness and saturation, skipped (exactly) when both are 1.
     let backdrop = mat.light_b.zw;
     if any(backdrop != vec2f(1.0)) {
         col *= backdrop.x;
@@ -447,7 +447,7 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
     if !lone {
         lightness = face_lightness(center_uv, mat);
     }
-    // mypaper: a face that is fully light or fully dark (always, once the scheme decides) maps
+    // Glaze: a face that is fully light or fully dark (always, once the scheme decides) maps
     // only that tone; mixing in the other with weight 0 changed nothing.
     if lightness <= 0.0 {
         g = tone(g, mat.dark_a, mat.dark_b);
@@ -480,14 +480,14 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
     g = mix(g, highlight, clamp(line * dir * mat.lighting.y * 2.5, 0.0, 1.0));
 
     // Inner shadows from the kit, skipped deep inside where they vanish.
-    // mypaper: thin glass narrows them with its lens (`rims` is exactly 1 for glass the kit's
+    // Glaze: thin glass narrows them with its lens (`rims` is exactly 1 for glass the kit's
     // depth fits, so large glass is unchanged).
     let rims = field.attrs.w;
     let rim_sigma = 5.0 * pt * rims;
     if -d < 45.0 * pt {
         let o = KIT_OFFSET * pt * rims;
         let away = -to_light * o; // shadow offset that lights the edge facing the light
-        // mypaper: the lit rim and the rim shade share one hole (inner_shadow's distance).
+        // Glaze: the lit rim and the rim shade share one hole (inner_shadow's distance).
         let hole = sdg_group(p - away, grp).x - o;
         if mat.lighting.z > 0.0 {
             let rims = phi(hole, rim_sigma) + inner_shadow(p, grp, -away, o, rim_sigma);
@@ -503,7 +503,7 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
         }
     }
 
-    // mypaper: a separate bottom inner shadow (the bars' depth contract). The shifted hole
+    // Glaze: a separate bottom inner shadow (the bars' depth contract). The shifted hole
     // exposes the bottom edge; thin glass narrows it with its lens, as for the kit's rims.
     // Zero strength skips the SDF/blur entirely and leaves the original picture unchanged.
     if mat.dark_b.z > 0.0 && -d < 45.0 * pt {
@@ -512,7 +512,7 @@ fn fs_glass(v: Varyings) -> @location(0) vec4f {
     }
 
     // Touch: the glass lights up from the finger; the light spills onto nearby glass.
-    // mypaper: skipped while nothing touches or presses it, when it adds exactly zero.
+    // Glaze: skipped while nothing touches or presses it, when it adds exactly zero.
     if globals.touch.w != 0.0 || grp.geo.z != 0.0 {
         let tp = p - globals.touch.xy;
         // Glass that isn't pressed only catches a little of it, so a held button doesn't

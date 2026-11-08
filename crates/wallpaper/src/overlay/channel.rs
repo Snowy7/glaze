@@ -33,7 +33,7 @@ impl Channel {
     /// The shell creates this before Open; the engine opens the same mapping at intake.
     pub fn open(client: HWND, create: bool) -> windows::core::Result<Self> {
         let name = HSTRING::from(format!(
-            "Local\\mypaper.overlay.placement.v1.{}",
+            "Local\\glaze.overlay.placement.v1.{}",
             client.0 as usize
         ));
         // SAFETY: a page-file mapping starts zeroed, has allocation alignment, and remains
@@ -146,7 +146,7 @@ impl Drop for Channel {
 mod tests {
     use super::super::{Layer, Material};
     use super::*;
-    use mypaper_desktop::Rect;
+    use glaze_desktop::Rect;
 
     #[test]
     fn a_burst_reads_only_the_latest_complete_placement() {

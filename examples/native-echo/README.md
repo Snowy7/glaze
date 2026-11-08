@@ -1,9 +1,9 @@
 # Native echo
 
 This standalone Rust `cdylib` implements the C ABI in
-`crates/native-host/include/mypaper_native.h`. Build it with
+`crates/native-host/include/glaze_native.h`. Build it with
 `cargo build --manifest-path examples/native-echo/Cargo.toml --release`, then copy
-`target/release/mypaper_native_echo.dll` into a plugin folder as `native_echo.dll`.
+`target/release/glaze_native_echo.dll` into a plugin folder as `native_echo.dll`.
 `plugin.json` illustrates the manifest fields; the platform's component and other
 required metadata belong alongside it.
 

@@ -14,7 +14,7 @@
 //!   journaled on its own because it outlives a run.
 //!
 //! Everything is reversible. Before the first registry change the original
-//! values (including "absent") are journaled to `%LOCALAPPDATA%\mypaper\undo.json`
+//! values (including "absent") are journaled to `%LOCALAPPDATA%\glaze\undo.json`
 //! ([`undo`]); [`Tweaks::deactivate`] (also run on drop) and the next
 //! start after a crash both undo from it.
 //!
@@ -44,7 +44,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::Result;
-use mypaper_theme::WindowsStyle;
+use glaze_theme::WindowsStyle;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{
     HWND_BROADCAST, SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_SETTINGCHANGE,
@@ -63,7 +63,7 @@ const BROADCAST_TIMEOUT_MS: u32 = 500;
 /// few milliseconds after we change one, and the restore waits that out.
 const SETTLE: Duration = Duration::from_millis(100);
 
-/// The app scheme before any active mypaper override, for another process resolving auto
+/// The app scheme before any active Glaze override, for another process resolving auto
 /// tokens. Reading the same journal as core avoids a config-event race with mode restoration.
 pub fn unmanaged_system_prefers_dark() -> bool {
     let original = palette::local_dir().ok().and_then(|dir| {

@@ -1,6 +1,6 @@
 //! Grid-snapped widget movement and resizing, transient until Studio commits the release.
-use mypaper_ui::{Point, Rect};
-use mypaper_widgets::{layout::Grid, manifest::SizeSpec};
+use glaze_ui::{Point, Rect};
+use glaze_widgets::{layout::Grid, manifest::SizeSpec};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Preview {
@@ -18,7 +18,7 @@ impl Preview {
         self.base_revision == revision && self.saved_revision != Some(revision)
     }
 
-    pub fn apply(&self, layout: &mut mypaper_widgets::layout::Layout) -> bool {
+    pub fn apply(&self, layout: &mut glaze_widgets::layout::Layout) -> bool {
         let Some(instance) = layout.instances.iter_mut().find(|i| {
             i.instance == self.selection.id
                 && i.cell == self.before_cell
@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn geometry_preview_holds_until_saved_and_never_changes_the_durable_layout() {
-        let mut durable = mypaper_widgets::layout::Layout::default();
+        let mut durable = glaze_widgets::layout::Layout::default();
         let id = durable.add("clock", "display", [2, 3], [8, 4]);
         let mut preview = Preview {
             selection: super::super::wire::Selection {

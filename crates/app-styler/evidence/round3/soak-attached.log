@@ -1,26 +1,26 @@
 ﻿08:39:56 soak start (35 min)
-08:39:56 [start] explorer 76024: 753.8 MB priv, 6218 handles, 429.09 s cpu | mypaper-styler 88116: 3.0 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 139.0 MB priv, 1613 handles, 20.33 s cpu
-08:39:56 [held (no burst)] explorer 76024: 753.8 MB priv, 6218 handles, 429.09 s cpu | mypaper-styler 88116: 3.0 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 139.0 MB priv, 1613 handles, 20.33 s cpu
-08:40:41 [held (no burst)] explorer 76024: 746.5 MB priv, 6222 handles, 429.19 s cpu | mypaper-styler 88116: 3.0 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 139.1 MB priv, 1615 handles, 20.33 s cpu
-08:41:26 [held (no burst)] explorer 76024: 746.5 MB priv, 6214 handles, 429.22 s cpu | mypaper-styler 88116: 3.0 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 139.1 MB priv, 1615 handles, 20.33 s cpu
+08:39:56 [start] explorer 76024: 753.8 MB priv, 6218 handles, 429.09 s cpu | glaze-styler 88116: 3.0 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 139.0 MB priv, 1613 handles, 20.33 s cpu
+08:39:56 [held (no burst)] explorer 76024: 753.8 MB priv, 6218 handles, 429.09 s cpu | glaze-styler 88116: 3.0 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 139.0 MB priv, 1613 handles, 20.33 s cpu
+08:40:41 [held (no burst)] explorer 76024: 746.5 MB priv, 6222 handles, 429.19 s cpu | glaze-styler 88116: 3.0 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 139.1 MB priv, 1615 handles, 20.33 s cpu
+08:41:26 [held (no burst)] explorer 76024: 746.5 MB priv, 6214 handles, 429.22 s cpu | glaze-styler 88116: 3.0 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 139.1 MB priv, 1615 handles, 20.33 s cpu
 08:42:11 [held (no burst)] explorer 76024: 753.5 MB priv, 6532 handles, 436.44 s cpu | SystemSettings 73468: 138.9 MB priv, 1621 handles, 20.70 s cpu
-08:42:57 [held (no burst)] explorer 76024: 753.8 MB priv, 6260 handles, 437.64 s cpu | mypaper-styler 42660: 3.4 MB priv, 298 handles, 0.06 s cpu | SystemSettings 73468: 139.2 MB priv, 1625 handles, 20.77 s cpu
-08:43:42 [held (no burst)] explorer 76024: 753.6 MB priv, 6238 handles, 437.78 s cpu | mypaper-styler 42660: 3.3 MB priv, 298 handles, 0.06 s cpu | SystemSettings 73468: 139.1 MB priv, 1619 handles, 20.78 s cpu
-08:44:27 [held (no burst)] explorer 76024: 753.3 MB priv, 6212 handles, 437.80 s cpu | mypaper-styler 42660: 3.2 MB priv, 294 handles, 0.06 s cpu | SystemSettings 73468: 139.1 MB priv, 1613 handles, 20.78 s cpu
-08:45:12 [held (no burst)] explorer 76024: 753.6 MB priv, 6251 handles, 438.59 s cpu | mypaper-styler 42660: 3.2 MB priv, 294 handles, 0.06 s cpu | SystemSettings 73468: 139.2 MB priv, 1629 handles, 20.81 s cpu
-08:45:57 [held (no burst)] explorer 76024: 753.4 MB priv, 6220 handles, 438.61 s cpu | mypaper-styler 42660: 3.2 MB priv, 294 handles, 0.06 s cpu | SystemSettings 73468: 139.1 MB priv, 1617 handles, 20.81 s cpu
-08:46:42 [held (no burst)] explorer 76024: 754.6 MB priv, 6656 handles, 447.55 s cpu | mypaper-styler 46396: 3.4 MB priv, 301 handles, 0.06 s cpu | SystemSettings 73468: 139.3 MB priv, 1625 handles, 21.34 s cpu
-08:47:27 [held (no burst)] explorer 76024: 747.7 MB priv, 6276 handles, 448.13 s cpu | mypaper-styler 46396: 3.3 MB priv, 300 handles, 0.06 s cpu | SystemSettings 73468: 139.2 MB priv, 1625 handles, 21.38 s cpu
-08:48:12 [held (no burst)] explorer 76024: 747.4 MB priv, 6231 handles, 448.13 s cpu | mypaper-styler 46396: 3.3 MB priv, 300 handles, 0.06 s cpu | SystemSettings 73468: 139.2 MB priv, 1613 handles, 21.38 s cpu
-08:48:57 [held (no burst)] explorer 76024: 753.7 MB priv, 6705 handles, 456.23 s cpu | mypaper-styler 46520: 3.9 MB priv, 301 handles, 0.16 s cpu | SystemSettings 73468: 139.3 MB priv, 1625 handles, 22.00 s cpu
-08:49:42 [held (no burst)] explorer 76024: 753.7 MB priv, 6309 handles, 457.66 s cpu | mypaper-styler 46520: 3.9 MB priv, 300 handles, 0.16 s cpu | SystemSettings 73468: 139.3 MB priv, 1631 handles, 22.05 s cpu
-08:50:27 [held (no burst)] explorer 76024: 753.4 MB priv, 6269 handles, 457.69 s cpu | mypaper-styler 46520: 3.9 MB priv, 300 handles, 0.16 s cpu | SystemSettings 73468: 139.2 MB priv, 1619 handles, 22.06 s cpu
-08:51:12 [held (no burst)] explorer 76024: 753.2 MB priv, 6255 handles, 457.78 s cpu | mypaper-styler 46520: 3.7 MB priv, 294 handles, 0.16 s cpu | SystemSettings 73468: 139.2 MB priv, 1619 handles, 22.06 s cpu
-08:51:57 [held (no burst)] explorer 76024: 755.0 MB priv, 6326 handles, 466.70 s cpu | mypaper-styler 34744: 3.8 MB priv, 300 handles, 0.09 s cpu | SystemSettings 73468: 139.3 MB priv, 1619 handles, 22.58 s cpu
-08:52:42 [held (no burst)] explorer 76024: 747.1 MB priv, 6292 handles, 467.94 s cpu | mypaper-styler 34744: 3.7 MB priv, 300 handles, 0.09 s cpu | SystemSettings 73468: 139.3 MB priv, 1631 handles, 22.59 s cpu
-08:53:27 [held (no burst)] explorer 76024: 748.2 MB priv, 6285 handles, 468.59 s cpu | mypaper-styler 34744: 3.7 MB priv, 300 handles, 0.09 s cpu | SystemSettings 73468: 139.3 MB priv, 1621 handles, 22.63 s cpu
-08:54:12 [held (no burst)] explorer 76024: 747.9 MB priv, 6242 handles, 468.64 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.09 s cpu | SystemSettings 73468: 139.2 MB priv, 1613 handles, 22.63 s cpu
-08:54:57 [held (no burst)] explorer 76024: 748.4 MB priv, 6246 handles, 469.34 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.09 s cpu | SystemSettings 73468: 139.3 MB priv, 1625 handles, 22.64 s cpu
+08:42:57 [held (no burst)] explorer 76024: 753.8 MB priv, 6260 handles, 437.64 s cpu | glaze-styler 42660: 3.4 MB priv, 298 handles, 0.06 s cpu | SystemSettings 73468: 139.2 MB priv, 1625 handles, 20.77 s cpu
+08:43:42 [held (no burst)] explorer 76024: 753.6 MB priv, 6238 handles, 437.78 s cpu | glaze-styler 42660: 3.3 MB priv, 298 handles, 0.06 s cpu | SystemSettings 73468: 139.1 MB priv, 1619 handles, 20.78 s cpu
+08:44:27 [held (no burst)] explorer 76024: 753.3 MB priv, 6212 handles, 437.80 s cpu | glaze-styler 42660: 3.2 MB priv, 294 handles, 0.06 s cpu | SystemSettings 73468: 139.1 MB priv, 1613 handles, 20.78 s cpu
+08:45:12 [held (no burst)] explorer 76024: 753.6 MB priv, 6251 handles, 438.59 s cpu | glaze-styler 42660: 3.2 MB priv, 294 handles, 0.06 s cpu | SystemSettings 73468: 139.2 MB priv, 1629 handles, 20.81 s cpu
+08:45:57 [held (no burst)] explorer 76024: 753.4 MB priv, 6220 handles, 438.61 s cpu | glaze-styler 42660: 3.2 MB priv, 294 handles, 0.06 s cpu | SystemSettings 73468: 139.1 MB priv, 1617 handles, 20.81 s cpu
+08:46:42 [held (no burst)] explorer 76024: 754.6 MB priv, 6656 handles, 447.55 s cpu | glaze-styler 46396: 3.4 MB priv, 301 handles, 0.06 s cpu | SystemSettings 73468: 139.3 MB priv, 1625 handles, 21.34 s cpu
+08:47:27 [held (no burst)] explorer 76024: 747.7 MB priv, 6276 handles, 448.13 s cpu | glaze-styler 46396: 3.3 MB priv, 300 handles, 0.06 s cpu | SystemSettings 73468: 139.2 MB priv, 1625 handles, 21.38 s cpu
+08:48:12 [held (no burst)] explorer 76024: 747.4 MB priv, 6231 handles, 448.13 s cpu | glaze-styler 46396: 3.3 MB priv, 300 handles, 0.06 s cpu | SystemSettings 73468: 139.2 MB priv, 1613 handles, 21.38 s cpu
+08:48:57 [held (no burst)] explorer 76024: 753.7 MB priv, 6705 handles, 456.23 s cpu | glaze-styler 46520: 3.9 MB priv, 301 handles, 0.16 s cpu | SystemSettings 73468: 139.3 MB priv, 1625 handles, 22.00 s cpu
+08:49:42 [held (no burst)] explorer 76024: 753.7 MB priv, 6309 handles, 457.66 s cpu | glaze-styler 46520: 3.9 MB priv, 300 handles, 0.16 s cpu | SystemSettings 73468: 139.3 MB priv, 1631 handles, 22.05 s cpu
+08:50:27 [held (no burst)] explorer 76024: 753.4 MB priv, 6269 handles, 457.69 s cpu | glaze-styler 46520: 3.9 MB priv, 300 handles, 0.16 s cpu | SystemSettings 73468: 139.2 MB priv, 1619 handles, 22.06 s cpu
+08:51:12 [held (no burst)] explorer 76024: 753.2 MB priv, 6255 handles, 457.78 s cpu | glaze-styler 46520: 3.7 MB priv, 294 handles, 0.16 s cpu | SystemSettings 73468: 139.2 MB priv, 1619 handles, 22.06 s cpu
+08:51:57 [held (no burst)] explorer 76024: 755.0 MB priv, 6326 handles, 466.70 s cpu | glaze-styler 34744: 3.8 MB priv, 300 handles, 0.09 s cpu | SystemSettings 73468: 139.3 MB priv, 1619 handles, 22.58 s cpu
+08:52:42 [held (no burst)] explorer 76024: 747.1 MB priv, 6292 handles, 467.94 s cpu | glaze-styler 34744: 3.7 MB priv, 300 handles, 0.09 s cpu | SystemSettings 73468: 139.3 MB priv, 1631 handles, 22.59 s cpu
+08:53:27 [held (no burst)] explorer 76024: 748.2 MB priv, 6285 handles, 468.59 s cpu | glaze-styler 34744: 3.7 MB priv, 300 handles, 0.09 s cpu | SystemSettings 73468: 139.3 MB priv, 1621 handles, 22.63 s cpu
+08:54:12 [held (no burst)] explorer 76024: 747.9 MB priv, 6242 handles, 468.64 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.09 s cpu | SystemSettings 73468: 139.2 MB priv, 1613 handles, 22.63 s cpu
+08:54:57 [held (no burst)] explorer 76024: 748.4 MB priv, 6246 handles, 469.34 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.09 s cpu | SystemSettings 73468: 139.3 MB priv, 1625 handles, 22.64 s cpu
 08:56:44   opened window 4128930
 08:56:44   rules -> changed
 08:56:44   opened window 95552166
@@ -34,7 +34,7 @@
 08:56:49   rules -> styled
 08:56:50   closed one during a change
 08:56:50   burst 1: 7 s with the lock; rules back to styled
-08:56:53 [after burst 1] explorer 76024: 902.8 MB priv, 8542 handles, 481.38 s cpu | mypaper-styler 34744: 3.8 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 144.8 MB priv, 1784 handles, 26.25 s cpu
+08:56:53 [after burst 1] explorer 76024: 902.8 MB priv, 8542 handles, 481.38 s cpu | glaze-styler 34744: 3.8 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 144.8 MB priv, 1784 handles, 26.25 s cpu
 08:57:39   opened window 48758990
 08:57:39   rules -> changed
 08:57:40   opened window 11144006
@@ -48,7 +48,7 @@
 08:57:47   rules -> styled
 08:57:48   closed one during a change
 08:57:48   burst 2: 10 s with the lock; rules back to styled
-08:57:51 [after burst 2] explorer 76024: 1,196.5 MB priv, 10180 handles, 495.14 s cpu | mypaper-styler 34744: 3.8 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 162.7 MB priv, 1931 handles, 30.81 s cpu
+08:57:51 [after burst 2] explorer 76024: 1,196.5 MB priv, 10180 handles, 495.14 s cpu | glaze-styler 34744: 3.8 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 162.7 MB priv, 1931 handles, 30.81 s cpu
 08:58:37   opened window 87820204
 08:58:37   rules -> changed
 08:58:38   opened window 147521748
@@ -62,7 +62,7 @@
 08:58:44   rules -> styled
 08:58:44   closed one during a change
 08:58:44   burst 3: 8 s with the lock; rules back to styled
-08:58:47 [after burst 3] explorer 76024: 1,609.4 MB priv, 11937 handles, 508.98 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 170.9 MB priv, 2121 handles, 40.86 s cpu
+08:58:47 [after burst 3] explorer 76024: 1,609.4 MB priv, 11937 handles, 508.98 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.11 s cpu | SystemSettings 73468: 170.9 MB priv, 2121 handles, 40.86 s cpu
 08:59:33   opened window 7278510
 08:59:33   rules -> changed
 08:59:33   opened window 46270170
@@ -76,7 +76,7 @@
 08:59:40   rules -> styled
 08:59:40   closed one during a change
 08:59:40   burst 4: 8 s with the lock; rules back to styled
-08:59:43 [after burst 4] explorer 76024: 1,809.8 MB priv, 12999 handles, 521.25 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.13 s cpu | SystemSettings 73468: 189.6 MB priv, 2101 handles, 46.92 s cpu
+08:59:43 [after burst 4] explorer 76024: 1,809.8 MB priv, 12999 handles, 521.25 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.13 s cpu | SystemSettings 73468: 189.6 MB priv, 2101 handles, 46.92 s cpu
 09:00:35   rules -> changed
 09:00:42   rules -> none
 09:00:43   rules -> styled (navigated)
@@ -86,7 +86,7 @@
 09:00:46   rules -> changed (navigated)
 09:00:47   rules -> none (navigated)
 09:00:47   burst 5: 18 s with the lock; rules back to styled
-09:00:50 [after burst 5] explorer 76024: 1,809.8 MB priv, 11866 handles, 522.75 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.13 s cpu | SystemSettings 73468: 192.0 MB priv, 2052 handles, 52.28 s cpu
+09:00:50 [after burst 5] explorer 76024: 1,809.8 MB priv, 11866 handles, 522.75 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.13 s cpu | SystemSettings 73468: 192.0 MB priv, 2052 handles, 52.28 s cpu
 09:01:36   opened window 13634184
 09:01:36   rules -> changed
 09:01:37   opened window 14616756
@@ -100,7 +100,7 @@
 09:01:44   rules -> styled
 09:01:44   closed one during a change
 09:01:44   burst 6: 9 s with the lock; rules back to styled
-09:01:47 [after burst 6] explorer 76024: 2,196.6 MB priv, 13858 handles, 539.22 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.14 s cpu | SystemSettings 73468: 193.3 MB priv, 2011 handles, 61.95 s cpu
+09:01:47 [after burst 6] explorer 76024: 2,196.6 MB priv, 13858 handles, 539.22 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.14 s cpu | SystemSettings 73468: 193.3 MB priv, 2011 handles, 61.95 s cpu
 09:02:33   opened window 15079322
 09:02:33   rules -> changed
 09:02:34   opened window 108988410
@@ -114,12 +114,12 @@
 09:02:41   rules -> styled
 09:02:41   closed one during a change
 09:02:42   burst 7: 9 s with the lock; rules back to styled
-09:02:45 [after burst 7] explorer 76024: 2,446.9 MB priv, 14645 handles, 552.88 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 203.8 MB priv, 2193 handles, 72.36 s cpu
-09:03:30 [held (no burst)] explorer 76024: 2,436.3 MB priv, 14460 handles, 552.94 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 203.1 MB priv, 2100 handles, 72.39 s cpu
-09:04:15 [held (no burst)] explorer 76024: 2,431.6 MB priv, 13283 handles, 553.45 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 200.5 MB priv, 1905 handles, 72.41 s cpu
-09:05:00 [held (no burst)] explorer 76024: 2,428.6 MB priv, 12847 handles, 553.50 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 199.7 MB priv, 1862 handles, 72.41 s cpu
-09:05:45 [held (no burst)] explorer 76024: 2,429.9 MB priv, 12882 handles, 554.22 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 199.4 MB priv, 1831 handles, 72.45 s cpu
-09:06:30 [held (no burst)] explorer 76024: 2,428.6 MB priv, 12755 handles, 554.27 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 199.3 MB priv, 1818 handles, 72.45 s cpu
-09:07:15 [held (no burst)] explorer 76024: 2,428.7 MB priv, 12759 handles, 554.31 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 199.3 MB priv, 1821 handles, 72.45 s cpu
-09:08:00 [held (no burst)] explorer 76024: 2,428.4 MB priv, 12735 handles, 554.36 s cpu | mypaper-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 199.3 MB priv, 1821 handles, 72.45 s cpu
-09:08:45 [held (no burst)] explorer 76024: 2,426.5 MB priv, 12737 handles, 554.44 s cpu | mypaper-styler 34744: 3.7 MB priv, 296 handles, 0.17 s cpu | SystemSettings 73468: 199.2 MB priv, 1807 handles, 72.47 s cpu
+09:02:45 [after burst 7] explorer 76024: 2,446.9 MB priv, 14645 handles, 552.88 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 203.8 MB priv, 2193 handles, 72.36 s cpu
+09:03:30 [held (no burst)] explorer 76024: 2,436.3 MB priv, 14460 handles, 552.94 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 203.1 MB priv, 2100 handles, 72.39 s cpu
+09:04:15 [held (no burst)] explorer 76024: 2,431.6 MB priv, 13283 handles, 553.45 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 200.5 MB priv, 1905 handles, 72.41 s cpu
+09:05:00 [held (no burst)] explorer 76024: 2,428.6 MB priv, 12847 handles, 553.50 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 199.7 MB priv, 1862 handles, 72.41 s cpu
+09:05:45 [held (no burst)] explorer 76024: 2,429.9 MB priv, 12882 handles, 554.22 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 199.4 MB priv, 1831 handles, 72.45 s cpu
+09:06:30 [held (no burst)] explorer 76024: 2,428.6 MB priv, 12755 handles, 554.27 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 199.3 MB priv, 1818 handles, 72.45 s cpu
+09:07:15 [held (no burst)] explorer 76024: 2,428.7 MB priv, 12759 handles, 554.31 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 199.3 MB priv, 1821 handles, 72.45 s cpu
+09:08:00 [held (no burst)] explorer 76024: 2,428.4 MB priv, 12735 handles, 554.36 s cpu | glaze-styler 34744: 3.7 MB priv, 294 handles, 0.17 s cpu | SystemSettings 73468: 199.3 MB priv, 1821 handles, 72.45 s cpu
+09:08:45 [held (no burst)] explorer 76024: 2,426.5 MB priv, 12737 handles, 554.44 s cpu | glaze-styler 34744: 3.7 MB priv, 296 handles, 0.17 s cpu | SystemSettings 73468: 199.2 MB priv, 1807 handles, 72.47 s cpu

@@ -7,7 +7,7 @@
     "cpu_core_pct": 4.606974075460574,
     "cpu_machine_pct": 0.28793587971628587,
     "visible_screens": 2,
-    "timing_file": "C:/mypaper-targets/native-engine/measured-gpu.run0.jsonl",
+    "timing_file": "C:/glaze-targets/native-engine/measured-gpu.run0.jsonl",
     "sample_started_qpc": 3585076612385,
     "sample_ended_qpc": 3585276716618
   }

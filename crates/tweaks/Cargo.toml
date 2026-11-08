@@ -1,15 +1,15 @@
 [package]
-name = "mypaper-tweaks"
+name = "glaze-tweaks"
 description = "Native Windows styling: DWM window attributes, accent color and dark mode, with an undo journal."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-mypaper-config.workspace = true
-mypaper-fswatch.workspace = true
-mypaper-inject.workspace = true
-mypaper-theme.workspace = true
+glaze-config.workspace = true
+glaze-fswatch.workspace = true
+glaze-inject.workspace = true
+glaze-theme.workspace = true
 
 anyhow.workspace = true
 log.workspace = true

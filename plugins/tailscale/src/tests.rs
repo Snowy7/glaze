@@ -1,6 +1,6 @@
 use super::*;
 use serde_json::json;
-use mypaper_plugin_sdk::SizeClass;
+use glaze_plugin_sdk::SizeClass;
 
 #[test]
 fn disconnected_or_unreachable_service_never_claims_a_green_connection() {

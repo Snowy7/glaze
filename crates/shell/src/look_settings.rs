@@ -1,19 +1,19 @@
 //! Resolve config.json's Look at runtime. Called on config notifications, never while drawing.
 //! Specific bar/instance values beat this layer; wallpaper/design values sit below it.
 use crate::glass::Family;
-use mypaper_bars::{
+use glaze_bars::{
     accent,
     style::{Look as BarLook, NativeStyle},
 };
-use mypaper_config::look::{Icons, Look, Scheme, Style, Tone};
-use mypaper_theme::{Appearance, Paint, TextTone};
-use mypaper_ui::{Text, icons::IconSet};
+use glaze_config::look::{Icons, Look, Scheme, Style, Tone};
+use glaze_theme::{Appearance, Paint, TextTone};
+use glaze_ui::{Text, icons::IconSet};
 
 #[cfg(test)]
 #[path = "look_settings_tests.rs"]
 mod tests;
 
-pub fn family(look: &Look, surface: Family) -> Option<&mypaper_config::look::FamilyLook> {
+pub fn family(look: &Look, surface: Family) -> Option<&glaze_config::look::FamilyLook> {
     match surface {
         Family::Bars => look.bars.as_ref(),
         Family::Widgets => look.widgets.as_ref(),
@@ -39,8 +39,8 @@ pub fn font(name: &str, installed: impl Fn(&str) -> bool) -> String {
     let name = name.trim();
     if !name.is_empty() && installed(name) {
         name.into()
-    } else if installed(mypaper_ui::VARIABLE) {
-        mypaper_ui::VARIABLE.into()
+    } else if installed(glaze_ui::VARIABLE) {
+        glaze_ui::VARIABLE.into()
     } else {
         "Segoe UI".into()
     }
@@ -49,7 +49,7 @@ pub fn font(name: &str, installed: impl Fn(&str) -> bool) -> String {
 pub fn icons(look: &Look, text: &Text) -> Option<IconSet> {
     look.text.icons.map(|i| match i {
         Icons::Lucide => IconSet::Vector,
-        Icons::Fluent => IconSet::Font(mypaper_ui::icons::system_family(text)),
+        Icons::Fluent => IconSet::Font(glaze_ui::icons::system_family(text)),
     })
 }
 
@@ -73,8 +73,8 @@ pub fn appearance(
             Some(Paint::Color(c)) => Some(c),
             // Automatic popup/widget glass is neutral, so wallpaper colour comes through the
             // lens itself rather than being painted onto it a second time.
-            Some(Paint::Auto) if surface != Family::Bars => Some(mypaper_widgets::look::DEFAULT_TINT),
-            Some(Paint::Auto) => mypaper_tweaks::palette::read().map(|p| {
+            Some(Paint::Auto) if surface != Family::Bars => Some(glaze_widgets::look::DEFAULT_TINT),
+            Some(Paint::Auto) => glaze_tweaks::palette::read().map(|p| {
                 let dark = match look.appearance {
                     Some(Scheme::Light) => false,
                     Some(Scheme::Dark) => true,
@@ -116,7 +116,7 @@ pub fn appearance(
 pub fn bar(
     look: &Look,
     surface: Family,
-    config: &mypaper_bars::BarsConfig,
+    config: &glaze_bars::BarsConfig,
     key: &str,
     bar: &mut BarLook,
     base: &mut Appearance,
@@ -125,9 +125,9 @@ pub fn bar(
 ) {
     let own = |p| crate::bars::look::explicit_look(config, key, p);
     let bare = bar.transparent.unwrap_or_else(|| match bar.background {
-        Some(mypaper_bars::style::Fill::None) => true,
+        Some(glaze_bars::style::Fill::None) => true,
         Some(_) => false,
-        None => base.surface == Some(mypaper_theme::Surface::None),
+        None => base.surface == Some(glaze_theme::Surface::None),
     });
     *base = appearance(look, surface, base, bare, system);
     if (surface != Family::Bars || !own("/style"))
@@ -175,8 +175,8 @@ pub fn bar(
         // A reserved top strip never overlaps maximized apps, even when they pause the
         // wallpaper. Use live glass for the chosen tint, as for a dock over an app; a
         // wallpaper plate would remain invisible until the desktop is uncovered.
-        bar.background = Some(mypaper_bars::style::Fill::Blur(
-            mypaper_bars::style::BlurFill {
+        bar.background = Some(glaze_bars::style::Fill::Blur(
+            glaze_bars::style::BlurFill {
                 brightness: 1.0,
                 blur: 0.0,
             },

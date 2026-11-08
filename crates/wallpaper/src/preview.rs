@@ -4,9 +4,9 @@
 //! the desktop's own glass, with the same Liquid Glass (liquid-rust, see `glass_pass`).
 //!
 //! The protocol, shared with `crates/studio/src/glass.rs` (keep the two in step):
-//! - Studio creates the section `Local\mypaper.preview` ([`Header`] then `width * height` BGRA
-//!   pixels, premultiplied, opaque) and the auto-reset event `Local\mypaper.preview.done`;
-//! - the engine creates the manual-reset event `Local\mypaper.preview.request` and waits on it
+//! - Studio creates the section `Local\glaze.preview` ([`Header`] then `width * height` BGRA
+//!   pixels, premultiplied, opaque) and the auto-reset event `Local\glaze.preview.done`;
+//! - the engine creates the manual-reset event `Local\glaze.preview.request` and waits on it
 //!   with its other handles. Studio fills a request (bumping `request`) and sets it;
 //! - the engine maps the section, draws, writes the pixels, `status` and then `done = request`,
 //!   unmaps it, and sets the done event.
@@ -24,7 +24,7 @@
 use anyhow::{Context, Result, bail};
 use bytemuck::{Pod, Zeroable};
 use liquid_rust as lr;
-use mypaper_glass_ipc::Material;
+use glaze_glass_ipc::Material;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Memory::{
     FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW,
@@ -104,7 +104,7 @@ impl Preview {
     pub fn new() -> Self {
         // SAFETY: a named manual-reset event owned by this process until drop.
         let event =
-            unsafe { CreateEventW(None, true, false, w!("Local\\mypaper.preview.request")) }
+            unsafe { CreateEventW(None, true, false, w!("Local\\glaze.preview.request")) }
                 .inspect_err(|e| log::warn!("Studio previews unavailable: {e}"))
                 .ok();
         Self {
@@ -170,7 +170,7 @@ fn answer(
     // SAFETY: Studio's section, mapped whole and unmapped below; the header is checked before
     // the pixel range (inside the mapping Studio sized for MAX_SIZE) is written.
     unsafe {
-        let mapping = OpenFileMappingW(FILE_MAP_ALL_ACCESS.0, false, w!("Local\\mypaper.preview"))
+        let mapping = OpenFileMappingW(FILE_MAP_ALL_ACCESS.0, false, w!("Local\\glaze.preview"))
             .context("no preview section")?;
         let view = MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, 0);
         let result = (|| -> Result<bool> {
@@ -213,7 +213,7 @@ fn answer(
         if matches!(result, Ok(true)) {
             return result;
         }
-        if let Ok(done) = OpenEventW(EVENT_MODIFY_STATE, false, w!("Local\\mypaper.preview.done")) {
+        if let Ok(done) = OpenEventW(EVENT_MODIFY_STATE, false, w!("Local\\glaze.preview.done")) {
             let _ = SetEvent(done);
             let _ = CloseHandle(done);
         }
@@ -246,7 +246,7 @@ fn draw(
         &gpu.queue,
         (kept.width(), kept.height()),
         size,
-        mypaper_theme::Fit::Stretch,
+        glaze_theme::Fit::Stretch,
         1.0,
     );
     {

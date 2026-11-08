@@ -23,19 +23,19 @@ allowlist re-check before each attach. The flag is off. Gaps:
    `TextFillColor*`, `ControlCornerRadius`, `TabView*` keys, light/dark dictionaries) in the right
    scope, so controls' own templates, including hover/pressed, follow the look. Undo them like
    properties.
-2. **Presets that visibly match mypaper**: calm/mono, glass (backdrop through, clear surfaces, soft
+2. **Presets that visibly match Glaze**: calm/mono, glass (backdrop through, clear surfaces, soft
    fills), compact (denser rows and command bar). Explorer: tabs, address and search boxes, command
    bar, details pane, Home/Gallery. Settings: navigation pane, cards, search, title area. Use
    `--dump` to find the surfaces that are actually drawn. Look at before/after DPI-aware captures of
    **your own** Explorer and Settings windows for each preset in light and dark, and keep them under
-   `C:\mypaper-targets\app-styler\round2\`. Calm, flat and translucent; no outlines on glass, no
+   `C:\glaze-targets\app-styler\round2\`. Calm, flat and translucent; no outlines on glass, no
    gloss (the `visual-restraint` / `liquid-glass` rules in `docs/glass.md`).
 3. **Crash guard, proven:** exercise it with your own Settings window: end its process twice within
    60 s of attaching, check the guard trips and logs, and check a fresh session starts clean. Never
    kill explorer.exe on purpose.
 4. **Soak:** with the flag on and the glass preset, 30 minutes of live use. Open and close your own
    Explorer windows and tabs, navigate, open Settings pages, restart Explorer twice
-   (`Stop-Process -Name explorer` is allowed twice for this; mypaper recovers from Explorer
+   (`Stop-Process -Name explorer` is allowed twice for this; Glaze recovers from Explorer
    restarts; check the bars and widgets come back). Measure the helper and the explorer.exe memory
    before and after. Idle helper CPU must be 0 %.
 5. If the soak is clean, **leave `experimental.app_styler` on** in the user's `config.json` with the

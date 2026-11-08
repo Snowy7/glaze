@@ -1,8 +1,8 @@
-//! Broadcasts and app-bar reservations. The visible windows belong to `mypaper-ui`;
+//! Broadcasts and app-bar reservations. The visible windows belong to `glaze-ui`;
 //! these hidden windows only receive Windows' notifications and reserve work area.
 
 use anyhow::Result;
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
@@ -20,7 +20,7 @@ pub const TIME: u32 = WM_APP + 425;
 pub const SHELL: u32 = WM_APP + 426;
 pub const SETTINGS: u32 = WM_APP + 427;
 pub const TRASH: u32 = WM_APP + 428;
-const CLASS: PCWSTR = w!("mypaper.bars.services");
+const CLASS: PCWSTR = w!("glaze.bars.services");
 
 /// A hidden top-level window (message-only windows miss system broadcasts).
 pub struct Broadcast(HWND);
@@ -116,7 +116,7 @@ fn window() -> Result<HWND> {
         Ok(CreateWindowExW(
             WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
             CLASS,
-            w!("mypaper bar services"),
+            w!("Glaze bar services"),
             WS_POPUP,
             0,
             0,

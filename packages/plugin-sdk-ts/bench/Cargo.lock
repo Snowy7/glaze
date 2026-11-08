@@ -734,17 +734,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
-name = "mypaper-plugin-api"
+name = "glaze-plugin-api"
 version = "0.1.0"
 dependencies = [
- "mypaper-plugin-sdk",
+ "glaze-plugin-sdk",
  "postcard",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "mypaper-plugin-sdk"
+name = "glaze-plugin-sdk"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -753,13 +753,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "mypaper-ts-probe"
+name = "glaze-ts-probe"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "log",
- "mypaper-plugin-api",
- "mypaper-plugin-sdk",
+ "glaze-plugin-api",
+ "glaze-plugin-sdk",
  "serde",
  "serde_json",
  "wasmtime",

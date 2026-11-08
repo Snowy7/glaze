@@ -1,5 +1,5 @@
 // Vendored from liquid-rust (https://github.com/al1h3n/liquid-rust, commit 2073cd9) by al1h3n,
-// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "mypaper:".
+// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "Glaze:".
 //! wgpu renderer: packs a [`Scene`] into GPU buffers and draws it over your content.
 //!
 //! Per frame:
@@ -38,7 +38,7 @@ pub struct Frame<'a> {
     /// blur pyramid is reused, wherever the glass moves (zero blur cost over static
     /// wallpapers). `true` is always correct, only slower.
     pub content_changed: bool,
-    /// mypaper: `true` (upstream) copies `content` into `target` first. `false` draws the glass
+    /// Glaze: `true` (upstream) copies `content` into `target` first. `false` draws the glass
     /// over whatever `target` already holds: the wallpaper the engine restored, or a transparent
     /// clear for a premultiplied overlay. `content` may then be a different size than `target`.
     pub copy_content: bool,
@@ -109,11 +109,11 @@ struct Packed {
     layers: Vec<Layer>,
     /// Farthest any group samples beyond its bounds (refraction + blur), px.
     reach: f32,
-    /// mypaper: one per group, same index: what it reads from the content pyramid.
+    /// Glaze: one per group, same index: what it reads from the content pyramid.
     reads: Vec<Reads>,
 }
 
-/// mypaper: what one glass group reads from the content's blur pyramid, so a rebuild only
+/// Glaze: what one glass group reads from the content's blur pyramid, so a rebuild only
 /// redraws the texels glass will read (see [`Pyramid::build_reads`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Reads {
@@ -246,11 +246,11 @@ fn pack(scene: &Scene, layers: Layers, scale: f32, viewport: Vec2, out: &mut Pac
             // Each shape's own material at its own size: a 52 pt bar fused to a 400 pt
             // panel stays thin glass, a tinted button next to a plain one stays tinted.
             let node = &scene.nodes[member.id];
-            // mypaper: each glass may bring its own appearance.
+            // Glaze: each glass may bring its own appearance.
             let appearance = node.glass.appearance.as_ref().unwrap_or(&scene.appearance);
             let resolved = scene.material_of(node).resolve(g.half.min_element() * 2.0, appearance);
             let m = resolved.material;
-            // mypaper: thin glass gets a shallow lens and narrow rims (`material::lens`).
+            // Glaze: thin glass gets a shallow lens and narrow rims (`material::lens`).
             let (lens, rims) = crate::material::lens(m.depth, g.half.min_element() * 2.0);
             let depth = (lens * s).min(g.half.min_element() * s).max(1.0);
             out.shapes.push(ShapeGpu {
@@ -305,17 +305,17 @@ fn material_gpu(resolved: &crate::material::Resolved, presence: f32, press: f32,
         optics: [m.refraction * p, resolved.adapt, m.dispersion * p, m.frost * 0.5 * s * p],
         lighting: [m.splay, m.specular * p * (1.0 + 0.6 * press), m.rim * p, m.rim_shade * p],
         edge: [m.hairline * p, m.edge * p, resolved.contrast * p, m.dim * p],
-        // mypaper: the scheme rides in the unused slot (1 light, 0 dark), per glass.
+        // Glaze: the scheme rides in the unused slot (1 light, 0 dark), per glass.
         shadow: [m.shadow.offset_y * s, m.shadow.blur * 0.5 * s, m.shadow.opacity * p, if dark { 0.0 } else { 1.0 }],
         light_a: tone_a(m.light_tone),
-        // mypaper: the backdrop's brightness and saturation ride in its unused slots, ramping
+        // Glaze: the backdrop's brightness and saturation ride in its unused slots, ramping
         // from 1 (as is) with presence like every other effect.
         light_b: {
             let [darken_to, darken, ..] = tone_b(m.light_tone);
             [darken_to, darken, 1.0 + (m.brightness - 1.0) * p, 1.0 + (m.saturation - 1.0) * p]
         },
         dark_a: tone_a(m.dark_tone),
-        // mypaper: spare slots keep the GPU material's size unchanged. Both additions are
+        // Glaze: spare slots keep the GPU material's size unchanged. Both additions are
         // neutral at zero; clipping follows the shape rather than a second circular contour.
         dark_b: [m.dark_tone.darken_to, m.dark_tone.darken * p, m.inner_shadow * p, if m.clip_to_shape { 1.0 } else { 0.0 }],
         tint,
@@ -338,7 +338,7 @@ fn scissor(pass: &mut wgpu::RenderPass<'_>, b: Bounds, size: (u32, u32)) -> bool
     true
 }
 
-// mypaper: `Clone`, so [`Renderer::fork`] can share compiled pipelines.
+// Glaze: `Clone`, so [`Renderer::fork`] can share compiled pipelines.
 #[derive(Clone)]
 struct Pipelines {
     glass: wgpu::RenderPipeline,
@@ -359,19 +359,19 @@ struct Pyramid {
 
 const PYRAMID_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const MAX_LEVELS: u32 = 7;
-/// mypaper: `glass.wgsl`'s PYRAMID_SIGMA0, the blur sigma (px) of pyramid level 1.
+/// Glaze: `glass.wgsl`'s PYRAMID_SIGMA0, the blur sigma (px) of pyramid level 1.
 const PYRAMID_SIGMA0: f32 = 1.9;
-/// mypaper: rects a level's cache may hold before still content is blurred whole instead.
+/// Glaze: rects a level's cache may hold before still content is blurred whole instead.
 const CACHE_RECTS: usize = 16;
 
-/// mypaper: rects of every pyramid level (`rects[level]`), in that level's texels.
+/// Glaze: rects of every pyramid level (`rects[level]`), in that level's texels.
 type LevelRects = Vec<Vec<Bounds>>;
 
 fn area(r: &Bounds) -> f32 {
     (r[2] - r[0]).max(0.0) * (r[3] - r[1]).max(0.0)
 }
 
-/// mypaper: drops empty rects and merges any two whose bounding box costs no more texels than
+/// Glaze: drops empty rects and merges any two whose bounding box costs no more texels than
 /// the two drawn apart, so overlapping glass doesn't downsample the same texels twice.
 fn merge(rects: &mut Vec<Bounds>) {
     rects.retain(|r| area(r) > 0.0);
@@ -392,7 +392,7 @@ fn merge(rects: &mut Vec<Bounds>) {
     }
 }
 
-/// mypaper: a pyramid's shape: the target size it blurs and its level count.
+/// Glaze: a pyramid's shape: the target size it blurs and its level count.
 #[derive(Clone, Copy)]
 struct Layout {
     size: (u32, u32),
@@ -404,7 +404,7 @@ impl Layout {
         ((self.size.0.div_ceil(2) >> level).max(1), (self.size.1.div_ceil(2) >> level).max(1))
     }
 
-    /// mypaper: the texels of each level that glass making `reads` samples, each with the
+    /// Glaze: the texels of each level that glass making `reads` samples, each with the
     /// halo its own taps and the levels above need to compute theirs exactly, merged per level.
     /// Levels nothing reads are left out. Upstream's region added the renderer's reach (8 sigma
     /// of blur plus refraction) to the bounds instead, since it had no halos.
@@ -431,7 +431,7 @@ impl Layout {
         out
     }
 
-    /// mypaper: adds `area` (level-0 px) at levels `0..=top`. A B-spline frost read or a
+    /// Glaze: adds `area` (level-0 px) at levels `0..=top`. A B-spline frost read or a
     /// bilinear tap reaches under 3 texels around its sample, and a downsampled texel reads
     /// its source 2 texels out (bilinear: 3) at the levels' size ratio.
     fn add(&self, out: &mut LevelRects, area: Bounds, top: usize) {
@@ -449,7 +449,7 @@ impl Layout {
         }
     }
 
-    /// mypaper: every texel of every level.
+    /// Glaze: every texel of every level.
     fn whole(&self) -> LevelRects {
         (0..self.levels as usize)
             .map(|k| {
@@ -479,12 +479,12 @@ impl Pyramid {
         Self { size, levels, full: texture.create_view(&wgpu::TextureViewDescriptor::default()), mips, chain }
     }
 
-    /// mypaper: its shape, which is all the rect maths needs.
+    /// Glaze: its shape, which is all the rect maths needs.
     fn layout(&self) -> Layout {
         Layout { size: self.size, levels: self.levels }
     }
 
-    /// mypaper: [`Pyramid::build`] into `rects` of each level only.
+    /// Glaze: [`Pyramid::build`] into `rects` of each level only.
     fn build_rects(&self, pipelines: &Pipelines, encoder: &mut wgpu::CommandEncoder, first: &wgpu::BindGroup, rects: &LevelRects, profiler: &Option<Profiler>) {
         const LEVELS: [&str; MAX_LEVELS as usize] = ["pyramid 0", "pyramid 1", "pyramid 2", "pyramid 3", "pyramid 4", "pyramid 5", "pyramid 6"];
         for (i, mip) in self.mips.iter().enumerate() {
@@ -596,7 +596,7 @@ fn blit(pipelines: &Pipelines, encoder: &mut wgpu::CommandEncoder, group: &wgpu:
     pass.draw(0..3, 0..1);
 }
 
-/// mypaper: GPU timestamps between the renderer's passes, for the frame lab's per-pass profile.
+/// Glaze: GPU timestamps between the renderer's passes, for the frame lab's per-pass profile.
 /// Needs `TIMESTAMP_QUERY_INSIDE_ENCODERS`. Timestamp 0 opens a frame; timestamp `i + 1` closes
 /// the pass named `labels()[i]`.
 pub struct Profiler {
@@ -699,7 +699,7 @@ pub struct Renderer {
     /// `layer_textures`, the first time glass overlaps glass.
     layered: Option<Pyramid>,
     layer_textures: Vec<wgpu::TextureView>,
-    /// mypaper: the texels of each `pyramid` level that hold the current content's blur
+    /// Glaze: the texels of each `pyramid` level that hold the current content's blur
     /// (upstream: one region for all levels).
     cached: Option<LevelRects>,
     packed: Packed,
@@ -709,7 +709,7 @@ pub struct Renderer {
     /// Per layer: whether it needs a backdrop that includes the glass below it. Kept to reuse
     /// its allocation.
     rebuild: Vec<bool>,
-    /// mypaper: per-pass GPU timestamps, when the frame lab asks.
+    /// Glaze: per-pass GPU timestamps, when the frame lab asks.
     pub profiler: Option<Profiler>,
 }
 
@@ -786,7 +786,7 @@ impl Renderer {
         Self::with_pipelines(device, format, pipelines)
     }
 
-    /// mypaper: [`Renderer::new`]'s body after the pipelines, shared with [`Renderer::fork`].
+    /// Glaze: [`Renderer::new`]'s body after the pipelines, shared with [`Renderer::fork`].
     fn with_pipelines(device: &wgpu::Device, format: wgpu::TextureFormat, pipelines: Pipelines) -> Self {
         Self {
             format,
@@ -812,7 +812,7 @@ impl Renderer {
         }
     }
 
-    /// mypaper: a new renderer (own buffers, blur pyramid and caches) that shares this one's
+    /// Glaze: a new renderer (own buffers, blur pyramid and caches) that shares this one's
     /// compiled pipelines, so a short-lived one (an overlay) costs no shader compile.
     pub fn fork(&self, device: &wgpu::Device) -> Self {
         Self::with_pipelines(device, self.format, self.pipelines.clone())
@@ -903,7 +903,7 @@ impl Renderer {
         let pipelines = &self.pipelines;
         let binds = &mut self.binds;
         let profiler = &self.profiler;
-        // mypaper: rebuild only the texels each group reads (upstream: the bounding box of all
+        // Glaze: rebuild only the texels each group reads (upstream: the bounding box of all
         // of them, here nearly the whole screen), and keep what still content already has.
         let needed = pyramid.layout().rects(&self.packed.reads);
         let build = match &mut self.cached {
@@ -1162,7 +1162,7 @@ mod tests {
         assert!(groups.iter().any(|g| g.iter().any(|m| m.id == pill)));
     }
 
-    // mypaper: per-glass appearance reaches the material (scheme and transparency).
+    // Glaze: per-glass appearance reaches the material (scheme and transparency).
     #[test]
     fn a_glass_brings_its_own_appearance() {
         let mut scene = Scene::new();
@@ -1177,7 +1177,7 @@ mod tests {
         assert!(own.dark_b[1] > scene_wide.dark_b[1], "its slider tints it further");
     }
 
-    // mypaper: a pyramid rebuild covers what each group reads, not their bounding box.
+    // Glaze: a pyramid rebuild covers what each group reads, not their bounding box.
     #[test]
     fn a_rebuild_covers_only_the_texels_glass_reads() {
         let mut scene = Scene::new();

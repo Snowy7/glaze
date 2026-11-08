@@ -1,6 +1,6 @@
 //! Wallpaper creation, selection, copying and removal.
 
-use mypaper_theme::Fit;
+use glaze_theme::Fit;
 use serde_json::{Value, json};
 
 use crate::actions::{Action, FieldId, Page, Source};
@@ -166,7 +166,7 @@ fn add(app: &mut App, use_it: bool) {
         fit,
         args: app.text(&FieldId::AddArgs).to_owned(),
     };
-    let root = match mypaper_config::user_themes_dir() {
+    let root = match glaze_config::user_themes_dir() {
         Ok(root) => root,
         Err(e) => return app.alert(format!("{e:#}")),
     };
@@ -197,7 +197,7 @@ fn copy(app: &mut App, i: usize) {
     let Some(w) = app.library.items.get(i).cloned() else {
         return;
     };
-    let root = match mypaper_config::user_themes_dir() {
+    let root = match glaze_config::user_themes_dir() {
         Ok(root) => root,
         Err(e) => return app.alert(format!("{e:#}")),
     };

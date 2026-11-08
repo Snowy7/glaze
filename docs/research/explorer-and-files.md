@@ -3,7 +3,7 @@
 Research snapshot: **6 November 2026**, for Windows 11 24H2/25H2 and build 26xxx.
 This is source research, not a live visual-tree inspection or a benchmark of this machine.
 Private selectors, exports, and hooks require verification on the precise Windows build before shipping.
-Numbers below are attributed vendor measurements or estimates, never measurements of mypaper.
+Numbers below are attributed vendor measurements or estimates, never measurements of glaze.
 
 The [night plan](../../plans/night/2026-11-06.md) supersedes the older research notes' blanket
 no-injection assumption: code inside another process belongs behind an off-by-default experimental
@@ -115,7 +115,7 @@ StartAllBack's official page promises translucent ribbon/command bars, a bottom 
 more dark Win32 dialogs. Its published page does **not** establish its loading mechanism or provide
 source for the rendering approach. Treat it as a closed-source product reference; whether a
 particular version injects cannot be certified from that page. It is not evidence for a supported,
-external API that mypaper can copy. [StartAllBack][startallback].
+external API that Glaze can copy. [StartAllBack][startallback].
 
 ### What DWM can change without injection
 
@@ -176,7 +176,7 @@ Explorer commands and the native DelegateExecute GUID through HKCR, removes the 
 deletes its user Win+E CLSID override. It is a predefined restoration, not a complete backup of
 arbitrary preexisting customizations. [UI implementation][files-advanced], [undo registration][files-unset].
 
-For mypaper, prefer a normal launchable native file browser first. Folder routing can be a separate
+For Glaze, prefer a normal launchable native file browser first. Folder routing can be a separate
 opt-in HKCU experiment, with original value/type/absence journaling and compare-before-restore.
 Those are design recommendations. The workaround does not provide replacement common file dialogs
 or guarantee redirection of programs that directly invoke Explorer; Files' code exposes open/save
@@ -212,13 +212,13 @@ The public Windows implementation route is:
 
 Do not describe Everything's **exact private call sequence** as audited source: it is not published
 here. The developer's explanation distinguishes the initial MFT read from USN-based maintenance;
-the Microsoft calls above establish how mypaper can implement that architecture. This explanation
+the Microsoft calls above establish how Glaze can implement that architecture. This explanation
 is historical, not a current binary audit. [Developer explanation][everything-mft].
 
 The Everything service provides privileged filename/indexing access while the main application can
 remain a standard user. Current docs also describe a 1.5 elevated indexing-process alternative.
 They say any local user can obtain NTFS filenames through the product, access is restricted to
-voidtools-signed Everything code, and the service does not grant access to file contents. A mypaper
+voidtools-signed Everything code, and the service does not grant access to file contents. A Glaze
 plugin should use the public SDK, not try to impersonate that service client.
 [Service boundary][everything-service], [SDK][everything-sdk].
 
@@ -357,7 +357,7 @@ sequence. An in-process interception of Explorer's COM calls would count as inje
 policy; it must not be inferred merely from the advertised behavior.
 [Vendor workflow][teracopy-workflow], [CLI][teracopy-cli].
 
-Recommended order: native on-demand operations from mypaper; an app-specific TeraCopy CLI plugin;
+Recommended order: native on-demand operations from Glaze; an app-specific TeraCopy CLI plugin;
 only later an off-by-default, allowlisted Explorer capture experiment. A command-based shell verb
 can launch out of process; avoid registering a DLL handler that may enter file dialogs in games
 or third-party applications. [Shell extension scope][shell-extensions].
@@ -410,7 +410,7 @@ No universal current 24H2/25H2 FPS gain for these switches was established in th
 sources. The table separates documented mechanisms from a reason to benchmark. Admin requirements
 refer to the change, not merely opening its Settings page; device policy can further restrict it.
 
-| Setting | Supported conclusion | Elevation / mypaper position |
+| Setting | Supported conclusion | Elevation / Glaze position |
 |---|---|---|
 | Game Mode | Current Windows exposes it under Gaming. Older developer docs describe resource prioritization but explicitly deprecate their Game Mode APIs from Windows 10 1809; those APIs are not a current external game detector. [Settings][windows-settings], [API status][game-mode] | User setting normally needs no admin. Offer the native page; do not promise a fixed FPS increase. |
 | HAGS | Hardware/driver-dependent scheduling offload. Microsoft's architecture article expected transparent behavior rather than a significant general uplift; it is historical evidence, not a 2026 benchmark. [DirectX team][hags] | System-wide setting; plan for admin/restart if automating, and verify on target. Prefer the Settings page and per-machine A/B results. |
@@ -426,12 +426,12 @@ power-plan imports, or forcing HAGS one way on all GPUs. Benchmark the affected 
 do not bundle unrelated registry changes. This is a recommendation inferred from the contracts and
 evidence limits above.
 
-### What zero overhead requires from mypaper
+### What zero overhead requires from Glaze
 
 The [night plan](../../plans/night/2026-11-06.md) requires disabled optional services to have no
 process/hook/thread/timer/memory. A blocked worker can approach zero idle CPU while retaining memory;
 it is not disabled. Literal **zero product footprint during a game** requires graceful shutdown of
-all mypaper processes and unloading any injected code; process exit releases its resources, but
+all Glaze processes and unloading any injected code; process exit releases its resources, but
 does not automatically terminate child processes. A retained automatic-resume watcher still costs
 memory and event handling. [Windows process lifecycle][process-exit].
 
@@ -453,7 +453,7 @@ Proposed game quiescence contract:
    relaunch or an existing launcher's lifecycle integration. Never inject into a game or bypass the
    [current process allowlist](../../crates/inject/src/lib.rs).
 
-Acceptance recommendation: compare the same reproducible game scene with mypaper off/on/quiesced,
+Acceptance recommendation: compare the same reproducible game scene with Glaze off/on/quiesced,
 using PresentMon frame-time capture plus process CPU/I/O/GPU activity; include tail frame times,
 second-monitor behavior, and alt-tab. PresentMon provides external performance capture, so this
 does not require game injection. No such measurement was performed for this report.
@@ -577,7 +577,7 @@ Experimental means off by default; it is mandatory for code inside another proce
 Plugin means app-specific integration, with a native host bridge if a WASM plugin needs Win32 IPC.
 No row promises that an enabled index has zero memory; disabled service resources must be released.
 
-| Feature mypaper could offer | How / evidence | Admin? | Injection? | Placement | Rough size |
+| Feature Glaze could offer | How / evidence | Admin? | Injection? | Placement | Rough size |
 |---|---|---|---|---|---|
 | Explorer frame colors/corners/backdrop | Existing external DWM attributes; client opacity limits. [API][dwm-attributes] | Normally no | No | Native, existing styling | S |
 | Explorer tabs/bars/details/Home/Gallery theme | WinUI TAP + selectors + reversible properties. [Source][explorer-source] | Not intrinsic for same-user host; installer may | Yes, Explorer | Experimental native styler | L |
@@ -591,7 +591,7 @@ No row promises that an enabled index has zero memory; disabled service resource
 | Folder-size inspector/cache | Share metadata scan; logical/allocated/link/cloud accounting. [Fields][dir-info], [cloud][cloud-size] | No crawler; yes raw-MFT fast path | No | Optional native service/job | M–L, beyond crawler |
 | Copy/move queue | Shell semantics or CopyFile2, bounded jobs, clone fallback. [API][copyfile2] | No except destination/privilege needs | No | On-demand native job service | L |
 | I/O-ring copy experiment | Capability/op probes and measured alternative backend. [SDK][sdk-ioring] | No extra privilege | No | Experimental native backend | M–L, beyond queue |
-| TeraCopy action | Explicit CLI job, no global capture promise. [CLI][teracopy-cli] | Normally no | No from mypaper | Plugin | S |
+| TeraCopy action | Explicit CLI job, no global capture promise. [CLI][teracopy-cli] | Normally no | No from Glaze | Plugin | S |
 | Capture Explorer copy/paste | Separate allowlisted interception; no general ICopyHook engine replacement. [Contract][copy-hook] | Method/install dependent | Yes for proposed in-process hooks | Experimental native styler/capture | L–XL |
 | Windows Search scope helper | Open native settings, user-folder scope suggestions. [Scope][search-scope] | No page/user scope; advanced actions may | No | Native on demand | S |
 | Dev Drive advisor/setup | Inspect, then user-selected new volume/VHD and trust setup. [Docs][dev-drive] | Yes to create/configure | No | Native on demand | M |

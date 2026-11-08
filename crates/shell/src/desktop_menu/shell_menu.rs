@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use mypaper_ui::Image;
+use glaze_ui::Image;
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, CreateDIBSection,
@@ -734,7 +734,7 @@ fn tidy(items: Vec<ShellItem>) -> Vec<ShellItem> {
 
 /// Runs command `id` the way Explorer does: the click point, the desktop as the directory.
 fn invoke(menu: &IContextMenu, id: u32, at: (i32, i32)) -> Result<()> {
-    let directory = mypaper_desktop::desktop_view::desktop_folder()
+    let directory = glaze_desktop::desktop_view::desktop_folder()
         .ok()
         .map(|d| HSTRING::from(d.as_os_str()));
     let info = CMINVOKECOMMANDINFOEX {
@@ -1000,7 +1000,7 @@ mod tests {
 
 #[cfg(test)]
 mod probe {
-    /// `cargo test -p mypaper-shell shell_menu::probe -- --ignored --nocapture`: prints this
+    /// `cargo test -p glaze-shell shell_menu::probe -- --ignored --nocapture`: prints this
     /// machine's desktop menu as the worker sees it.
     #[test]
     #[ignore]
@@ -1044,16 +1044,16 @@ mod probe {
 #[cfg(test)]
 mod live {
     use super::super::items::{self, Sources};
-    use mypaper_ui::{Entry, Tokens, Ui, icons, menu};
+    use glaze_ui::{Entry, Tokens, Ui, icons, menu};
 
-    /// `cargo test -p mypaper-shell shell_menu::live -- --ignored --nocapture`: draws this
+    /// `cargo test -p glaze-shell shell_menu::live -- --ignored --nocapture`: draws this
     /// machine's full desktop menu (its shell extensions, their icons, the desktop's state) and
-    /// its View, Sort by, New and Open in submenus to `%TEMP%\mypaper-desktop-menu-*.png`, as
-    /// the shell draws them (at `MYPAPER_MENU_SCALE`, default 1), and times building it.
+    /// its View, Sort by, New and Open in submenus to `%TEMP%\glaze-desktop-menu-*.png`, as
+    /// the shell draws them (at `GLAZE_MENU_SCALE`, default 1), and times building it.
     #[test]
     #[ignore]
     fn draw_this_machines_desktop_menu() {
-        let scale: f32 = std::env::var("MYPAPER_MENU_SCALE")
+        let scale: f32 = std::env::var("GLAZE_MENU_SCALE")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(1.0);
@@ -1065,10 +1065,10 @@ mod live {
         let snapshot = shell.snapshot().expect("a snapshot");
         let state = super::super::view_state();
         let mut ui = Ui::new().unwrap();
-        let theme = mypaper_ui::Theme::new(
-            mypaper_ui::Style::Liquid,
-            mypaper_ui::Scheme::Dark,
-            mypaper_ui::theme::SYSTEM_BLUE,
+        let theme = glaze_ui::Theme::new(
+            glaze_ui::Style::Liquid,
+            glaze_ui::Scheme::Dark,
+            glaze_ui::theme::SYSTEM_BLUE,
         );
         let tokens = Tokens {
             icons: icons::system_family(&ui.text),
@@ -1079,12 +1079,12 @@ mod live {
         // The installed plugins' items (`desktop-menu`), as the shell adds them.
         let plugins = crate::widgets::plugin_events::menu_items();
         let root = items::build_with(
-            &mypaper_config::DesktopMenu::default(),
+            &glaze_config::DesktopMenu::default(),
             state,
             Sources {
                 plugins: &plugins,
                 shell: Some(&snapshot),
-                mypaper: None,
+                Glaze: None,
             },
         );
         let sub = |label: &str| {
@@ -1115,10 +1115,10 @@ mod live {
             let edge = tokens.menu.shadow.ceil() as u32;
             let (w, h) = layout.size();
             let image =
-                mypaper_ui::render(&mut ui, &list, w as u32 + 2 * edge, h as u32 + 2 * edge)
+                glaze_ui::render(&mut ui, &list, w as u32 + 2 * edge, h as u32 + 2 * edge)
                     .unwrap();
-            let path = std::env::temp_dir().join(format!("mypaper-desktop-menu-{name}.png"));
-            mypaper_ui::golden::write(&image, &path).unwrap();
+            let path = std::env::temp_dir().join(format!("glaze-desktop-menu-{name}.png"));
+            glaze_ui::golden::write(&image, &path).unwrap();
             println!("{}", path.display());
         }
         println!(

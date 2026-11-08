@@ -9,17 +9,17 @@ use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use mypaper_plugin_api::wire::{self, HelperMsg, HostMsg, Status};
-use mypaper_plugin_api::{SizeClass, diff};
-use mypaper_plugin_sdk::view::Face;
+use glaze_plugin_api::wire::{self, HelperMsg, HostMsg, Status};
+use glaze_plugin_api::{SizeClass, diff};
+use glaze_plugin_sdk::view::Face;
 
-use crate::runtime::exports::mypaper::plugin::lifecycle::{Action, Event, FaceOpen};
-use crate::runtime::mypaper::plugin::http::{Header, Reply, Response};
-use crate::runtime::mypaper::plugin::pipes::PipeEvent;
-use crate::runtime::mypaper::plugin::websocket::SocketEvent;
-use mypaper_plugin_api::wire::{SystemEvent, WindowChange};
-use crate::runtime::mypaper::plugin::native::{NativeMessage, NativeReply};
-use crate::runtime::mypaper::plugin::types::{Error as WitError, SizeClass as WitSize};
+use crate::runtime::exports::glaze::plugin::lifecycle::{Action, Event, FaceOpen};
+use crate::runtime::glaze::plugin::http::{Header, Reply, Response};
+use crate::runtime::glaze::plugin::pipes::PipeEvent;
+use crate::runtime::glaze::plugin::websocket::SocketEvent;
+use glaze_plugin_api::wire::{SystemEvent, WindowChange};
+use crate::runtime::glaze::plugin::native::{NativeMessage, NativeReply};
+use crate::runtime::glaze::plugin::types::{Error as WitError, SizeClass as WitSize};
 use crate::runtime::{Effect, Instance, Manifest, Runtime};
 
 /// Nothing visible this long → saved and unloaded.
@@ -46,7 +46,7 @@ pub enum Input {
     Host(HostMsg),
     Http { plugin: String, id: u64, result: Result<crate::caps::Fetched, String> },
     Native { plugin: String, id: u64, result: Result<Vec<u8>, String> },
-    NativeEvent(mypaper_native_host::NativeEvent),
+    NativeEvent(glaze_native_host::NativeEvent),
     Socket { plugin: String, event: SocketEvent },
     Pipe { plugin: String, event: PipeEvent },
     PipeHttp { plugin: String, id: u64, result: Result<crate::io::PipeReply, String> },
@@ -298,7 +298,7 @@ impl<W: Write> Host<W> {
     /// The system topics a visible (placed, not held) loaded plugin subscribes to and may receive.
     pub fn topics(&self) -> Vec<String> {
         if self.game { return Vec::new(); }
-        use crate::runtime::mypaper::plugin::events::Topic;
+        use crate::runtime::glaze::plugin::events::Topic;
         let topics = [(Topic::Windows, "windows"), (Topic::Monitors, "monitors"), (Topic::Media, "media"), (Topic::Power, "power"), (Topic::Theme, "theme")];
         let visible: Vec<&Instance> = self.plugins.values().filter(|p| !self.held && !p.faces.is_empty()).filter_map(|p| p.instance.as_ref()).collect();
         topics.into_iter().filter(|(topic, _)| visible.iter().any(|i| i.store.data().subscribed(*topic))).map(|(_, name)| name.to_owned()).collect()
@@ -310,7 +310,7 @@ impl<W: Write> Host<W> {
             self.demand = topics.clone();
             self.send(HelperMsg::Demand { topics });
         }
-        use crate::runtime::mypaper::plugin::events::Topic;
+        use crate::runtime::glaze::plugin::events::Topic;
         let mut plugins: Vec<_> = self.plugins.iter().filter(|(_, p)| !self.game && !self.held && !p.faces.is_empty()
             && p.instance.as_ref().is_some_and(|i| i.store.data().subscribed(Topic::Notifications)))
             .map(|(id, _)| id.clone()).collect();
@@ -336,8 +336,8 @@ impl<W: Write> Host<W> {
     }
 
     fn broadcast(&mut self, event: SystemEvent, now: Instant) {
-        use crate::runtime::exports::mypaper::plugin::lifecycle::{WindowChange as W, WindowEvent};
-        use crate::runtime::mypaper::plugin::events::Topic;
+        use crate::runtime::exports::glaze::plugin::lifecycle::{WindowChange as W, WindowEvent};
+        use crate::runtime::glaze::plugin::events::Topic;
         let (topic, wit) = match event {
             SystemEvent::Window { change, id, title, process } => {
                 let kind = match change {
@@ -404,7 +404,7 @@ impl<W: Write> Host<W> {
                 true
             }
             Input::Socket { plugin, event } => {
-                use crate::runtime::mypaper::plugin::websocket::SocketEvent as S;
+                use crate::runtime::glaze::plugin::websocket::SocketEvent as S;
                 let (id, closed) = match &event {
                     S::Opened(id) => (*id, false),
                     S::Message((id, _)) => (*id, false),
@@ -423,7 +423,7 @@ impl<W: Write> Host<W> {
                 true
             }
             Input::Pipe { plugin, event } => {
-                use crate::runtime::mypaper::plugin::pipes::PipeEvent as P;
+                use crate::runtime::glaze::plugin::pipes::PipeEvent as P;
                 let (id, closed) = match &event {
                     P::Data((id, _)) => (*id, false),
                     P::Closed(id) => (*id, true),
@@ -853,12 +853,12 @@ pub fn compile_all(rt: &Runtime, roots: &[PathBuf]) -> Result<()> {
 #[cfg(test)]
 mod pause_tests {
     use super::*;
-    use crate::runtime::mypaper::plugin::websocket::{Host as SocketHost, Message};
+    use crate::runtime::glaze::plugin::websocket::{Host as SocketHost, Message};
 
     #[test]
     fn game_pause_preserves_socket_replies_and_closes_a_full_backlog() {
         let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins/hello");
-        let root = std::env::temp_dir().join(format!("mypaper-socket-pause-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("glaze-socket-pause-{}", std::process::id()));
         let dir = root.join("hello");
         std::fs::create_dir_all(&dir).unwrap();
         let manifest = std::fs::read_to_string(source.join("plugin.json")).unwrap()

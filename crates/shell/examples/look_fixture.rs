@@ -1,15 +1,15 @@
 //! Isolated, no-input live evidence for Look. Uses production views and the config watcher;
 //! no providers, app-bar reservations, taskbar changes, or glass-plate snapshot writes.
 use anyhow::{Result, ensure};
-use mypaper_bars::BarsConfig;
-use mypaper_config::Config;
-use mypaper_shell::{
+use glaze_bars::BarsConfig;
+use glaze_config::Config;
+use glaze_shell::{
     glass::Family,
     look::settings,
     preview::{bars, flyouts, widgets},
 };
-use mypaper_ui::{DisplayList, Entry, FileWatch, Glass, Kind, Rect, Role, Surface, Ui};
-use mypaper_widgets::{
+use glaze_ui::{DisplayList, Entry, FileWatch, Glass, Kind, Rect, Role, Surface, Ui};
+use glaze_widgets::{
     layout::{Grid, Layout, RectF},
     registry,
     storage::Storage,
@@ -26,11 +26,11 @@ use windows::Win32::{
 };
 
 fn main() -> Result<()> {
-    let root = PathBuf::from(std::env::var_os("MYPAPER_LOOK_FIXTURE").ok_or_else(|| {
-        anyhow::anyhow!("MYPAPER_LOOK_FIXTURE must name the isolated config folder")
+    let root = PathBuf::from(std::env::var_os("GLAZE_LOOK_FIXTURE").ok_or_else(|| {
+        anyhow::anyhow!("GLAZE_LOOK_FIXTURE must name the isolated config folder")
     })?);
     ensure!(
-        mypaper_config::path()? == root.join("config.json")
+        glaze_config::path()? == root.join("config.json")
             && root.to_string_lossy().contains("look-fixture"),
         "fixture APPDATA must be isolated"
     );
@@ -38,19 +38,19 @@ fn main() -> Result<()> {
 }
 
 fn run(root: PathBuf) -> Result<()> {
-    mypaper_desktop::enable_dpi_awareness();
-    let _com = mypaper_desktop::desktop_view::Com::init();
+    glaze_desktop::enable_dpi_awareness();
+    let _com = glaze_desktop::desktop_view::Com::init();
     let mut ui = Ui::new()?;
-    mypaper_shell::overlay_client::install();
-    let inbox = mypaper_shell::inbox::Inbox::new()?;
-    let _watch = mypaper_desktop::watch_config(|| {
-        mypaper_shell::inbox::post(mypaper_shell::inbox::WM_CONFIG, 0)
+    glaze_shell::overlay_client::install();
+    let inbox = glaze_shell::inbox::Inbox::new()?;
+    let _watch = glaze_desktop::watch_config(|| {
+        glaze_shell::inbox::post(glaze_shell::inbox::WM_CONFIG, 0)
     })?;
     let thread = unsafe { GetCurrentThreadId() };
     let _stop = FileWatch::new(&root.join("stop"), move || {
         let _ = unsafe { PostThreadMessageW(thread, WM_QUIT, WPARAM(0), LPARAM(0)) };
     })?;
-    let monitor = mypaper_desktop::monitor_infos()
+    let monitor = glaze_desktop::monitor_infos()
         .into_iter()
         .find(|m| m.primary)
         .ok_or_else(|| anyhow::anyhow!("no primary monitor"))?;
@@ -61,16 +61,16 @@ fn run(root: PathBuf) -> Result<()> {
     // An opaque fixture-owned backdrop keeps transparent text screenshots free of other apps.
     let mut backdrop = Surface::new(
         Kind::Popup { activate: false },
-        "mypaper Look fixture backdrop",
+        "Glaze Look fixture backdrop",
         Role::Pane,
     )?;
     let mut background = DisplayList::default();
     for row in 0..16 {
         for col in 0..13 {
-            background.ops.push(mypaper_ui::Op::Fill {
+            background.ops.push(glaze_ui::Op::Fill {
                 rect: Rect::new(col as f32 * 50.0, row as f32 * 50.0, 50.0, 50.0),
                 radius: 0.0,
-                color: mypaper_ui::Rgba::rgb8(
+                color: glaze_ui::Rgba::rgb8(
                     if (col + row) % 2 == 0 {
                         [105, 135, 165]
                     } else {
@@ -92,12 +92,12 @@ fn run(root: PathBuf) -> Result<()> {
         .map(|i| {
             Surface::new(
                 Kind::Popup { activate: false },
-                &format!("mypaper Look fixture {i}"),
+                &format!("Glaze Look fixture {i}"),
                 Role::Pane,
             )
         })
         .collect::<Result<Vec<_>>>()?;
-    let field = mypaper_ui::TextField::new(windows[5].hwnd(), Rect::new(14.0, 5.0, 590.0, 30.0), false, 14.0, mypaper_ui::Rgba::rgb8([255;3], 1.0))?;
+    let field = glaze_ui::TextField::new(windows[5].hwnd(), Rect::new(14.0, 5.0, 590.0, 30.0), false, 14.0, glaze_ui::Rgba::rgb8([255;3], 1.0))?;
     field.set_text("Editable text keeps its content")?;
     field.prepare()?;
     let mut revisions = 0u64;
@@ -141,10 +141,10 @@ fn run(root: PathBuf) -> Result<()> {
                 DispatchMessageW(&msg);
             }
         }
-        while let Some(msg) = mypaper_shell::inbox::next() {
-            dirty |= msg.message == mypaper_shell::inbox::WM_CONFIG;
+        while let Some(msg) = glaze_shell::inbox::next() {
+            dirty |= msg.message == glaze_shell::inbox::WM_CONFIG;
         }
-        while mypaper_ui::next_event().is_some() {}
+        while glaze_ui::next_event().is_some() {}
     }
     drop(inbox);
     Ok(())
@@ -153,22 +153,22 @@ fn run(root: PathBuf) -> Result<()> {
 fn draw(
     ui: &mut Ui,
     windows: &mut [Surface],
-    field: &mypaper_ui::TextField,
+    field: &glaze_ui::TextField,
     config: &Config,
     origin: (i32, i32),
     root: &std::path::Path,
 ) -> Result<Vec<serde_json::Value>> {
     let user = &config.look;
-    mypaper_ui::theme::set_active(
+    glaze_ui::theme::set_active(
         match settings::style(user, Family::Widgets).unwrap_or_default() {
-            mypaper_bars::style::NativeStyle::Liquid => mypaper_ui::Style::Liquid,
-            mypaper_bars::style::NativeStyle::OneUi => mypaper_ui::Style::OneUi,
-            mypaper_bars::style::NativeStyle::Fluent => mypaper_ui::Style::Fluent,
-            mypaper_bars::style::NativeStyle::Solid => mypaper_ui::Style::Solid,
-            mypaper_bars::style::NativeStyle::Mono => mypaper_ui::Style::Mono,
+            glaze_bars::style::NativeStyle::Liquid => glaze_ui::Style::Liquid,
+            glaze_bars::style::NativeStyle::OneUi => glaze_ui::Style::OneUi,
+            glaze_bars::style::NativeStyle::Fluent => glaze_ui::Style::Fluent,
+            glaze_bars::style::NativeStyle::Solid => glaze_ui::Style::Solid,
+            glaze_bars::style::NativeStyle::Mono => glaze_ui::Style::Mono,
         },
     );
-    let system = mypaper_bars::accent::read();
+    let system = glaze_bars::accent::read();
     let mut config_bars = BarsConfig::parse(
         r#"{"top":{"layout":"strip","left":["start","app"],"center":["clock"],"right":["volume","power"]},"dock":{"pinned":[],"extras":["desktop","trash"]}}"#,
     )?;
@@ -182,7 +182,7 @@ fn draw(
         } else {
             config_bars.dock.look.clone()
         };
-        let mut a = mypaper_theme::Appearance::default();
+        let mut a = glaze_theme::Appearance::default();
         settings::bar(
             user,
             Family::Bars,
@@ -250,19 +250,19 @@ fn draw(
             [0, 0],
             registry.get("quote").unwrap().manifest.size.default,
         );
-        let mut base = mypaper_widgets::look::defaults();
+        let mut base = glaze_widgets::look::defaults();
         if *bare {
-            base.surface = Some(mypaper_theme::Surface::None);
+            base.surface = Some(glaze_theme::Surface::None);
         }
         let mut a = settings::appearance(user, Family::Widgets, &base, *bare, &system);
         if let Some(name) = a.font.as_mut() {
             *name = settings::font(name, |f| ui.text.has_family(f));
         }
-        let a = mypaper_widgets::look::resolve(
+        let a = glaze_widgets::look::resolve(
             &Default::default(),
             &Default::default(),
             &a,
-            mypaper_theme::Color([80, 140, 240]),
+            glaze_theme::Color([80, 140, 240]),
         );
         let grid = Grid::new(
             &layout.grid,
@@ -274,7 +274,7 @@ fn draw(
                 height: 180.0,
             },
         );
-        let placed = mypaper_widgets::layout::place(
+        let placed = glaze_widgets::layout::place(
             layout.get(&id).unwrap(),
             &registry.get("quote").unwrap().manifest,
             &grid,
@@ -303,7 +303,7 @@ fn draw(
             &mut ui.text,
         );
         let glass = (!bare)
-            .then(|| mypaper_ui::theme::material(mypaper_ui::theme::active(), tokens.material.tint))
+            .then(|| glaze_ui::theme::material(glaze_ui::theme::active(), tokens.material.tint))
             .flatten()
             .map(|material| Glass {
                 body: Rect::new(0.0, 0.0, 620.0, 150.0),
@@ -323,7 +323,7 @@ fn draw(
         )?;
     }
     let mut bar_look = config_bars.top.look.clone();
-    let mut a = mypaper_theme::Appearance::default();
+    let mut a = glaze_theme::Appearance::default();
     settings::bar(
         user,
         Family::Menus,
@@ -338,17 +338,17 @@ fn draw(
         &bar_look,
         &a,
         &system,
-        &mypaper_shell::glass::knobs(user, Family::Menus),
+        &glaze_shell::glass::knobs(user, Family::Menus),
         user,
         &ui.text,
     );
     let tokens = panel.menu_tokens();
     let entries = vec![
-        Entry::action("Settings", ()).with_icon(mypaper_ui::MenuIcon::Glyph('\u{E713}')),
-        Entry::action("Refresh", ()).with_icon(mypaper_ui::MenuIcon::Glyph('\u{E72C}')),
+        Entry::action("Settings", ()).with_icon(glaze_ui::MenuIcon::Glyph('\u{E713}')),
+        Entry::action("Refresh", ()).with_icon(glaze_ui::MenuIcon::Glyph('\u{E72C}')),
     ];
-    let layout = mypaper_ui::menu::layout(&entries, &tokens, tokens.scale, &mut ui.text);
-    let list = mypaper_ui::menu::view(&entries, &layout, None, &tokens);
+    let layout = glaze_ui::menu::layout(&entries, &tokens, tokens.scale, &mut ui.text);
+    let list = glaze_ui::menu::view(&entries, &layout, None, &tokens);
     let size = (
         (layout.width + 28.0 * tokens.scale).ceil() as u32,
         (layout.height + 28.0 * tokens.scale).ceil() as u32,
@@ -376,10 +376,10 @@ fn draw(
         &mut report,
     )?;
     let name = settings::font(user.text.font.as_deref().unwrap_or("Segoe UI"), |f| ui.text.has_family(f));
-    field.set_style(&mypaper_ui::TextStyle::new(&name, 14.0 * user.text.size.unwrap_or(1.0)), mypaper_ui::Rgba::rgb8([255;3],1.0));
+    field.set_style(&glaze_ui::TextStyle::new(&name, 14.0 * user.text.size.unwrap_or(1.0)), glaze_ui::Rgba::rgb8([255;3],1.0));
     let mut input = DisplayList::default();
-    input.ops.push(mypaper_ui::Op::Fill {rect:Rect::new(0.0,0.0,620.0,40.0),radius:user.shape.corners.unwrap_or(8.0),color:mypaper_ui::Rgba::rgb8([28,28,30],1.0)});
-    input.ops.push(mypaper_ui::Op::TextField {rect:Rect::new(14.0,5.0,590.0,30.0),field:field.clone(),revision:field.revision()});
+    input.ops.push(glaze_ui::Op::Fill {rect:Rect::new(0.0,0.0,620.0,40.0),radius:user.shape.corners.unwrap_or(8.0),color:glaze_ui::Rgba::rgb8([28,28,30],1.0)});
+    input.ops.push(glaze_ui::Op::TextField {rect:Rect::new(14.0,5.0,590.0,30.0),field:field.clone(),revision:field.revision()});
     present(ui,&mut windows[5],input,(620,40),(origin.0,origin.1+745),None,root,"field",&mut report)?;
     Ok(report)
 }
@@ -400,8 +400,8 @@ fn present(
     surface.set_glass(glass);
     surface.present(ui, at, size, list)?;
     surface.show();
-    mypaper_ui::golden::write(
-        &mypaper_ui::render(ui, surface.shown(), size.0, size.1)?,
+    glaze_ui::golden::write(
+        &glaze_ui::render(ui, surface.shown(), size.0, size.1)?,
         &root.join(format!("{name}.png")),
     )?;
     report.push(serde_json::json!({"name":name,"hwnd":surface.hwnd().0 as usize,"at":at,"size":size,"glass_radius":radius}));

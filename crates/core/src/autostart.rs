@@ -1,4 +1,4 @@
-//! "Start with Windows": `mypaper-core --autostart on|off|status`.
+//! "Start with Windows": `glaze-core --autostart on|off|status`.
 //!
 //! The preferred mechanism is a per-user Task Scheduler logon task, which Windows starts
 //! straight at sign-in instead of waiting for Explorer to process the `Run` key. When the task
@@ -38,7 +38,7 @@ use windows::core::{BSTR, HRESULT, Interface, PCWSTR, PWSTR};
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 /// Name of the `Run` value, also what earlier versions of Studio wrote.
-const RUN_VALUE: &str = "mypaper";
+const RUN_VALUE: &str = "Glaze";
 /// `HRESULT_FROM_WIN32` of the "not found" errors Task Scheduler returns for a missing task or folder.
 const NOT_FOUND: [HRESULT; 2] = [
     ERROR_FILE_NOT_FOUND.to_hresult(),
@@ -82,10 +82,10 @@ struct Action {
     arguments: String,
 }
 
-/// `mypaper (<user>)`: task names are machine-global, so each user gets their own.
+/// `Glaze (<user>)`: task names are machine-global, so each user gets their own.
 fn task_name(sam_user: &str) -> String {
     let user = sam_user.rsplit('\\').next().unwrap_or(sam_user);
-    format!("mypaper ({user})")
+    format!("Glaze ({user})")
 }
 
 /// Wraps a path in quotes, as the `Run` key and the printed `command` want it.
@@ -128,7 +128,7 @@ pub fn cli(mut args: impl Iterator<Item = String>) -> Option<ExitCode> {
     ensure_std_handle(STD_OUTPUT_HANDLE);
     ensure_std_handle(STD_ERROR_HANDLE);
     let result = args.next().as_deref().map_or_else(
-        || bail!("usage: mypaper-core --autostart on|off|status"),
+        || bail!("usage: glaze-core --autostart on|off|status"),
         run_command,
     );
     Some(
@@ -156,13 +156,13 @@ fn run_command(command: &str) -> Result<State> {
         "on" => enable(
             &names,
             &user,
-            &std::env::current_exe().context("path of mypaper-core.exe")?,
+            &std::env::current_exe().context("path of glaze-core.exe")?,
         ),
         "off" => {
             let state = disable(&names)?;
-            // mypaper won't start at sign-in any more, so Windows shouldn't show its still:
+            // Glaze won't start at sign-in any more, so Windows shouldn't show its still:
             // the user's own wallpaper comes back (docs/performance.md, "Static snapshot").
-            if let Err(e) = mypaper_desktop::desktop_wallpaper::restore() {
+            if let Err(e) = glaze_desktop::desktop_wallpaper::restore() {
                 eprintln!("could not put your wallpaper back: {e:#}");
             }
             Ok(state)
@@ -322,7 +322,7 @@ impl Scheduler {
         unsafe {
             let def = self.service.NewTask(0)?;
             def.RegistrationInfo()?
-                .SetDescription(&BSTR::from("Starts mypaper when you sign in."))?;
+                .SetDescription(&BSTR::from("Starts Glaze when you sign in."))?;
 
             let trigger = def
                 .Triggers()?
@@ -500,14 +500,14 @@ mod tests {
     fn task(enabled: bool) -> Option<TaskInfo> {
         Some(TaskInfo {
             enabled,
-            path: r"C:\mypaper\mypaper-core.exe".into(),
+            path: r"C:\glaze\glaze-core.exe".into(),
         })
     }
 
     #[test]
     fn task_name_drops_the_domain() {
-        assert_eq!(task_name(r"DESKTOP-1\you"), "mypaper (you)");
-        assert_eq!(task_name("you"), "mypaper (you)");
+        assert_eq!(task_name(r"DESKTOP-1\you"), "Glaze (you)");
+        assert_eq!(task_name("you"), "Glaze (you)");
     }
 
     #[test]
@@ -516,7 +516,7 @@ mod tests {
         assert_eq!(state.method, Some(Method::Task));
         assert_eq!(
             state.command.as_deref(),
-            Some(r#""C:\mypaper\mypaper-core.exe""#)
+            Some(r#""C:\glaze\glaze-core.exe""#)
         );
     }
 
@@ -580,7 +580,7 @@ mod tests {
 
     impl Cleanup {
         fn new(label: &str) -> Self {
-            let id = format!("mypaper-autostart-test-{label}-{}", std::process::id());
+            let id = format!("glaze-autostart-test-{label}-{}", std::process::id());
             Self {
                 task: id.clone(),
                 run_value: id,
@@ -603,12 +603,12 @@ mod tests {
         assert_eq!(run_value(&cleanup.run_value), None);
         set_run_value(
             &cleanup.run_value,
-            r#""C:\Program Files\mypaper\mypaper-core.exe""#,
+            r#""C:\Program Files\glaze\glaze-core.exe""#,
         )
         .unwrap();
         assert_eq!(
             run_value(&cleanup.run_value).as_deref(),
-            Some(r#""C:\Program Files\mypaper\mypaper-core.exe""#)
+            Some(r#""C:\Program Files\glaze\glaze-core.exe""#)
         );
         delete_run_value(&cleanup.run_value).unwrap();
         assert_eq!(run_value(&cleanup.run_value), None);
@@ -616,7 +616,7 @@ mod tests {
     }
 
     /// Registers a task exactly as `on` does (harmless action), reads it back, runs it on demand
-    /// and checks it succeeded. `prefix` puts it in a subfolder of `\` (e.g. `"mypaper-x\\"`).
+    /// and checks it succeeded. `prefix` puts it in a subfolder of `\` (e.g. `"glaze-x\\"`).
     fn logon_task_round_trip(prefix: &str) {
         use std::time::{Duration, Instant};
         use windows::Win32::System::TaskScheduler::{TASK_RUNLEVEL_TYPE, TASK_STATE_RUNNING};
@@ -708,7 +708,7 @@ mod tests {
     }
 
     /// Can a non-elevated user register this task in the root folder? Run explicitly:
-    /// `cargo test -p mypaper-core -- --ignored --nocapture`. Touches the real Task Scheduler
+    /// `cargo test -p glaze-core -- --ignored --nocapture`. Touches the real Task Scheduler
     /// (test-named task, always removed).
     #[test]
     #[ignore = "touches Task Scheduler"]
@@ -716,11 +716,11 @@ mod tests {
         logon_task_round_trip("");
     }
 
-    /// The same inside a `\mypaper-autostart-test-...\` subfolder (removed afterwards).
+    /// The same inside a `\glaze-autostart-test-...\` subfolder (removed afterwards).
     #[test]
     #[ignore = "touches Task Scheduler"]
     fn limited_logon_task_in_subfolder() {
-        let folder = format!("mypaper-autostart-test-folder-{}", std::process::id());
+        let folder = format!("glaze-autostart-test-folder-{}", std::process::id());
         struct FolderGuard(String);
         impl Drop for FolderGuard {
             fn drop(&mut self) {

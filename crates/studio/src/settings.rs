@@ -275,7 +275,7 @@ const MOTION_STYLE: &[(&str, &str)] = &[
     (r#""none""#, "None"),
 ];
 const FAMILY: &[(&str, &str)] = &[
-    (r#""mono""#, "mypaper"),
+    (r#""mono""#, "Glaze"),
     (r#""fluent""#, "Windows 11"),
     (r#""macos""#, "macOS"),
     (r#""material""#, "ChromeOS"),
@@ -300,12 +300,12 @@ const CURVES: &[(&str, &str)] = &[
 /// The table. Ids are stable: deep links and pages use them.
 pub static SETTINGS: &[Setting] = &[
     // --- Settings › General -------------------------------------------------------------------
-    custom("autostart", "Start with Windows", "mypaper starts when you sign in", GENERAL)
+    custom("autostart", "Start with Windows", "Glaze starts when you sign in", GENERAL)
         .words("startup login boot"),
     sw(
         "static_snapshot",
         "Show the wallpaper while Windows starts",
-        "Windows shows a still of it before mypaper runs",
+        "Windows shows a still of it before Glaze runs",
         C,
         "/static_snapshot",
         true,
@@ -340,7 +340,7 @@ pub static SETTINGS: &[Setting] = &[
     .words("experimental search files index folder size"),
     sw(
         "experimental_files_default",
-        "Open folders in mypaper Files",
+        "Open folders in Glaze Files",
         "Folders and Win+E open in Files instead of Explorer",
         C,
         "/experimental/files_default",
@@ -433,7 +433,7 @@ pub static SETTINGS: &[Setting] = &[
     // --- Settings › Desktop ---------------------------------------------------------------------
     sw(
         "desktop_menu",
-        "Use mypaper's right-click menu",
+        "Use Glaze's right-click menu",
         "On the bare desktop",
         C,
         "/desktop_menu/enabled",
@@ -606,7 +606,7 @@ pub static SETTINGS: &[Setting] = &[
         .more("Different for")
         .words("override bars widgets menus"),
     // --- Look › Windows -------------------------------------------------------------------------
-    custom("windows_look", "Windows look", "As is, Match mypaper, Glass or Sharp", WIN)
+    custom("windows_look", "Windows look", "As is, Match Glaze, Glass or Sharp", WIN)
         .words("windows styling dwm"),
     custom("windows_accent", "Accent", "", WIN).words("accent colour windows taskbar start"),
     ch(

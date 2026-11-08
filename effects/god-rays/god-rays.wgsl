@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let light = clamp(vec2f(params.light_x, params.light_y), vec2f(0.0), vec2f(1.0));
     let delta = (light - uv) * clamp(params.length, 0.05, 1.0) / 32.0;

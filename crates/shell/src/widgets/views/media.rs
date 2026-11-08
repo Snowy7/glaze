@@ -10,8 +10,8 @@
 //! The cover's colour (lifted to read on glass) tints the play disc and the progress.
 use super::{Ctx, NEXT, PREVIOUS, PRIMARY};
 use crate::widgets::media_time;
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Align, Op, Rect, Rgba, Role, TextRole, TextStyle};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Align, Op, Rect, Rgba, Role, TextRole, TextStyle};
 
 /// What every layout shows.
 struct Track<'a> {
@@ -49,7 +49,7 @@ fn track<'a>(c: &Ctx<'a>) -> Track<'a> {
         .filter(|_| m.flag("tint", true))
         .map(|t| lift(t, if c.f.theme.dark() { 0.68 } else { 0.40 }));
     let disc = tint.map_or((color.accent, color.on_accent), |t| {
-        let on = if mypaper_ui::theme::luminance(t) > 0.4 {
+        let on = if glaze_ui::theme::luminance(t) > 0.4 {
             Rgba::rgb8([17, 17, 19], 1.0)
         } else {
             Rgba::rgb8([255; 3], 1.0)
@@ -131,7 +131,7 @@ fn cover(c: &mut Ctx, rect: Rect) {
 }
 
 /// `image` covering `rect` (a centred crop, never stretched).
-fn cover_image(c: &mut Ctx, rect: Rect, image: &std::sync::Arc<mypaper_ui::Image>, opacity: f32) {
+fn cover_image(c: &mut Ctx, rect: Rect, image: &std::sync::Arc<glaze_ui::Image>, opacity: f32) {
     let ratio = (rect.width() / image.width as f32).max(rect.height() / image.height as f32);
     let (w, h) = (rect.width() / ratio, rect.height() / ratio);
     c.f.push(Op::Image {
@@ -228,7 +228,7 @@ fn eyebrow(c: &mut Ctx, r: Rect, t: &Track, align: Align) {
         return;
     }
     let color = c.color();
-    let style = mypaper_ui::TextStyle {
+    let style = glaze_ui::TextStyle {
         tracking: 0.1 * c.px(10.0),
         ..c.display(10.5, 650)
     };
@@ -386,7 +386,7 @@ fn pill(c: &mut Ctx, t: &Track) {
     }
     let h = rect.height();
     let pad = ((h - (h - c.px(16.0)).clamp(c.px(44.0), c.px(72.0))) / 2.0).max(c.px(6.0)) + c.px(4.0);
-    let inner = rect.inset(mypaper_ui::Insets::xy((h / 2.0 - c.px(10.0)).max(pad), pad));
+    let inner = rect.inset(glaze_ui::Insets::xy((h / 2.0 - c.px(10.0)).max(pad), pad));
     let cap_h = inner.height();
     let art_side = (cap_h).floor();
     if t.title.is_empty() {

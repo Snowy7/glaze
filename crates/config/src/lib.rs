@@ -1,4 +1,4 @@
-//! User settings, stored as JSON at `%APPDATA%\mypaper\config.json`.
+//! User settings, stored as JSON at `%APPDATA%\glaze\config.json`.
 //!
 //! The studio writes this file; the wallpaper engine watches it and applies
 //! changes live (theme switch, pause), so there is no IPC to keep in sync.
@@ -36,7 +36,7 @@ pub struct Config {
     pub index: IndexConfig,
     /// Wallpaper GPU preference and frame cap, with optional overrides keyed by theme folder ID.
     pub engine: EngineConfig,
-    /// Theme name (looked up like `mypaper_theme::locate`) or folder path.
+    /// Theme name (looked up like `glaze_theme::locate`) or folder path.
     pub theme: String,
     /// Paused by the user (tray or studio).
     pub paused: bool,
@@ -45,7 +45,7 @@ pub struct Config {
     /// Pause every screen while a fullscreen app or game is in front, so
     /// games get the whole GPU.
     pub pause_on_fullscreen: bool,
-    /// mypaper's own right-click menu for the bare desktop (on by default). Left out
+    /// Glaze's own right-click menu for the bare desktop (on by default). Left out
     /// of the file while it is all defaults, so saving settings never freezes them.
     #[serde(skip_serializing_if = "DesktopMenu::is_default")]
     pub desktop_menu: DesktopMenu,
@@ -53,7 +53,7 @@ pub struct Config {
     /// registry switch, opt-in, reversible; Explorer needs a restart to show it).
     pub classic_context_menu: bool,
     /// Also set a still of the theme as the Windows desktop wallpaper, so Windows shows the
-    /// theme's look before mypaper starts (docs/performance.md, "Static snapshot"). Turning it
+    /// theme's look before Glaze starts (docs/performance.md, "Static snapshot"). Turning it
     /// off puts the user's own wallpaper back.
     pub static_snapshot: bool,
     /// The user's look (D2): style, material and colour over the wallpaper's, and how Windows
@@ -118,15 +118,15 @@ pub struct Experimental {
     pub files_default: bool,
     pub file_index: bool,
     /// Restyle the XAML inside File Explorer and Settings (docs/windows-styling.md, "App
-    /// styler"): core runs `mypaper-styler` only while this is on. Written only when on.
+    /// styler"): core runs `glaze-styler` only while this is on. Written only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub app_styler: bool,
 }
 
-/// `%APPDATA%\mypaper`: config plus the user's own `themes\`.
+/// `%APPDATA%\glaze`: config plus the user's own `themes\`.
 pub fn dir() -> Result<PathBuf> {
     let appdata = std::env::var_os("APPDATA").context("APPDATA is not set")?;
-    Ok(PathBuf::from(appdata).join("mypaper"))
+    Ok(PathBuf::from(appdata).join("glaze"))
 }
 
 /// The config file path.

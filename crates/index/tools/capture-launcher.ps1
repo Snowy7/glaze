@@ -1,8 +1,8 @@
-# Capture the deployed launcher. Input is sent only to verified mypaper windows under the
+# Capture the deployed launcher. Input is sent only to verified Glaze windows under the
 # shared desktop lock; no user window is minimized, moved, closed, or typed into.
 param([string]$Query = 'folder:wallpaper', [string]$Out = 'D:\Coding\projects\desktop\wallpaper\crates\index\evidence\launcher-index.png')
 $ErrorActionPreference = 'Stop'
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 $lockDeadline = [DateTime]::UtcNow.AddMinutes(2)
 while (-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) {
   if ([DateTime]::UtcNow -ge $lockDeadline) { throw 'Desktop lock stayed busy; capture skipped' }
@@ -31,13 +31,13 @@ public static class IndexCapture {
  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc callback,IntPtr p);
  [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h,StringBuilder s,int max);
  [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr h,uint msg,IntPtr w,IntPtr l);
- public static bool Ours(IntPtr h) {uint pid; GetWindowThreadProcessId(h,out pid); try{return Process.GetProcessById((int)pid).ProcessName.StartsWith("mypaper-");}catch{return false;}}
+ public static bool Ours(IntPtr h) {uint pid; GetWindowThreadProcessId(h,out pid); try{return Process.GetProcessById((int)pid).ProcessName.StartsWith("glaze-");}catch{return false;}}
  public static string ForegroundProcess() {uint pid;GetWindowThreadProcessId(GetForegroundWindow(),out pid);return Process.GetProcessById((int)pid).ProcessName;}
  public static IntPtr Flyout(int pid) {IntPtr found=IntPtr.Zero; EnumWindows((h,p)=>{uint owner;GetWindowThreadProcessId(h,out owner);var title=new StringBuilder(256);GetWindowText(h,title,256);if(owner==pid&&IsWindowVisible(h)&&title.ToString()=="Flyout"){found=h;return false;}return true;},IntPtr.Zero);return found;}
 }
 '@
   [IndexCapture]::SetProcessDpiAwarenessContext([IntPtr]::new(-4)) | Out-Null
-  $shell = Get-Process mypaper-shell -ErrorAction Stop | Select-Object -First 1
+  $shell = Get-Process glaze-shell -ErrorAction Stop | Select-Object -First 1
   $condition = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ProcessIdProperty, $shell.Id)
   $starts = @()
   foreach ($window in [Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children, $condition)) {
@@ -45,16 +45,16 @@ public static class IndexCapture {
       if ($element.Current.Name -eq 'Start' -and -not $element.Current.IsOffscreen) { $starts += $element }
     }
   }
-  if ($starts.Count -eq 0) { throw 'No visible mypaper Start control' }
+  if ($starts.Count -eq 0) { throw 'No visible Glaze Start control' }
   $start = $starts[0]
   $bounds = $start.Current.BoundingRectangle
   $point = New-Object IndexCapture+POINT
   $point.x = [int]($bounds.X + $bounds.Width/2); $point.y = [int]($bounds.Y + $bounds.Height/2)
-  if (-not [IndexCapture]::Ours([IndexCapture]::WindowFromPoint($point))) { throw 'Start point is not a mypaper window; input skipped' }
+  if (-not [IndexCapture]::Ours([IndexCapture]::WindowFromPoint($point))) { throw 'Start point is not a Glaze window; input skipped' }
   # UIA Invoke cannot grant foreground rights. A real click is allowed only over our verified
   # Start control, with no user application in front that could receive later typing.
   $foreground = [IndexCapture]::ForegroundProcess()
-  if ($foreground -notlike 'mypaper-*' -and $foreground -notin @('explorer','ShellExperienceHost','StartMenuExperienceHost','SearchHost')) { throw "User application in front ($foreground); input skipped" }
+  if ($foreground -notlike 'glaze-*' -and $foreground -notin @('explorer','ShellExperienceHost','StartMenuExperienceHost','SearchHost')) { throw "User application in front ($foreground); input skipped" }
   $cursorBefore = New-Object IndexCapture+POINT
   [IndexCapture]::GetCursorPos([ref]$cursorBefore) | Out-Null
   [IndexCapture]::SetCursorPos($point.x,$point.y) | Out-Null
@@ -88,6 +88,6 @@ public static class IndexCapture {
 } finally {
   if ($flyout -and [IndexCapture]::GetForegroundWindow() -eq $flyout) { [IndexCapture]::SendMessage($flyout,0x100,[IntPtr]::new(27),[IntPtr]::Zero) | Out-Null }
   if ($cursorBefore) { [IndexCapture]::SetCursorPos($cursorBefore.x,$cursorBefore.y) | Out-Null }
-  if ([IO.Path]::GetFullPath($lock) -ne 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock') { throw 'Invalid desktop lock' }
+  if ([IO.Path]::GetFullPath($lock) -ne 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock') { throw 'Invalid desktop lock' }
   [IO.Directory]::Delete($lock)
 }

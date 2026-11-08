@@ -3,8 +3,8 @@
   "name": "Timer",
   "category": "Time",
   "version": "1.1.0",
-  "author": "mypaper",
-  "description": "Pomodoro and countdown timer with a thin progress ring. Keeps counting while mypaper is closed.",
+  "author": "Glaze",
+  "description": "Pomodoro and countdown timer with a thin progress ring. Keeps counting while Glaze is closed.",
   "size": {
     "default": [4, 4],
     "min": [2, 2],

@@ -20,4 +20,4 @@ desktop closes the socket and cancels every timer. No native OBS helper is launc
 Build with `scripts/build-plugins.ps1` (own workspace, `wasm32-wasip2`). Protocol and view tests:
 `cargo test --manifest-path plugins/obs/Cargo.toml`. The host's `obs_` tests load the real component,
 check scoped sockets, offline behavior and memory. The shell's `obs_plugin_faces` test renders
-`golden/host-sizes.png`; `MYPAPER_BLESS=1` updates the fixture.
+`golden/host-sizes.png`; `GLAZE_BLESS=1` updates the fixture.

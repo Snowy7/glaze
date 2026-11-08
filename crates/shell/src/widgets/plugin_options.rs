@@ -2,8 +2,8 @@
 //! "Options…", and a kit menu built from the face's option schema (its widget `settings`) edits
 //! the instance's settings in place. A change is saved to `widgets.json` and reaches the plugin
 //! live as `event::options`. Studio's Widgets page edits the same values.
-use mypaper_ui::menu::{Entry, Menu, screen_at};
-use mypaper_widgets::manifest::Setting;
+use glaze_ui::menu::{Entry, Menu, screen_at};
+use glaze_widgets::manifest::Setting;
 use serde_json::{Map, Value};
 
 use super::Widgets;
@@ -54,8 +54,8 @@ pub(super) fn entries(instance: &str, schema: &[Setting], values: &Map<String, V
                         .map(|option| {
                             let value = option.value();
                             let shown = match option {
-                                mypaper_widgets::manifest::SelectOption::Detailed(c) => c.label.as_deref().unwrap_or(value),
-                                mypaper_widgets::manifest::SelectOption::Plain(v) => v,
+                                glaze_widgets::manifest::SelectOption::Detailed(c) => c.label.as_deref().unwrap_or(value),
+                                glaze_widgets::manifest::SelectOption::Plain(v) => v,
                             };
                             Entry::radio(shown, pick(key, value.into()), current.as_str() == Some(value))
                         })
@@ -82,7 +82,7 @@ pub(super) fn entries(instance: &str, schema: &[Setting], values: &Map<String, V
 
 impl Widgets {
     /// Right-click on plugin widget `id`: "Options…" over its option rows, when it has any.
-    pub(super) fn open_plugin_options(&mut self, ui: &mut mypaper_ui::Ui, id: &str, at: (i32, i32)) {
+    pub(super) fn open_plugin_options(&mut self, ui: &mut glaze_ui::Ui, id: &str, at: (i32, i32)) {
         let Some(entry) = self.entries.get(id) else { return };
         let Some(installed) = self.registry.get(&entry.model.placed.widget) else { return };
         let manifest = &installed.manifest;

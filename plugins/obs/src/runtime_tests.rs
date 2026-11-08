@@ -2,17 +2,17 @@
 use std::{path::PathBuf, time::SystemTime};
 use serde_json::json;
 use crate::runtime::{Effect, Manifest, Runtime};
-use crate::runtime::exports::mypaper::plugin::lifecycle::{Event, FaceOpen};
-use crate::runtime::mypaper::plugin::{types::SizeClass, websocket::{Message, SocketEvent}};
+use crate::runtime::exports::glaze::plugin::lifecycle::{Event, FaceOpen};
+use crate::runtime::glaze::plugin::{types::SizeClass, websocket::{Message, SocketEvent}};
 
-fn latest(effects: &[Effect]) -> mypaper_plugin_sdk::Face {
+fn latest(effects: &[Effect]) -> glaze_plugin_sdk::Face {
     effects.iter().rev().find_map(|e| match e { Effect::View(_, face) => Some(face.clone()), _ => None }).expect("component rendered a face")
 }
 
 #[test]
 fn obs_component_uses_scoped_websocket_and_renders_offline_without_controls() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins/obs");
-    let scratch = std::env::temp_dir().join(format!("mypaper-obs-component-{}", std::process::id()));
+    let scratch = std::env::temp_dir().join(format!("glaze-obs-component-{}", std::process::id()));
     let runtime = Runtime::new(scratch.join("cache"), scratch.join("data")).unwrap();
     let manifest = Manifest::load(&root).unwrap();
     let (component, _) = runtime.component(&manifest, &root).unwrap();
@@ -62,18 +62,18 @@ fn obs_component_uses_scoped_websocket_and_renders_offline_without_controls() {
 #[test]
 fn obs_closed_server_shows_clean_empty_state_through_the_host() {
     use crate::host::Host;
-    use mypaper_plugin_api::wire::{self, HelperMsg, HostMsg};
+    use glaze_plugin_api::wire::{self, HelperMsg, HostMsg};
     use std::{net::TcpListener, sync::mpsc, time::{Duration, Instant}};
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     drop(listener);
-    let scratch = std::env::temp_dir().join(format!("mypaper-obs-closed-{}", std::process::id()));
+    let scratch = std::env::temp_dir().join(format!("glaze-obs-closed-{}", std::process::id()));
     let runtime = Runtime::new(scratch.join("cache"), scratch.join("data")).unwrap();
     let (tx, rx) = mpsc::channel();
     let mut host = Host::new(runtime, vec![], tx);
     host.on_host(HostMsg::Open {
         plugin: "obs".into(), dir: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins/obs").to_string_lossy().into_owned(),
-        instance: "closed-obs".into(), face: "controls".into(), size: mypaper_plugin_api::SizeClass::Medium,
+        instance: "closed-obs".into(), face: "controls".into(), size: glaze_plugin_api::SizeClass::Medium,
         settings: json!({"port":port}).to_string(),
     }, Instant::now());
     let deadline = Instant::now() + Duration::from_secs(20);

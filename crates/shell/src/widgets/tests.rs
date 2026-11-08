@@ -1,6 +1,6 @@
 use super::*;
-use mypaper_ui::calendar::Date;
-use mypaper_ui::{DisplayList, Op, Point, golden, render};
+use glaze_ui::calendar::Date;
+use glaze_ui::{DisplayList, Op, Point, golden, render};
 
 fn fixture(id: &str, root: PathBuf) -> Model {
     let registry = registry::builtins();
@@ -66,21 +66,21 @@ fn fixture(id: &str, root: PathBuf) -> Model {
             json!({"current":{"location":{"name":"Oslo"},"temperature":27,"condition":"Clear sky","code":0},"forecast":{"days":days,"hourly":hourly}})
         }
         Widget::Rss => {
-            json!({"items":[{"title":"A simpler native desktop takes shape","source":"mypaper","published":1793790000,"link":"https://example.com/one"},{"title":"Software rendering, small surfaces and a sleeping event loop","source":"Engineering","published":1793788000,"link":"https://example.com/two"}]})
+            json!({"items":[{"title":"A simpler native desktop takes shape","source":"Glaze","published":1793790000,"link":"https://example.com/one"},{"title":"Software rendering, small surfaces and a sleeping event loop","source":"Engineering","published":1793788000,"link":"https://example.com/two"}]})
         }
         Widget::Crypto => {
             json!({"coins":[{"id":"bitcoin","name":"Bitcoin","price":71543.25,"change":1.42},{"id":"ethereum","name":"Ethereum","price":2641.80,"change":-0.81},{"id":"solana","name":"Solana","price":164.55,"change":2.35}]})
         }
         _ => Value::Null,
     };
-    m.stats = Some(mypaper_widgets::stats::SystemStats {
+    m.stats = Some(glaze_widgets::stats::SystemStats {
         cpu: 23.0,
-        memory: mypaper_widgets::stats::Usage {
+        memory: glaze_widgets::stats::Usage {
             used: 7_000_000_000,
             total: 16_000_000_000,
         },
         gpu: Some(12.0),
-        net: Some(mypaper_widgets::stats::Net {
+        net: Some(glaze_widgets::stats::Net {
             up: 14000.0,
             down: 280000.0,
         }),
@@ -93,7 +93,7 @@ fn fixture(id: &str, root: PathBuf) -> Model {
         m.counts
             .insert(now().date.add_days(-i).key(), (i % 6) as u32);
     }
-    m.photo.current = Some(Arc::new(mypaper_ui::Image {
+    m.photo.current = Some(Arc::new(glaze_ui::Image {
         width: 320,
         height: 200,
         pixels: (0..200)
@@ -156,7 +156,7 @@ fn profile_system_repaint_cost() {
             let stats = m.stats.as_mut().unwrap();
             stats.cpu = (i % 12) as f64;
             stats.gpu = Some((17 + i % 7) as f64);
-            stats.net = Some(mypaper_widgets::stats::Net {
+            stats.net = Some(glaze_widgets::stats::Net {
                 down: (i % 8) as f64 * 1000.0,
                 up: (i % 5) as f64 * 1000.0,
             });
@@ -213,7 +213,7 @@ fn profile_system_repaint_cost() {
                 let stats = m.stats.as_mut().unwrap();
                 stats.cpu = (i % 12) as f64;
                 stats.gpu = Some((17 + i % 7) as f64);
-                stats.net = Some(mypaper_widgets::stats::Net {
+                stats.net = Some(glaze_widgets::stats::Net {
                     down: (i % 60) as f64 * 1000.0,
                     up: (i % 17) as f64 * 1000.0,
                 });
@@ -247,7 +247,7 @@ fn media_timeline_updates_reuse_artwork_and_removing_art_clears_its_material() {
     let ui = Ui::new().unwrap();
     let root = temp("media-art-cache");
     let path = root.join("cover.png");
-    let image = mypaper_ui::Image {
+    let image = glaze_ui::Image {
         width: 2,
         height: 2,
         pixels: [40, 80, 160, 255].repeat(4),
@@ -284,7 +284,7 @@ fn media_timeline_updates_reuse_artwork_and_removing_art_clears_its_material() {
 fn a_bleed_photo_is_cropped_to_the_body_and_rounded_like_the_plate() {
     let root = temp("photo-round");
     let m = fixture("photo", root.clone());
-    let photo = mypaper_ui::Image { width: 300, height: 200, pixels: [90, 90, 90, 255].repeat(300 * 200) };
+    let photo = glaze_ui::Image { width: 300, height: 200, pixels: [90, 90, 90, 255].repeat(300 * 200) };
     // A square widget: a square body, so a square crop with transparent corners.
     let out = photo_bitmap(&m, Rect::new(0.0, 0.0, 200.0, 200.0), 1.0, photo);
     assert_eq!((out.width, out.height), (200, 200));
@@ -349,7 +349,7 @@ fn explicit_widget_corners_and_edge_reach_the_drawn_body_even_for_pill_variants(
             assert_eq!(list.ops.iter().any(|op| matches!(op, Op::Stroke {rect:r,..} if *r == rect.inflate(-0.5))), edge);
         }
     }
-    let user: mypaper_config::Look = serde_json::from_value(json!({"shape":{"corners":0,"edge":true},"text":{"font":"Consolas","icons":"lucide"}})).unwrap();
+    let user: glaze_config::Look = serde_json::from_value(json!({"shape":{"corners":0,"edge":true},"text":{"font":"Consolas","icons":"lucide"}})).unwrap();
     let theme = edit::chrome_look(&user, &ui.text);
     let (list, _) = edit::pill(&theme, 1.0, &Default::default(), &mut ui.text, user.shape.corners);
     assert!(list.ops.iter().any(|op| matches!(op, Op::Fill {radius,..} if *radius==0.0)));
@@ -481,7 +481,7 @@ fn long_content_scrolls_to_the_last_item_without_hits_outside_the_viewport() {
     }
 }
 fn temp(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("mypaper-n4-{name}-{}", std::process::id()))
+    std::env::temp_dir().join(format!("glaze-n4-{name}-{}", std::process::id()))
 }
 
 #[test]
@@ -513,7 +513,7 @@ fn compact_flip_clock_keeps_seconds_and_period_clear_of_the_digit_cards() {
 }
 
 /// A vertical gradient as an image (premultiplied BGRA), for a stand-in wallpaper.
-fn gradient(width: u32, height: u32, top: [u8; 3], bottom: [u8; 3]) -> mypaper_ui::Image {
+fn gradient(width: u32, height: u32, top: [u8; 3], bottom: [u8; 3]) -> glaze_ui::Image {
     let mut pixels = Vec::with_capacity((width * height * 4) as usize);
     for y in 0..height {
         let t = y as f32 / height.max(2) as f32;
@@ -522,7 +522,7 @@ fn gradient(width: u32, height: u32, top: [u8; 3], bottom: [u8; 3]) -> mypaper_u
             pixels.extend_from_slice(&[c(2), c(1), c(0), 255]);
         }
     }
-    mypaper_ui::Image {
+    glaze_ui::Image {
         width,
         height,
         pixels,
@@ -531,7 +531,7 @@ fn gradient(width: u32, height: u32, top: [u8; 3], bottom: [u8; 3]) -> mypaper_u
 
 /// One widget at one size in one scheme, over its plate's stand-in glass (the engine draws
 /// the real glass): its content as an image and its plate's radius.
-fn widget_shot(ui: &mut Ui, m: &mut Model, size: (u32, u32), dark: bool) -> (mypaper_ui::Image, f32) {
+fn widget_shot(ui: &mut Ui, m: &mut Model, size: (u32, u32), dark: bool) -> (glaze_ui::Image, f32) {
     m.placed
         .appearance
         .insert("text".into(), json!(if dark { "light" } else { "dark" }));
@@ -608,12 +608,12 @@ fn overflow(list: &DisplayList, size: (u32, u32)) -> Option<String> {
 /// The size sheet as a check: every widget at every size from its min to its max (one cell at a
 /// time), on the fine grid of a 96 DIP and a 75 DIP (Windows' default) icon cell, renders
 /// without panicking and keeps its paint inside its frame. Integration views are listed, not
-/// failed: other owners fix those (MYPAPER_SIZES=all fails them too).
+/// failed: other owners fix those (GLAZE_SIZES=all fails them too).
 #[test]
 fn every_widget_renders_inside_its_frame_at_every_size() {
     let mut ui = Ui::new().unwrap();
     let root = temp("dense-sizes");
-    let strict_all = std::env::var("MYPAPER_SIZES").is_ok_and(|v| v == "all");
+    let strict_all = std::env::var("GLAZE_SIZES").is_ok_and(|v| v == "all");
     let integrations = ["t3"];
     let mut failures = Vec::new();
     let mut reported = Vec::new();
@@ -668,7 +668,7 @@ fn widget_size_sheets() {
     let px = |n: u32| n * CELL + (n - 1) * GAP;
     let mut ui = Ui::new().unwrap();
     let root = temp("sheets");
-    let only = std::env::var("MYPAPER_SHEET").ok();
+    let only = std::env::var("GLAZE_SHEET").ok();
     let registry = registry::builtins();
     for (id, installed) in &registry.widgets {
         // The integration widgets keep their own goldens (`views/integrations`).
@@ -727,7 +727,7 @@ fn widget_size_sheets() {
                     list.ops.push(Op::Text {
                         rect: Rect::new(x + 2.0, y, 80.0, 18.0),
                         text: format!("{}×{}", size[0], size[1]).into(),
-                        style: theme.font.style(mypaper_ui::TextRole::Footnote, 1.0),
+                        style: theme.font.style(glaze_ui::TextRole::Footnote, 1.0),
                         color: if dark {
                             Rgba::new(1.0, 1.0, 1.0, 0.7)
                         } else {
@@ -1157,12 +1157,12 @@ fn calendar_views_and_the_event_editor_give_every_hit_its_own_id() {
 
 /// The README's desktop scene, widgets half (`docs/media/readme`): a few built-in widgets at
 /// their default sizes on a 2560×1440 screen at 150 %, content only on transparency, plus their
-/// glass plates in the frame lab's `MYPAPER_LAB_PLATES` form, so the engine's real glass can be
-/// drawn under them; `widgets-editing.png` is the same in edit mode. Run with `MYPAPER_README_SCENE=<dir>` (the bars half is in `bars::tests`).
+/// glass plates in the frame lab's `GLAZE_LAB_PLATES` form, so the engine's real glass can be
+/// drawn under them; `widgets-editing.png` is the same in edit mode. Run with `GLAZE_README_SCENE=<dir>` (the bars half is in `bars::tests`).
 #[test]
-#[ignore = "writes images: MYPAPER_README_SCENE=<dir>"]
+#[ignore = "writes images: GLAZE_README_SCENE=<dir>"]
 fn readme_scene_widgets() {
-    let Ok(dir) = std::env::var("MYPAPER_README_SCENE") else {
+    let Ok(dir) = std::env::var("GLAZE_README_SCENE") else {
         return;
     };
     let dir = PathBuf::from(dir);
@@ -1176,7 +1176,7 @@ fn readme_scene_widgets() {
     let (left, top, gap) = (60.0_f32, 110.0_f32, 36.0_f32);
     let (mut list, mut editing_list) = (DisplayList::default(), DisplayList::default());
     let mut plates = String::new();
-    let material = mypaper_glass_ipc::Material::default();
+    let material = glaze_glass_ipc::Material::default();
     let mut x = left;
     for column in columns {
         let mut y = top;

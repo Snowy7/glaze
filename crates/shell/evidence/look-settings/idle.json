@@ -3,7 +3,7 @@
     "at":  "2026-11-06T21:41:06",
     "rows":  [
                  {
-                     "part":  "mypaper-files",
+                     "part":  "glaze-files",
                      "pid":  68900,
                      "cpu_core_pct":  0,
                      "gpu3d_pct":  0,
@@ -14,7 +14,7 @@
                      "ws_mb":  88
                  },
                  {
-                     "part":  "mypaper-look-fixture",
+                     "part":  "glaze-look-fixture",
                      "pid":  28456,
                      "cpu_core_pct":  0,
                      "gpu3d_pct":  0,
@@ -25,7 +25,7 @@
                      "ws_mb":  37
                  },
                  {
-                     "part":  "mypaper-wallpaper",
+                     "part":  "glaze-wallpaper",
                      "pid":  79824,
                      "cpu_core_pct":  4.53,
                      "gpu3d_pct":  7.74,
@@ -36,7 +36,7 @@
                      "ws_mb":  62
                  },
                  {
-                     "part":  "mypaper-index",
+                     "part":  "glaze-index",
                      "pid":  81524,
                      "cpu_core_pct":  0.16,
                      "gpu3d_pct":  0,
@@ -47,7 +47,7 @@
                      "ws_mb":  7
                  },
                  {
-                     "part":  "mypaper-core",
+                     "part":  "glaze-core",
                      "pid":  46740,
                      "cpu_core_pct":  0.08,
                      "gpu3d_pct":  0,
@@ -58,7 +58,7 @@
                      "ws_mb":  18
                  },
                  {
-                     "part":  "mypaper-plugins",
+                     "part":  "glaze-plugins",
                      "pid":  71384,
                      "cpu_core_pct":  0,
                      "gpu3d_pct":  0,
@@ -69,7 +69,7 @@
                      "ws_mb":  21
                  },
                  {
-                     "part":  "mypaper-shell",
+                     "part":  "glaze-shell",
                      "pid":  70788,
                      "cpu_core_pct":  0.23,
                      "gpu3d_pct":  0.01,

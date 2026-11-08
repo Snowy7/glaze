@@ -6,7 +6,7 @@ param(
 . "$PSScriptRoot\common.ps1"
 $ExternalLocation = (Resolve-Path -LiteralPath $ExternalLocation).Path.TrimEnd('\')
 $PackagePath = (Resolve-Path -LiteralPath $PackagePath).Path
-foreach ($exe in 'mypaper-shell.exe', 'mypaper-core.exe') {
+foreach ($exe in 'glaze-shell.exe', 'glaze-core.exe') {
     if (-not (Test-Path -LiteralPath (Join-Path $ExternalLocation $exe))) { throw "Missing $exe at $ExternalLocation" }
 }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -30,7 +30,7 @@ if ($installed) {
         throw "Identity changed. Build a higher package version than $($installed.Version), then register it. Existing registration was preserved."
     }
 }
-Assert-MypaperStopped
+Assert-GlazeStopped
 if ($Development) {
     $mode = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock' -ErrorAction SilentlyContinue
     if ($mode.AllowDevelopmentWithoutDevLicense -ne 1) {
@@ -45,7 +45,7 @@ if ($Development) {
         throw 'The development MSIX must be signed by a publisher certificate in CurrentUser\TrustedPeople.'
     }
     $hash = (Get-FileHash -LiteralPath $PackagePath -Algorithm SHA256).Hash
-    $layout = Join-Path $env:LOCALAPPDATA "mypaper\identity\$($manifest.Package.Identity.Version)\$hash"
+    $layout = Join-Path $env:LOCALAPPDATA "glaze\identity\$($manifest.Package.Identity.Version)\$hash"
     if (-not (Test-Path -LiteralPath (Join-Path $layout 'AppxManifest.xml'))) {
         Invoke-PackageTool (Get-SdkTool 'makeappx.exe') @('unpack', '/o', '/nv', '/p', $PackagePath, '/d', $layout)
     }

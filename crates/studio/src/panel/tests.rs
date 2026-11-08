@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use mypaper_ui::{Ui, golden, render};
+use glaze_ui::{Ui, golden, render};
 use serde_json::json;
 
 use super::{Command, Page, State};
@@ -40,9 +40,9 @@ fn app(ui: &Ui, dark: bool) -> App {
 /// Review artifacts only: does not bless or replace the legacy Studio's golden baselines.
 #[test]
 fn render_panel_pages() {
-    let out = std::env::var_os("MYPAPER_STUDIO_PANEL_SHOTS")
+    let out = std::env::var_os("GLAZE_STUDIO_PANEL_SHOTS")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-panel\shots"));
+        .unwrap_or_else(|| PathBuf::from(r"C:\glaze-targets\studio-panel\shots"));
     let mut ui = Ui::new().unwrap();
     for dark in [true, false] {
         for (page, name) in [
@@ -114,7 +114,7 @@ fn render_panel_pages() {
             (Page::BarPanel, "tray-panel"),
             (Page::BarPanel, "notifications-panel"),
         ] {
-            if std::env::var("MYPAPER_STUDIO_PANEL_SHOT_FILTER").ok()
+            if std::env::var("GLAZE_STUDIO_PANEL_SHOT_FILTER").ok()
                 .is_some_and(|filter| !filter.split(',').any(|wanted| wanted == name)) {
                 continue;
             }
@@ -129,7 +129,7 @@ fn render_panel_pages() {
                 }
                 "performance-custom" => {
                     app.run(Action::Set(crate::actions::Edit::new(DocId::Config, "/engine/fps", "Frame rate"), json!(73)));
-                    app.nav.more.insert(mypaper_ui::controls::key(("panel-custom-fps", "/engine/fps")));
+                    app.nav.more.insert(glaze_ui::controls::key(("panel-custom-fps", "/engine/fps")));
                 }
                 "wallpaper-own-look" => {
                     let mut wallpaper = app.library.items[app.library.active().unwrap()].clone();
@@ -137,7 +137,7 @@ fn render_panel_pages() {
                     wallpaper.name = "Rainy Hong Kong (copy)".into();
                     wallpaper.active = false;
                     wallpaper.origin = crate::library::Origin::User;
-                    app.nav.more.insert(mypaper_ui::controls::key(("panel-wallpaper-look", &wallpaper.id)));
+                    app.nav.more.insert(glaze_ui::controls::key(("panel-wallpaper-look", &wallpaper.id)));
                     app.nav.wallpaper = Some(app.library.items.len());
                     app.library.items.push(wallpaper);
                 }
@@ -154,7 +154,7 @@ fn render_panel_pages() {
                     json!("light"),
                 )),
                 "look-custom-color" => {
-                    app.nav.more.insert(mypaper_ui::controls::key((
+                    app.nav.more.insert(glaze_ui::controls::key((
                         "panel-color-picker",
                         DocId::Config,
                         "/look/material/tint",
@@ -211,7 +211,7 @@ fn render_panel_pages() {
                     {
                         photo.settings.insert(
                             format!("image{}", n + 1),
-                            json!(mypaper_widgets::pick::data_url(
+                            json!(glaze_widgets::pick::data_url(
                                 "photo",
                                 "photo-1",
                                 &format!("{}.png", item.name)
@@ -232,9 +232,9 @@ fn render_panel_pages() {
                     app.nav.widget = Some("photo-1".into());
                 }
                 "look-more" | "windows-more" => {
-                    app.nav.more.insert(mypaper_ui::controls::key((
+                    app.nav.more.insert(glaze_ui::controls::key((
                         "panel-more",
-                        mypaper_ui::controls::key(("studio-panel", page)),
+                        glaze_ui::controls::key(("studio-panel", page)),
                     )));
                 }
                 "wallpaper-look" => app.nav.look_theme = true,
@@ -293,7 +293,7 @@ fn render_panel_pages() {
                 "history" => {
                     super::history::observe(&app);
                     app.run(Action::Preset("islands"));
-                    app.run(Action::SetStyle(Some(mypaper_config::look::Style::Solid)));
+                    app.run(Action::SetStyle(Some(glaze_config::look::Style::Solid)));
                     super::history::observe(&app);
                     app.panel.as_ref().unwrap().history.borrow_mut().selected = Some(1);
                     for (i, entry) in app
@@ -329,7 +329,7 @@ fn render_panel_pages() {
                     own.name = "Rain picture".into();
                     own.origin = crate::library::Origin::User;
                     own.active = false;
-                    own.dir = PathBuf::from(r"C:\mypaper-fixture-only\rain-picture");
+                    own.dir = PathBuf::from(r"C:\glaze-fixture-only\rain-picture");
                     super::theme_failed(&mut app, &own.dir, "The wallpaper folder is read-only.");
                     app.nav.wallpaper = Some(app.library.items.len());
                     app.library.items.push(own);
@@ -353,7 +353,7 @@ fn render_panel_pages() {
                 "top-bar-designs" => {
                     app.panel.as_mut().unwrap().page = Page::BarDesign;
                     app.nav.bar = Some(crate::actions::Bar::Top);
-                    app.nav.more.insert(mypaper_ui::controls::key((
+                    app.nav.more.insert(glaze_ui::controls::key((
                         "panel-bar-designs",
                         crate::actions::Bar::Top,
                     )));
@@ -362,7 +362,7 @@ fn render_panel_pages() {
                 "dock-designs" => {
                     app.panel.as_mut().unwrap().page = Page::BarDesign;
                     app.nav.bar = Some(crate::actions::Bar::Dock);
-                    app.nav.more.insert(mypaper_ui::controls::key((
+                    app.nav.more.insert(glaze_ui::controls::key((
                         "panel-bar-designs",
                         crate::actions::Bar::Dock,
                     )));
@@ -375,15 +375,15 @@ fn render_panel_pages() {
                         index: 0,
                     });
                     if name == "module-more" {
-                        app.nav.more.insert(mypaper_ui::controls::key((
+                        app.nav.more.insert(glaze_ui::controls::key((
                             "panel-more",
-                            mypaper_ui::controls::key(("studio-panel", page)),
+                            glaze_ui::controls::key(("studio-panel", page)),
                         )));
                     }
                     if name == "module-program" {
                         app.texts.insert(crate::actions::FieldId::Text(DocId::Studio, "/panel/draft/gesture/modules/media/click/left".into()), "program".into());
                         app.run(Action::Set(crate::actions::Edit::new(DocId::Bars, "/modules/media/click/left", "Program"), json!({"exec":"notepad.exe","args":[]})));
-                        app.nav.more.insert(mypaper_ui::controls::key((
+                        app.nav.more.insert(glaze_ui::controls::key((
                             "panel-trigger",
                             "/modules/media/click/left",
                         )));
@@ -567,7 +567,7 @@ fn panel_controls_stay_inside_laptop_and_scaled_widths() {
             let built = super::build(&app, &mut ui.text);
             if page == Page::Performance && text_scale == 1.0 {
                 for label in ["On battery", "Like Windows", "Always", "Never"] {
-                    assert!(built.list.ops.iter().any(|op| matches!(op, mypaper_ui::Op::Text { text, .. } if text.as_ref() == label)), "{label} is readable at {width}/{scale}");
+                    assert!(built.list.ops.iter().any(|op| matches!(op, glaze_ui::Op::Text { text, .. } if text.as_ref() == label)), "{label} is readable at {width}/{scale}");
                 }
             }
             for target in built.targets {
@@ -583,13 +583,13 @@ fn panel_controls_stay_inside_laptop_and_scaled_widths() {
 
 #[test]
 fn placement_uses_work_area_and_display_dpi() {
-    let screen = mypaper_desktop::Rect {
+    let screen = glaze_desktop::Rect {
         x: 0,
         y: 0,
         width: 1920,
         height: 1080,
     };
-    let work = mypaper_desktop::Rect {
+    let work = glaze_desktop::Rect {
         x: 0,
         y: 32,
         width: 1920,
@@ -763,7 +763,7 @@ fn keyboard_can_reorder_menu_items_without_removing_them() {
     assert_eq!(items[1], json!("view"));
     assert_eq!(
         items.len(),
-        mypaper_config::desktop_menu::default_items().len()
+        glaze_config::desktop_menu::default_items().len()
     );
     assert_eq!(
         app.input.focus,
@@ -773,7 +773,7 @@ fn keyboard_can_reorder_menu_items_without_removing_them() {
 
 #[test]
 fn a_list_drag_writes_once_on_drop_and_is_one_undo_step() {
-    use mypaper_ui::{Button, Event, Point, Pointer};
+    use glaze_ui::{Button, Event, Point, Pointer};
     let mut ui = Ui::new().unwrap();
     let mut app = app(&ui, true);
     app.size.1 = 1400;
@@ -792,7 +792,7 @@ fn a_list_drag_writes_once_on_drop_and_is_one_undo_step() {
         .find(|t| t.action == Action::Panel(Command::SortRow(super::SortList::Menu, 2)))
         .unwrap()
         .rect;
-    let pointer = |r: mypaper_ui::Rect| Pointer {
+    let pointer = |r: glaze_ui::Rect| Pointer {
         at: Point::new((r.left + r.right) / 2.0, (r.top + r.bottom) / 2.0),
         screen: (0, 0),
     };
@@ -979,8 +979,8 @@ fn history_summarizes_the_whole_coalesced_style_change_and_fields_ignore_typed_c
     let ui = Ui::new().unwrap();
     let mut app = app(&ui, true);
     super::history::observe(&app);
-    app.run(Action::SetStyle(Some(mypaper_config::look::Style::Solid)));
-    app.run(Action::SetStyle(Some(mypaper_config::look::Style::Fluent)));
+    app.run(Action::SetStyle(Some(glaze_config::look::Style::Solid)));
+    app.run(Action::SetStyle(Some(glaze_config::look::Style::Fluent)));
     assert_eq!(
         app.panel
             .as_ref()
@@ -1098,17 +1098,17 @@ fn moving_a_module_between_bars_and_disconnect_are_single_undo_steps() {
 
 #[test]
 fn style_specimens_ignore_the_current_material_and_native_windows_are_distinct() {
-    use mypaper_ui::Rect;
-    use mypaper_ui::controls::Builder;
+    use glaze_ui::Rect;
+    use glaze_ui::controls::Builder;
     let mut ui = Ui::new().unwrap();
     let mut app = app(&ui, true);
-    let render_material = |app: &App, text: &mut mypaper_ui::Text| {
+    let render_material = |app: &App, text: &mut glaze_ui::Text| {
         let mut b = Builder::new(text, &app.theme.palette, &app.theme.ty, 1.0, &app.input);
         super::specimens::material(
             app,
             &mut b,
             Rect::new(0.0, 0.0, 160.0, 100.0),
-            mypaper_config::look::Style::Fluent,
+            glaze_config::look::Style::Fluent,
         );
         b.list.ops
     };
@@ -1124,7 +1124,7 @@ fn style_specimens_ignore_the_current_material_and_native_windows_are_distinct()
         )
         .unwrap();
     assert_eq!(render_material(&app, &mut ui.text), before);
-    let window = |look, text: &mut mypaper_ui::Text| {
+    let window = |look, text: &mut glaze_ui::Text| {
         let mut b = Builder::new(text, &app.theme.palette, &app.theme.ty, 1.0, &app.input);
         super::specimens::window(&app, &mut b, Rect::new(0.0, 0.0, 160.0, 100.0), look);
         b.list.ops

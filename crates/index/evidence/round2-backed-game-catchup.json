@@ -1,12 +1,12 @@
 ﻿{
     "created_at":  "2026-11-06T09:45:12.4178939+03:00",
-    "file":  "C:\\Users\\you\\mypaper-index-fixtures\\game-09422a5a29a44ee8a54b3b68e4deb138\\mypaper-game-resume-62527b3d783a4dbb9d713eb55212aabc.txt",
+    "file":  "C:\\Users\\you\\glaze-index-fixtures\\game-09422a5a29a44ee8a54b3b68e4deb138\\glaze-game-resume-62527b3d783a4dbb9d713eb55212aabc.txt",
     "catchup_ms":  152.61090000000002,
     "search":  {
                    "hits":  [
                                 {
-                                    "name":  "mypaper-game-resume-62527b3d783a4dbb9d713eb55212aabc.txt",
-                                    "path":  "C:\\Users\\you\\mypaper-index-fixtures\\game-09422a5a29a44ee8a54b3b68e4deb138\\mypaper-game-resume-62527b3d783a4dbb9d713eb55212aabc.txt",
+                                    "name":  "glaze-game-resume-62527b3d783a4dbb9d713eb55212aabc.txt",
+                                    "path":  "C:\\Users\\you\\glaze-index-fixtures\\game-09422a5a29a44ee8a54b3b68e4deb138\\glaze-game-resume-62527b3d783a4dbb9d713eb55212aabc.txt",
                                     "directory":  false,
                                     "size":  32768,
                                     "files":  1,
@@ -23,7 +23,7 @@
                   "hits":  [
                                {
                                    "name":  "game-09422a5a29a44ee8a54b3b68e4deb138",
-                                   "path":  "C:\\Users\\you\\mypaper-index-fixtures\\game-09422a5a29a44ee8a54b3b68e4deb138",
+                                   "path":  "C:\\Users\\you\\glaze-index-fixtures\\game-09422a5a29a44ee8a54b3b68e4deb138",
                                    "directory":  true,
                                    "size":  32768,
                                    "files":  1,
@@ -32,8 +32,8 @@
                                    "excluded":  false
                                },
                                {
-                                   "name":  "mypaper-game-resume-62527b3d783a4dbb9d713eb55212aabc.txt",
-                                   "path":  "C:\\Users\\you\\mypaper-index-fixtures\\game-09422a5a29a44ee8a54b3b68e4deb138\\mypaper-game-resume-62527b3d783a4dbb9d713eb55212aabc.txt",
+                                   "name":  "glaze-game-resume-62527b3d783a4dbb9d713eb55212aabc.txt",
+                                   "path":  "C:\\Users\\you\\glaze-index-fixtures\\game-09422a5a29a44ee8a54b3b68e4deb138\\glaze-game-resume-62527b3d783a4dbb9d713eb55212aabc.txt",
                                    "directory":  false,
                                    "size":  32768,
                                    "files":  1,

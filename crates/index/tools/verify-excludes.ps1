@@ -1,7 +1,7 @@
 # Exercise default exclusions, marker transitions, and honest aggregates through the live pipe.
-param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\mypaper-index.exe')
+param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\glaze-index.exe')
 $ErrorActionPreference = 'Stop'
-$base = Join-Path $env:USERPROFILE 'mypaper-index-fixtures'
+$base = Join-Path $env:USERPROFILE 'glaze-index-fixtures'
 $root = [IO.Path]::GetFullPath((Join-Path $base ('rules-' + [Guid]::NewGuid().ToString('N'))))
 if (-not $root.StartsWith([IO.Path]::GetFullPath($base) + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid fixture root' }
 function Remove-FixtureTree([string]$Relative) {

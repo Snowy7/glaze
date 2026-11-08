@@ -1,5 +1,5 @@
 //! Headless qualification harness. It never changes app settings, requests consent, or invokes controls.
-use mypaper_integrations::{Availability, Hub, Provider, config::Config};
+use glaze_integrations::{Availability, Hub, Provider, config::Config};
 use std::{
     sync::mpsc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -158,7 +158,7 @@ fn main() -> anyhow::Result<()> {
             let end = Instant::now() + Duration::from_secs(watch_seconds);
             while let Ok(()) = rx.recv_timeout(end.saturating_duration_since(Instant::now())) {
                 let snapshot = lease.snapshot();
-                if let Some(mypaper_integrations::Data::Notifications(notifications)) =
+                if let Some(glaze_integrations::Data::Notifications(notifications)) =
                     snapshot.data
                 {
                     println!(

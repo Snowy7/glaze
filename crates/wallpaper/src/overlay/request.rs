@@ -9,7 +9,7 @@
 //! a click-through window directly under it.
 
 use bytemuck::{Pod, Zeroable};
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::System::DataExchange::COPYDATASTRUCT;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -26,7 +26,7 @@ pub use curve::FadeCurve;
 pub const WM_PLACEMENT: u32 = channel::WM_PLACEMENT;
 
 /// The window class of the engine's overlay message window (message-only).
-pub const OVERLAY_CLASS: PCWSTR = w!("mypaper.wallpaper.overlay");
+pub const OVERLAY_CLASS: PCWSTR = w!("glaze.wallpaper.overlay");
 /// `COPYDATASTRUCT::dwData` of an overlay request ("MPOV"), and the wire version in its high byte.
 const MAGIC: usize = 0x4D50_4F56;
 /// How long the shell waits for the engine to take a request.
@@ -73,7 +73,7 @@ impl Material {
 
 /// An overlay's finer glass knobs and its fade (parity C07, C10, C12, C13), sent with
 /// [`Request::Style`] after each `Open` (a new overlay starts at [`Style::DEFAULT`]). The knobs
-/// mean what `mypaper_glass_ipc::Style`'s do for plates.
+/// mean what `glaze_glass_ipc::Style`'s do for plates.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 pub struct Style {
@@ -555,7 +555,7 @@ mod tests {
             // SAFETY: forwarding this window's unhandled message unchanged.
             unsafe { DefWindowProcW(hwnd, message, w, l) }
         }
-        let class = w!("mypaper.test.legacy-glass-style");
+        let class = w!("glaze.test.legacy-glass-style");
         // SAFETY: a process-local class and message-only test window, never shown or activated.
         let hwnd = unsafe {
             assert_ne!(

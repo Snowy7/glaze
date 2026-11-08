@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use serde_json::{Value, json};
 
-/// A JSON-RPC error. `data_code` carries one of mypaper's error names (`NotFound`, ...) so the
+/// A JSON-RPC error. `data_code` carries one of Glaze's error names (`NotFound`, ...) so the
 /// host can pass it on to the widget; without it the host maps by `code`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RpcError {

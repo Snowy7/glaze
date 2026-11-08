@@ -1,5 +1,5 @@
 use crate::{State, faces, tailscale};
-use mypaper_plugin_sdk::SizeClass;
+use glaze_plugin_sdk::SizeClass;
 use serde_json::{Map, Value, json};
 
 pub const NOW: i64 = 1_793_875_200_000;
@@ -33,7 +33,7 @@ pub fn faces() -> Value {
 fn faces_match_the_view_golden() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("golden/faces.json");
     let actual = serde_json::to_string_pretty(&faces()).unwrap() + "\n";
-    if std::env::var_os("MYPAPER_BLESS").is_some() {
+    if std::env::var_os("GLAZE_BLESS").is_some() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, &actual).unwrap();
     }

@@ -23,9 +23,9 @@ use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use mypaper_desktop::desktop_hit::{Under, under};
-use mypaper_desktop::raw_input::{Button, Event, Gate, Kind, RawMouse};
-use mypaper_theme::{Fit, LoadedTheme, WebWallpaper};
+use glaze_desktop::desktop_hit::{Under, under};
+use glaze_desktop::raw_input::{Button, Event, Gate, Kind, RawMouse};
+use glaze_theme::{Fit, LoadedTheme, WebWallpaper};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG, COREWEBVIEW2_COLOR,
     COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS, CreateCoreWebView2EnvironmentWithOptions,
@@ -53,10 +53,10 @@ use super::wic::{Budget, Decoded, Decoder, Picture};
 use super::{Frame, Redraw, Source, Visibility, begin};
 use crate::gpu::Gpu;
 
-/// Name under which a local page's folder is served (`https://mypaper.theme/...`).
+/// Name under which a local page's folder is served (`https://glaze.theme/...`).
 /// Unlike `file://`, a virtual host gives the page a real origin, so `fetch`,
 /// ES modules and workers work with relative paths.
-const HOST: &str = "mypaper.theme";
+const HOST: &str = "glaze.theme";
 
 /// Browser flags: no SmartScreen lookups (a wallpaper loads its own content),
 /// and autoplay without a user gesture (nobody clicks a wallpaper). Background
@@ -134,10 +134,10 @@ fn percent_encode(segment: &str) -> String {
     out
 }
 
-/// `%LOCALAPPDATA%\mypaper\webview2`: one profile shared by every web theme.
+/// `%LOCALAPPDATA%\glaze\webview2`: one profile shared by every web theme.
 fn user_data_folder() -> Result<PathBuf> {
     let local = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?;
-    let dir = PathBuf::from(local).join("mypaper").join("webview2");
+    let dir = PathBuf::from(local).join("glaze").join("webview2");
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     Ok(dir)
 }
@@ -716,7 +716,7 @@ impl Forwarder {
             let forwarded = self.gate.filter(
                 event,
                 || under(point) == Under::Desktop,
-                || mypaper_desktop::desktop_view::on_icon(event.at),
+                || glaze_desktop::desktop_view::on_icon(event.at),
             );
             if let Some(event) = forwarded {
                 self.deliver(&state, event);
@@ -919,14 +919,14 @@ mod tests {
             resolve("index.html", r"C:\themes\t"),
             Page::Local {
                 folder: PathBuf::from(r"C:\themes\t"),
-                url: "https://mypaper.theme/index.html".into(),
+                url: "https://glaze.theme/index.html".into(),
             }
         );
         assert_eq!(
             resolve("site/my page.html", r"C:\themes\t"),
             Page::Local {
                 folder: PathBuf::from(r"C:\themes\t"),
-                url: "https://mypaper.theme/site/my%20page.html".into(),
+                url: "https://glaze.theme/site/my%20page.html".into(),
             }
         );
     }
@@ -942,7 +942,7 @@ mod tests {
             page,
             Page::Local {
                 folder: PathBuf::from(r"D:\sites\fun"),
-                url: "https://mypaper.theme/home.html".into(),
+                url: "https://glaze.theme/home.html".into(),
             }
         );
     }

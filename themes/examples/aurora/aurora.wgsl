@@ -1,5 +1,5 @@
 // Aurora: ribbons of light over a mountain ridge.
-// Edit and save, and mypaper reloads it live. Inputs: see `paper` in
+// Edit and save, and Glaze reloads it live. Inputs: see `paper` in
 // crates/wallpaper/src/prelude.wgsl.
 
 fn hash(p: vec2f) -> f32 {

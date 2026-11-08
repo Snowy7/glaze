@@ -8,6 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@mypaper/plugin-sdk':
+      '@glaze/plugin-sdk':
         specifier: link:../../packages/plugin-sdk-ts
         version: link:../../packages/plugin-sdk-ts

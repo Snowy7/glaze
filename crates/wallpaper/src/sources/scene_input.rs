@@ -1,5 +1,5 @@
 //! Mouse input for `interactive` scene wallpapers: dragging with the left button
-//! over the bare desktop orbits the camera (see `mypaper_desktop::raw_input`: the
+//! over the bare desktop orbits the camera (see `glaze_desktop::raw_input`: the
 //! mouse is read through Raw Input, nothing is hooked or injected, and the
 //! desktop behaves exactly as before). The parallax lean toward the cursor
 //! needs no input events at all: the engine already reads the cursor each frame.
@@ -8,8 +8,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use anyhow::Result;
-use mypaper_desktop::desktop_hit::{Under, under};
-use mypaper_desktop::raw_input::{Button, Gate, Kind, RawMouse};
+use glaze_desktop::desktop_hit::{Under, under};
+use glaze_desktop::raw_input::{Button, Gate, Kind, RawMouse};
 use windows::Win32::Foundation::POINT;
 
 /// Camera turn per dragged pixel, in radians (a screen width is about a turn and a half).
@@ -63,7 +63,7 @@ impl SceneInput {
                 let forwarded = gate.filter(
                     event,
                     || under(point) == Under::Desktop,
-                    || mypaper_desktop::desktop_view::on_icon(event.at),
+                    || glaze_desktop::desktop_view::on_icon(event.at),
                 );
                 let Some(event) = forwarded else { continue };
                 match (event.kind, anchor) {

@@ -10,7 +10,7 @@ fn main() -> anyhow::Result<()> {
     let mut secret = std::fs::read(&path)?;
     let result = std::str::from_utf8(&secret)
         .map_err(anyhow::Error::from)
-        .and_then(|value| mypaper_integrations::credentials::write(&key, value.trim()));
+        .and_then(|value| glaze_integrations::credentials::write(&key, value.trim()));
     secret.fill(0);
     result?;
     println!("Stored {key} in Windows Credential Manager");

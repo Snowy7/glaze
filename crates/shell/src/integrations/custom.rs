@@ -1,7 +1,7 @@
 //! Visible custom widgets own bounded, short-lived data workers and their explicit refresh deadlines.
 use crate::widgets::model::Model as WidgetModel;
-use mypaper_ui::{HitId, Image};
-use mypaper_widgets::custom::{Definition, Template};
+use glaze_ui::{HitId, Image};
+use glaze_widgets::custom::{Definition, Template};
 use serde_json::Value;
 use std::{
     sync::Arc,
@@ -31,15 +31,15 @@ impl Model {
     }
 }
 fn load(id: &str) -> anyhow::Result<Loaded> {
-    let definition = mypaper_widgets::custom::load(id)?;
-    let value = mypaper_widgets::custom::evaluate(id, &definition)?;
+    let definition = glaze_widgets::custom::load(id)?;
+    let value = glaze_widgets::custom::evaluate(id, &definition)?;
     let image = if definition.layout == Template::Image {
         let location = value
             .as_str()
             .or(value["url"].as_str())
             .ok_or_else(|| anyhow::anyhow!("An image template needs an image path or HTTPS URL"))?;
         let bytes = if location.starts_with("https://") {
-            mypaper_integrations::calendar_http::request(
+            glaze_integrations::calendar_http::request(
                 "GET",
                 location,
                 &[],
@@ -52,7 +52,7 @@ fn load(id: &str) -> anyhow::Result<Loaded> {
             let path = if path.is_absolute() {
                 path.to_owned()
             } else {
-                mypaper_widgets::custom::folder()?.join(path)
+                glaze_widgets::custom::folder()?.join(path)
             };
             let file = std::fs::File::open(path)?;
             anyhow::ensure!(
@@ -64,7 +64,7 @@ fn load(id: &str) -> anyhow::Result<Loaded> {
             anyhow::ensure!(bytes.len() <= 8 * 1024 * 1024, "Image exceeds 8 MiB");
             bytes
         };
-        let ui = mypaper_ui::Ui::new()?;
+        let ui = glaze_ui::Ui::new()?;
         Some(Arc::new(ui.decode_image(&bytes, (1024, 1024))?))
     } else {
         None
@@ -124,10 +124,10 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
             state.loaded = false;
             state.next = None;
         }
-        EDIT => match mypaper_widgets::custom::path(&widget.placed.widget) {
+        EDIT => match glaze_widgets::custom::path(&widget.placed.widget) {
             Ok(path) => {
                 let result =
-                    mypaper_integrations::launcher::open(&mypaper_integrations::launcher::Recent {
+                    glaze_integrations::launcher::open(&glaze_integrations::launcher::Recent {
                         title: String::new(),
                         target: path.to_string_lossy().into_owned(),
                         arguments: String::new(),

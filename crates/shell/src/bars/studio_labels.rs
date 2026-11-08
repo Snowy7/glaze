@@ -1,5 +1,5 @@
 //! Desktop name chips describe the module's actual left-click action.
-use mypaper_bars::{
+use glaze_bars::{
     BarsConfig, Module, ModuleRef,
     config::{Action, BuiltinAction},
 };

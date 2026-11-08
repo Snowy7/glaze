@@ -1,13 +1,13 @@
 [package]
-name = "mypaper-perf"
-description = "The perf harness: startup, CPU and memory of a mypaper build against perf/budget.toml."
+name = "glaze-perf"
+description = "The perf harness: startup, CPU and memory of a Glaze build against perf/budget.toml."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-mypaper-bars.workspace = true
-mypaper-desktop.workspace = true
+glaze-bars.workspace = true
+glaze-desktop.workspace = true
 
 anyhow.workspace = true
 serde.workspace = true

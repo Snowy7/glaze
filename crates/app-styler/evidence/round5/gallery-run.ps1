@@ -2,7 +2,7 @@
 param([int]$N = 5, [string]$Trials = "gallery-trials.ps1", [string[]]$Variants = @("glass", "none", "control"), [string]$LogName = "gallery.log")
 $d = $PSScriptRoot
 $log = "$d\$LogName"
-$styler = 'C:\mypaper-targets\app-styler\release\mypaper-styler.exe'
+$styler = 'C:\glaze-targets\app-styler\release\glaze-styler.exe'
 foreach ($variant in $Variants) {
   $helper = $null
   if ($variant -ne 'control') {

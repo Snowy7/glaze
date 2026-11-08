@@ -1,5 +1,5 @@
 //! File drops are accepted by Studio's own window only while a composition is open.
-use mypaper_ui::Point;
+use glaze_ui::Point;
 use std::{cell::RefCell, path::PathBuf};
 use windows::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM},

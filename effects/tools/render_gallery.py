@@ -53,7 +53,7 @@ def grid(manifests, target):
     columns = 5
     image = Image.new('RGB', (columns * 336 + 16, ((len(manifests) + columns - 1) // columns) * 232 + 84), '#10151c')
     draw = ImageDraw.Draw(image)
-    draw.text((16, 12), 'mypaper / effect gallery', font=heading, fill='#eef4fb')
+    draw.text((16, 12), 'Glaze / effect gallery', font=heading, fill='#eef4fb')
     draw.text((16, 48), 'Engine renders (the real stack path) / curated photos and representative frames / 320 x 180 cards',
               font=small, fill='#a4b5c8')
     for i, manifest in enumerate(manifests):
@@ -67,11 +67,11 @@ def grid(manifests, target):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--out', type=Path, default=Path('C:/mypaper-targets/effects-sheet/gallery-v3'))
-    parser.add_argument('--target-dir', default=os.environ.get('CARGO_TARGET_DIR', 'C:/mypaper-targets/main'))
+    parser.add_argument('--out', type=Path, default=Path('C:/glaze-targets/effects-sheet/gallery-v3'))
+    parser.add_argument('--target-dir', default=os.environ.get('CARGO_TARGET_DIR', 'C:/glaze-targets/main'))
     parser.add_argument('--ffmpeg', default=shutil.which('ffmpeg'))
     # Video frames are extracted once and reused (ffmpeg is only needed the first time).
-    parser.add_argument('--frames', type=Path, default=Path('C:/mypaper-targets/effects-sheet/gallery-v2'))
+    parser.add_argument('--frames', type=Path, default=Path('C:/glaze-targets/effects-sheet/gallery-v2'))
     parser.add_argument('--only', default='')
     parser.add_argument('--grid-only', action='store_true')
     args = parser.parse_args()
@@ -113,8 +113,8 @@ def main():
                              'mouse': recipe['motion'].get('mouse', job['mouse'])}
         (folder / 'job.json').write_text(json.dumps(job, indent=2) + '\n')
     if chosen:
-        env = dict(os.environ, MYPAPER_GALLERY=str(args.out), CARGO_TARGET_DIR=args.target_dir)
-        subprocess.run(['cargo', 'test', '-p', 'mypaper-wallpaper', '--bins', 'gallery_renders', '--',
+        env = dict(os.environ, GLAZE_GALLERY=str(args.out), CARGO_TARGET_DIR=args.target_dir)
+        subprocess.run(['cargo', 'test', '-p', 'glaze-wallpaper', '--bins', 'gallery_renders', '--',
                         '--ignored', '--test-threads=1', '--nocapture'], cwd=ROOT, env=env, check=True)
     for manifest in chosen:
         effect_id = manifest['id']

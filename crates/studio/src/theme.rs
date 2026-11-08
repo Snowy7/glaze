@@ -2,8 +2,8 @@
 //! chose), a Windows contrast theme mapped onto system colours, Windows' text size, and the icon
 //! glyphs (Segoe Fluent Icons).
 
-use mypaper_ui::controls::{Palette, Type};
-use mypaper_ui::{Rgba, Text};
+use glaze_ui::controls::{Palette, Type};
+use glaze_ui::{Rgba, Text};
 use windows::Win32::Graphics::Gdi::{
     COLOR_BTNFACE, COLOR_GRAYTEXT, COLOR_HIGHLIGHT, COLOR_WINDOW, COLOR_WINDOWTEXT, GetSysColor,
 };
@@ -169,8 +169,8 @@ fn contrast() -> Option<Palette> {
 /// The icons used across Studio: the kit's vectors, and Segoe Fluent Icons for the caption
 /// buttons (Windows' own).
 pub mod glyph {
-    use mypaper_ui::controls::Glyph;
-    use mypaper_ui::icons::Icon;
+    use glaze_ui::controls::Glyph;
+    use glaze_ui::icons::Icon;
 
     const fn i(icon: Icon) -> Glyph {
         Glyph::Icon(icon)

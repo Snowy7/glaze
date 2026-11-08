@@ -48,7 +48,7 @@ struct ThemeData {
 
 /// Watch the cheap file stamp; parse a wallpaper manifest only when its file changes.
 pub fn theme_value(app: &App, wallpaper: &crate::library::Wallpaper) -> std::rc::Rc<Value> {
-    let path = wallpaper.dir.join(mypaper_theme::MANIFEST);
+    let path = wallpaper.dir.join(glaze_theme::MANIFEST);
     let stamp = std::fs::metadata(&path)
         .ok()
         .and_then(|m| Some((m.modified().ok()?, m.len())));
@@ -84,7 +84,7 @@ fn theme_source(app: &App, wallpaper: &crate::library::Wallpaper) -> Option<std:
         .theme_data
         .borrow()
         .0
-        .get(&wallpaper.dir.join(mypaper_theme::MANIFEST))
+        .get(&wallpaper.dir.join(glaze_theme::MANIFEST))
         .and_then(|data| data.source.clone())
 }
 
@@ -93,7 +93,7 @@ pub fn emphasize_feedback(b: &mut B, from: usize) {
     let style = super::controls::font(b, 12.0, 500);
     for op in &mut b.list.ops[from..] {
         match op {
-            mypaper_ui::Op::Text {
+            glaze_ui::Op::Text {
                 style: text_style,
                 color,
                 ..
@@ -101,7 +101,7 @@ pub fn emphasize_feedback(b: &mut B, from: usize) {
                 *text_style = style.clone();
                 *color = b.p.ink1;
             }
-            mypaper_ui::Op::Icon { color, .. } => *color = b.p.ink1,
+            glaze_ui::Op::Icon { color, .. } => *color = b.p.ink1,
             _ => {}
         }
     }
@@ -109,7 +109,7 @@ pub fn emphasize_feedback(b: &mut B, from: usize) {
 
 /// Make a file's unavailable controls visibly inert. The kit owns selection appearance.
 pub fn finish_page(app: &App, b: &mut B, page: Page, first_op: usize, first_target: usize) {
-    use mypaper_ui::Op;
+    use glaze_ui::Op;
     if !super::controls::relevant_docs(page)
         .iter()
         .any(|id| app.docs.doc(*id).issue.is_some())
@@ -186,7 +186,7 @@ pub fn reset_part(app: &mut App, doc: crate::docs::DocId, path: Option<&'static 
             DocId::Bars => "{\"version\":1}".into(),
             DocId::Widgets => format!(
                 "{{\"version\":{},\"instances\":[]}}",
-                mypaper_widgets::layout::VERSION
+                glaze_widgets::layout::VERSION
             ),
             _ => "{}".into(),
         }
@@ -288,7 +288,7 @@ pub fn banner(app: &App, b: &mut B, c: &mut Col, page: Page) {
     {
         let parsed = theme_source(app, wallpaper);
         let parse_error = parsed.as_deref().and_then(|source| {
-            mypaper_theme::LoadedTheme::parse(wallpaper.dir.clone(), source).err()
+            glaze_theme::LoadedTheme::parse(wallpaper.dir.clone(), source).err()
         });
         let newer = (error.contains("unknown field") || error.contains("unknown variant"))
             || error.contains("newer")
@@ -336,7 +336,7 @@ pub fn write_banners(app: &App, b: &mut B, c: &mut Col) {
             b,
             c,
             doc.filename(),
-            mypaper_ui::controls::key(("panel-save-reason", doc)),
+            glaze_ui::controls::key(("panel-save-reason", doc)),
             failure,
         );
     }
@@ -347,7 +347,7 @@ pub fn write_banners(app: &App, b: &mut B, c: &mut Col) {
             b,
             c,
             &format!("{name}/theme.json"),
-            mypaper_ui::controls::key(("panel-theme-reason", dir)),
+            glaze_ui::controls::key(("panel-theme-reason", dir)),
             failure,
         );
     }
@@ -358,15 +358,15 @@ fn failure_banner(
     b: &mut B,
     c: &mut Col,
     file: &str,
-    key: mypaper_ui::controls::Key,
+    key: glaze_ui::controls::Key,
     failure: &Failure,
 ) {
     use super::controls::{group, height, notice};
     group(b, c, "", |b, c| {
         let style = super::controls::font(b, 13.0, 600);
         b.icon(
-            mypaper_ui::Rect::new(c.x, c.y + b.px(2.0), b.px(16.0), height(b, 20.0)),
-            mypaper_ui::icons::Icon::Warning,
+            glaze_ui::Rect::new(c.x, c.y + b.px(2.0), b.px(16.0), height(b, 20.0)),
+            glaze_ui::icons::Icon::Warning,
             15.0,
             b.p.ink1,
         );
@@ -381,18 +381,18 @@ fn failure_banner(
         ) + b.px(8.0);
         notice(b, c, failure.outcome);
         let width = (c.w - b.px(8.0)) / 2.0;
-        let r = mypaper_ui::Rect::new(c.x, c.y, width, height(b, 30.0));
+        let r = glaze_ui::Rect::new(c.x, c.y, width, height(b, 30.0));
         b.button(
-            mypaper_ui::controls::key((key, "retry")),
+            glaze_ui::controls::key((key, "retry")),
             r,
             "Retry",
             None,
-            mypaper_ui::controls::ButtonKind::Secondary,
+            glaze_ui::controls::ButtonKind::Secondary,
             true,
             failure.retry.clone(),
         );
         b.button(
-            mypaper_ui::controls::key((key, "reason")),
+            glaze_ui::controls::key((key, "reason")),
             r.offset(width + b.px(8.0), 0.0),
             if app.is_open(key) {
                 "Hide reason"
@@ -400,7 +400,7 @@ fn failure_banner(
                 "Show reason"
             },
             None,
-            mypaper_ui::controls::ButtonKind::Secondary,
+            glaze_ui::controls::ButtonKind::Secondary,
             true,
             Action::More(key),
         );
@@ -439,7 +439,7 @@ pub fn reset_theme(app: &mut App, dir: &Path) {
     {
         return;
     }
-    let result = mypaper_config::user_themes_dir().and_then(|root| reset_file(dir, &root));
+    let result = glaze_config::user_themes_dir().and_then(|root| reset_file(dir, &root));
     match result {
         Ok(backup) => {
             theme_saved(app, dir);
@@ -467,10 +467,10 @@ fn reset_file(dir: &Path, user_root: &Path) -> Result<PathBuf> {
     if dir.parent() != Some(user_root.as_path()) {
         bail!("A built-in wallpaper cannot be reset; make a copy first");
     }
-    let file = dir.join(mypaper_theme::MANIFEST);
+    let file = dir.join(glaze_theme::MANIFEST);
     let bytes = std::fs::read(&file).context("reading theme.json")?;
     if let Ok(source) = std::str::from_utf8(&bytes)
-        && let Err(error) = mypaper_theme::LoadedTheme::parse(dir.clone(), source)
+        && let Err(error) = glaze_theme::LoadedTheme::parse(dir.clone(), source)
         && error.chain().any(|cause| {
             let message = cause.to_string();
             message.contains("unknown field") || message.contains("unknown variant")
@@ -490,7 +490,7 @@ fn reset_file(dir: &Path, user_root: &Path) -> Result<PathBuf> {
         wallpaper.remove("fit");
     }
     let text = serde_json::to_string_pretty(&root)? + "\n";
-    mypaper_theme::LoadedTheme::parse(dir.clone(), &text)
+    glaze_theme::LoadedTheme::parse(dir.clone(), &text)
         .context("checking the reset wallpaper")?;
     let backup = (1..)
         .map(|n| dir.join(format!("theme.json.{n}.bak")))
@@ -514,7 +514,7 @@ mod tests {
 
     #[test]
     fn a_save_failure_stays_pinned_across_pages_and_explains_its_effect() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         app.size = (360, 760);
@@ -531,8 +531,8 @@ mod tests {
         ] {
             app.panel.as_mut().unwrap().page = page;
             let built = super::super::build(&app, &mut ui.text);
-            assert!(built.list.ops.iter().any(|op| matches!(op, mypaper_ui::Op::Text { text, .. } if text.as_ref() == "Couldn't save config.json")), "{page:?}");
-            assert!(built.list.ops.iter().any(|op| matches!(op, mypaper_ui::Op::Text { text, .. } if text.as_ref() == "Change did not take effect")));
+            assert!(built.list.ops.iter().any(|op| matches!(op, glaze_ui::Op::Text { text, .. } if text.as_ref() == "Couldn't save config.json")), "{page:?}");
+            assert!(built.list.ops.iter().any(|op| matches!(op, glaze_ui::Op::Text { text, .. } if text.as_ref() == "Change did not take effect")));
             assert!(built.targets.iter().any(|target| target.action
                 == Action::Panel(Command::RetryDoc(crate::docs::DocId::Config))
                 && target.rect.top < 160.0));
@@ -543,7 +543,7 @@ mod tests {
 
     #[test]
     fn expanded_more_keeps_its_theme_contrast_instead_of_segment_text() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         for dark in [true, false] {
             let mut app = crate::goldens::app(dark, &ui);
             app.panel = Some(super::super::State::default());
@@ -561,7 +561,7 @@ mod tests {
             let built = super::super::build(&app, &mut ui.text);
             assert!(built.list.ops.iter().any(|op| matches!(
                 op,
-                mypaper_ui::Op::Text { text, color, .. }
+                glaze_ui::Op::Text { text, color, .. }
                     if text.as_ref() == "More"
                         && *color == super::super::palette_for(&app).ink2
             )));
@@ -570,7 +570,7 @@ mod tests {
 
     #[test]
     fn short_segment_labels_have_the_same_selected_fill() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         for dark in [true, false] {
             let mut app = crate::goldens::app(dark, &ui);
             app.panel = Some(super::super::State::default());
@@ -587,7 +587,7 @@ mod tests {
             assert_eq!(selected.checked, Some(true));
             assert!(built.list.ops.iter().any(|op| matches!(
                 op,
-                mypaper_ui::Op::Fill { rect, color, .. }
+                glaze_ui::Op::Fill { rect, color, .. }
                     if *rect == selected.rect && *color == super::super::palette_for(&app).selected
             )));
         }
@@ -596,7 +596,7 @@ mod tests {
     #[test]
     fn theme_reset_preserves_source_and_playback_keeps_a_backup_and_refuses_other_folders() {
         let root = std::env::temp_dir().join(format!(
-            "mypaper-panel-reset-{}-{}",
+            "glaze-panel-reset-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

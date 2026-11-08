@@ -11,7 +11,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{PCWSTR, w};
 
 /// The class of the bars' message-only window.
-const HOST_CLASS: PCWSTR = w!("mypaper.shell.inbox");
+const HOST_CLASS: PCWSTR = w!("glaze.shell.inbox");
 /// How long the bars get to restore the taskbar and exit before they're killed.
 pub const GRACE: Duration = Duration::from_secs(3);
 /// How long core waits for Explorer's desktop at logon before starting without it.
@@ -77,7 +77,7 @@ pub fn stop_leftover() -> anyhow::Result<bool> {
 
 /// Puts the native taskbar back from the journal, if the bars left one.
 pub fn replay_journal() {
-    match mypaper_bars::replay() {
+    match glaze_bars::replay() {
         Ok(true) => log::warn!("restored the native taskbar from the bars' journal"),
         Ok(false) => {}
         Err(e) => log::error!("restoring the native taskbar: {e:#}"),

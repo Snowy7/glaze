@@ -8,11 +8,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use mypaper_bars::BarsConfig;
-use mypaper_shell::preview as shell;
-use mypaper_ui::controls::key;
-use mypaper_ui::{DisplayList, Image, Op, Point, Rect, Rgba, Role, Ui};
-use mypaper_widgets::layout::{self, Grid, Layout, RectF};
+use glaze_bars::BarsConfig;
+use glaze_shell::preview as shell;
+use glaze_ui::controls::key;
+use glaze_ui::{DisplayList, Image, Op, Point, Rect, Rgba, Role, Ui};
+use glaze_widgets::layout::{self, Grid, Layout, RectF};
 use serde_json::{Value, json};
 
 use crate::actions::{Action, Bar, Slot};
@@ -74,7 +74,7 @@ pub struct Cache {
     pub picture: Option<Arc<Image>>,
     images: Option<shell::bars::Images>,
     /// The shell's app-icon service (names and icons of pinned apps), started on first use.
-    icons: Option<(mypaper_bars::icons::Icons, std::sync::mpsc::Receiver<mypaper_bars::wake::Msg>)>,
+    icons: Option<(glaze_bars::icons::Icons, std::sync::mpsc::Receiver<glaze_bars::wake::Msg>)>,
 }
 
 impl Cache {
@@ -88,18 +88,18 @@ impl Cache {
     }
 
     /// Share the existing asynchronous shell icon worker with the panel's app lists.
-    pub(crate) fn app_icon(&mut self, thread: u32, source: mypaper_bars::icons::Source) -> Option<PathBuf> {
+    pub(crate) fn app_icon(&mut self, thread: u32, source: glaze_bars::icons::Source) -> Option<PathBuf> {
         // Studio only needs the picture here, not a shell item's display name or launch
         // metadata. A warm PNG must not load a native shell provider just to rediscover it.
-        if let mypaper_bars::icons::Source::Path(path) = &source {
-            let cached = mypaper_bars::files::local("icons").ok()?
-                .join(mypaper_bars::icons::cache_name(&path.to_lowercase()));
+        if let glaze_bars::icons::Source::Path(path) = &source {
+            let cached = glaze_bars::files::local("icons").ok()?
+                .join(glaze_bars::icons::cache_name(&path.to_lowercase()));
             if cached.is_file() { return Some(cached); }
         }
         if self.icons.is_none() && thread != 0 {
             let (tx, rx) = std::sync::mpsc::channel();
-            let dir = mypaper_bars::files::local("icons").ok()?;
-            self.icons = Some((mypaper_bars::icons::Icons::new(mypaper_bars::wake::Waker::new(tx, thread), dir), rx));
+            let dir = glaze_bars::files::local("icons").ok()?;
+            self.icons = Some((glaze_bars::icons::Icons::new(glaze_bars::wake::Waker::new(tx, thread), dir), rx));
         }
         self.icons.as_mut()?.0.get(&source)?.icon.as_ref().map(PathBuf::from)
     }
@@ -109,7 +109,7 @@ impl Cache {
         let Some((icons, rx)) = &mut self.icons else { return false };
         let mut any = false;
         while let Ok(msg) = rx.try_recv() {
-            if let mypaper_bars::wake::Msg::Described(source, described) = msg {
+            if let glaze_bars::wake::Msg::Described(source, described) = msg {
                 icons.on_described(source, described);
                 any = true;
             }
@@ -162,9 +162,9 @@ pub fn prepare(app: &App, ui: &mut Ui, size: (u32, u32), show: Show) {
     cache.key = key;
     if cache.icons.is_none() && !app.fixture && app.thread != 0 {
         let (tx, rx) = std::sync::mpsc::channel();
-        let dir = mypaper_bars::files::local("icons").unwrap_or_default();
-        let waker = mypaper_bars::wake::Waker::new(tx, app.thread);
-        cache.icons = Some((mypaper_bars::icons::Icons::new(waker, dir), rx));
+        let dir = glaze_bars::files::local("icons").unwrap_or_default();
+        let waker = glaze_bars::wake::Waker::new(tx, app.thread);
+        cache.icons = Some((glaze_bars::icons::Icons::new(waker, dir), rx));
     }
     let Cache { images, icons, .. } = &mut *cache;
     let images = images.get_or_insert_with(shell::bars::Images::default);
@@ -176,7 +176,7 @@ fn build(
     app: &App,
     ui: &mut Ui,
     images: &mut shell::bars::Images,
-    icons: Option<&mut mypaper_bars::icons::Icons>,
+    icons: Option<&mut glaze_bars::icons::Icons>,
     size: (u32, u32),
     show: Show,
 ) -> Content {
@@ -207,8 +207,8 @@ fn build(
     if !app.system.running() || !app.system.parts[2].running {
         return out;
     }
-    let theme_dir = theme_name(&app.docs).and_then(|t| mypaper_theme::locate(Some(&t)).ok());
-    let loaded = theme_dir.as_deref().and_then(|d| mypaper_theme::LoadedTheme::load(d).ok());
+    let theme_dir = theme_name(&app.docs).and_then(|t| glaze_theme::locate(Some(&t)).ok());
+    let loaded = theme_dir.as_deref().and_then(|d| glaze_theme::LoadedTheme::load(d).ok());
     images.configure(
         app.get(DocId::Bars, "/icons").and_then(Value::as_str),
         theme_dir.clone().unwrap_or_default(),
@@ -221,7 +221,7 @@ fn build(
         if config.top.enabled && config.top.monitors.includes(&monitor.device, monitor.primary) {
             let tokens = shell::bars::Tokens::resolve(&config.top.look, &appearance, &system);
             let frame = shell::bars::top(size.0, &config, &model, &tokens, scale, ui, images, None);
-            let y = if config.top.position == mypaper_bars::config::TopPosition::Bottom {
+            let y = if config.top.position == glaze_bars::config::TopPosition::Bottom {
                 size.1 as f32 - frame.size.1 as f32
             } else {
                 0.0
@@ -235,10 +235,10 @@ fn build(
             let (w, h) = (frame.size.0 as f32, frame.size.1 as f32);
             let margin = config.dock.margin.unwrap_or(6.0) as f32 * scale;
             let (x, y) = match config.dock.position {
-                mypaper_bars::config::DockPosition::Bottom => ((size.0 as f32 - w) / 2.0, size.1 as f32 - h - margin),
-                mypaper_bars::config::DockPosition::Top => ((size.0 as f32 - w) / 2.0, margin),
-                mypaper_bars::config::DockPosition::Left => (margin, (size.1 as f32 - h) / 2.0),
-                mypaper_bars::config::DockPosition::Right => (size.0 as f32 - w - margin, (size.1 as f32 - h) / 2.0),
+                glaze_bars::config::DockPosition::Bottom => ((size.0 as f32 - w) / 2.0, size.1 as f32 - h - margin),
+                glaze_bars::config::DockPosition::Top => ((size.0 as f32 - w) / 2.0, margin),
+                glaze_bars::config::DockPosition::Left => (margin, (size.1 as f32 - h) / 2.0),
+                glaze_bars::config::DockPosition::Right => (size.0 as f32 - w - margin, (size.1 as f32 - h) / 2.0),
             };
             place_bar(&mut out, &mut bar_ops, &frame, (x.round(), y.round()), &tokens, Bar::Dock, &config);
         }
@@ -262,18 +262,18 @@ fn build(
 fn bar_base(
     app: &App,
     config: &BarsConfig,
-    loaded: Option<&mypaper_theme::LoadedTheme>,
-) -> (mypaper_theme::Appearance, mypaper_bars::accent::System) {
+    loaded: Option<&glaze_theme::LoadedTheme>,
+) -> (glaze_theme::Appearance, glaze_bars::accent::System) {
     let theme = loaded
         .and_then(|t| t.theme.bars.as_ref())
         .and_then(|s| s.appearance.clone())
         .unwrap_or_default();
-    let system = if app.fixture { fixed_accent() } else { mypaper_bars::accent::read() };
+    let system = if app.fixture { fixed_accent() } else { glaze_bars::accent::read() };
     (config.appearance.over(&theme), system)
 }
 
 /// The bars' config as this display sees it (overrides applied, pins resolved).
-fn bars_config(app: &App, monitor: &mypaper_desktop::Monitor) -> anyhow::Result<BarsConfig> {
+fn bars_config(app: &App, monitor: &glaze_desktop::Monitor) -> anyhow::Result<BarsConfig> {
     let text = serde_json::to_string(&app.docs.doc(DocId::Bars).raw)?;
     let mut config = BarsConfig::parse(&text)?.for_monitor(&monitor.device, monitor.primary)?;
     config.resolve(shell::bars::default_pins);
@@ -281,7 +281,7 @@ fn bars_config(app: &App, monitor: &mypaper_desktop::Monitor) -> anyhow::Result<
 }
 
 /// The pinned apps as dock items (no windows: a calm preview).
-fn dock_apps(config: &BarsConfig, mut icons: Option<&mut mypaper_bars::icons::Icons>) -> Vec<mypaper_bars::apps::Item> {
+fn dock_apps(config: &BarsConfig, mut icons: Option<&mut glaze_bars::icons::Icons>) -> Vec<glaze_bars::apps::Item> {
     config
         .dock
         .pinned
@@ -292,14 +292,14 @@ fn dock_apps(config: &BarsConfig, mut icons: Option<&mut mypaper_bars::icons::Ic
         .map(|pin| {
             let described = icons
                 .as_deref_mut()
-                .and_then(|i| i.get(&mypaper_bars::icons::Source::Path(pin.path.clone())).cloned());
+                .and_then(|i| i.get(&glaze_bars::icons::Source::Path(pin.path.clone())).cloned());
             let name = pin
                 .name
                 .clone()
                 .or_else(|| described.as_ref().and_then(|d| d.name.clone()))
-                .unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path));
-            mypaper_bars::apps::Item {
-                key: mypaper_bars::apps::pin_key(&pin.path),
+                .unwrap_or_else(|| glaze_bars::apps::file_stem(&pin.path));
+            glaze_bars::apps::Item {
+                key: glaze_bars::apps::pin_key(&pin.path),
                 name,
                 path: pin.path,
                 icon: described.and_then(|d| d.icon),
@@ -358,7 +358,7 @@ fn place_bar(
 }
 
 /// Where a module sits in the top bar's lists.
-fn slot_of(config: &BarsConfig, module: &mypaper_bars::ModuleRef) -> Option<Slot> {
+fn slot_of(config: &BarsConfig, module: &glaze_bars::ModuleRef) -> Option<Slot> {
     for (list, items) in [("left", &config.top.left), ("center", &config.top.center), ("right", &config.top.right)] {
         if let Some(index) = items.iter().position(|m| m == module) {
             return Some(Slot { bar: Bar::Top, list, index });
@@ -396,21 +396,21 @@ fn widgets(
     app: &App,
     ui: &mut Ui,
     out: &mut Content,
-    monitor: &mypaper_desktop::Monitor,
+    monitor: &glaze_desktop::Monitor,
     scale: f32,
-    theme: Option<&mypaper_theme::LoadedTheme>,
+    theme: Option<&glaze_theme::LoadedTheme>,
 ) {
     let text = serde_json::to_string(&app.docs.doc(DocId::Widgets).raw).unwrap_or_default();
     let Ok(layout) = Layout::parse(&text) else { return };
     let devices: Vec<String> = app.monitors.iter().map(|m| m.device.clone()).collect();
     let primary = app.monitors.iter().position(|m| m.primary).unwrap_or(0);
     let grid = grid_for(&layout, monitor);
-    let skin = mypaper_widgets::look::load_skin(theme.map(|t| t.dir.as_path()));
-    let base = mypaper_widgets::look::base(&skin);
-    let mut storage = mypaper_widgets::storage::Storage::new(if app.fixture {
-        std::env::temp_dir().join("mypaper-studio-fixture")
+    let skin = glaze_widgets::look::load_skin(theme.map(|t| t.dir.as_path()));
+    let base = glaze_widgets::look::base(&skin);
+    let mut storage = glaze_widgets::storage::Storage::new(if app.fixture {
+        std::env::temp_dir().join("glaze-studio-fixture")
     } else {
-        mypaper_widgets::files::user("widget-data").unwrap_or_default()
+        glaze_widgets::files::user("widget-data").unwrap_or_default()
     });
     
     out.grid = Some((grid, scale));
@@ -446,7 +446,7 @@ fn widgets(
             });
             continue;
         };
-        let appearance = mypaper_widgets::look::resolve(&instance.appearance, &layout.appearance, &base, mypaper_widgets::look::accent(None));
+        let appearance = glaze_widgets::look::resolve(&instance.appearance, &layout.appearance, &base, glaze_widgets::look::accent(None));
         let placed = layout::place(instance, manifest, &grid, &appearance);
         let r = grid.rect(placed.cell, placed.size);
         let rect = Rect::new(r.x as f32 * scale, r.y as f32 * scale, r.width as f32 * scale, r.height as f32 * scale);
@@ -468,11 +468,11 @@ fn widgets(
 fn widget(
     ui: &mut Ui,
     out: &mut Content,
-    placed: mypaper_widgets::layout::Placed,
-    storage: &mut mypaper_widgets::storage::Storage,
+    placed: glaze_widgets::layout::Placed,
+    storage: &mut glaze_widgets::storage::Storage,
     rect: Rect,
     scale: f32,
-    skin: &mypaper_widgets::look::Skin,
+    skin: &glaze_widgets::look::Skin,
     data: Option<Value>,
     fixture: bool,
 ) {
@@ -506,12 +506,12 @@ fn widget(
     out.ops.extend(offset(&list.ops, rect.left.round(), rect.top.round()));
     let surface = appearance.get("surface").and_then(Value::as_str).unwrap_or("glass");
     if !matches!(surface, "none" | "solid" | "tint") {
-        let liquid = mypaper_widgets::look::liquid(skin);
+        let liquid = glaze_widgets::look::liquid(skin);
         let tint = appearance
             .get("tint")
             .and_then(Value::as_str)
-            .and_then(mypaper_config::Color::parse)
-            .unwrap_or(mypaper_widgets::look::DEFAULT_TINT);
+            .and_then(glaze_config::Color::parse)
+            .unwrap_or(glaze_widgets::look::DEFAULT_TINT);
         let radius = appearance.get("radius").and_then(Value::as_f64).unwrap_or(22.0) as f32 * scale;
         out.shapes.push(Shape {
             rect,
@@ -532,22 +532,22 @@ fn specimen(
     ui: &mut Ui,
     out: &mut Content,
     scale: f32,
-    theme: Option<&mypaper_theme::LoadedTheme>,
+    theme: Option<&glaze_theme::LoadedTheme>,
 ) {
     // A 1280-wide virtual display, so the specimen reads at any size.
-    let monitor = &mypaper_desktop::Monitor {
+    let monitor = &glaze_desktop::Monitor {
         device: "specimen".into(),
-        rect: mypaper_desktop::Rect { x: 0, y: 0, width: 1280, height: (1280.0 * out.size.1 as f32 / out.size.0.max(1) as f32) as i32 },
-        work: mypaper_desktop::Rect { x: 0, y: 0, width: 1280, height: (1280.0 * out.size.1 as f32 / out.size.0.max(1) as f32) as i32 },
+        rect: glaze_desktop::Rect { x: 0, y: 0, width: 1280, height: (1280.0 * out.size.1 as f32 / out.size.0.max(1) as f32) as i32 },
+        work: glaze_desktop::Rect { x: 0, y: 0, width: 1280, height: (1280.0 * out.size.1 as f32 / out.size.0.max(1) as f32) as i32 },
         dpi: 96,
         primary: true,
     };
-    let skin = mypaper_widgets::look::load_skin(theme.map(|t| t.dir.as_path()));
-    let base = mypaper_widgets::look::base(&skin);
+    let skin = glaze_widgets::look::load_skin(theme.map(|t| t.dir.as_path()));
+    let base = glaze_widgets::look::base(&skin);
     let text = serde_json::to_string(&app.docs.doc(DocId::Widgets).raw).unwrap_or_default();
     let user = Layout::parse(&text).map(|l| l.appearance).unwrap_or_default();
-    let appearance = mypaper_widgets::look::resolve(&Default::default(), &user, &base, mypaper_widgets::look::accent(None));
-    let mut storage = mypaper_widgets::storage::Storage::new(std::env::temp_dir().join("mypaper-studio-specimen"));
+    let appearance = glaze_widgets::look::resolve(&Default::default(), &user, &base, glaze_widgets::look::accent(None));
+    let mut storage = glaze_widgets::storage::Storage::new(std::env::temp_dir().join("glaze-studio-specimen"));
     let grid = grid_for(&Layout::default(), monitor);
     let cell = |c: u32, r: u32, w: u32, h: u32| -> (Rect, [u32; 2], [u32; 2]) {
         let rr = grid.rect([c, r], [w, h]);
@@ -557,7 +557,7 @@ fn specimen(
             [w, h],
         )
     };
-    let placed = |id: &str, at: [u32; 2], size: [u32; 2]| -> Option<mypaper_widgets::layout::Placed> {
+    let placed = |id: &str, at: [u32; 2], size: [u32; 2]| -> Option<glaze_widgets::layout::Placed> {
         let manifest = &app.registry.get(id)?.manifest;
         let mut l = Layout::default();
         let instance = l.add(id, &monitor.device, at, size);
@@ -583,15 +583,15 @@ fn specimen(
     // The desktop menu, open in the middle.
     let mut menu_tokens = shell::menu::tokens(&theme_name(&app.docs).unwrap_or_default(), &ui.text);
     menu_tokens.shadow = false;
-    let items = shell::menu::build(&mypaper_config::DesktopMenu::default(), shell::menu::ViewState { icons_visible: true, ..Default::default() });
-    let layout = mypaper_ui::menu::layout(&items, &menu_tokens, scale, &mut ui.text);
-    let list: DisplayList = mypaper_ui::menu::view(&items, &layout, Some(7), &menu_tokens);
+    let items = shell::menu::build(&glaze_config::DesktopMenu::default(), shell::menu::ViewState { icons_visible: true, ..Default::default() });
+    let layout = glaze_ui::menu::layout(&items, &menu_tokens, scale, &mut ui.text);
+    let list: DisplayList = glaze_ui::menu::view(&items, &layout, Some(7), &menu_tokens);
     let (mx, my) = (out.size.0 as f32 * 0.42, out.size.1 as f32 * 0.32);
     out.ops.extend(offset(&list.ops, mx.round(), my.round()));
 }
 
 /// A widget grid for a display, as the shell computes it.
-pub fn grid_for(layout: &Layout, monitor: &mypaper_desktop::Monitor) -> Grid {
+pub fn grid_for(layout: &Layout, monitor: &glaze_desktop::Monitor) -> Grid {
     let scale = monitor.dpi as f64 / 96.0;
     Grid::new(
         &layout.grid,
@@ -636,10 +636,10 @@ fn icon_cell() -> [f64; 2] {
 }
 
 /// Goldens: a fixed accent (no machine settings).
-fn fixed_accent() -> mypaper_bars::accent::System {
-    mypaper_bars::accent::System {
+fn fixed_accent() -> glaze_bars::accent::System {
+    glaze_bars::accent::System {
         accent: std::array::from_fn(|_| "#5b8def".to_owned()),
-        scheme: mypaper_bars::accent::Scheme::Dark,
+        scheme: glaze_bars::accent::Scheme::Dark,
         animations: true,
     }
 }
@@ -647,7 +647,7 @@ fn fixed_accent() -> mypaper_bars::accent::System {
 /// Goldens: Thursday 5 November 2026, 10:42.
 fn fixed_stamp() -> shell::widgets::Stamp {
     shell::widgets::Stamp {
-        date: mypaper_ui::calendar::Date { year: 2026, month: 11, day: 5 },
+        date: glaze_ui::calendar::Date { year: 2026, month: 11, day: 5 },
         hour: 10,
         minute: 42,
         second: 0,
@@ -772,13 +772,13 @@ pub fn draw(app: &App, b: &mut B, frame: Rect, show: Show, pick: impl Fn(Option<
         })
         .collect();
     drop(cache);
-    b.hit(key("stage-wallpaper"), frame, Role::Image, "Wallpaper", pick(None), mypaper_ui::controls::Behavior::Click);
+    b.hit(key("stage-wallpaper"), frame, Role::Image, "Wallpaper", pick(None), glaze_ui::controls::Behavior::Click);
     for item in &items {
         let k = key(("stage", format!("{:?}", item.what)));
         let behavior = if matches!(item.what, What::Widget(_) | What::Module(_)) && show != Show::Desktop {
-            mypaper_ui::controls::Behavior::Drag
+            glaze_ui::controls::Behavior::Drag
         } else {
-            mypaper_ui::controls::Behavior::Click
+            glaze_ui::controls::Behavior::Click
         };
         b.hit(k, item.rect, Role::Button, &item.label, pick(Some(item)), behavior);
         if b.hovered(k) && show != Show::Specimen {

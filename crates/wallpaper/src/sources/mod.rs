@@ -21,7 +21,7 @@ mod wic;
 use std::time::Duration;
 
 use anyhow::Result;
-use mypaper_theme::{LoadedTheme, Wallpaper};
+use glaze_theme::{LoadedTheme, Wallpaper};
 use windows::Win32::Foundation::HWND;
 
 use crate::gpu::Gpu;
@@ -148,9 +148,9 @@ pub fn poster(gpu: &Gpu, theme: &LoadedTheme) -> Option<Box<dyn Source>> {
         .into_iter()
         .map(std::path::PathBuf::from)
         .find(|path| theme.asset(path).is_file())?;
-    let config = mypaper_theme::ImageWallpaper {
+    let config = glaze_theme::ImageWallpaper {
         source,
-        fit: mypaper_theme::Fit::Cover,
+        fit: glaze_theme::Fit::Cover,
     };
     image::ImageSource::new(gpu, theme, &config)
         .inspect_err(|e| log::warn!("wallpaper poster: {e:#}"))

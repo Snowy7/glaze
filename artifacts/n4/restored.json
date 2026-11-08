@@ -1,15 +1,15 @@
 {
     "processes":  [
                       {
-                          "Name":  "mypaper-core",
+                          "Name":  "glaze-core",
                           "Id":  85680
                       },
                       {
-                          "Name":  "mypaper-shell",
+                          "Name":  "glaze-shell",
                           "Id":  76396
                       },
                       {
-                          "Name":  "mypaper-wallpaper",
+                          "Name":  "glaze-wallpaper",
                           "Id":  78588
                       }
                   ],

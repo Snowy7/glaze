@@ -1,7 +1,7 @@
 //! Settings actions, desktop menu transactions and recovery confirmations.
 
-use mypaper_config::desktop_menu::{Builtin, Entry, default_items};
-use mypaper_ui::controls::key;
+use glaze_config::desktop_menu::{Builtin, Entry, default_items};
+use glaze_ui::controls::key;
 use serde_json::{Value, json};
 
 use crate::actions::{Action, FieldId};
@@ -46,7 +46,7 @@ pub fn run(app: &mut App, action: Action) {
                         app.alert("Give your item a name and a program");
                         return;
                     }
-                    items.push(Entry::Custom(mypaper_config::desktop_menu::Custom {
+                    items.push(Entry::Custom(glaze_config::desktop_menu::Custom {
                         label,
                         command,
                         args: vec![],
@@ -110,7 +110,7 @@ pub fn run(app: &mut App, action: Action) {
                 // The current layout version: an older one would be upgraded (and refused) again.
                 DocId::Widgets => format!(
                     "{{ \"version\": {}, \"instances\": [] }}\n",
-                    mypaper_widgets::layout::VERSION
+                    glaze_widgets::layout::VERSION
                 ),
                 _ => "{}\n".to_owned(),
             };

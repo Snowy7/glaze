@@ -3,8 +3,8 @@
 //! refreshes every 15 minutes while a face is placed and keeps the last forecast across unloads.
 use std::collections::BTreeMap;
 
-use mypaper_plugin_sdk::guest::{self, Event, FaceOpen, Plugin, SizeClass, timers, ui};
-use mypaper_plugin_sdk::{Align, Role, Tone, View};
+use glaze_plugin_sdk::guest::{self, Event, FaceOpen, Plugin, SizeClass, timers, ui};
+use glaze_plugin_sdk::{Align, Role, Tone, View};
 use serde::{Deserialize, Serialize};
 
 const REFRESH_MS: u32 = 15 * 60 * 1000;
@@ -212,4 +212,4 @@ impl Plugin for Weather {
     }
 }
 
-mypaper_plugin_sdk::export!(Weather);
+glaze_plugin_sdk::export!(Weather);

@@ -10,19 +10,19 @@ $InstallDirectory = (Resolve-Path -LiteralPath $InstallDirectory).Path
 $ProbePath = (Resolve-Path -LiteralPath $ProbePath).Path
 $EvidenceDirectory = [IO.Path]::GetFullPath($EvidenceDirectory)
 New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 while (-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) {
     Start-Sleep -Milliseconds 250
 }
-$appId = 'mypaper.NotificationTest.' + [Guid]::NewGuid().ToString('N')
+$appId = 'glaze.NotificationTest.' + [Guid]::NewGuid().ToString('N')
 $probe = Join-Path $InstallDirectory ('notification-check-' + [Guid]::NewGuid().ToString('N') + '.exe')
 $observer = $null
 $output = Join-Path $EvidenceDirectory 'provider-live.jsonl'
 $errors = Join-Path $EvidenceDirectory 'provider-stderr.txt'
 try {
-    Get-Process mypaper-* -ErrorAction SilentlyContinue | Select-Object ProcessName, Id, Path | Format-Table -AutoSize | Out-Host
+    Get-Process glaze-* -ErrorAction SilentlyContinue | Select-Object ProcessName, Id, Path | Format-Table -AutoSize | Out-Host
     Copy-Item -LiteralPath $ProbePath -Destination $probe
-    $exeManifest = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'crates\shell\mypaper-shell.manifest'
+    $exeManifest = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'crates\shell\glaze-shell.manifest'
     Invoke-PackageTool (Get-SdkTool 'mt.exe') @('-nologo', '-manifest', $exeManifest, "-outputresource:$probe;#1")
     & $probe notifications --registration-only | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'packaged-registration.jsonl') -Encoding UTF8
     $arguments = @('notifications','--live','--runs=1','--seconds=60','--baseline-seconds=60',"--watch-aumid=$appId",'--watch-seconds=12')

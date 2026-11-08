@@ -42,7 +42,7 @@ try {
             $bitmap.Save((Join-Path $staging "Assets\$($asset[0]).png"), [Drawing.Imaging.ImageFormat]::Png)
         } finally { $graphics.Dispose(); $bitmap.Dispose() }
     }
-    $package = Join-Path $OutputDirectory 'mypaper.Desktop.msix'
+    $package = Join-Path $OutputDirectory 'glaze.Desktop.msix'
     Invoke-PackageTool (Get-SdkTool 'makeappx.exe') @('pack', '/o', '/nv', '/d', $staging, '/p', $package)
     & "$PSScriptRoot\sign.ps1" -PackagePath $package -CertificateThumbprint $CertificateThumbprint -TimestampUrl $TimestampUrl
     $package

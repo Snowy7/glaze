@@ -1,5 +1,5 @@
-//! Win32 plumbing shared by mypaper processes. Everything is event-driven,
-//! with no polling threads, so an idle mypaper costs ~0% CPU.
+//! Win32 plumbing shared by Glaze processes. Everything is event-driven,
+//! with no polling threads, so an idle Glaze costs ~0% CPU.
 
 mod config_watch;
 mod control;
@@ -48,7 +48,7 @@ use windows::core::BOOL;
 
 /// Debug builds log to the console. Release builds have no console (they
 /// use the Windows subsystem so double-clicking opens no terminal), so they
-/// append to `%LOCALAPPDATA%\mypaper\mypaper.log`. Filter with `RUST_LOG`.
+/// append to `%LOCALAPPDATA%\glaze\glaze.log`. Filter with `RUST_LOG`.
 pub fn init_logging() {
     let env = env_logger::Env::default().default_filter_or("info");
     let mut builder = env_logger::Builder::from_env(env);
@@ -87,9 +87,9 @@ fn install_panic_hook() {
 
 fn log_file() -> Option<std::fs::File> {
     const MAX_BYTES: u64 = 4 << 20;
-    let dir = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("mypaper");
+    let dir = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("glaze");
     std::fs::create_dir_all(&dir).ok()?;
-    let path = dir.join("mypaper.log");
+    let path = dir.join("glaze.log");
     let too_big = std::fs::metadata(&path).is_ok_and(|m| m.len() > MAX_BYTES);
     let mut options = std::fs::OpenOptions::new();
     options.create(true);

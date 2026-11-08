@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use mypaper_desktop::{EXIT_CONFIG, EXIT_RESTART};
+use glaze_desktop::{EXIT_CONFIG, EXIT_RESTART};
 
 /// Crashes counted within this window decide the backoff.
 const CRASH_WINDOW: Duration = Duration::from_secs(60);

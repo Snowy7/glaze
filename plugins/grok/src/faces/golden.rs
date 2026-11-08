@@ -55,7 +55,7 @@ fn faces_match_the_view_golden() {
     }
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("golden/faces.json");
     let actual = serde_json::to_string_pretty(&out).unwrap() + "\n";
-    if std::env::var_os("MYPAPER_BLESS").is_some() {
+    if std::env::var_os("GLAZE_BLESS").is_some() {
         std::fs::write(&path, &actual).unwrap();
     }
     assert_eq!(

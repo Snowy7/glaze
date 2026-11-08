@@ -1,4 +1,4 @@
-//! `%APPDATA%\mypaper\bars.json`: which bars show where, their designs, layout, modules, look and
+//! `%APPDATA%\glaze\bars.json`: which bars show where, their designs, layout, modules, look and
 //! motion, the dock's pins and the native taskbar's mode (docs/bars.md, "Config").
 //!
 //! Every field is optional and unknown fields are errors. The file is merged over its preset and
@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use mypaper_theme::Appearance;
+use glaze_theme::Appearance;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 
@@ -25,9 +25,9 @@ use crate::style::{BorderStyle, ColorRef, Look, Motion, Paint, check};
 
 pub const FILE: &str = "bars.json";
 
-/// `%APPDATA%\mypaper\bars.json`.
+/// `%APPDATA%\glaze\bars.json`.
 pub fn path() -> Result<PathBuf> {
-    Ok(mypaper_config::dir()?.join(FILE))
+    Ok(glaze_config::dir()?.join(FILE))
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -52,7 +52,7 @@ pub struct BarsConfig {
     pub animation: Motion,
     /// Per module (`clock`, `custom:<id>`…): click actions, style, icon; a custom module's command.
     pub modules: BTreeMap<ModuleRef, ModuleOptions>,
-    /// An icon pack: a folder under `%APPDATA%\mypaper\icons\`, or a bundled one (`mono`).
+    /// An icon pack: a folder under `%APPDATA%\glaze\icons\`, or a bundled one (`mono`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icons: Option<String>,
     /// Blur and animation off: `on`, `off`, or `auto` (on battery).

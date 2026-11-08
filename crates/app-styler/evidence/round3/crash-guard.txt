@@ -5,15 +5,15 @@
 08:03:22.280 round 2: ended 82992
 08:03:32.348 marker exists: True; explorer processes now: 76024
 08:03:32.490 --- helper log
-08:03:32.923   [2026-11-06T05:03:09Z INFO  mypaper_styler::helper::attach] attached to 15596 (WinUI 3, WinUIVisualDiagConnection1)
-08:03:33.037   [2026-11-06T05:03:09Z INFO  mypaper_styler::helper::run] styling explorer (15596, WinUI 3)
-08:03:33.080   [2026-11-06T05:03:11Z INFO  mypaper_styler::helper::run] explorer (15596) exited with 0xffffffff
-08:03:33.106   [2026-11-06T05:03:11Z WARN  mypaper_styler::helper::run] explorer crashed 3.016509s after we attached (1 of 2)
-08:03:33.108   [2026-11-06T05:03:20Z INFO  mypaper_styler::helper::attach] attached to 82992 (WinUI 3, WinUIVisualDiagConnection1)
-08:03:33.132   [2026-11-06T05:03:20Z INFO  mypaper_styler::helper::run] styling explorer (82992, WinUI 3)
-08:03:33.136   [2026-11-06T05:03:22Z INFO  mypaper_styler::helper::run] explorer (82992) exited with 0xffffffff
-08:03:33.153   [2026-11-06T05:03:22Z WARN  mypaper_styler::helper::run] explorer crashed 2.8444733s after we attached (2 of 2)
-08:03:33.252   [2026-11-06T05:03:22Z ERROR mypaper_styler::helper::run] not styling explorer again this session
+08:03:32.923   [2026-11-06T05:03:09Z INFO  glaze_styler::helper::attach] attached to 15596 (WinUI 3, WinUIVisualDiagConnection1)
+08:03:33.037   [2026-11-06T05:03:09Z INFO  glaze_styler::helper::run] styling explorer (15596, WinUI 3)
+08:03:33.080   [2026-11-06T05:03:11Z INFO  glaze_styler::helper::run] explorer (15596) exited with 0xffffffff
+08:03:33.106   [2026-11-06T05:03:11Z WARN  glaze_styler::helper::run] explorer crashed 3.016509s after we attached (1 of 2)
+08:03:33.108   [2026-11-06T05:03:20Z INFO  glaze_styler::helper::attach] attached to 82992 (WinUI 3, WinUIVisualDiagConnection1)
+08:03:33.132   [2026-11-06T05:03:20Z INFO  glaze_styler::helper::run] styling explorer (82992, WinUI 3)
+08:03:33.136   [2026-11-06T05:03:22Z INFO  glaze_styler::helper::run] explorer (82992) exited with 0xffffffff
+08:03:33.153   [2026-11-06T05:03:22Z WARN  glaze_styler::helper::run] explorer crashed 2.8444733s after we attached (2 of 2)
+08:03:33.252   [2026-11-06T05:03:22Z ERROR glaze_styler::helper::run] not styling explorer again this session
 08:03:33.283 --- TAP log (survivors)
 08:03:33.311   [tap 76024] the helper stopped styling this app (crash guard)
 08:03:33.321   [tap 76024] restoring 16 element(s) on 3 thread(s) (2712 known; 0 removal(s) of elements never seen)

@@ -1,4 +1,4 @@
-Grok Bot runs as `grok.wasm` in mypaper's shared Wasmtime helper. Build it with
+Grok Bot runs as `grok.wasm` in Glaze's shared Wasmtime helper. Build it with
 `powershell -NoProfile -File scripts/build-plugins.ps1`; its Rust workspace is independent of
 the desktop workspace.
 

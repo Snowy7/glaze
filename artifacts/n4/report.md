@@ -10,7 +10,7 @@ The final evidence/check commit follows these three; it also forwards input-lang
 windowless RichEdit while preserving normal HWND language-context handling.
 
 The shell contains 17 compiled widget ids, native edit mode and one shared media implementation.
-`mypaper-widgets` is a services library; core no longer starts its executable. The HTML widget
+`glaze-widgets` is a services library; core no longer starts its executable. The HTML widget
 folders, SDK, widget WebView host/environment, CSS plates and widget backdrop request producer are
 deleted. Weather is linked and uses bounded blocking WinHTTP on a sleeping worker. Existing layout,
 settings, per-instance storage, shared activity and replacement ids are retained.
@@ -71,7 +71,7 @@ the successful Arabic/CJK check uses native Unicode keyboard events. RichEdit's 
 bidirectional drawing and no-redraw-feedback contract have component tests.
 
 The fixture's guards restore the media, minimized apps, focus and cursor changes it owns.
-The fixture never stops a mypaper process. The original core executable was restarted under the
+The fixture never stops a Glaze process. The original core executable was restarted under the
 lock after the last fixture. After another agent's perf/plates run, the final locked restoration
 confirmed core, native shell and wallpaper running (`restored.json`). The existing `bars.json`
 requests taskbar mode `hide`, and N2's running shell actively enforces it. The stock taskbar was
@@ -89,7 +89,7 @@ WASAPI cost and sampler profiling); the sampler profile was run separately. The 
 test is ignored by default because CI has no user's data.
 
 Strict `cargo clippy --all-targets -- -D warnings` passes for UI, widgets, weather and shell.
-`cargo check -p mypaper-core`, `cargo check -p mypaper-wallpaper`, Studio's Rust check and
+`cargo check -p glaze-core`, `cargo check -p glaze-wallpaper`, Studio's Rust check and
 `pnpm typecheck` pass. Studio dependencies were installed from the frozen lockfile without scripts.
 No dev server was started. Release fixture builds were used only for the requested live tests.
 
@@ -123,7 +123,7 @@ No dev server was started. Release fixture builds were used only for the request
   `fact(usize, isize)`, `on_event(&mut Ui, SurfaceId, &Event)`, `poll(&mut Ui)`, `timeout_ms() -> u32`,
   `timer_handle() -> HANDLE`, `frame_ready()`. Inbox `WM_APP + 100/101/102/103` means edit / overlay /
   layout reload / service data. Internal lParam is 0 off, 1 on, 2 toggle; legacy registered messages
-  carry that value in wParam to class `mypaper.widgets.host`.
+  carry that value in wParam to class `glaze.widgets.host`.
 - `Kind::DesktopChild { parent: HWND }`; `Surface::keep_above_desktop() -> Result<bool>`,
   `raise_in_desktop_band() -> Result<()>`, `desktop_order_valid() -> bool`.
 - `glass::publish(monitor: &str, plates: &[Plate])`;

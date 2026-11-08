@@ -43,5 +43,5 @@ You change no code. Cap: 75 minutes.
    plans, timer resolution, Game DVR), what's placebo, which need admin, and what a desktop
    customizer must do to cost exactly nothing while a game runs.
 
-End with a table: each feature mypaper could offer here, how, needs admin or not, needs injection
+End with a table: each feature Glaze could offer here, how, needs admin or not, needs injection
 or not, where it belongs (native service, plugin, experimental), and a rough size.

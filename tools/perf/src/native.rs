@@ -79,7 +79,7 @@ struct Sample {
 }
 
 pub fn run() -> Result<bool> {
-    mypaper_desktop::enable_dpi_awareness();
+    glaze_desktop::enable_dpi_awareness();
     let args: Vec<_> = std::env::args().collect();
     let option = |name: &str| {
         args.iter()
@@ -114,16 +114,16 @@ pub fn run() -> Result<bool> {
     let stage = build.join("native-stage");
     std::fs::create_dir_all(&stage)?;
     std::fs::copy(
-        build.join("mypaper-wallpaper.exe"),
-        stage.join("mypaper-wallpaper.exe"),
+        build.join("glaze-wallpaper.exe"),
+        stage.join("glaze-wallpaper.exe"),
     )?;
     std::fs::copy(
         build.join("examples/plates.exe"),
-        stage.join("mypaper-plates.exe"),
+        stage.join("glaze-plates.exe"),
     )?;
     let local = PathBuf::from(std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA")?);
-    let lock = local.join("Temp/mypaper-tools/desktop.lock");
-    let refresh_hz: Vec<_> = mypaper_desktop::monitor_infos()
+    let lock = local.join("Temp/glaze-tools/desktop.lock");
+    let refresh_hz: Vec<_> = glaze_desktop::monitor_infos()
         .iter()
         .map(|monitor| {
             use windows::Win32::Graphics::Gdi::{
@@ -157,19 +157,19 @@ pub fn run() -> Result<bool> {
     for run in 0..runs {
         let session = Session::begin(&lock, &stage, None)?;
         let desktop = DesktopView::uncover();
-        let monitors = mypaper_desktop::monitors();
+        let monitors = glaze_desktop::monitors();
         ensure!(
             monitors.len() == 2 && monitors.iter().all(|m| (m.width, m.height) == (2560, 1440)),
             "N0.3 requires two 2560x1440 monitors: {monitors:?}"
         );
         ensure!(
-            mypaper_desktop::covered_monitors(&monitors)
+            glaze_desktop::covered_monitors(&monitors)
                 .iter()
                 .all(|c| !c),
             "screens remain covered"
         );
         let env = stage.join(format!("env-{run}"));
-        let settings = env.join("appdata/mypaper");
+        let settings = env.join("appdata/Glaze");
         std::fs::create_dir_all(&settings)?;
         std::fs::create_dir_all(env.join("local"))?;
         std::fs::write(
@@ -180,7 +180,7 @@ pub fn run() -> Result<bool> {
             .iter()
             .any(|a| a == "--timestamps")
             .then(|| output.with_extension(format!("run{run}.jsonl")));
-        let mut command = Command::new(stage.join("mypaper-wallpaper.exe"));
+        let mut command = Command::new(stage.join("glaze-wallpaper.exe"));
         command
             .arg(content.join("themes").join(&theme))
             .env("APPDATA", env.join("appdata"))
@@ -189,13 +189,13 @@ pub fn run() -> Result<bool> {
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         if let Some(path) = &timing_file {
-            command.env("MYPAPER_GPU_TIMINGS", path);
+            command.env("GLAZE_GPU_TIMINGS", path);
         }
         if args.iter().any(|a| a == "--composition") {
-            command.env("MYPAPER_COMPOSITION_TIMING", "1");
+            command.env("GLAZE_COMPOSITION_TIMING", "1");
         }
         let mut engine = Running(command.spawn()?);
-        let mut writer_command = Command::new(stage.join("mypaper-plates.exe"));
+        let mut writer_command = Command::new(stage.join("glaze-plates.exe"));
         writer_command
             .args([
                 "--seconds",
@@ -232,14 +232,14 @@ pub fn run() -> Result<bool> {
                 &mut engine,
                 &mut command,
                 &settings.join("config.json"),
-                &env.join("local/mypaper/mypaper.log"),
+                &env.join("local/glaze/glaze.log"),
                 timing_file.as_deref(),
             )?;
         }
         ensure!(
             engine.0.try_wait()?.is_none(),
             "engine exited: inspect {}",
-            env.join("local/mypaper/mypaper.log").display()
+            env.join("local/glaze/glaze.log").display()
         );
         let handle = procs::Handle::query(engine.0.id()).context("query engine")?;
         let before = handle.times().context("engine times")?;
@@ -257,7 +257,7 @@ pub fn run() -> Result<bool> {
         // Check actual visibility each second; never pass a paused/covered sample as two-screen.
         for _ in 0..seconds {
             std::thread::sleep(Duration::from_secs(1));
-            if mypaper_desktop::covered_monitors(&monitors)
+            if glaze_desktop::covered_monitors(&monitors)
                 .iter()
                 .any(|c| *c)
             {
@@ -376,7 +376,7 @@ fn exercise_settings(
             std::thread::sleep(Duration::from_millis(50));
         };
         ensure!(
-            status.code() == Some(i32::from(mypaper_desktop::EXIT_RESTART)),
+            status.code() == Some(i32::from(glaze_desktop::EXIT_RESTART)),
             "unexpected GPU restart exit: {status}"
         );
         if gpu == "high-performance"

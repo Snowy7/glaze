@@ -1,4 +1,4 @@
-// Repeatable headless comparison against the same immutable mypaper runtime sources.
+// Repeatable headless comparison against the same immutable Glaze runtime sources.
 import { spawnSync } from 'node:child_process';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +30,7 @@ if (!values['rust-component']) {
   check('cargo', ['build', '--release', '--locked', '--target', 'wasm32-wasip2', '--manifest-path', 'bench/.source/hello/Cargo.toml', '--target-dir', 'bench/target/guest']);
 }
 check('cargo', ['build', '--release', '--locked', '--manifest-path', 'bench/Cargo.toml', '--target-dir', 'bench/target'], {
-  env: { ...process.env, MYPAPER_PROBE_MEMORY_MB: '32' },
+  env: { ...process.env, GLAZE_PROBE_MEMORY_MB: '32' },
 });
 
 const fixtures = [
@@ -57,7 +57,7 @@ const data = {
   probeOverrides: { maxCoreInstanceBytes: 512 * 1024, maxComponentInstanceBytes: 512 * 1024, linearMemoryCapBytes: 32 * 1024 * 1024 },
   fixtures: {},
 };
-const probe = fileURLToPath(new URL('bench/target/release/mypaper-ts-probe.exe', sdk));
+const probe = fileURLToPath(new URL('bench/target/release/glaze-ts-probe.exe', sdk));
 for (const fixture of fixtures) {
   const samples = [];
   for (let run = 0; run < (fixture.id === 'abi' ? 1 : runs); run++) {
@@ -78,7 +78,7 @@ for (const fixture of fixtures) {
   data.fixtures[fixture.id] = { sha256: createHash('sha256').update(wasm).digest('hex'), samples, median };
 }
 // Compare the finished SDK and StarlingMonkey against the actual production helper too.
-const helper = fileURLToPath(new URL('../../target/release/mypaper-plugins.exe', sdk));
+const helper = fileURLToPath(new URL('../../target/release/glaze-plugins.exe', sdk));
 data.production = {};
 for (const id of ['starling', 'quickjs-sdk']) {
   const result = command(helper, ['--bench', `measurements/stock/${id}`]);

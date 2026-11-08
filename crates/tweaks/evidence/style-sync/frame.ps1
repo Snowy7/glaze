@@ -26,7 +26,7 @@ $expected = Get-Content -Raw -LiteralPath $ExpectedFile | ConvertFrom-Json
 $frame = New-Object StyleSyncFrame
 $bitmap = $null; $graphics = $null
 try {
-  $frame.Text = "mypaper $($expected.style) / $($expected.appearance) - native DWM frame"
+  $frame.Text = "Glaze $($expected.style) / $($expected.appearance) - native DWM frame"
   $frame.ShowInTaskbar = $false
   $frame.StartPosition = 'Manual'
   $screen = [Windows.Forms.Screen]::AllScreens | Where-Object { -not $_.Primary } | Select-Object -First 1

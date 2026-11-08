@@ -1,11 +1,11 @@
 validate-live.ps1 PowerShell syntax: pass
-> cargo clippy -p mypaper-ui -p mypaper-widgets -p mypaper-integrations -p mypaper-shell --lib -- -D warnings
+> cargo clippy -p glaze-ui -p glaze-widgets -p glaze-integrations -p glaze-shell --lib -- -D warnings
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
 exit_code=0
-> cargo clippy -p mypaper-shell --bin mypaper-shell --example mypaper-widget-fixture -- -D warnings
-    Checking mypaper-shell v0.1.0 (C:\Users\you\.t3\worktrees\wallpaper\t3-dcf0a0a7\crates\shell)
+> cargo clippy -p glaze-shell --bin glaze-shell --example glaze-widget-fixture -- -D warnings
+    Checking glaze-shell v0.1.0 (C:\Users\you\.t3\worktrees\wallpaper\t3-dcf0a0a7\crates\shell)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.06s
 exit_code=0
-> cargo clippy -p mypaper-studio -- -D warnings
+> cargo clippy -p glaze-studio -- -D warnings
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.26s
 exit_code=0

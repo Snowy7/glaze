@@ -1,4 +1,4 @@
-//! The machine side: mypaper's three processes (core, the engine, the shell) with their state,
+//! The machine side: Glaze's three processes (core, the engine, the shell) with their state,
 //! memory and CPU; starting, stopping and restarting them; Start with Windows; the graphics
 //! cards; diagnostics; and opening files. Live numbers are polled only while someone looks.
 
@@ -24,11 +24,11 @@ use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_QUIT};
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 
-/// mypaper's parts: what Troubleshoot lists.
+/// Glaze's parts: what Troubleshoot lists.
 pub const PARTS: [(&str, &str); 3] = [
-    ("core", "mypaper-core.exe"),
-    ("engine", "mypaper-wallpaper.exe"),
-    ("shell", "mypaper-shell.exe"),
+    ("core", "glaze-core.exe"),
+    ("engine", "glaze-wallpaper.exe"),
+    ("shell", "glaze-shell.exe"),
 ];
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -68,7 +68,7 @@ const POLL: Duration = Duration::from_secs(3);
 impl System {
     pub fn probe() -> Self {
         let mut s = Self {
-            core_path: find_exe("mypaper-core.exe"),
+            core_path: find_exe("glaze-core.exe"),
             ..Self::default()
         };
         s.refresh();
@@ -98,7 +98,7 @@ impl System {
                 ("NVIDIA GeForce RTX 4060 Laptop GPU".into(), false),
             ]),
             display_gpu: Some("Intel Iris Xe Graphics".into()),
-            core_path: Some(PathBuf::from("C:\\Program Files\\mypaper\\mypaper-core.exe")),
+            core_path: Some(PathBuf::from("C:\\Program Files\\glaze\\glaze-core.exe")),
         }
     }
 
@@ -106,7 +106,7 @@ impl System {
         self.parts[0].running
     }
 
-    /// mypaper's whole cost: CPU (percent of one core) and private MB.
+    /// Glaze's whole cost: CPU (percent of one core) and private MB.
     pub fn total(&self) -> (f32, f32) {
         self.parts
             .iter()
@@ -158,7 +158,7 @@ impl System {
     /// The graphics cards, read once (adapter enumeration creates no device).
     pub fn gpus(&mut self) -> &[(String, bool)] {
         if self.gpus.is_none() {
-            self.display_gpu = mypaper_desktop::display_gpu::display_adapter().map(|a| a.name);
+            self.display_gpu = glaze_desktop::display_gpu::display_adapter().map(|a| a.name);
         }
         self.gpus.get_or_insert_with(adapters)
     }
@@ -251,10 +251,10 @@ pub fn find_exe(name: &str) -> Option<PathBuf> {
 
 /// Starts core (it reads `config.json` itself); nothing if it's running.
 pub fn start() -> Result<()> {
-    if processes().iter().any(|(_, n)| n.eq_ignore_ascii_case("mypaper-core.exe")) {
+    if processes().iter().any(|(_, n)| n.eq_ignore_ascii_case("glaze-core.exe")) {
         return Ok(());
     }
-    let exe = find_exe("mypaper-core.exe").context("mypaper-core.exe isn't installed beside Studio")?;
+    let exe = find_exe("glaze-core.exe").context("glaze-core.exe isn't installed beside Studio")?;
     let mut child = Command::new(&exe)
         .current_dir(exe.parent().unwrap_or(Path::new(".")))
         .stdin(Stdio::null())
@@ -266,16 +266,16 @@ pub fn start() -> Result<()> {
     // Core exits at once on a bad config or a second instance: say so.
     std::thread::sleep(Duration::from_millis(400));
     if let Some(exit) = child.try_wait()? {
-        bail!("mypaper stopped right away ({exit}); Open logs in Troubleshoot says why");
+        bail!("Glaze stopped right away ({exit}); Open logs in Troubleshoot says why");
     }
     Ok(())
 }
 
 /// Starts Studio again once this one has quit: a hidden PowerShell waits for this process, then
-/// starts `mypaper-studio.exe` beside it (which a deploy may have replaced meanwhile). The
+/// starts `glaze-studio.exe` beside it (which a deploy may have replaced meanwhile). The
 /// caller quits right after.
 pub fn restart_studio() -> Result<()> {
-    let exe = std::env::current_exe()?.with_file_name("mypaper-studio.exe");
+    let exe = std::env::current_exe()?.with_file_name("glaze-studio.exe");
     let path = exe.display().to_string().replace('\'', "''");
     let pid = std::process::id();
     Command::new("powershell.exe")
@@ -305,7 +305,7 @@ pub fn stop() -> Result<()> {
             .collect::<Vec<_>>()
     };
     for (pid, name) in ours() {
-        if name.eq_ignore_ascii_case("mypaper-core.exe") {
+        if name.eq_ignore_ascii_case("glaze-core.exe") {
             post_quit(pid);
         }
     }
@@ -331,7 +331,7 @@ pub fn restart(part: &str) -> Result<()> {
         return start();
     }
     let Some((pid, _)) = processes().into_iter().find(|(_, n)| n.eq_ignore_ascii_case(exe)) else {
-        bail!("the {part} isn't running; Start mypaper starts it");
+        bail!("the {part} isn't running; Start Glaze starts it");
     };
     terminate(pid)
 }
@@ -396,7 +396,7 @@ pub fn restore_desktop() {
 
 /// Start with Windows, from core's `--autostart` (the source of truth).
 pub fn autostart(command: &str) -> Result<Autostart> {
-    let core = find_exe("mypaper-core.exe").context("mypaper-core.exe isn't installed beside Studio")?;
+    let core = find_exe("glaze-core.exe").context("glaze-core.exe isn't installed beside Studio")?;
     let output = Command::new(&core)
         .args(["--autostart", command])
         .creation_flags(CREATE_NO_WINDOW)
@@ -411,7 +411,7 @@ pub fn autostart(command: &str) -> Result<Autostart> {
 
 /// Versions, parts, graphics and the settings files' validity; no personal paths.
 pub fn diagnostics(app: &crate::app::App) -> String {
-    let mut out = format!("mypaper Studio {}\n", env!("CARGO_PKG_VERSION"));
+    let mut out = format!("Glaze Studio {}\n", env!("CARGO_PKG_VERSION"));
     for ((name, _), part) in PARTS.iter().zip(app.system.parts) {
         out += &format!(
             "{name}: {} {:.0} MB {:.1}% CPU\n",
@@ -482,7 +482,7 @@ pub fn reveal(path: &Path) {
 
 pub fn open_logs() {
     if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
-        let log = PathBuf::from(dir).join("mypaper").join("mypaper.log");
+        let log = PathBuf::from(dir).join("glaze").join("glaze.log");
         if log.exists() {
             reveal(&log);
         } else if let Some(parent) = log.parent() {

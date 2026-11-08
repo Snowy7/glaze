@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let base = sample_src(uv);
     let sky = 1.0 - smoothstep(clamp(params.sky, 0.1, 1.0) * 0.65, clamp(params.sky, 0.1, 1.0), uv.y);

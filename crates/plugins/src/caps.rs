@@ -78,7 +78,7 @@ pub fn fetch(method: &str, url: &str, headers: &[(String, String)], body: Option
     // SAFETY: handles are RAII values, every string and buffer outlives the call using it, and
     // reads stay within `chunk`; the response is bounded by MAX_RESPONSE.
     unsafe {
-        let session = Handle::new(WinHttpOpen(w!("mypaper-plugins/0.1"), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, PCWSTR::null(), PCWSTR::null(), 0))?;
+        let session = Handle::new(WinHttpOpen(w!("glaze-plugins/0.1"), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, PCWSTR::null(), PCWSTR::null(), 0))?;
         WinHttpSetTimeouts(session.0, timeout, timeout, timeout, timeout).map_err(|e| e.to_string())?;
         let connection = Handle::new(WinHttpConnect(session.0, &HSTRING::from(host), port, 0))?;
         let flags = if secure { WINHTTP_FLAG_SECURE } else { WINHTTP_OPEN_REQUEST_FLAGS(0) };
@@ -109,7 +109,7 @@ pub fn fetch(method: &str, url: &str, headers: &[(String, String)], body: Option
     }
 }
 
-/// `mypaper/integrations/plugin/<id>/<key>`, the same target the native plugin host uses.
+/// `glaze/integrations/plugin/<id>/<key>`, the same target the native plugin host uses.
 fn credential(plugin: &str, key: &str) -> Result<Vec<u16>, String> {
     let ok = |s: &str| !s.is_empty() && s.len() <= 96 && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_".contains(c));
     if !ok(plugin) || key.len() > 128 || !key.split('/').all(ok) {
@@ -118,9 +118,9 @@ fn credential(plugin: &str, key: &str) -> Result<Vec<u16>, String> {
     // Scoped first-party keys preserve credentials entered in Studio before plugin migration.
     // A bare key equal to the plugin id is the old single credential (OBS's "obs" password).
     let target = if key == plugin || key.starts_with(&format!("{plugin}/")) {
-        format!("mypaper/integrations/{key}\0")
+        format!("glaze/integrations/{key}\0")
     } else {
-        format!("mypaper/integrations/plugin/{plugin}/{key}\0")
+        format!("glaze/integrations/plugin/{plugin}/{key}\0")
     };
     Ok(target.encode_utf16().collect())
 }
@@ -201,7 +201,7 @@ pub fn storage_remove(data_dir: &Path, key: &str) -> Result<(), String> {
 }
 
 /// Public app status only. A stale marker cannot make a stopped app appear signed in.
-pub fn desktop_status(app: &str) -> Result<crate::runtime::mypaper::plugin::launch::DesktopStatus, String> {
+pub fn desktop_status(app: &str) -> Result<crate::runtime::glaze::plugin::launch::DesktopStatus, String> {
     use std::io::Read;
     use std::path::PathBuf;
     use windows::Win32::System::Threading::{OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW};
@@ -232,7 +232,7 @@ pub fn desktop_status(app: &str) -> Result<crate::runtime::mypaper::plugin::laun
         }
     }
     installed |= running;
-    Ok(crate::runtime::mypaper::plugin::launch::DesktopStatus { installed, running, marker })
+    Ok(crate::runtime::glaze::plugin::launch::DesktopStatus { installed, running, marker })
 }
 
 /// Whether `process:<name>` names a plain executable name (no path, no extension tricks).
@@ -425,8 +425,8 @@ pub fn foreground() -> Option<Window> {
     }
 }
 
-/// mypaper's toast identity for plugins (an unpackaged AppUserModelID, registered on first use).
-pub const TOAST_APP: &str = "mypaper.Plugins";
+/// Glaze's toast identity for plugins (an unpackaged AppUserModelID, registered on first use).
+pub const TOAST_APP: &str = "glaze.Plugins";
 
 fn xml_escape(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
@@ -442,7 +442,7 @@ pub fn toast_xml(plugin_name: &str, title: &str, body: &str) -> String {
     )
 }
 
-/// Shows a Windows toast from mypaper on a worker thread (WinRT activation can take a while).
+/// Shows a Windows toast from Glaze on a worker thread (WinRT activation can take a while).
 /// `clicked` runs when the user clicks the toast while the helper is alive (its `action`); the
 /// last few toasts are kept so their `Activated` handlers stay registered.
 pub fn notify(plugin_name: &str, title: &str, body: &str, clicked: Option<impl Fn() + Send + Sync + 'static>) -> Result<(), String> {
@@ -456,7 +456,7 @@ pub fn notify(plugin_name: &str, title: &str, body: &str, clicked: Option<impl F
     unsafe {
         let mut key = HKEY::default();
         if RegCreateKeyW(HKEY_CURRENT_USER, &HSTRING::from(format!(r"Software\Classes\AppUserModelId\{TOAST_APP}")), &mut key).is_ok() {
-            let name: Vec<u8> = "mypaper\0".encode_utf16().flat_map(u16::to_le_bytes).collect();
+            let name: Vec<u8> = "glaze\0".encode_utf16().flat_map(u16::to_le_bytes).collect();
             let _ = RegSetValueExW(key, w!("DisplayName"), None, REG_SZ, Some(&name));
             let _ = RegCloseKey(key);
         }
@@ -487,8 +487,8 @@ mod tests {
     #[test]
     fn scoped_credentials_keep_legacy_keys_without_cross_plugin_access() {
         let target = |plugin, key| super::credential(plugin,key).map(|v| String::from_utf16_lossy(&v));
-        assert_eq!(target("grok","grok/morning").unwrap(), "mypaper/integrations/grok/morning\0");
-        assert_eq!(target("other","grok/morning").unwrap(), "mypaper/integrations/plugin/other/grok/morning\0");
+        assert_eq!(target("grok","grok/morning").unwrap(), "glaze/integrations/grok/morning\0");
+        assert_eq!(target("other","grok/morning").unwrap(), "glaze/integrations/plugin/other/grok/morning\0");
         for invalid in ["../other","grok//key","grok/../key","/key","key/"] { assert!(target("grok",invalid).is_err()); }
         for invalid in ["../Grok Bot", "Grok Bot/secret", "Grok Bot\\secret", ""] { assert!(super::desktop_status(invalid).is_err()); }
     }
@@ -541,12 +541,12 @@ mod tests {
         for bad in ["/etc/x", "~/", "~/../x", "~/a/./b", r"~/a\b", "~/C:/x", "~/a//b", "C:/x"] {
             assert!(!file_path_ok(bad), "{bad}");
         }
-        assert_eq!(read_file("~/no-such-mypaper-file").unwrap(), None);
+        assert_eq!(read_file("~/no-such-glaze-file").unwrap(), None);
     }
 
     #[test]
     fn storage_keys_are_safe_file_names() {
-        let dir = std::env::temp_dir().join(format!("mypaper-kv-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("glaze-kv-{}", std::process::id()));
         storage_set(&dir, "../../evil", b"v").unwrap();
         assert_eq!(storage_get(&dir, "../../evil").unwrap(), Some(b"v".to_vec()));
         assert!(dir.join("kv").read_dir().unwrap().count() == 1);

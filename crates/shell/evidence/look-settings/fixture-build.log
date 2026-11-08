@@ -1,11 +1,11 @@
-cargo :    Compiling mypaper-ui v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\ui)
+cargo :    Compiling glaze-ui v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\ui)
 At line:2 char:331
-+ ... Exit -eq 0){cargo build --release -p mypaper-shell --example mypaper- ...
++ ... Exit -eq 0){cargo build --release -p glaze-shell --example glaze- ...
 +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (   Compiling my...aper\crates\ui):String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
-   Compiling mypaper-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
+   Compiling glaze-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
 warning: struct `Layout` is never constructed
   --> crates\shell\src\widgets\views\integrations\mod.rs:19:19
    |
@@ -50,5 +50,5 @@ warning: function `icon_action` is never used
 144 | pub(super) fn icon_action(
     |               ^^^^^^^^^^^
 
-warning: `mypaper-shell` (lib) generated 7 warnings
+warning: `glaze-shell` (lib) generated 7 warnings
     Finished `release` profile [optimized] target(s) in 40.63s

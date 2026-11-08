@@ -1,4 +1,4 @@
-import type { Error as WitError } from './generated/interfaces/mypaper-plugin-types.js';
+import type { Error as WitError } from './generated/interfaces/glaze-plugin-types.js';
 
 /** jco's generated types use undefined for option::none. QuickJS returns null; normalize
  * that representation at the trusted WIT boundary. Preserve typed arrays and scalar values. */

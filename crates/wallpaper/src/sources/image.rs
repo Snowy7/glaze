@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use mypaper_theme::{Fit, ImageWallpaper, LoadedTheme};
+use glaze_theme::{Fit, ImageWallpaper, LoadedTheme};
 
 use super::wic::{Budget, Decoder, Picture};
 use super::{Frame, Redraw, Source, begin};

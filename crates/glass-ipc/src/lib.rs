@@ -30,7 +30,7 @@ pub const MAX_PLATES: usize = 96;
 /// The engine's frost tops out at 64 pt whatever the screen's scale (`material::liquid`).
 pub const MAX_BLUR: f32 = 256.0;
 const WORDS: usize = 15;
-const CHANNEL: &str = "Local\\mypaper.glass.v1";
+const CHANNEL: &str = "Local\\glaze.glass.v1";
 
 /// A plate's Liquid Glass material (plan, "Material controls"). The engine draws it as
 /// liquid-rust's `Glass.regular` with these knobs (`crates/wallpaper/src/material.rs`,

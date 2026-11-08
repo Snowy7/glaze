@@ -1,9 +1,9 @@
 //! Visible built-in widgets lease the same providers as bars and panels.
 use crate::widgets::model::{Model as WidgetModel, Widget};
-use mypaper_integrations::{
+use glaze_integrations::{
     Availability, Lease, Provider, Snapshot,
 };
-use mypaper_ui::HitId;
+use glaze_ui::HitId;
 
 pub const CONNECT: HitId = 6000;
 pub const REFRESH: HitId = 6001;

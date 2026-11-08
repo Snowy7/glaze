@@ -13,7 +13,7 @@ pub(crate) fn prompt(
 ) -> Result<Option<String>> {
     let caption = caption.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
     let message = message.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
-    let target = "mypaper/integrations/app-registration\0"
+    let target = "glaze/integrations/app-registration\0"
         .encode_utf16()
         .collect::<Vec<_>>();
     let info = CREDUI_INFOW {

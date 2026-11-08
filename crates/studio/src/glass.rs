@@ -4,13 +4,13 @@
 //! itself, a web page or an app), the stage shows the still with a flat tint instead.
 //!
 //! The protocol is `crates/wallpaper/src/preview.rs`'s (keep the two in step): Studio owns the
-//! section `Local\mypaper.preview` and the auto-reset event `Local\mypaper.preview.done`; the
-//! engine owns `Local\mypaper.preview.request`. Everything here is released when Studio closes.
+//! section `Local\glaze.preview` and the auto-reset event `Local\glaze.preview.done`; the
+//! engine owns `Local\glaze.preview.request`. Everything here is released when Studio closes.
 
 use std::sync::Arc;
 
 use bytemuck_free::{Header, Plate};
-use mypaper_ui::{Image, Rect, Rgba};
+use glaze_ui::{Image, Rect, Rgba};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows::Win32::System::Memory::{
     CreateFileMappingW, FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile,
@@ -132,7 +132,7 @@ impl Glass {
             return;
         }
         // SAFETY: the engine's event, opened and closed here.
-        let event = unsafe { OpenEventW(EVENT_MODIFY_STATE, false, w!("Local\\mypaper.preview.request")) };
+        let event = unsafe { OpenEventW(EVENT_MODIFY_STATE, false, w!("Local\\glaze.preview.request")) };
         let Ok(event) = event else {
             self.unavailable = true;
             return;
@@ -220,7 +220,7 @@ impl Glass {
                     PAGE_READWRITE,
                     (size >> 32) as u32,
                     size as u32,
-                    w!("Local\\mypaper.preview"),
+                    w!("Local\\glaze.preview"),
                 )
                 .ok()?;
                 let view = MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, 0);
@@ -228,7 +228,7 @@ impl Glass {
                     let _ = CloseHandle(mapping);
                     return None;
                 }
-                let Ok(done) = CreateEventW(None, false, false, w!("Local\\mypaper.preview.done")) else {
+                let Ok(done) = CreateEventW(None, false, false, w!("Local\\glaze.preview.done")) else {
                     let _ = UnmapViewOfFile(view);
                     let _ = CloseHandle(mapping);
                     return None;

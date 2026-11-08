@@ -1,5 +1,5 @@
 //! Notifications (docs/bars.md, "Flyouts" → "Notifications"), on the `notifications` lane, through
-//! `UserNotificationListener`. Measured on build 26300 with the unpackaged `mypaper-bars`
+//! `UserNotificationListener`. Measured on build 26300 with the unpackaged `glaze-bars`
 //! (`examples/winrt-spike.rs`): access is `Allowed`, reading every toast works, and so does
 //! removing one; the `NotificationChanged` event refuses to register without package identity
 //! (`0x80070490`, "Element not found"). So the list is read when the flyout opens (and every few

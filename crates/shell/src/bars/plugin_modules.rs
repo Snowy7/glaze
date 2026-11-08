@@ -9,8 +9,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use mypaper_bars::{BarsConfig, ModuleRef};
-use mypaper_plugin_sdk::{Face, View};
+use glaze_bars::{BarsConfig, ModuleRef};
+use glaze_plugin_sdk::{Face, View};
 
 #[derive(Default)]
 struct Shared {
@@ -59,7 +59,7 @@ pub fn place(config: &BarsConfig) {
         .collect();
     let module_panels = placed.iter().filter_map(|id| {
         let (plugin, bar) = parse(id)?;
-        let (manifest, _) = mypaper_widgets::registry::find_plugin(plugin)?;
+        let (manifest, _) = glaze_widgets::registry::find_plugin(plugin)?;
         let panel = manifest.bars.iter().find(|b| b.id == bar)?.panel.clone()?;
         manifest.panels.iter().any(|p| p.id == panel).then(|| (id.clone(), format!("{plugin}--{panel}")))
     }).collect();
@@ -232,7 +232,7 @@ pub fn sync(view: impl Fn(&str) -> Option<Face>) -> Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mypaper_plugin_sdk::Role;
+    use glaze_plugin_sdk::Role;
 
     #[test]
     fn a_module_shows_its_text_and_clicks_its_first_action() {

@@ -220,9 +220,9 @@
   "gpu_method": "3 warmup frames, median of 24 GPU timestamp samples, sum of passes.",
   "ring_fix": "Mip generation and trilinear filtering were already present. Replaced dense regular alpha stripes in the CC0 texture with broad irregular bands and soft edges; 256 mesh segments.",
   "captures": {
-    "planet": "C:/mypaper-targets/builder-fixes/planet-fixed.jpg",
-    "gallery": "C:/mypaper-targets/effects-sheet/preview-grid-v2.jpg",
-    "defaults": "C:/mypaper-targets/builder-fixes/effects"
+    "planet": "C:/glaze-targets/builder-fixes/planet-fixed.jpg",
+    "gallery": "C:/glaze-targets/effects-sheet/preview-grid-v2.jpg",
+    "defaults": "C:/glaze-targets/builder-fixes/effects"
   },
   "validation": {
     "stack_tests": "6 passed, 2 ignored; every bundled effect compiles",
@@ -231,6 +231,6 @@
     "explorer_lifecycle_test": "1 passed",
     "finite_effect_cases": "snow and grain: 3 RGBA16F parameter cases each"
   },
-  "cleanup": "Inspected C:/mypaper-targets/builder-live/test-themes. Automatic approval review rejected deletion with blocked by policy; folder remains.",
+  "cleanup": "Inspected C:/glaze-targets/builder-live/test-themes. Automatic approval review rejected deletion with blocked by policy; folder remains.",
   "config_restored_byte_for_byte": true
 }

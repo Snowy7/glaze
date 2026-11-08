@@ -1,5 +1,5 @@
 [package]
-name = "mypaper-config"
+name = "glaze-config"
 description = "User settings shared by core, the wallpaper engine and the studio."
 version.workspace = true
 edition.workspace = true

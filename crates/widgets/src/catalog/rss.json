@@ -3,7 +3,7 @@
   "name": "RSS",
   "category": "Info",
   "version": "1.1.0",
-  "author": "mypaper",
+  "author": "Glaze",
   "description": "Headlines from your favourite feeds; click one to open the article.",
   "size": {
     "default": [6, 4],

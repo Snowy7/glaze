@@ -3,8 +3,8 @@
 //! RichEdit field over the widget); a task's box toggles it.
 use super::{Ctx, FIELD, NOTE_TASK, field};
 use crate::widgets::markdown::{self, Emphasis};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Op, Rect, Role, TextStyle};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Op, Rect, Role, TextStyle};
 
 /// A laid-out block: its source line, top and height, and what it is.
 struct Block {

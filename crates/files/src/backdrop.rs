@@ -7,7 +7,7 @@
 #[path = "../../wallpaper/src/overlay/request.rs"]
 mod wire;
 
-use mypaper_ui::glass::{Backdrop, GlassMaterial, Shape};
+use glaze_ui::glass::{Backdrop, GlassMaterial, Shape};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -38,11 +38,11 @@ impl Plate {
         let mut class = [0u16; 64];
         // SAFETY: the bounded class buffer is writable and the client HWND is only queried.
         let count = unsafe { GetClassNameW(self.client, &mut class) } as usize;
-        let app = String::from_utf16_lossy(&class[..count]) == "mypaper.ui.app";
+        let app = String::from_utf16_lossy(&class[..count]) == "glaze.ui.app";
         Request::Open {
             client: self.client,
             layer: if app { Layer::Desktop } else { Layer::Popup },
-            rect: mypaper_desktop::Rect {
+            rect: glaze_desktop::Rect {
                 x: self.shape.x,
                 y: self.shape.y,
                 width: self.shape.width,
@@ -61,7 +61,7 @@ impl Client {
             plates: RefCell::new(Vec::new()),
             hook: Cell::new(HWINEVENTHOOK::default()),
         });
-        mypaper_ui::glass::install(client.clone());
+        glaze_ui::glass::install(client.clone());
         client
     }
     fn engine(&self) -> Option<HWND> {
@@ -155,7 +155,7 @@ impl Client {
             // SAFETY: the bounded class buffer is writable for the class-name query.
             let length = unsafe { GetClassNameW(next, &mut class) }.max(0) as usize;
             if engine_pid == overlay_pid
-                && String::from_utf16_lossy(&class[..length]) == "mypaper.wallpaper.glass"
+                && String::from_utf16_lossy(&class[..length]) == "glaze.wallpaper.glass"
             {
                 plate.overlay.set(Some(next));
             }

@@ -1,4 +1,4 @@
-# mypaper: a total retheme at near-zero cost. Merged council plan, v6
+# Glaze: a total retheme at near-zero cost. Merged council plan, v6
 
 This plan merges three round-1 plans (Grok, GPT Sol, Claude Opus) with the fixes from rounds 2 to 6.
 Its scope is visuals only: the shell, widgets, wallpaper and native app styling. Filesystem and OS
@@ -17,7 +17,7 @@ ticks it lists (CDP `Tracing` frame events per page, plus an ETW DxgKrnl present
 `document.getAnimations()` is a diagnostic only.
 
 ## Budgets
-Budgets are in percent of one core, across all mypaper processes (the WebView2 browser, GPU and
+Budgets are in percent of one core, across all Glaze processes (the WebView2 browser, GPU and
 renderer processes included). Measure them with `measure.ps1`, which S0 checks into `tools/` from
 `%TEMP%`. Take the median of 3 runs of 60 s after settling, on the user's real 2-monitor setup.
 `perf/budget.toml` stays in whole-machine percent (`:5`, 16 logical CPUs); only the report
@@ -222,7 +222,7 @@ fails closed if the styler does not load on this build.
 
   ✅ `glass_cost` ≤0.11 ms GPU per frame at the 4-plate reference (`docs/engine-notes.md`, the
   liquid-glass table). Over a still wallpaper, 0 frames after a settle of at most 1 s. WebView 0
-  presents. Side by side with `C:\mypaper-targets\refs\liquid-glass\crops\tahoe-clear-dock.png`.
+  presents. Side by side with `C:\glaze-targets\refs\liquid-glass\crops\tahoe-clear-dock.png`.
 - **S6 (only if D1 = yes)** the Windhawk token export, with the honest reach above.
 
 **Cut:** the "every app" per-window DWM mode, live notifications (the polls run only while the flyout

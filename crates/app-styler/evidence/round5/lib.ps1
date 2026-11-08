@@ -3,7 +3,7 @@
 # move to the secondary screen without activation, navigate with Shell COM and close with Quit()
 # or WM_CLOSE. The desktop lock is held per action only.
 $ErrorActionPreference = 'Stop'
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 Add-Type -Namespace R5 -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr h, out uint pid);
 [DllImport("user32.dll")] public static extern bool SetWindowPos(System.IntPtr h, System.IntPtr after, int x, int y, int cx, int cy, uint flags);
@@ -80,5 +80,5 @@ function Open-Folder([string]$path, [int]$slot = 0) {
 }
 $folders = 'C:\Windows', 'C:\Windows\System32', 'C:\Program Files', 'C:\Users\Public',
   'shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}', 'shell:::{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}',
-  'C:\Windows\Fonts', 'C:\mypaper-targets\app-styler'
+  'C:\Windows\Fonts', 'C:\glaze-targets\app-styler'
 $rand = New-Object Random 7

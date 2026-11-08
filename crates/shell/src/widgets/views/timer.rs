@@ -3,8 +3,8 @@
 //! when there is room. By the box: a **tile** (the ring with play inside), a **row** (ring,
 //! then the controls beside it), or a **stack** (switch, ring, controls).
 use super::{Ctx, MODE, NEXT, PRIMARY, RESET};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Align, Point, Rect, Role, TextRole};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Align, Point, Rect, Role, TextRole};
 
 const MODES: [(&str, &str); 4] = [("focus", "Focus"), ("short", "Short"), ("long", "Long"), ("custom", "Custom")];
 

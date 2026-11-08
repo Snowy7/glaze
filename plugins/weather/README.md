@@ -2,7 +2,7 @@
 
 JSON-RPC 2.0, one compact object per line over stdio. The host must initialize the plugin with
 `{ "protocol": 1, "plugin": "weather", "dataDir": "..." }`; it replies `{ "protocol": 1 }`.
-`dataDir` is normally `%APPDATA%\mypaper\plugin-data\weather`. Standalone runs without a
+`dataDir` is normally `%APPDATA%\glaze\plugin-data\weather`. Standalone runs without a
 handshake use that same default directory. stdout contains protocol messages only.
 
 ## Location selection
@@ -172,27 +172,27 @@ An existing successful cache may take up to 30 minutes to expire after permissio
   to Open-Meteo and search data to GeoNames (CC BY 4.0). Commercial distribution needs an
   appropriate Open-Meteo plan or self-hosted endpoint.
 
-No analytics or location upload to mypaper is implemented. Exact location and the cache stay
+No analytics or location upload to Glaze is implemented. Exact location and the cache stay
 on the device except for the necessary direct reverse-geocoding request. That provider sees
 current coordinates and the public IP; the IP provider sees the public IP; search sends typed
 queries to Open-Meteo. The forecast endpoint receives **only two-decimal coordinates**
 (approximately 1 km) as location input, plus weather options, never place names, network IDs,
-or the full-precision position. HTTP requests use an identifying `mypaper-weather/1.1` User-Agent.
+or the full-precision position. HTTP requests use an identifying `glaze-weather/1.1` User-Agent.
 
 ## Validation and standalone use
 
 ```powershell
-$env:CARGO_TARGET_DIR = 'C:\mypaper-targets\weather'
-cargo test -p mypaper-plugin-weather
-cargo clippy -p mypaper-plugin-weather --all-targets -- -D warnings
-cargo build -p mypaper-plugin-weather
+$env:CARGO_TARGET_DIR = 'C:\glaze-targets\weather'
+cargo test -p glaze-plugin-weather
+cargo clippy -p glaze-plugin-weather --all-targets -- -D warnings
+cargo build -p glaze-plugin-weather
 ```
 
-Run `C:\mypaper-targets\weather\debug\weather.exe`, keep stdin open, write each request line,
+Run `C:\glaze-targets\weather\debug\weather.exe`, keep stdin open, write each request line,
 and read its matching response before sending shutdown. Example requests:
 
 ```jsonl
-{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocol":1,"plugin":"weather","dataDir":"C:\\mypaper-targets\\weather\\rpc-data"}}
+{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocol":1,"plugin":"weather","dataDir":"C:\\glaze-targets\\weather\\rpc-data"}}
 {"jsonrpc":"2.0","id":1,"method":"locate"}
 {"jsonrpc":"2.0","id":2,"method":"current","params":{"auto":true}}
 {"jsonrpc":"2.0","id":3,"method":"search","params":{"query":"Springfield, Illinois"}}
@@ -200,4 +200,4 @@ and read its matching response before sending shutdown. Example requests:
 ```
 
 Calls run concurrently, so piping shutdown immediately after slow requests will terminate them.
-Never copy over `plugins/weather/weather.exe` while mypaper is using it; deployment is separate.
+Never copy over `plugins/weather/weather.exe` while Glaze is using it; deployment is separate.

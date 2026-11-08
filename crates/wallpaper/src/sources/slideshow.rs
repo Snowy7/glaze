@@ -13,7 +13,7 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
-use mypaper_theme::{Fit, LoadedTheme, SlideshowWallpaper};
+use glaze_theme::{Fit, LoadedTheme, SlideshowWallpaper};
 
 use super::wic::{Budget, Decoded, Decoder, Picture};
 use super::{Frame, Redraw, Source, begin};
@@ -436,7 +436,7 @@ mod tests {
 
     #[test]
     fn lists_only_images_in_the_folder_sorted_by_name() {
-        let dir = std::env::temp_dir().join(format!("mypaper-slides-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("glaze-slides-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("nested.png")).unwrap();
         for name in ["b.png", "A.jpg", "c.txt", "d.WEBP"] {
             std::fs::write(dir.join(name), "").unwrap();

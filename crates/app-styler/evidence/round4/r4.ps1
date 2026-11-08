@@ -13,12 +13,12 @@ function Append-Line([string]$file, [string]$line) {
   for ($i = 0; $i -lt 20; $i++) { try { [IO.File]::AppendAllText($file, $line + "`r`n"); break } catch { Start-Sleep -Milliseconds 100 } }
   Write-Host $line
 }
-$root = 'C:\mypaper-targets\app-styler\round4'
+$root = 'C:\glaze-targets\app-styler\round4'
 $log = Join-Path $root "$Variant.log"
-$dir = Join-Path $env:LOCALAPPDATA 'mypaper\app-styler'
-$probe = Join-Path $root 'probe-bin\mypaper-styler.exe'
-$design = 'C:\mypaper-targets\app-styler\release\mypaper-styler.exe'
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$dir = Join-Path $env:LOCALAPPDATA 'glaze\app-styler'
+$probe = Join-Path $root 'probe-bin\glaze-styler.exe'
+$design = 'C:\glaze-targets\app-styler\release\glaze-styler.exe'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 function Note([string]$m) { $l = '{0} {1}' -f (Get-Date -Format 'HH:mm:ss'), $m; Append-Line $log $l }
 function Take-Lock { for ($i = 0; $i -lt 240; $i++) { if (New-Item -ItemType Directory $lock -ErrorAction SilentlyContinue) { return }; Start-Sleep -Milliseconds 500 }; throw 'lock busy' }
 function Drop-Lock { if (Test-Path -LiteralPath $lock) { Remove-Item -LiteralPath $lock -Recurse -Force } }
@@ -30,7 +30,7 @@ function Wait-Log([string]$file, [string]$pattern, [int]$seconds = 20) {
   return $false
 }
 
-if (Get-Process mypaper-styler -ErrorAction SilentlyContinue) { throw 'a styler helper is running; stop it first' }
+if (Get-Process glaze-styler -ErrorAction SilentlyContinue) { throw 'a styler helper is running; stop it first' }
 # A fresh separate Explorer with one anchor window (kept open throughout).
 # (`explorer /separate` hands off to a second new process: the target is the new window's owner.)
 Add-Type -Namespace R4r -Name Win -MemberDefinition '[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hwnd, out uint pid);'
@@ -64,9 +64,9 @@ switch ($Variant) {
     Note "probe attached: $ok (helper $($helper.Id))"
   }
   'design' {
-    $env:RUST_LOG = 'mypaper_styler=debug,info'
+    $env:RUST_LOG = 'glaze_styler=debug,info'
     $helper = Start-Process $design -ArgumentList "--preview glass --only $target" -PassThru
-    $ok = Wait-Log (Join-Path $env:LOCALAPPDATA 'mypaper\mypaper.log') "styling explorer \($target, WinUI 3\)"
+    $ok = Wait-Log (Join-Path $env:LOCALAPPDATA 'glaze\glaze.log') "styling explorer \($target, WinUI 3\)"
     Note "design helper attached: $ok (helper $($helper.Id))"
   }
 }

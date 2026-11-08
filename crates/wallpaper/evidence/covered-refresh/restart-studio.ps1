@@ -1,5 +1,5 @@
 $ErrorActionPreference='Stop'
-$lock='C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$lock='C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 $until=(Get-Date).AddMinutes(2)
 while(-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) {
   if((Get-Date) -ge $until){throw 'Desktop lock is busy'}
@@ -12,14 +12,14 @@ public static class CoveredQuit {
   [DllImport("user32.dll")] public static extern bool PostThreadMessage(uint thread,uint message,IntPtr w,IntPtr l);
 }
 '@
-  foreach($studio in Get-Process mypaper-studio -ErrorAction SilentlyContinue) {
+  foreach($studio in Get-Process glaze-studio -ErrorAction SilentlyContinue) {
     foreach($thread in $studio.Threads) {[CoveredQuit]::PostThreadMessage([uint32]$thread.Id,0x12,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null}
   }
   $until=(Get-Date).AddSeconds(10)
-  while((Get-Process mypaper-studio -ErrorAction SilentlyContinue) -and (Get-Date) -lt $until){Start-Sleep -Milliseconds 200}
-  if(Get-Process mypaper-studio -ErrorAction SilentlyContinue){throw 'Studio did not quit gracefully'}
+  while((Get-Process glaze-studio -ErrorAction SilentlyContinue) -and (Get-Date) -lt $until){Start-Sleep -Milliseconds 200}
+  if(Get-Process glaze-studio -ErrorAction SilentlyContinue){throw 'Studio did not quit gracefully'}
   $release=Join-Path (Resolve-Path "$PSScriptRoot\..\..\..\..").Path 'target\release'
-  Start-Process -FilePath (Join-Path $release 'mypaper-studio.exe') -WorkingDirectory $release -WindowStyle Hidden
+  Start-Process -FilePath (Join-Path $release 'glaze-studio.exe') -WorkingDirectory $release -WindowStyle Hidden
   Start-Sleep 3
-  Get-Process mypaper-studio | Select-Object Id,Path
+  Get-Process glaze-studio | Select-Object Id,Path
 } finally {[IO.Directory]::Delete($lock)}

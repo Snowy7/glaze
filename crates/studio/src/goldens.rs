@@ -1,9 +1,9 @@
 //! Deterministic standalone window renders, compared with `tests/golden/window`.
-//! Set `MYPAPER_BLESS=1` to update baselines; review copies go to the window shots folder.
+//! Set `GLAZE_BLESS=1` to update baselines; review copies go to the window shots folder.
 
 use std::path::PathBuf;
 
-use mypaper_ui::{Ui, golden, render};
+use glaze_ui::{Ui, golden, render};
 
 use crate::actions::Action;
 use crate::app::App;
@@ -11,9 +11,9 @@ use crate::docs::Docs;
 use crate::library::Library;
 use crate::theme::Theme;
 
-pub(crate) fn check(image: &mypaper_ui::Image, path: &std::path::Path) -> anyhow::Result<()> {
+pub(crate) fn check(image: &glaze_ui::Image, path: &std::path::Path) -> anyhow::Result<()> {
     // Keep Studio's documented blessing switch after the kit moved to its own repository.
-    if std::env::var_os("MYPAPER_BLESS").is_some() {
+    if std::env::var_os("GLAZE_BLESS").is_some() {
         golden::write(image, path)
     } else {
         golden::check(image, path)
@@ -75,7 +75,7 @@ pub fn window_app(dark: bool, ui: &Ui, size: (u32, u32)) -> App {
     app
 }
 
-pub fn shot(app: &mut App, ui: &mut Ui) -> mypaper_ui::Image {
+pub fn shot(app: &mut App, ui: &mut Ui) -> glaze_ui::Image {
     let built = crate::view::build(app, ui);
     let image = render(ui, &built.list, app.size.0, app.size.1).unwrap();
     app.frame.targets = built.targets;
@@ -122,7 +122,7 @@ fn keyboard_reaches_window_pages_search_and_history() {
             .find(|t| Some(t.key) == app.input.focus)
             .unwrap()
             .rect;
-        let center = mypaper_ui::Point::new(
+        let center = glaze_ui::Point::new(
             (rect.left + rect.right) / 2.0,
             (rect.top + rect.bottom) / 2.0,
         );
@@ -162,14 +162,14 @@ fn sidebar_preferences_survive_reopening_and_narrow_windows_do_not_change_them()
             .iter()
             .any(|hit| hit.label.as_ref() == "Look" && hit.checked == Some(true))
     );
-    app.input.hover = Some(mypaper_ui::controls::key(("nav-page", Page::Look)));
+    app.input.hover = Some(glaze_ui::controls::key(("nav-page", Page::Look)));
     let built = crate::view::build(&app, &mut ui);
     assert!(
         built
             .list
             .ops
             .iter()
-            .any(|op| matches!(op, mypaper_ui::Op::Text { text, .. } if text.as_ref() == "Look"))
+            .any(|op| matches!(op, glaze_ui::Op::Text { text, .. } if text.as_ref() == "Look"))
     );
     // The existing close path replaces the placement object, including in older readers.
     app.apply("Window", vec![crate::docs::Op {
@@ -201,7 +201,7 @@ fn sidebar_preferences_survive_reopening_and_narrow_windows_do_not_change_them()
 
 #[test]
 fn inspector_drag_is_bounded_remembered_and_does_not_edit_the_desktop() {
-    use mypaper_ui::{Button, Event, Point, Pointer};
+    use glaze_ui::{Button, Event, Point, Pointer};
     let mut ui = Ui::new().unwrap();
     let mut app = window_app(true, &ui, (1280, 800));
     let before = [
@@ -248,14 +248,14 @@ fn inspector_drag_is_bounded_remembered_and_does_not_edit_the_desktop() {
 #[test]
 fn window_hover_and_card_clicks_keep_previews_transient_and_undoable() {
     use crate::panel::{Command, Page};
-    use mypaper_ui::{Button, Event, Point, Pointer};
-    let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
+    use glaze_ui::{Button, Event, Point, Pointer};
+    let out = std::env::var_os("GLAZE_STUDIO_WINDOW_SHOTS")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-window\shots"));
+        .unwrap_or_else(|| PathBuf::from(r"C:\glaze-targets\studio-window\shots"));
     let mut ui = Ui::new().unwrap();
     for (page, name, action) in [
-        (Page::Look, "solid", Action::SetStyle(Some(mypaper_config::look::Style::Solid))),
-        (Page::Look, "mono", Action::SetStyle(Some(mypaper_config::look::Style::Mono))),
+        (Page::Look, "solid", Action::SetStyle(Some(glaze_config::look::Style::Solid))),
+        (Page::Look, "mono", Action::SetStyle(Some(glaze_config::look::Style::Mono))),
         (Page::BarDesign, "bar-preset", Action::Set(
             crate::actions::Edit::new(crate::docs::DocId::Studio, "/panel/bar-preset", "Bar design"),
             serde_json::json!("islands"),
@@ -271,7 +271,7 @@ fn window_hover_and_card_clicks_keep_previews_transient_and_undoable() {
         app.event(Event::Move(pointer));
         let image = shot(&mut app, &mut ui);
         assert!(crate::view::build(&app, &mut ui).semantics.iter().any(|(_, semantic)| {
-            matches!(semantic, mypaper_ui::Semantics::Status(message) if message.starts_with("Previewing"))
+            matches!(semantic, glaze_ui::Semantics::Status(message) if message.starts_with("Previewing"))
         }), "the hovered card must actually request a preview");
         golden::write(&image, &out.join(format!("headless-hover-{name}.png"))).unwrap();
         assert_eq!(before, crate::docs::DocId::ALL.map(|id| app.docs.doc(id).raw.clone()));
@@ -298,9 +298,9 @@ fn window_hover_and_card_clicks_keep_previews_transient_and_undoable() {
 #[test]
 fn render_window_pages() {
     use crate::panel::{Command, Page};
-    let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
+    let out = std::env::var_os("GLAZE_STUDIO_WINDOW_SHOTS")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-window\shots"));
+        .unwrap_or_else(|| PathBuf::from(r"C:\glaze-targets\studio-window\shots"));
     let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
     let mut ui = Ui::new().unwrap();
     for size in [(1280, 800), (1920, 1080)] {
@@ -327,7 +327,7 @@ fn render_window_pages() {
                         app.nav.widget = Some("clock-1".into());
                     }
                     if page == Page::History {
-                        app.run(Action::SetStyle(Some(mypaper_config::look::Style::Fluent)));
+                        app.run(Action::SetStyle(Some(glaze_config::look::Style::Fluent)));
                         app.run(Action::Preset("islands"));
                         for (i, entry) in app
                             .panel
@@ -369,9 +369,9 @@ fn render_window_pages() {
 #[test]
 fn render_onboarding_steps() {
     use crate::panel::{Command, Page, first_run};
-    let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
+    let out = std::env::var_os("GLAZE_STUDIO_WINDOW_SHOTS")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-window\shots"));
+        .unwrap_or_else(|| PathBuf::from(r"C:\glaze-targets\studio-window\shots"));
     let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
     let mut ui = Ui::new().unwrap();
     for size in [(1920, 1080), (1280, 800)] {
@@ -422,14 +422,14 @@ fn render_onboarding_steps() {
 #[test]
 fn render_material_signatures() {
     use crate::panel::{controls, specimens};
-    use mypaper_config::look::Style;
-    use mypaper_ui::{
+    use glaze_config::look::Style;
+    use glaze_ui::{
         Rect,
         controls::{Align, Builder},
     };
-    let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
+    let out = std::env::var_os("GLAZE_STUDIO_WINDOW_SHOTS")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-window\shots"));
+        .unwrap_or_else(|| PathBuf::from(r"C:\glaze-targets\studio-window\shots"));
     let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
     let mut ui = Ui::new().unwrap();
     for dark in [true, false] {
@@ -448,7 +448,7 @@ fn render_material_signatures() {
         b.fill(Rect::new(0.0, 0.0, 750.0, 280.0), 0.0, b.p.bg);
         for (row, names) in [
             &["Liquid", "One UI", "Solid", "Fluent", "Mono"][..],
-            &["As is", "Match mypaper", "Glass", "Sharp"][..],
+            &["As is", "Match Glaze", "Glass", "Sharp"][..],
         ]
         .into_iter()
         .enumerate()
@@ -498,7 +498,7 @@ fn render_material_signatures() {
 #[test]
 fn look_preview_segments_switch_pages_without_editing_documents() {
     use crate::panel::{Command, Page};
-    use mypaper_ui::controls::key;
+    use glaze_ui::controls::key;
     let mut ui = Ui::new().unwrap();
     let mut app = window_app(true, &ui, (1280, 800));
     let before = crate::docs::DocId::ALL.map(|id| app.docs.doc(id).raw.clone());
@@ -597,9 +597,9 @@ fn stage_selection_and_zoom_only_change_navigation_and_keep_the_inspector_in_pla
     let inspector = crate::view::regions(&app).inspector.unwrap();
     let built = crate::view::build(&app, &mut ui);
     let viewport = crate::view::regions(&app).stage.unwrap();
-    let desktop = built.targets.iter().find(|target| target.key == mypaper_ui::controls::key("stage-wallpaper")).unwrap().rect;
+    let desktop = built.targets.iter().find(|target| target.key == glaze_ui::controls::key("stage-wallpaper")).unwrap().rect;
     let chips = built.targets.iter().filter(|target| {
-        target.scroll == Some(mypaper_ui::controls::key("window-stage"))
+        target.scroll == Some(glaze_ui::controls::key("window-stage"))
             && matches!(target.action, Action::Panel(Command::Display(_)))
     }).map(|target| target.rect).collect::<Vec<_>>();
     assert_eq!(chips.len(), app.monitors.len());
@@ -622,7 +622,7 @@ fn stage_selection_and_zoom_only_change_navigation_and_keep_the_inspector_in_pla
     for target in built
         .targets
         .iter()
-        .filter(|target| target.scroll == Some(mypaper_ui::controls::key("window-stage")))
+        .filter(|target| target.scroll == Some(glaze_ui::controls::key("window-stage")))
     {
         if let Some(visible) = target.visible {
             assert!(
@@ -692,8 +692,8 @@ fn stage_selection_and_zoom_only_change_navigation_and_keep_the_inspector_in_pla
 fn render_window_interaction_states() {
     use crate::panel::{Command, Page};
     let out = PathBuf::from(
-        std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
-            .unwrap_or_else(|| r"C:\mypaper-targets\studio-window\shots".into()),
+        std::env::var_os("GLAZE_STUDIO_WINDOW_SHOTS")
+            .unwrap_or_else(|| r"C:\glaze-targets\studio-window\shots".into()),
     );
     let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
     let mut ui = Ui::new().unwrap();
@@ -720,7 +720,7 @@ fn render_window_interaction_states() {
                 // The world-clock review owns the native timezone factory on its own test
                 // thread. Weather exercises card geometry without sharing that WinRT cache.
                 app.nav.widget = Some("weather-1".into());
-                app.nav.more.insert(mypaper_ui::controls::key(("panel-faces", "weather-1", "variant")));
+                app.nav.more.insert(glaze_ui::controls::key(("panel-faces", "weather-1", "variant")));
             }
             if name == "large-text" {
                 app.theme.ty.text_scale = 1.5;
@@ -734,7 +734,7 @@ fn render_window_interaction_states() {
                 });
             }
             if page == Page::History {
-                app.run(Action::SetStyle(Some(mypaper_config::look::Style::Fluent)));
+                app.run(Action::SetStyle(Some(glaze_config::look::Style::Fluent)));
                 app.run(Action::Preset("islands"));
                 app.run(Action::Panel(Command::History(1)));
                 for (i, entry) in app
@@ -767,13 +767,13 @@ fn render_window_interaction_states() {
 #[test]
 fn stage_drag_snaps_rejects_overlap_and_undoes_as_one_change() {
     use crate::panel::{Command, Page};
-    use mypaper_ui::{Button, Event, Point, Pointer};
+    use glaze_ui::{Button, Event, Point, Pointer};
     let mut ui = Ui::new().unwrap();
     let mut app = window_app(true, &ui, (1280, 800));
     app.run(Action::Panel(Command::Open(Page::Widgets)));
     shot(&mut app, &mut ui);
     let target = app.frame.targets.iter().find(|t| t.action == Action::SelectWidget(Some("clock-1".into()))).unwrap();
-    assert!(matches!(target.behavior, mypaper_ui::controls::Behavior::Drag));
+    assert!(matches!(target.behavior, glaze_ui::controls::Behavior::Drag));
     let origin = Point::new(target.rect.left + target.rect.width() / 2.0, target.rect.top + target.rect.height() / 2.0);
     let (grid, scale) = app.stage.borrow().content.grid.unwrap();
     let cell = ((grid.cell[0] + grid.gap) as f32 * scale, (grid.cell[1] + grid.gap) as f32 * scale);
@@ -798,7 +798,7 @@ fn render_studio_refinements() {
     use crate::panel::{Command, Page};
     use crate::docs::{DocId, Op};
     use serde_json::json;
-    let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-window\shots"));
+    let out = std::env::var_os("GLAZE_STUDIO_WINDOW_SHOTS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\glaze-targets\studio-window\shots"));
     let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
     let mut ui = Ui::new().unwrap();
     for dark in [true, false] {
@@ -808,13 +808,13 @@ fn render_studio_refinements() {
             app.apply("Sidebar width", vec![Op { doc: DocId::Studio, path: crate::view::INSPECTOR_SETTING.into(), value: Some(json!(680.0)) }]);
             if page == Page::Connections {
                 for (id, name) in [("discord", "Discord"), ("grok", "Grok"), ("obs", "OBS Studio"), ("tailscale", "Tailscale"), ("rss", "RSS")] {
-                    app.plugins.installed.push(mypaper_widgets::manifest::PluginManifest::parse(&json!({"id":id,"name":name,"version":"1.0.0","component":"fixture.wasm","api":"0.1"}).to_string(), id).unwrap());
+                    app.plugins.installed.push(glaze_widgets::manifest::PluginManifest::parse(&json!({"id":id,"name":name,"version":"1.0.0","component":"fixture.wasm","api":"0.1"}).to_string(), id).unwrap());
                 }
             }
             if name == "look-color" {
                 app.run(Action::Set(crate::actions::Edit::new(DocId::Config, "/look/accent", "Accent"), json!("#c88d3c")));
                 shot(&mut app, &mut ui);
-                let scroll = mypaper_ui::controls::key(("studio-panel", Page::Look));
+                let scroll = glaze_ui::controls::key(("studio-panel", Page::Look));
                 app.nav.scroll.insert(scroll, 610.0);
             }
             if name == "sidebar-resizing" {
@@ -822,7 +822,7 @@ fn render_studio_refinements() {
                 app.panel.as_mut().unwrap().window.inspector_drag = Some(580.0);
             }
             if name == "widgets-arranging" {
-                use mypaper_ui::{Button, Event, Point, Pointer};
+                use glaze_ui::{Button, Event, Point, Pointer};
                 shot(&mut app, &mut ui);
                 let target = app.frame.targets.iter().find(|target| target.action == Action::SelectWidget(Some("clock-1".into()))).unwrap().rect;
                 let (grid, scale) = app.stage.borrow().content.grid.unwrap();
@@ -842,7 +842,7 @@ fn render_studio_refinements() {
 #[test]
 fn dragging_onto_display_chip_transfers_and_undoes_the_layout() {
     use crate::{panel::{Command, Page}, docs::DocId};
-    use mypaper_ui::{Button, Event, Point, Pointer};
+    use glaze_ui::{Button, Event, Point, Pointer};
     let mut ui = Ui::new().unwrap();
     let mut app = window_app(true, &ui, (1280, 800));
     app.run(Action::Panel(Command::Open(Page::Widgets)));
@@ -851,7 +851,7 @@ fn dragging_onto_display_chip_transfers_and_undoes_the_layout() {
     let widget = app.frame.targets.iter().find(|t| t.action == Action::SelectWidget(Some("clock-1".into()))).unwrap().rect;
     let destination = (app.nav.display + 1) % app.monitors.len();
     let chip = app.frame.targets.iter().find(|t| t.action == Action::Panel(Command::Display(destination))).unwrap().rect;
-    let pointer = |r: mypaper_ui::Rect| Pointer { at: Point::new(r.left + r.width() / 2.0, r.top + r.height() / 2.0), screen: (0, 0) };
+    let pointer = |r: glaze_ui::Rect| Pointer { at: Point::new(r.left + r.width() / 2.0, r.top + r.height() / 2.0), screen: (0, 0) };
     app.event(Event::Press(pointer(widget), Button::Left));
     app.event(Event::Move(pointer(chip)));
     app.event(Event::Release(pointer(chip), Button::Left));

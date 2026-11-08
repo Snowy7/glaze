@@ -1,4 +1,4 @@
-Opened log file 'C:\mypaper-targets\app-styler\round5\hang-77068.txt'
+Opened log file 'C:\glaze-targets\app-styler\round5\hang-77068.txt'
 
 ************* Preparing the environment for Debugger Extensions Gallery repositories **************
    ExtensionRepository : Implicit

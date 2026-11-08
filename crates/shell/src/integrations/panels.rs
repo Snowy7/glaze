@@ -5,12 +5,12 @@ use crate::flyouts::{
     Cx, Effect, Panel,
     kit::{Kit, link},
 };
-use mypaper_integrations::{
+use glaze_integrations::{
     Action, Availability, Data, Lease, Provider, Snapshot, launcher::Recent,
 };
-use mypaper_ui::icons::Icon;
-use mypaper_ui::layout::{Align, Stack};
-use mypaper_ui::{
+use glaze_ui::icons::Icon;
+use glaze_ui::layout::{Align, Stack};
+use glaze_ui::{
     Accessory, Frame, HitId, Lead, ListRow, Rect, Scroll, TextRole,
 };
 use std::time::Instant;
@@ -234,12 +234,12 @@ impl Panel for Integration {
                 if (id - LIST) % 2 == 1 {
                     self.action(Action::Dismiss(vec![card.id]))
                 } else {
-                    mypaper_bars::system::open(format!("shell:AppsFolder\\{}", card.app_id));
+                    glaze_bars::system::open(format!("shell:AppsFolder\\{}", card.app_id));
                     Effect::Close
                 }
             }
             Data::Media(_) if id == PRIMARY => {
-                self.action(Action::Media(mypaper_integrations::media::Action::Toggle))
+                self.action(Action::Media(glaze_integrations::media::Action::Toggle))
             }
             _ => Effect::None,
         }
@@ -303,7 +303,7 @@ impl AppActions {
         let task = if super::config().launcher.enabled && !app_id.is_empty() {
             let id = app_id.clone();
             Some(super::Task::spawn(move || {
-                mypaper_integrations::launcher::recent(&id, false)
+                glaze_integrations::launcher::recent(&id, false)
             }))
         } else {
             None
@@ -387,14 +387,14 @@ impl Panel for AppActions {
     }
     fn activate(&mut self, id: HitId, _: &mut Cx) -> Effect {
         if id == PRIMARY && !self.app_id.is_empty() {
-            mypaper_bars::system::open(format!("shell:AppsFolder\\{}", self.app_id));
+            glaze_bars::system::open(format!("shell:AppsFolder\\{}", self.app_id));
             return Effect::Close;
         }
         if let Some(item) = id
             .checked_sub(LIST)
             .and_then(|i| self.recent.get(i as usize))
         {
-            self.error = mypaper_integrations::launcher::open(item)
+            self.error = glaze_integrations::launcher::open(item)
                 .err()
                 .map(|e| e.to_string());
             return if self.error.is_none() {
