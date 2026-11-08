@@ -115,7 +115,8 @@ fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 /// Linear or radial gradient from up to eight stops (display-encoded colors).
 const GRADIENT: &str = r#"
 struct Gradient { count: u32, radial: u32, angle: f32, _pad: f32, stops: array<vec4f, 8> }
-var<immediate> resolution: vec2f;
+struct GradientPaper { resolution: vec2f }
+var<immediate> paper: GradientPaper;
 @group(0) @binding(0) var<uniform> g: Gradient;
 
 @vertex
@@ -126,8 +127,8 @@ fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
 
 @fragment
 fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    let aspect = resolution.x / resolution.y;
-    let p = (pos.xy / resolution - 0.5) * vec2f(aspect, 1.0);
+    let aspect = paper.resolution.x / paper.resolution.y;
+    let p = (pos.xy / paper.resolution - 0.5) * vec2f(aspect, 1.0);
     var t: f32;
     if g.radial != 0u {
         t = length(p) / length(vec2f(aspect, 1.0) * 0.5);
@@ -1405,6 +1406,23 @@ mod tests {
     }
 
     const COLOR: &str = r##""base": { "kind": "color", "color": "#203040" }"##;
+
+    #[test]
+    fn a_linear_gradient_renders_both_stop_colors() {
+        let gpu = Gpu::headless().expect("a DX12 GPU");
+        let (theme, config) = stack_in(
+            "gradient",
+            r##"{"kind":"stack","base":{"kind":"gradient","angle":0,"stops":[{"color":"#ff0000","at":0},{"color":"#0000ff","at":1}]}}"##,
+            &[],
+        );
+        let mut source = StackSource::new_in(&gpu, &theme, &config, &roots()).unwrap();
+        assert!(source.errors.is_empty(), "{:?}", source.errors);
+        let pixels = render(&gpu, &mut source, (64, 32), 0.0);
+        let left = &pixels[(16 * 64 + 2) * 4..][..4];
+        let right = &pixels[(16 * 64 + 61) * 4..][..4];
+        assert!(left[2] > 200 && left[0] < 40, "left BGRA: {left:?}");
+        assert!(right[0] > 200 && right[2] < 40, "right BGRA: {right:?}");
+    }
 
     /// Every bundled effect (ours and the effects library's) compiles through the real prelude.
     #[test]
