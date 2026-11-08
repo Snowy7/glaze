@@ -442,7 +442,8 @@ fn pump(studio: &Rc<RefCell<Studio>>, rx: &Receiver<Msg>) -> Result<()> {
     }
 }
 
-/// Where the window opens: where it was left, else 1280×800 centred on the main display.
+/// Where the window opens: where it was left (kept inside that display's work area, so the top
+/// edge can always be grabbed), else 1280×800 centred on the main display.
 fn placement(app: &App, scale: f32) -> ((i32, i32, i32, i32), bool) {
     let saved = app.get(docs::DocId::Studio, "/window").cloned();
     if let Some(w) = saved
@@ -452,13 +453,13 @@ fn placement(app: &App, scale: f32) -> ((i32, i32, i32, i32), bool) {
             w.get("width").and_then(serde_json::Value::as_i64),
             w.get("height").and_then(serde_json::Value::as_i64),
         )
-        && app.monitors.iter().any(|m| {
+        && let Some(m) = app.monitors.iter().find(|m| {
             let (cx, cy) = (x as i32 + width as i32 / 2, y as i32 + height as i32 / 2);
             cx >= m.work.x && cx < m.work.x + m.work.width && cy >= m.work.y && cy < m.work.y + m.work.height
         })
     {
         let max = w.get("maximized").and_then(serde_json::Value::as_bool).unwrap_or(false);
-        return ((x as i32, y as i32, width as i32, height as i32), max);
+        return (inside(m.work, (x as i32, y as i32, width as i32, height as i32)), max);
     }
     let work = app
         .monitors
@@ -467,6 +468,30 @@ fn placement(app: &App, scale: f32) -> ((i32, i32, i32, i32), bool) {
         .map_or(mypaper_desktop::Rect { x: 0, y: 0, width: 1920, height: 1080 }, |m| m.work);
     let (w, h) = (((1280.0 * scale) as i32).min(work.width), ((800.0 * scale) as i32).min(work.height));
     ((work.x + (work.width - w) / 2, work.y + (work.height - h) / 2, w, h), false)
+}
+
+/// `rect` shrunk to fit `work` and moved fully inside it.
+fn inside(work: mypaper_desktop::Rect, (x, y, w, h): (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
+    let (w, h) = (w.min(work.width), h.min(work.height));
+    (
+        x.clamp(work.x, work.x + work.width - w),
+        y.clamp(work.y, work.y + work.height - h),
+        w,
+        h,
+    )
+}
+
+/// What turns `hwnd`'s workspace coordinates into screen coordinates: its monitor's work-area
+/// origin minus the monitor origin.
+fn workspace_offset(hwnd: windows::Win32::Foundation::HWND) -> (i32, i32) {
+    use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow};
+    let mut info = MONITORINFO { cbSize: size_of::<MONITORINFO>() as u32, ..Default::default() };
+    // SAFETY: queries on our own window into a sized local.
+    let ok = unsafe { GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut info) }.as_bool();
+    if !ok {
+        return (0, 0);
+    }
+    (info.rcWork.left - info.rcMonitor.left, info.rcWork.top - info.rcMonitor.top)
 }
 
 fn remember_placement(s: &mut Studio) {
@@ -479,9 +504,13 @@ fn remember_placement(s: &mut Studio) {
     if unsafe { GetWindowPlacement(s.surface.hwnd(), &mut wp) }.is_err() {
         return;
     }
+    // `rcNormalPosition` is in workspace coordinates: relative to the work area of the window's
+    // monitor, not the screen. Saved as screen coordinates, the window crept up by the top bar's
+    // height on every close until its title bar sat behind the bar.
+    let (dx, dy) = workspace_offset(s.surface.hwnd());
     let r = wp.rcNormalPosition;
     let value = serde_json::json!({
-        "x": r.left, "y": r.top, "width": r.right - r.left, "height": r.bottom - r.top,
+        "x": r.left + dx, "y": r.top + dy, "width": r.right - r.left, "height": r.bottom - r.top,
         "maximized": wp.showCmd == SW_SHOWMAXIMIZED.0 as u32,
     });
     s.app.apply("Window", vec![docs::Op {
@@ -489,4 +518,19 @@ fn remember_placement(s: &mut Studio) {
         path: "/window".into(),
         value: Some(value),
     }]);
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::inside;
+    use mypaper_desktop::Rect;
+
+    #[test]
+    fn a_window_left_above_the_top_bar_opens_below_it() {
+        // A display left of the main one with a 37 px top bar: the old saves crept to y = -39.
+        let work = Rect { x: -2560, y: 37, width: 2560, height: 1403 };
+        assert_eq!(inside(work, (-2062, -39, 1880, 980)), (-2062, 37, 1880, 980));
+        // Too big for the work area: shrunk to fit, not pushed off the far edge.
+        assert_eq!(inside(work, (-2560, 37, 3000, 2000)), (-2560, 37, 2560, 1403));
+    }
 }
