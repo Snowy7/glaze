@@ -136,68 +136,8 @@
     }
   ],
   "idle_on": {
-    "run": "glaze-idle-on-20261109-003150",
+    "run": "glaze-idle-on-latest-20261109-005216",
     "foreground_unchanged": true,
-    "count": 4,
-    "cpu_ms": 0.0,
-    "message_wakes": 0,
-    "off": false,
-    "one_core_percent": 0.0,
-    "private_bytes": 2220032,
-    "seconds": 60.0093847
-  },
-  "idle_off": {
-    "run": "glaze-idle-off-20261109-003345",
-    "foreground_unchanged": true,
-    "count": 4,
-    "cpu_ms": 15.625,
-    "message_wakes": 0,
-    "off": true,
-    "one_core_percent": 0.026039711518326833,
-    "private_bytes": 1560576,
-    "seconds": 60.004505
-  },
-  "native_cases": {
-    "run": "glaze-native-final-20261109-004630",
-    "foreground_unchanged": true,
-    "animation": [
-      {
-        "frames": 75,
-        "interval_p95_ms": 6.880599999999999,
-        "mean_us": 1122.7159999999997,
-        "missed_frames": 4,
-        "p95_us": 1605.7,
-        "refresh_period_ms": 4.1666,
-        "windows": 4
-      },
-      {
-        "frames": 77,
-        "interval_p95_ms": 5.6955,
-        "mean_us": 1118.9337662337657,
-        "missed_frames": 3,
-        "p95_us": 1525.3,
-        "refresh_period_ms": 4.1666,
-        "windows": 4
-      },
-      {
-        "frames": 79,
-        "interval_p95_ms": 5.2454,
-        "mean_us": 1044.2696202531645,
-        "missed_frames": 1,
-        "p95_us": 1907.8999999999999,
-        "refresh_period_ms": 4.1666,
-        "windows": 3
-      },
-      {
-        "frames": 79,
-        "interval_p95_ms": 5.570399999999999,
-        "mean_us": 1137.1202531645572,
-        "missed_frames": 1,
-        "p95_us": 1989.9,
-        "refresh_period_ms": 4.1668,
-        "windows": 4
-      }
-    ],
     "count": 4,
     "cpu_ms": 0.0,
     "message_wakes": 0,
@@ -215,10 +155,87 @@
         "refresh_hz": 200
       }
     ],
-    "private_bytes": 2322432,
+    "private_bytes": 2068480,
+    "seconds": 60.0057161
+  },
+  "idle_off": {
+    "run": "glaze-idle-off-20261109-003345",
+    "foreground_unchanged": true,
+    "count": 4,
+    "cpu_ms": 15.625,
+    "message_wakes": 0,
+    "off": true,
+    "one_core_percent": 0.026039711518326833,
+    "private_bytes": 1560576,
+    "seconds": 60.004505
+  },
+  "native_cases": {
+    "run": "glaze-owned-focus-final-20261109-010102",
+    "foreground_unchanged": true,
+    "capture_head": "9a2063b1",
+    "tray_hide_show_cycles": 3,
+    "background_owned_open_preserves_focused_rect": true,
+    "resize_source_and_proxy_inspected": true,
+    "resized_and_restored_bounds_asserted": true,
+    "animation": [
+      {
+        "frames": 78,
+        "interval_p95_ms": 5.6489,
+        "mean_us": 1075.7358974358976,
+        "missed_frames": 2,
+        "p95_us": 2168.6,
+        "refresh_period_ms": 4.1666,
+        "windows": 3
+      },
+      {
+        "frames": 76,
+        "interval_p95_ms": 6.0347,
+        "mean_us": 1087.1657894736843,
+        "missed_frames": 3,
+        "p95_us": 2202.5,
+        "refresh_period_ms": 4.1666,
+        "windows": 3
+      },
+      {
+        "frames": 79,
+        "interval_p95_ms": 5.175800000000001,
+        "mean_us": 1020.3506329113924,
+        "missed_frames": 1,
+        "p95_us": 1591.8,
+        "refresh_period_ms": 4.1666,
+        "windows": 2
+      },
+      {
+        "frames": 77,
+        "interval_p95_ms": 5.248,
+        "mean_us": 1162.9,
+        "missed_frames": 2,
+        "p95_us": 2003.1,
+        "refresh_period_ms": 4.1666,
+        "windows": 4
+      }
+    ],
+    "count": 4,
+    "cpu_ms": 15.625,
+    "message_wakes": 0,
+    "off": false,
+    "one_core_percent": 0.7804816548348977,
+    "outputs": [
+      {
+        "device": "\\\\.\\DISPLAY2",
+        "rect": [
+          -2560,
+          9,
+          2560,
+          1440
+        ],
+        "refresh_hz": 200
+      }
+    ],
+    "private_bytes": 2301952,
     "resize_proxy_captured": true,
     "restored": true,
-    "seconds": 2.0005132,
+    "seconds": 2.0019689,
     "window_cases": true
   },
   "crash_recovery": {
@@ -231,6 +248,27 @@
     "Update cost excludes snapshot setup, DwmFlush and final HWND commit.",
     "DWM primary period is about 4.167 ms; the fixture output mode is 200 Hz (5 ms).",
     "Shared desktop: other workloads were present. Smooth pacing and isolated DWM/GPU cost remain unverified.",
-    "Adapter idle samples do not establish whole-shell CPU/wakes/RAM equivalence with main."
-  ]
+    "Adapter idle samples do not establish whole-shell CPU/wakes/RAM equivalence with main.",
+    "PrintWindow is synchronous: a client hanging after its responsiveness probe can still block the projection worker and cancellation join."
+  ],
+  "previous_idle_on": {
+    "run": "glaze-idle-on-20261109-003150",
+    "foreground_unchanged": true,
+    "count": 4,
+    "cpu_ms": 0.0,
+    "message_wakes": 0,
+    "off": false,
+    "one_core_percent": 0.0,
+    "private_bytes": 2220032,
+    "seconds": 60.0093847
+  },
+  "unit_ui_render": {
+    "test": "glaze-studio panel::tests::render_panel_pages",
+    "filters": [
+      "settings",
+      "general"
+    ],
+    "general_dark_inspected": true,
+    "live_studio_interaction": false
+  }
 }

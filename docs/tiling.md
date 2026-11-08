@@ -1,6 +1,6 @@
 # Scrolling tiling
 
-Glaze can replace Snap with a row of independently sized columns. Enable **Settings > Experimental >
+Glaze can replace Snap with a row of independently sized columns. Enable **Settings > General > Experimental >
 Scrolling tiling** in Studio. It is off by default. Turning it off restores the windows and the session's
 original Snap preference. The implementation is experimental; the validation gaps below are release gates.
 
@@ -86,13 +86,14 @@ Eligible SHOW events whose native state is still settling get at most three one-
 There is no tiling object, subscription, hook extension, worker, overlay, or timer while the flag is off.
 
 The projection worker retains only the newest pending layout. A spring drives DWM thumbnails in a transient,
-nonactivating, input-transparent overlay; resizing windows use a `PrintWindow` snapshot. It is paced by
+nonactivating, input-transparent overlay; resizing windows use a `PrintWindow` snapshot
+uploaded once into an owned layered source window. It is paced by
 `DwmFlush` and exits when motion ends. **Region updates use `SetWindowRgn` only on Glaze's own overlay.**
 No other application's region, style, or cloaking state is changed. Proxy paths use workspace coordinates,
 independent of native parking, and are cropped to their owning output. Both overlays stay below topmost
 windows. Responsive real windows are committed in one `DeferWindowPos` batch; hung clients use the
-`SetWindowPos` async fallback because the deferred API rejects `SWP_ASYNCWINDOWPOS`; only a DPI transition gets a second compensation pass. Extended frame bounds account
-for invisible borders. Post-placement bounds teach per-application minima and incompatible-client rules.
+`SetWindowPos` async fallback because the deferred API rejects `SWP_ASYNCWINDOWPOS`. Only a DPI
+transition gets a second compensation pass. Extended frame bounds account for invisible borders. Post-placement bounds teach per-application minima and incompatible-client rules.
 
 Off-view windows are parked just beyond the bounding box of all connected monitors. Parking preserves
 native taskbar and Alt-Tab membership. Parked GDI thumbnails can show their last frame; this is an accepted
@@ -135,6 +136,8 @@ On 9 November 2026, medium-integrity scoped fixtures passed admission/owned/fixe
 tray, minimize, hung-client positioning, native fullscreen suspension/return, topmost overlay ordering,
 workspace overview, destruction and exact disable restoration. A hard-crash/new-process recovery restored
 four parked windows. Own-window overview and tiled captures were inspected and uploaded to PR #2.
+The final run repeats tray hide/show three times. Its resized snapshot source and animated proxy were
+inspected: both contain the frozen client image, after replacing an initially black off-screen GDI source.
 Foreground stayed unchanged and every created process was stopped. Native stress and resize capture are
 recorded in the [measurement artifact](research/scrolling-tiling/measurements-2026-11-09.json).
 
@@ -158,7 +161,7 @@ that gate is open; their incremental costs have not been measured.
 
 | 60-second adapter sample | CPU ms | One-core CPU | UI wakes | Private bytes |
 |---|---:|---:|---:|---:|
-| Flag on | 0 | 0% | 0 | 2,220,032 |
+| Flag on | 0 | 0% | 0 | 2,068,480 |
 | Flag off | 15.625 | 0.02604% | 0 | 1,560,576 |
 
 These single quiet samples include process CPU time, not just UI time; zero means no CPU-time quantum was
@@ -168,7 +171,8 @@ main shell was not stopped or replaced to collect a whole-shell A/B.
 
 The pure layout suite has 38 passing tests, including 128 generated sequences over 36 operation families
 and saved counterexamples. Latest focused runs: config 25, desktop 45 (one ignored), shell tiling 5,
-keyboard 8. All seven touched crates pass `cargo check` and clippy (warnings remain). At the rename
+keyboard 8. Studio's focused settings-page render also passes; its General page was inspected with the
+new toggle off. All seven touched crates pass `cargo check` and clippy (warnings remain). At the rename
 checkpoint, bars had 122 passing tests; shell had 218 passing tests and a z-order test that passed in
 isolation. Studio had 184 passing tests and one weather-gallery golden mismatch (missing plugin card),
 reproduced in isolation. That fixture and its baselines were not changed by tiling.
@@ -210,6 +214,7 @@ code inspection is not counted as a test.
 | Win-key conflicts | Unit | Bindings and existing hook state-machine tests; actual key capture untested without input injection |
 | Explorer restart | Open | Debounced TaskbarCreated receiver implemented; actual restart not performed |
 | Crash / exit | Live, partial | Disable and renamed hard-crash recovery restore exact originals; actual core-death/panic paths not invoked |
+
 Whole-shell flag-off CPU, wakes and RAM equivalence has **not** been measured: the owner's main Glaze build
 must not be replaced or stopped. An isolated adapter measurement cannot prove that gate.
 
@@ -218,7 +223,10 @@ late titles, Electron transients, public virtual-desktop identity, DPI/hotplug, 
 hung probes, UWP frames and recovery. Real applications, physical monitor changes, keys, title-bar dragging,
 and overview pointer drops need additional live validation. Full-monitor placement retains client chrome.
 Shadows, a wallpaper-backed overview, repaint detection beyond the final DWM frame, touchpad gestures and
-wallpaper panning are not implemented yet. Optional cloaking and an elevated companion are not included.
+wallpaper panning are not implemented yet.
+`PrintWindow` is [synchronous](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-printwindow).
+The 20 ms responsiveness probe handles an already-hung client; a client hanging after that probe can still
+block capture/positioning and the cancellation join. Mid-call cancellation is a remaining reliability gap. Optional cloaking and an elevated companion are not included.
 
 Run only PID-scoped, medium-integrity fixtures; never exercise the normal tiler on the user's windows:
 
