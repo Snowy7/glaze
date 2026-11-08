@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use mypaper_desktop::tiling_recovery::Identity;
 use mypaper_tiling::{Rect, WindowId};
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use windows::{
     Win32::{
         Foundation::{CloseHandle, HANDLE, HWND, RECT},
@@ -21,6 +21,9 @@ use windows::{
     },
     core::PWSTR,
 };
+static DISPLAY_DIRTY: AtomicBool = AtomicBool::new(false);
+static DRAG_FRAME: AtomicBool = AtomicBool::new(false);
+static EXPLORER_MESSAGE: AtomicU32 = AtomicU32::new(0);
 static ELEVATION_HINTED: AtomicBool = AtomicBool::new(false);
 /// Kernel-side eligibility only: safe before queuing an intake event or querying another process.
 pub fn intake_candidate(h: HWND) -> bool {
@@ -43,6 +46,99 @@ pub fn desktop_window(h: HWND) -> bool {
     // SAFETY: read-only desktop HWND queries; neither activates a window.
     unsafe { h == GetDesktopWindow() || h == GetShellWindow() }
 }
+/// Hidden top-level receiver: broadcasts do not reach message-only windows.
+pub struct DisplayEvents(HWND);
+impl DisplayEvents {
+    /// A frame timer exists only while the user is in a native move/resize loop.
+    pub fn dragging(&self, on: bool) {
+        /* SAFETY: owned window, distinct timer ID. */
+        unsafe {
+            if on {
+                SetTimer(Some(self.0), 2, 16, None);
+            } else {
+                let _ = KillTimer(Some(self.0), 2);
+            }
+        }
+    }
+    pub fn drag_frame(&self) -> bool {
+        DRAG_FRAME.swap(false, Ordering::Relaxed)
+    }
+    pub fn new() -> Result<Self> {
+        // SAFETY: a static procedure and a hidden shell-owned window; no activation.
+        unsafe {
+            let class = windows::core::w!("mypaper.tiling.events");
+            let info = WNDCLASSEXW {
+                cbSize: size_of::<WNDCLASSEXW>() as u32,
+                lpfnWndProc: Some(display_proc),
+                hInstance: windows::Win32::System::LibraryLoader::GetModuleHandleW(None)?.into(),
+                lpszClassName: class,
+                ..Default::default()
+            };
+            RegisterClassExW(&info);
+            EXPLORER_MESSAGE.store(
+                RegisterWindowMessageW(windows::core::w!("TaskbarCreated")),
+                Ordering::Relaxed,
+            );
+            Ok(Self(CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                class,
+                windows::core::w!("Tiling events"),
+                WS_POPUP,
+                0,
+                0,
+                0,
+                0,
+                None,
+                None,
+                None,
+                None,
+            )?))
+        }
+    }
+    pub fn changed(&self) -> bool {
+        DISPLAY_DIRTY.swap(false, Ordering::Relaxed)
+    }
+}
+impl Drop for DisplayEvents {
+    fn drop(&mut self) {
+        /* SAFETY: owned window on its creating thread. */
+        unsafe {
+            let _ = KillTimer(Some(self.0), 1);
+            let _ = DestroyWindow(self.0);
+        }
+    }
+}
+unsafe extern "system" fn display_proc(
+    h: HWND,
+    msg: u32,
+    w: WPARAM,
+    l: LPARAM,
+) -> windows::Win32::Foundation::LRESULT {
+    // SAFETY: timer is armed only for a display burst, and killed at its sole firing.
+    unsafe {
+        if msg == WM_DISPLAYCHANGE
+            || msg == WM_DPICHANGED
+            || (msg == WM_SETTINGCHANGE && w.0 == SPI_SETWORKAREA.0 as usize)
+            || msg == EXPLORER_MESSAGE.load(Ordering::Relaxed)
+        {
+            SetTimer(Some(h), 1, 150, None);
+            return Default::default();
+        }
+        if msg == WM_TIMER && w.0 == 1 {
+            let _ = KillTimer(Some(h), 1);
+            DISPLAY_DIRTY.store(true, Ordering::Relaxed);
+            crate::inbox::post(crate::inbox::WM_CONFIG + 21, 0);
+            return Default::default();
+        }
+        if msg == WM_TIMER && w.0 == 2 {
+            DRAG_FRAME.store(true, Ordering::Relaxed);
+            crate::inbox::post(crate::inbox::WM_CONFIG + 25, 0);
+            return Default::default();
+        }
+        DefWindowProcW(h, msg, w, l)
+    }
+}
+
 pub fn hwnd(id: WindowId) -> HWND {
     HWND(id.0 as usize as *mut _)
 }
