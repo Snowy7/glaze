@@ -1,455 +1,352 @@
-//! `scene` wallpapers: a glTF file drawn by a small forward renderer. The
-//! whole scene is merged into one vertex/index buffer at load time, drawn
-//! with 4x MSAA behind a sky gradient, and orbited by a camera that leans
-//! toward the mouse. A still camera makes it a static wallpaper that is
-//! drawn once.
+//! Shared glTF renderer for scene bases and model layers.
+//!
+//! `SceneRenderer::load(gpu, path, &SceneOptions)` uploads a model once.
+//! `render_into(gpu, encoder, color, depth, size, clock, mouse, transparent)`
+//! records into a single-sample `gpu.format` color target. `mouse` is in output
+//! pixels. Optional depth is an `R32Float` render attachment at output size:
+//! linear camera depth, 0 at near, 1 at far (including the background).
+//! Transparent output is premultiplied, including glTF BLEND materials.
+//! `scale` reduces internal render resolution; the caller supplies rect size,
+//! never a full-screen texture for a small model. Targets persist until resize.
+//! `animated()` is false for no clip, orbit=0 and parallax=0: bake that output.
+//! A renderer is one view; the legacy source keeps separate uniform slots for
+//! screens so several renders can be encoded before the queue is submitted.
 
-use std::rc::{Rc, Weak};
-use std::time::Duration;
-
-use anyhow::{Context, Result};
-use bytemuck::{Pod, Zeroable};
-use glam::{Vec2, Vec3};
-use mypaper_theme::{Fit, LoadedTheme, SceneWallpaper};
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use windows::Win32::Foundation::HWND;
-
-use super::blit::BlitQuad;
 use super::{Frame, Redraw, Source, Visibility, begin};
 use crate::gpu::Gpu;
-use input::SceneInput;
-use load::{SceneData, Vertex};
-use math::{Sphere, View};
-
+use anyhow::{Context, Result, bail};
+use bytemuck::{Pod, Zeroable};
+use glam::{Mat4, Quat, Vec2, Vec3};
+use mypaper_theme::{LoadedTheme, SceneWallpaper};
+use std::{path::Path, time::Duration};
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use windows::Win32::Foundation::HWND;
 #[path = "scene_input.rs"]
 mod input;
 #[path = "scene_load.rs"]
 mod load;
 #[path = "scene_math.rs"]
 mod math;
+#[cfg(test)]
+#[path = "scene/tests.rs"]
+mod tests;
+use load::{SceneData, Vertex};
 
-const SAMPLES: u32 = 4;
-const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-
-/// Direction toward the sun in world space (it does not move with the camera).
-const SUN_DIR: Vec3 = Vec3::new(0.55, 0.38, 0.45);
-/// Warm dusk sunlight, linear.
-const SUN_COLOR: Vec3 = Vec3::new(1.3, 0.82, 0.55);
-/// Fog thickness: fraction hidden per scene radius of depth is `1 - exp(-FOG)`.
-const FOG: f32 = 0.3;
-/// How quickly the parallax lean catches up with the mouse, per second.
-const LEAN_RATE: f32 = 5.0;
-
-/// Mirrors `struct Globals` in scene.wgsl. Everything except the camera
-/// part is fixed per scene, so it is built once and copied per frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Environment {
+    #[default]
+    Sky,
+    Color,
+    Transparent,
+}
+#[derive(Debug, Clone)]
+pub struct SceneOptions {
+    pub orbit: f32,
+    pub parallax: f32,
+    /// Render resolution multiplier, 0.25..1 (model size comes from its rect).
+    pub scale: f32,
+    pub rotation: [f32; 3],
+    pub light: [f32; 3],
+    pub background: [f32; 3],
+    pub environment: Environment,
+    pub exposure: f32,
+    pub animation: Option<String>,
+}
+impl Default for SceneOptions {
+    fn default() -> Self {
+        Self {
+            orbit: 0.0,
+            parallax: 0.0,
+            scale: 1.0,
+            rotation: [0.0; 3],
+            light: [0.4, 0.8, 0.5],
+            background: [0.02, 0.025, 0.04],
+            environment: Environment::Sky,
+            exposure: 1.0,
+            animation: None,
+        }
+    }
+}
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[derive(Clone, Copy, Pod, Zeroable)]
 struct Globals {
     view_proj: [[f32; 4]; 4],
-    /// xyz; w = distance from the eye where fog starts.
+    model: [[f32; 4]; 4],
     eye: [f32; 4],
-    sun_dir: [f32; 4],
-    sun_color: [f32; 4],
-    sky: [f32; 4],
-    ground: [f32; 4],
-    /// rgb; w = density per world unit.
-    fog: [f32; 4],
-    bg_top: [f32; 4],
-    bg_bottom: [f32; 4],
+    light: [f32; 4],
+    background: [f32; 4],
+    horizon: [f32; 4],
+    clip: [f32; 4],
 }
-
-impl Globals {
-    /// Lighting and sky derived from the theme's linear `background`: it is
-    /// the top of the sky; the horizon warms toward a dusk glow, and the
-    /// hemisphere ambient and fog take their colors from the two.
-    fn new(background: Vec3, radius: f32) -> Self {
-        let luma = background.dot(Vec3::new(0.2126, 0.7152, 0.0722));
-        let glow = Vec3::new(1.0, 0.45, 0.4) * 0.19 * (1.0 - luma.min(1.0));
-        let horizon = (background + glow).min(Vec3::ONE);
-        let sky = background * 3.0 + Vec3::splat(0.05);
-        let ground = horizon * 1.2;
-        let fog = background.lerp(horizon, 0.6);
-        let v4 = |v: Vec3| v.extend(0.0).to_array();
-        Self {
-            view_proj: Default::default(),
-            eye: [0.0; 4],
-            sun_dir: v4(SUN_DIR.normalize()),
-            sun_color: v4(SUN_COLOR),
-            sky: v4(sky),
-            ground: v4(ground),
-            fog: fog.extend(FOG / radius).to_array(),
-            bg_top: v4(background),
-            bg_bottom: v4(horizon),
-        }
-    }
-
-    fn with_view(mut self, view: &View) -> Self {
-        self.view_proj = view.view_proj.to_cols_array_2d();
-        self.eye = view.eye.extend(view.nearest).to_array();
-        self
-    }
+struct Material {
+    bind: wgpu::BindGroup,
+    blend: bool,
 }
-
-pub struct SceneSource {
-    sphere: Sphere,
-    globals: Globals,
-    /// Degrees per second.
-    orbit: f32,
-    parallax: f32,
-    scale: f32,
-    interval: Duration,
-    /// Safety-net clear color (sRGB-encoded); the sky pass covers it.
-    clear: wgpu::Color,
-    vertices: wgpu::Buffer,
-    indices: wgpu::Buffer,
-    batches: Vec<DrawBatch>,
-    sky_pipeline: wgpu::RenderPipeline,
-    mesh_pipeline: wgpu::RenderPipeline,
-    globals_layout: wgpu::BindGroupLayout,
-    screens: Vec<Option<ScreenState>>,
-    /// The live multisampled attachments, shared by same-sized screens.
-    attachments: Vec<Weak<Attachments>>,
-    /// Drag-to-orbit for `interactive` scenes; `None` (and nothing listening) otherwise.
-    input: Option<SceneInput>,
-    /// Per screen: visible (not covered, not held). Input listens while any is.
-    live: Vec<bool>,
-}
-
-/// One draw: an index range plus the texture bound for it.
-struct DrawBatch {
-    bind_group: wgpu::BindGroup,
-    indices: std::ops::Range<u32>,
-}
-
-struct ScreenState {
-    globals: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
-    /// Smoothed mouse position, -1..1 (x right, y up).
-    lean: Vec2,
-    last_clock: Duration,
-    target: Option<Target>,
-}
-
-/// Per-screen render targets, rebuilt only when the render size changes.
 struct Target {
     size: (u32, u32),
-    attachments: Rc<Attachments>,
-    /// Single-sample color and its upscaler, when `scale < 1`.
-    upscale: Option<(wgpu::TextureView, BlitQuad)>,
-}
-
-/// The multisampled color and depth that a pass draws into. Both are cleared
-/// when a pass starts and discarded when it ends, so screens with the same
-/// render size can take turns with one set instead of each holding its own
-/// (about 120 MB of GPU memory per 1440p screen).
-struct Attachments {
-    size: (u32, u32),
-    msaa: wgpu::TextureView,
     depth: wgpu::TextureView,
+    depth_bind: wgpu::BindGroup,
+    upscale: Option<wgpu::TextureView>,
 }
-
-impl Attachments {
-    fn new(gpu: &Gpu, size: (u32, u32)) -> Self {
-        let attachment = |label, format| {
-            gpu.device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: wgpu::Extent3d {
-                        width: size.0,
-                        height: size.1,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: SAMPLES,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default())
-        };
-        Self {
-            size,
-            msaa: attachment("scene msaa", gpu.format),
-            depth: attachment("scene depth", DEPTH_FORMAT),
+struct ViewState {
+    uniform: wgpu::Buffer,
+    bind: wgpu::BindGroup,
+    target: Option<Target>,
+    lean: Vec2,
+    clock: Duration,
+}
+pub struct SceneRenderer {
+    options: SceneOptions,
+    data: SceneData,
+    sphere: math::Sphere,
+    clip: Option<usize>,
+    last_animation: Option<Duration>,
+    vertices: wgpu::Buffer,
+    indices: wgpu::Buffer,
+    materials: Vec<Material>,
+    order: Vec<usize>,
+    globals_layout: wgpu::BindGroupLayout,
+    depth_layout: wgpu::BindGroupLayout,
+    opaque: wgpu::RenderPipeline,
+    blend: wgpu::RenderPipeline,
+    sky: wgpu::RenderPipeline,
+    depth: wgpu::RenderPipeline,
+    resolve: wgpu::RenderPipeline,
+    states: Vec<ViewState>,
+}
+impl SceneRenderer {
+    pub fn load(gpu: &Gpu, path: &Path, options: &SceneOptions) -> Result<Self> {
+        if !options.scale.is_finite()
+            || !options.exposure.is_finite()
+            || options
+                .rotation
+                .iter()
+                .chain(&options.light)
+                .chain(&options.background)
+                .chain([&options.orbit, &options.parallax])
+                .any(|x| !x.is_finite())
+        {
+            bail!("scene options must be finite");
         }
+        let data = load::load(path)?;
+        let sphere = math::Sphere::around(data.vertices.iter().map(|v| Vec3::from(v.position)))
+            .context("empty model")?;
+        let sphere = math::Sphere {
+            radius: sphere.radius.max(0.001),
+            ..sphere
+        };
+        let clip = options
+            .animation
+            .as_ref()
+            .map(|name| {
+                data.clips
+                    .iter()
+                    .position(|c| &c.name == name)
+                    .with_context(|| format!("animation {name:?} not found"))
+            })
+            .transpose()?;
+        gpu.checked(|| Self::upload(gpu, options.clone(), data, sphere, clip))
+            .with_context(|| path.display().to_string())
     }
-}
-
-/// The attachments for `size`: the ones another screen already uses, else new
-/// ones. `cache` only watches them, so a set is freed with its last screen.
-fn shared_attachments(
-    cache: &mut Vec<Weak<Attachments>>,
-    gpu: &Gpu,
-    size: (u32, u32),
-) -> Rc<Attachments> {
-    cache.retain(|weak| weak.strong_count() > 0);
-    let found = cache
-        .iter()
-        .filter_map(Weak::upgrade)
-        .find(|attachments| attachments.size == size);
-    found.unwrap_or_else(|| {
-        let attachments = Rc::new(Attachments::new(gpu, size));
-        cache.push(Rc::downgrade(&attachments));
-        attachments
-    })
-}
-
-impl SceneSource {
-    pub fn new(gpu: &Gpu, theme: &LoadedTheme, config: &SceneWallpaper) -> Result<Self> {
-        let path = theme.asset(&config.source);
-        let data = load::load(&path)?;
-        let sphere = Sphere::around(data.vertices.iter().map(|v| Vec3::from(v.position)))
-            .context("scene has no vertices")?;
-        let background = Vec3::from(config.background);
-        let [r, g, b] = background.to_array().map(math::linear_to_srgb);
-
-        let gpu_resources = gpu
-            .checked(|| GpuResources::new(gpu, &data))
-            .with_context(|| path.display().to_string())?;
-        Ok(Self {
-            sphere,
-            globals: Globals::new(background, sphere.radius.max(f32::EPSILON)),
-            orbit: config.orbit,
-            parallax: config.parallax,
-            scale: config.scale,
-            interval: Duration::from_secs(1) / config.fps,
-            clear: wgpu::Color {
-                r: r.into(),
-                g: g.into(),
-                b: b.into(),
-                a: 1.0,
-            },
-            vertices: gpu_resources.vertices,
-            indices: gpu_resources.indices,
-            batches: gpu_resources.batches,
-            sky_pipeline: gpu_resources.sky_pipeline,
-            mesh_pipeline: gpu_resources.mesh_pipeline,
-            globals_layout: gpu_resources.globals_layout,
-            screens: Vec::new(),
-            attachments: Vec::new(),
-            input: config
-                .interactive
-                .then(SceneInput::start)
-                .transpose()
-                .inspect_err(|e| log::warn!("scene: no mouse input: {e:#}"))
-                .unwrap_or(None),
-            // Every screen is visible until the engine says otherwise: starting empty would let
-            // the first screen to report "covered" look like "all covered".
-            live: vec![true; mypaper_desktop::monitors().len().max(1)],
-        })
+    pub fn animated(&self) -> bool {
+        self.options.orbit != 0.0
+            || self.options.parallax != 0.0
+            || self.clip.is_some_and(|i| self.data.clips[i].duration > 0.0)
     }
-
-    fn animated(&self) -> bool {
-        self.orbit != 0.0 || self.parallax != 0.0 || self.input.is_some()
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_into(
+        &mut self,
+        gpu: &Gpu,
+        encoder: &mut wgpu::CommandEncoder,
+        color_view: &wgpu::TextureView,
+        depth_out: Option<&wgpu::TextureView>,
+        size: (u32, u32),
+        clock: Duration,
+        mouse: [f32; 2],
+        transparent: bool,
+    ) {
+        self.render_view(
+            gpu,
+            encoder,
+            color_view,
+            depth_out,
+            size,
+            clock,
+            mouse,
+            transparent,
+            0,
+            Vec2::ZERO,
+        );
     }
-}
-
-impl Source for SceneSource {
-    fn render(&mut self, gpu: &Gpu, frame: Frame<'_>) {
-        let size = render_size(frame.size, self.scale);
-        let state = screen_state(&mut self.screens, gpu, &self.globals_layout, frame.screen);
-        if state.target.as_ref().is_none_or(|t| t.size != size) {
-            let attachments = shared_attachments(&mut self.attachments, gpu, size);
+    #[allow(clippy::too_many_arguments)]
+    fn render_view(
+        &mut self,
+        gpu: &Gpu,
+        encoder: &mut wgpu::CommandEncoder,
+        color_view: &wgpu::TextureView,
+        depth_out: Option<&wgpu::TextureView>,
+        size: (u32, u32),
+        clock: Duration,
+        mouse: [f32; 2],
+        transparent: bool,
+        screen: usize,
+        drag: Vec2,
+    ) {
+        let size = (size.0.max(1), size.1.max(1));
+        let internal = render_size(size, self.options.scale);
+        if let Some(clip) = self.clip.filter(|_| self.last_animation != Some(clock)) {
+            self.data.animate(clip, clock.as_secs_f32());
+            gpu.queue
+                .write_buffer(&self.vertices, 0, bytemuck::cast_slice(&self.data.vertices));
+            self.last_animation = Some(clock);
+        }
+        while self.states.len() <= screen {
+            self.states.push(ViewState::new(gpu, &self.globals_layout));
+        }
+        let state = &mut self.states[screen];
+        if state.target.as_ref().is_none_or(|t| t.size != internal) {
             state.target = Some(Target::new(
                 gpu,
-                attachments,
+                internal,
                 size,
-                frame.size,
-                self.scale < 1.0,
+                &self.depth_layout,
+                self.options.scale < 1.0,
             ));
         }
-        let target = state.target.as_ref().expect("just created");
-
-        // Camera: orbit on the engine clock, lean toward the (eased) mouse.
-        let (w, h) = (frame.size.0.max(1) as f32, frame.size.1.max(1) as f32);
         let mouse = Vec2::new(
-            frame.mouse[0] / w * 2.0 - 1.0,
-            1.0 - frame.mouse[1] / h * 2.0,
+            mouse[0] / size.0 as f32 * 2.0 - 1.0,
+            1.0 - mouse[1] / size.1 as f32 * 2.0,
         )
         .clamp(Vec2::NEG_ONE, Vec2::ONE);
-        let dt = frame.clock.saturating_sub(state.last_clock).as_secs_f32();
-        state.last_clock = frame.clock;
-        state.lean = math::approach(state.lean, mouse, dt, LEAN_RATE);
-        // Dragging adds to the orbit, and (as lean, so it works with no parallax) tilts the camera.
-        let drag = self
-            .input
-            .as_ref()
-            .map(SceneInput::drag)
-            .unwrap_or_default();
-        let lean_gain = if self.input.is_some() {
-            self.parallax.max(0.12)
-        } else {
-            self.parallax
-        };
-        let lean = if lean_gain > 0.0 {
-            state.lean * (self.parallax / lean_gain) + Vec2::new(0.0, drag.pitch)
-        } else {
-            state.lean
-        };
+        state.lean = math::approach(
+            state.lean,
+            mouse,
+            clock.saturating_sub(state.clock).as_secs_f32(),
+            5.0,
+        );
+        state.clock = clock;
         let view = math::camera(
             self.sphere,
-            w / h,
-            math::azimuth(self.orbit, frame.clock) + drag.yaw,
-            lean,
-            lean_gain,
+            size.0 as f32 / size.1 as f32,
+            math::azimuth(self.options.orbit, clock) + drag.x,
+            state.lean + Vec2::new(0.0, drag.y),
+            self.options
+                .parallax
+                .max(if drag.y != 0.0 { 0.12 } else { 0.0 }),
         );
-        let globals = self.globals.with_view(&view);
+        let r = self.options.rotation.map(f32::to_radians);
+        let rotation = Quat::from_euler(glam::EulerRot::XYZ, r[0], r[1], r[2]);
+        let model = Mat4::from_translation(self.sphere.center)
+            * Mat4::from_quat(rotation)
+            * Mat4::from_translation(-self.sphere.center);
+        let bg = Vec3::from(self.options.background);
+        let horizon = bg + Vec3::new(0.12, 0.07, 0.035);
+        let transparent = transparent || self.options.environment == Environment::Transparent;
+        let globals = Globals {
+            view_proj: view.view_proj.to_cols_array_2d(),
+            model: model.to_cols_array_2d(),
+            eye: view.eye.extend(0.0).to_array(),
+            light: Vec3::from(self.options.light)
+                .normalize_or(Vec3::Y)
+                .extend(self.options.exposure.max(0.0))
+                .to_array(),
+            background: bg
+                .extend(if self.options.environment == Environment::Color {
+                    1.0
+                } else {
+                    0.0
+                })
+                .to_array(),
+            horizon: horizon.extend(0.0).to_array(),
+            clip: [view.near, view.far, 0.0, 0.0],
+        };
         gpu.queue
-            .write_buffer(&state.globals, 0, bytemuck::bytes_of(&globals));
-
-        // Draw into the MSAA target, resolving straight to the screen, or to
-        // the scaled texture that is then upscaled onto it.
-        let resolve = target.upscale.as_ref().map_or(frame.view, |(view, _)| view);
+            .write_buffer(&state.uniform, 0, bytemuck::bytes_of(&globals));
+        let target = state.target.as_ref().expect("created target");
+        let color = target.upscale.as_ref().map_or(color_view, |v| v);
+        // Opaque first; BLEND primitives back-to-front, without allocating a sort buffer.
+        self.order.sort_unstable_by(|&a, &b| {
+            let a = &self.data.batches[a];
+            let b = &self.data.batches[b];
+            let aa = self.materials[a.material].blend;
+            let bb = self.materials[b.material].blend;
+            aa.cmp(&bb).then_with(|| {
+                if aa {
+                    model
+                        .transform_point3(b.center)
+                        .distance_squared(view.eye)
+                        .total_cmp(&model.transform_point3(a.center).distance_squared(view.eye))
+                } else {
+                    a.material.cmp(&b.material)
+                }
+            })
+        });
         {
-            let mut pass = frame
-                .encoder
-                .begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("scene"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &target.attachments.msaa,
-                        depth_slice: None,
-                        resolve_target: Some(resolve),
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(self.clear),
-                            store: wgpu::StoreOp::Discard,
-                        },
-                    })],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &target.attachments.depth,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0),
-                            store: wgpu::StoreOp::Discard,
-                        }),
-                        stencil_ops: None,
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("scene PBR"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: color,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &target.depth,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
                     }),
-                    ..Default::default()
-                });
-            pass.set_bind_group(0, &state.bind_group, &[]);
-            pass.set_pipeline(&self.sky_pipeline);
-            pass.draw(0..3, 0..1);
-
-            pass.set_pipeline(&self.mesh_pipeline);
+                    stencil_ops: None,
+                }),
+                ..Default::default()
+            });
+            pass.set_bind_group(0, &state.bind, &[]);
+            if !transparent {
+                pass.set_pipeline(&self.sky);
+                pass.draw(0..3, 0..1);
+            }
             pass.set_vertex_buffer(0, self.vertices.slice(..));
             pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
-            for batch in &self.batches {
-                pass.set_bind_group(1, &batch.bind_group, &[]);
+            for &i in &self.order {
+                let batch = &self.data.batches[i];
+                let m = &self.materials[batch.material];
+                pass.set_pipeline(if m.blend { &self.blend } else { &self.opaque });
+                pass.set_bind_group(1, &m.bind, &[]);
                 pass.draw_indexed(batch.indices.clone(), 0, 0..1);
             }
         }
-        if let Some((_, quad)) = &target.upscale {
-            let mut pass = begin(frame.encoder, frame.view, wgpu::LoadOp::Clear(self.clear));
-            quad.draw(&gpu.blit, &mut pass);
-        }
-    }
-
-    fn redraw(&self, _clock: Duration) -> Redraw {
-        if self.animated() {
-            Redraw::Every(self.interval)
-        } else {
-            Redraw::OnChange
-        }
-    }
-
-    fn set_visibility(&mut self, screen: usize, _hwnd: HWND, visibility: Visibility) {
-        let Some(input) = &mut self.input else { return };
-        if self.live.len() <= screen {
-            self.live.resize(screen + 1, true);
-        }
-        self.live[screen] = visibility == Visibility::Live;
-        input.set_live(self.live.iter().any(|&live| live));
-    }
-}
-
-/// The render resolution for a screen of `size` at render scale `scale`.
-fn render_size(size: (u32, u32), scale: f32) -> (u32, u32) {
-    if scale >= 1.0 {
-        return size;
-    }
-    let scaled = |n: u32| ((n as f32 * scale).ceil() as u32).max(1);
-    (scaled(size.0), scaled(size.1))
-}
-
-/// The state for `screen`, created on first use.
-fn screen_state<'a>(
-    screens: &'a mut Vec<Option<ScreenState>>,
-    gpu: &Gpu,
-    layout: &wgpu::BindGroupLayout,
-    screen: usize,
-) -> &'a mut ScreenState {
-    if screens.len() <= screen {
-        screens.resize_with(screen + 1, || None);
-    }
-    screens[screen].get_or_insert_with(|| {
-        let globals = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("scene globals"),
-            size: size_of::<Globals>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("scene globals"),
-            layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: globals.as_entire_binding(),
-            }],
-        });
-        ScreenState {
-            globals,
-            bind_group,
-            lean: Vec2::ZERO,
-            last_clock: Duration::ZERO,
-            target: None,
-        }
-    })
-}
-
-impl Target {
-    /// `size` is the render size; `screen` the swapchain size to upscale to.
-    fn new(
-        gpu: &Gpu,
-        attachments: Rc<Attachments>,
-        size: (u32, u32),
-        screen: (u32, u32),
-        upscale: bool,
-    ) -> Self {
-        let upscale = upscale.then(|| {
-            let texture = gpu.texture(
-                "scene resolve",
-                size,
-                gpu.format,
-                wgpu::TextureUsages::RENDER_ATTACHMENT,
-                None,
+        if target.upscale.is_some() {
+            let mut pass = begin(
+                encoder,
+                color_view,
+                wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
             );
-            let view = texture.create_view(&Default::default());
-            let quad = gpu.blit.quad(&gpu.device, &view);
-            quad.set(&gpu.queue, size, screen, Fit::Stretch, 1.0);
-            (view, quad)
-        });
-        Self {
-            size,
-            attachments,
-            upscale,
+            pass.set_pipeline(&self.resolve);
+            pass.set_bind_group(0, &state.bind, &[]);
+            pass.set_bind_group(1, &target.depth_bind, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        if let Some(depth) = depth_out {
+            let mut pass = begin(encoder, depth, wgpu::LoadOp::Clear(wgpu::Color::WHITE));
+            pass.set_pipeline(&self.depth);
+            pass.set_bind_group(0, &state.bind, &[]);
+            pass.set_bind_group(1, &target.depth_bind, &[]);
+            pass.draw(0..3, 0..1);
         }
     }
-}
-
-/// Everything uploaded to the GPU at load time.
-struct GpuResources {
-    vertices: wgpu::Buffer,
-    indices: wgpu::Buffer,
-    batches: Vec<DrawBatch>,
-    sky_pipeline: wgpu::RenderPipeline,
-    mesh_pipeline: wgpu::RenderPipeline,
-    globals_layout: wgpu::BindGroupLayout,
-}
-
-impl GpuResources {
-    fn new(gpu: &Gpu, data: &SceneData) -> Self {
-        let device = &gpu.device;
+    fn upload(
+        gpu: &Gpu,
+        options: SceneOptions,
+        data: SceneData,
+        sphere: math::Sphere,
+        clip: Option<usize>,
+    ) -> Self {
+        let d = &gpu.device;
         let buffer = |label, usage, contents: &[u8]| {
-            device.create_buffer_init(&BufferInitDescriptor {
+            d.create_buffer_init(&BufferInitDescriptor {
                 label: Some(label),
                 contents,
                 usage,
@@ -457,7 +354,7 @@ impl GpuResources {
         };
         let vertices = buffer(
             "scene vertices",
-            wgpu::BufferUsages::VERTEX,
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             bytemuck::cast_slice(&data.vertices),
         );
         let indices = buffer(
@@ -465,30 +362,58 @@ impl GpuResources {
             wgpu::BufferUsages::INDEX,
             bytemuck::cast_slice(&data.indices),
         );
-
         let entry = |binding, visibility, ty| wgpu::BindGroupLayoutEntry {
             binding,
             visibility,
             ty,
             count: None,
         };
-        let globals_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let uniform = wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        };
+        let globals_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("scene globals"),
-            entries: &[entry(
-                0,
-                wgpu::ShaderStages::VERTEX_FRAGMENT,
-                wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-            )],
+            entries: &[entry(0, wgpu::ShaderStages::VERTEX_FRAGMENT, uniform)],
         });
-        let texture_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("scene texture"),
+        let mut entries = vec![
+            entry(0, wgpu::ShaderStages::FRAGMENT, uniform),
+            entry(
+                1,
+                wgpu::ShaderStages::FRAGMENT,
+                wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            ),
+        ];
+        for i in 2..7 {
+            entries.push(entry(
+                i,
+                wgpu::ShaderStages::FRAGMENT,
+                wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+            ));
+        }
+        let material_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("scene materials"),
+            entries: &entries,
+        });
+        let depth_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("scene linear depth"),
             entries: &[
                 entry(
                     0,
+                    wgpu::ShaderStages::FRAGMENT,
+                    wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                ),
+                entry(
+                    1,
                     wgpu::ShaderStages::FRAGMENT,
                     wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -497,167 +422,395 @@ impl GpuResources {
                     },
                 ),
                 entry(
-                    1,
+                    2,
                     wgpu::ShaderStages::FRAGMENT,
                     wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 ),
             ],
         });
-
-        // Untextured batches sample a 1x1 white texture, so one shader serves all.
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("scene"),
+        let sampler = d.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("scene sampler"),
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        let upload = |label: &str, size, rgba: &[u8]| {
+        let upload = |label, size, pixels: &[u8], srgb| {
             gpu.texture(
                 label,
                 size,
-                wgpu::TextureFormat::Rgba8UnormSrgb,
+                if srgb {
+                    wgpu::TextureFormat::Rgba8UnormSrgb
+                } else {
+                    wgpu::TextureFormat::Rgba8Unorm
+                },
                 wgpu::TextureUsages::empty(),
-                Some(rgba),
+                Some(pixels),
             )
             .create_view(&Default::default())
         };
-        let white = upload("scene white", (1, 1), &[255; 4]);
+        let white = upload("scene white", (1, 1), &[255; 4], false);
+        let normal = upload("scene flat normal", (1, 1), &[128, 128, 255, 255], false);
         let textures: Vec<_> = data
             .textures
             .iter()
-            .map(|t| upload("scene texture", t.size, &t.rgba))
+            .map(|t| {
+                (
+                    upload("scene srgb", t.size, &t.rgba, true),
+                    upload("scene linear", t.size, &t.rgba, false),
+                )
+            })
             .collect();
-        let batches = data
-            .batches
+        let materials = data
+            .materials
             .iter()
-            .map(|batch| {
-                let view = batch.texture.map_or(&white, |i| &textures[i]);
-                DrawBatch {
-                    bind_group: device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("scene texture"),
-                        layout: &texture_layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: wgpu::BindingResource::TextureView(view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::Sampler(&sampler),
-                            },
-                        ],
+            .map(|m| {
+                let u = buffer(
+                    "scene material",
+                    wgpu::BufferUsages::UNIFORM,
+                    bytemuck::bytes_of(&m.uniform),
+                );
+                let mut entries = vec![
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: u.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                ];
+                for (i, texture) in m.textures.iter().enumerate() {
+                    let view = texture.map_or(if i == 2 { &normal } else { &white }, |t| {
+                        if i == 0 || i == 3 {
+                            &textures[t].0
+                        } else {
+                            &textures[t].1
+                        }
+                    });
+                    entries.push(wgpu::BindGroupEntry {
+                        binding: i as u32 + 2,
+                        resource: wgpu::BindingResource::TextureView(view),
+                    });
+                }
+                Material {
+                    bind: d.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("scene material"),
+                        layout: &material_layout,
+                        entries: &entries,
                     }),
-                    indices: batch.indices.clone(),
+                    blend: m.uniform.alpha[0] == 2.0,
                 }
             })
             .collect();
-
-        let module = device.create_shader_module(wgpu::include_wgsl!("scene.wgsl"));
+        let module = d.create_shader_module(wgpu::include_wgsl!("scene.wgsl"));
+        let output_module = d.create_shader_module(wgpu::include_wgsl!("scene_output.wgsl"));
         let layout = |label, groups: &[Option<&wgpu::BindGroupLayout>]| {
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some(label),
                 bind_group_layouts: groups,
                 immediate_size: 0,
             })
         };
-        let sky_layout = layout("scene sky", &[Some(&globals_layout)]);
         let mesh_layout = layout(
             "scene mesh",
-            &[Some(&globals_layout), Some(&texture_layout)],
+            &[Some(&globals_layout), Some(&material_layout)],
         );
-        let pipeline = |label,
+        let sky_layout = layout("scene sky", &[Some(&globals_layout)]);
+        let depth_pipeline_layout =
+            layout("scene depth", &[Some(&globals_layout), Some(&depth_layout)]);
+        let pipeline = |module: &wgpu::ShaderModule,
+                        label,
                         layout,
                         vs,
                         fs,
                         buffers: &[Option<wgpu::VertexBufferLayout>],
-                        depth_write,
-                        depth_compare| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        depth: Option<wgpu::DepthStencilState>,
+                        format,
+                        blend| {
+            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(layout),
                 vertex: wgpu::VertexState {
-                    module: &module,
+                    module,
                     entry_point: Some(vs),
                     compilation_options: Default::default(),
                     buffers,
                 },
-                // Both sides are drawn: the shader flips back-face normals.
                 primitive: Default::default(),
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: DEPTH_FORMAT,
-                    depth_write_enabled: Some(depth_write),
-                    depth_compare: Some(depth_compare),
-                    stencil: Default::default(),
-                    bias: Default::default(),
-                }),
-                multisample: wgpu::MultisampleState {
-                    count: SAMPLES,
-                    ..Default::default()
-                },
+                depth_stencil: depth,
+                multisample: Default::default(),
                 fragment: Some(wgpu::FragmentState {
-                    module: &module,
+                    module,
                     entry_point: Some(fs),
                     compilation_options: Default::default(),
-                    targets: &[Some(gpu.format.into())],
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
                 }),
                 multiview_mask: None,
                 cache: None,
             })
         };
-        let sky_pipeline = pipeline(
+        let depth_state = |write| {
+            Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: Some(write),
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                stencil: Default::default(),
+                bias: Default::default(),
+            })
+        };
+        let vertex_layout = [Some(wgpu::VertexBufferLayout {
+            array_stride: size_of::<Vertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x3,2=>Float32x2,3=>Float32x4],
+        })];
+        let opaque = pipeline(
+            &module,
+            "scene opaque",
+            &mesh_layout,
+            "vs_main",
+            "fs_main",
+            &vertex_layout,
+            depth_state(true),
+            gpu.format,
+            None,
+        );
+        let blend = pipeline(
+            &module,
+            "scene blend",
+            &mesh_layout,
+            "vs_main",
+            "fs_main",
+            &vertex_layout,
+            depth_state(false),
+            gpu.format,
+            Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+        );
+        let sky = pipeline(
+            &module,
             "scene sky",
             &sky_layout,
             "vs_sky",
             "fs_sky",
             &[],
-            false,
-            wgpu::CompareFunction::Always,
+            depth_state(false),
+            gpu.format,
+            None,
         );
-        let mesh_pipeline = pipeline(
-            "scene mesh",
-            &mesh_layout,
-            "vs_main",
-            "fs_main",
-            &[Some(wgpu::VertexBufferLayout {
-                array_stride: size_of::<Vertex>() as u64,
-                step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &wgpu::vertex_attr_array![
-                    0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Float32x3, 4 => Float32x3
-                ],
-            })],
-            true,
-            wgpu::CompareFunction::Less,
+        let depth = pipeline(
+            &output_module,
+            "scene linear depth",
+            &depth_pipeline_layout,
+            "vs",
+            "fs_depth",
+            &[],
+            None,
+            wgpu::TextureFormat::R32Float,
+            None,
         );
-
+        let resolve = pipeline(
+            &output_module,
+            "scene upscale",
+            &depth_pipeline_layout,
+            "vs",
+            "fs_color",
+            &[],
+            None,
+            gpu.format,
+            None,
+        );
+        let order = (0..data.batches.len()).collect();
         Self {
+            options,
+            data,
+            sphere,
+            clip,
+            last_animation: None,
             vertices,
             indices,
-            batches,
-            sky_pipeline,
-            mesh_pipeline,
+            materials,
+            order,
             globals_layout,
+            depth_layout,
+            opaque,
+            blend,
+            sky,
+            depth,
+            resolve,
+            states: Vec::new(),
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn gpu_structs_match_the_wgsl_layout() {
-        // mat4x4f + eight vec4f.
-        assert_eq!(size_of::<Globals>(), 64 + 8 * 16);
-        // Three vec3f, one vec2f, tightly packed (see `VsIn`).
-        assert_eq!(size_of::<Vertex>(), (3 + 3 + 2 + 3 + 3) * 4);
+impl ViewState {
+    fn new(gpu: &Gpu, layout: &wgpu::BindGroupLayout) -> Self {
+        let uniform = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("scene view"),
+            size: size_of::<Globals>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("scene view"),
+            layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform.as_entire_binding(),
+            }],
+        });
+        Self {
+            uniform,
+            bind,
+            target: None,
+            lean: Vec2::ZERO,
+            clock: Duration::ZERO,
+        }
     }
+}
+impl Target {
+    fn new(
+        gpu: &Gpu,
+        size: (u32, u32),
+        _screen: (u32, u32),
+        layout: &wgpu::BindGroupLayout,
+        upscale: bool,
+    ) -> Self {
+        let depth = gpu
+            .texture(
+                "scene hardware depth",
+                size,
+                wgpu::TextureFormat::Depth32Float,
+                wgpu::TextureUsages::RENDER_ATTACHMENT,
+                None,
+            )
+            .create_view(&Default::default());
+        let upscale = upscale.then(|| {
+            gpu.texture(
+                "scene scaled color",
+                size,
+                gpu.format,
+                wgpu::TextureUsages::RENDER_ATTACHMENT,
+                None,
+            )
+            .create_view(&Default::default())
+        });
+        let dummy = gpu
+            .texture(
+                "scene unused color",
+                (1, 1),
+                gpu.format,
+                wgpu::TextureUsages::empty(),
+                None,
+            )
+            .create_view(&Default::default());
+        let sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let depth_bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("scene output"),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&depth),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(
+                        upscale.as_ref().unwrap_or(&dummy),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+        Self {
+            size,
+            depth,
+            depth_bind,
+            upscale,
+        }
+    }
+}
+fn render_size(size: (u32, u32), scale: f32) -> (u32, u32) {
+    let scale = scale.clamp(0.25, 1.0);
+    (
+        ((size.0 as f32 * scale).ceil() as u32).max(1),
+        ((size.1 as f32 * scale).ceil() as u32).max(1),
+    )
+}
 
-    #[test]
-    fn render_scale_shrinks_the_target_but_never_to_nothing() {
-        assert_eq!(render_size((1920, 1080), 1.0), (1920, 1080));
-        assert_eq!(render_size((1920, 1080), 0.5), (960, 540));
-        assert_eq!(render_size((1001, 1), 0.25), (251, 1));
+/// Legacy `kind: scene` uses precisely the same renderer as a stack model.
+pub struct SceneSource {
+    renderer: SceneRenderer,
+    interval: Duration,
+    input: Option<input::SceneInput>,
+    live: Vec<bool>,
+}
+impl SceneSource {
+    pub fn new(gpu: &Gpu, theme: &LoadedTheme, config: &SceneWallpaper) -> Result<Self> {
+        let options = SceneOptions {
+            orbit: config.orbit,
+            parallax: config.parallax,
+            scale: config.scale,
+            background: config.background,
+            ..Default::default()
+        };
+        Ok(Self {
+            renderer: SceneRenderer::load(gpu, &theme.asset(&config.source), &options)?,
+            interval: Duration::from_secs(1) / config.fps.max(1),
+            input: config
+                .interactive
+                .then(input::SceneInput::start)
+                .transpose()
+                .inspect_err(|e| log::warn!("scene input: {e:#}"))
+                .unwrap_or(None),
+            live: vec![true; mypaper_desktop::monitors().len().max(1)],
+        })
+    }
+}
+impl Source for SceneSource {
+    fn render(&mut self, gpu: &Gpu, frame: Frame<'_>) {
+        let drag = self
+            .input
+            .as_ref()
+            .map(input::SceneInput::drag)
+            .unwrap_or_default();
+        self.renderer.render_view(
+            gpu,
+            frame.encoder,
+            frame.view,
+            None,
+            frame.size,
+            frame.clock,
+            frame.mouse,
+            false,
+            frame.screen,
+            Vec2::new(drag.yaw, drag.pitch),
+        );
+    }
+    fn redraw(&self, _clock: Duration) -> Redraw {
+        if self.renderer.animated() || self.input.is_some() {
+            Redraw::Every(self.interval)
+        } else {
+            Redraw::OnChange
+        }
+    }
+    fn set_visibility(&mut self, screen: usize, _hwnd: HWND, visibility: Visibility) {
+        if let Some(input) = &mut self.input {
+            if self.live.len() <= screen {
+                self.live.resize(screen + 1, true);
+            }
+            self.live[screen] = visibility == Visibility::Live;
+            input.set_live(self.live.iter().any(|&v| v));
+        }
     }
 }

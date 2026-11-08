@@ -14,7 +14,7 @@ const ELEVATION: f32 = 14.0 * std::f32::consts::PI / 180.0;
 /// Fraction of the exact "sphere touches the frame" distance the camera sits
 /// at. Below 1 the scene fills more of the screen (the bounding sphere is
 /// conservative, so the actual silhouette still has slack).
-const FRAMING: f32 = 0.66;
+const FRAMING: f32 = 1.08;
 
 /// A bounding sphere.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -44,6 +44,8 @@ pub struct View {
     pub view_proj: Mat4,
     /// Distance from the eye to the nearest possible scene point (fog starts here).
     pub nearest: f32,
+    pub near: f32,
+    pub far: f32,
 }
 
 /// Distance at which a sphere of `radius` exactly fits the narrower of the
@@ -79,6 +81,8 @@ pub fn camera(sphere: Sphere, aspect: f32, azimuth: f32, lean: Vec2, parallax: f
         eye,
         view_proj: proj * view,
         nearest: (from_center - sphere.radius).max(0.0),
+        near,
+        far,
     }
 }
 
