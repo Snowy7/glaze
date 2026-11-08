@@ -320,6 +320,19 @@ fn a_left_clients_size_request_does_not_move_the_focused_window() {
     );
 }
 #[test]
+fn a_stack_members_minimum_keeps_the_focused_column_visible() {
+    let mut l = layout();
+    open(&mut l, 1);
+    open(&mut l, 2);
+    l.command(Command::Consume);
+    l.learn_minimum(WindowId(1), 1200.0);
+    assert!(
+        l.targets()
+            .iter()
+            .any(|t| t.window == WindowId(2) && t.visible)
+    );
+}
+#[test]
 fn portrait_rotates_both_layout_axes() {
     let mut l = Layout::new(Settings::default());
     let r = Rect {

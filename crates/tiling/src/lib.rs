@@ -186,7 +186,10 @@ impl Layout {
         if logical_size.is_finite() && logical_size > 0.0 {
             if let Some((mi, wi)) = self.locate(window) {
                 let before = self.focus_position(mi, wi);
-                let focused = self.monitors[mi].workspaces[wi].focused == Some(window);
+                let w = &self.monitors[mi].workspaces[wi];
+                let focused = w
+                    .column(window)
+                    .is_some_and(|ci| w.focused.and_then(|id| w.column(id)) == Some(ci));
                 let m = &mut self.monitors[mi];
                 let length = m.axis.length(m.area) / m.scale;
                 let w = &mut m.workspaces[wi];
@@ -617,7 +620,10 @@ impl Layout {
     pub fn learn_minimum(&mut self, id: WindowId, along: f64) -> Vec<Target> {
         if let Some((mi, wi)) = self.locate(id) {
             let before = self.focus_position(mi, wi);
-            let focused = self.monitors[mi].workspaces[wi].focused == Some(id);
+            let w = &self.monitors[mi].workspaces[wi];
+            let focused = w
+                .column(id)
+                .is_some_and(|ci| w.focused.and_then(|id| w.column(id)) == Some(ci));
             let w = &mut self.monitors[mi].workspaces[wi];
             if let Some(ci) = w.column(id) {
                 w.columns[ci].learned_min = w.columns[ci].learned_min.max(along);
