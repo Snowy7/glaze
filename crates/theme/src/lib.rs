@@ -4,7 +4,8 @@
 //! { "name": "Aurora", "wallpaper": { "kind": "shader", "source": "aurora.wgsl", "fps": 60 } }
 //! ```
 //!
-//! Wallpaper kinds: `shader`, `image`, `slideshow`, `video`, `scene`.
+//! Wallpaper kinds: `shader`, `image`, `slideshow`, `video`, `scene`, `web`, `app`, and
+//! `stack` (a base plus layers; docs/wallpaper-builder.md and [`stack`]).
 //! Relative asset paths resolve inside the theme folder and may not use
 //! `..`; absolute paths (e.g. your own pictures or videos) are allowed.
 
@@ -13,7 +14,13 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
+pub mod stack;
 pub mod windows;
+
+pub use stack::{
+    Base, Blend, EffectLayer, EffectManifest, Environment, ImageLayer, Layer, LoadedEffect,
+    ModelLayer, Param, ParamKind, StackWallpaper,
+};
 
 pub const MANIFEST: &str = "theme.json";
 
@@ -300,6 +307,8 @@ pub enum Wallpaper {
     /// An external program rendering into our desktop window, e.g. a
     /// Unity player (`-parentHWND`).
     App(AppWallpaper),
+    /// A base plus a stack of effect, image and model layers (docs/wallpaper-builder.md).
+    Stack(StackWallpaper),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -325,7 +334,7 @@ pub struct AppWallpaper {
 }
 
 /// How a source that has its own size fills a screen.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Fit {
     /// Fill the screen, cropping the overflow (like CSS `cover`).
@@ -456,6 +465,12 @@ pub struct SceneWallpaper {
     /// Off by default: no input is read at all.
     #[serde(default)]
     pub interactive: bool,
+    /// What is drawn behind the models (`color` = `background`).
+    #[serde(default)]
+    pub environment: Environment,
+    /// Linear exposure multiplier.
+    #[serde(default = "one")]
+    pub exposure: f32,
 }
 
 fn default_fps() -> u32 {
@@ -473,13 +488,13 @@ fn default_interval() -> f32 {
 fn default_transition() -> f32 {
     1.5
 }
-fn default_orbit() -> f32 {
+pub(crate) fn default_orbit() -> f32 {
     4.0
 }
-fn default_parallax() -> f32 {
+pub(crate) fn default_parallax() -> f32 {
     0.15
 }
-fn default_background() -> [f32; 3] {
+pub(crate) fn default_background() -> [f32; 3] {
     [0.02, 0.025, 0.04]
 }
 
@@ -569,6 +584,7 @@ impl LoadedTheme {
                 }
             }
             Wallpaper::App(a) => check_path(&a.command)?,
+            Wallpaper::Stack(s) => s.validate()?,
         }
         if theme.windows.as_ref().and_then(|w| w.cursors.as_deref()) == Some("") {
             bail!("windows.cursors must name a cursor set or folder");
@@ -593,14 +609,14 @@ impl LoadedTheme {
     }
 }
 
-fn check_fps(fps: u32) -> Result<()> {
+pub(crate) fn check_fps(fps: u32) -> Result<()> {
     if !(1..=240).contains(&fps) {
         bail!("wallpaper.fps must be between 1 and 240, got {fps}");
     }
     Ok(())
 }
 
-fn check_scale(scale: f32) -> Result<()> {
+pub(crate) fn check_scale(scale: f32) -> Result<()> {
     if !(0.25..=1.0).contains(&scale) {
         bail!("wallpaper.scale must be between 0.25 and 1, got {scale}");
     }
@@ -642,7 +658,7 @@ fn migrate_windows_in(config: &mut mypaper_config::Config, user_root: &Path) -> 
 }
 
 /// Relative paths may not climb out of the theme folder.
-fn check_path(path: &Path) -> Result<()> {
+pub(crate) fn check_path(path: &Path) -> Result<()> {
     if path.is_relative() && path.components().any(|c| matches!(c, Component::ParentDir)) {
         bail!(
             "asset path {} must stay inside the theme folder (or be absolute)",
@@ -1037,6 +1053,7 @@ mod tests {
                     assert!(std::fs::read_dir(loaded.asset(&w.folder)).unwrap().count() >= 2);
                 }
                 Wallpaper::Web(_) => {}
+                Wallpaper::Stack(_) => {}
             }
             for skin in [&loaded.theme.widgets, &loaded.theme.bars]
                 .into_iter()

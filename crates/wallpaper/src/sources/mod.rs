@@ -136,6 +136,7 @@ pub fn load(gpu: &Gpu, theme: &LoadedTheme, screens: &[HWND]) -> Result<Box<dyn 
         Wallpaper::Scene(w) => Box::new(scene::SceneSource::new(gpu, theme, w)?),
         Wallpaper::Web(w) => Box::new(web::WebSource::new(theme, w, screens)?),
         Wallpaper::App(w) => Box::new(app::AppSource::new(theme, w, screens)?),
+        Wallpaper::Stack(_) => anyhow::bail!("stack wallpapers need sources/stack.rs (in progress)"),
     })
 }
 

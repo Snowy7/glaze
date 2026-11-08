@@ -36,6 +36,9 @@ and update this file in the same commit.
 - `mix` (0..1) blends the layer's output over its input.
 - `blend` is one of `normal`, `add`, `screen` or `multiply`.
 - `enabled: false` keeps the layer in the file but skips it.
+- Bases and layers ignore fields they do not know, so a newer Studio can add one without
+  breaking an older engine. Layer `id`, `enabled` (true) and `mix` (1) are optional.
+- Rust types: `mypaper_theme::stack` (`StackWallpaper`, `Base`, `Layer`, `EffectManifest`).
 - `params` lists only values that differ from the effect's defaults. Unknown params are ignored,
   so an effect can drop a param without breaking older themes.
 
@@ -115,7 +118,19 @@ prepends `effects/prelude.wgsl`, which provides:
   - `bool` and `enum` → `u32` (an enum is its option's index)
 
   The fields are named exactly as the param `id`s.
-- helpers: `sample_src(uv)`, `hash21`, `noise2`, `fbm2`, `luma`.
+- helpers: `sample_src(uv)`, `hash21`, `noise2`, `fbm2`, `luma`; also `sample_original(uv)`,
+  `sample_depth(uv)` (depth is not filterable on every GPU, so never sample it with
+  `src_sampler`) and `to_linear` / `to_display`. `src` and `original` hold display
+  (sRGB-encoded) values; `color` params are linear.
+
+Bindings, all in group 0: `src` 0, `src_sampler` 1, `original` 2, `depth` 3, `params` 4
+(uniform); `paper` is immediate data. `paper.resolution` is the pass's own target size. The
+entry points `mypaper_vs` / `mypaper_fx` are the prelude's, so a pass must not define them.
+
+To validate exactly what the engine compiles, use `mypaper_theme::stack::pass_wgsl` (the
+prelude, then the generated `struct Params`, then the pass; `first_line` maps errors back to
+the pass file) or, with the crate's `check` feature, `stack::check::pass`, which runs naga and
+reports the pass file's line. `stack::check::glsl` does the same for a Shadertoy base.
 
 A multi-pass effect, such as a separable blur, lists several passes. Each pass reads the previous
 pass as `src`. A pass may run at a lower `scale`; the engine upsamples its output.
@@ -127,7 +142,27 @@ Studio turns these comments in a shader base into sliders, the same way it does 
 ```
 // @param amount float 0..1 = 0.5 "Amount"
 // @param tint color = #ffffff "Tint"
+// @param streaks bool = true "Streaks"
+// @param style enum drizzle|storm = drizzle "Style"
 ```
+
+`mypaper_theme::stack::shader_params` parses them. The engine appends the generated
+`struct Params` and a `const params = Params(...)` built from the base's `params` values, so the
+shader reads `params.amount` with no binding; a change recompiles the shader.
+
+### Shadertoy bases
+
+A `glsl` base defines `void mainImage(out vec4 fragColor, in vec2 fragCoord)`. The engine wraps
+it (`stack::glsl_fragment`) with a std140 block of `iResolution`, `iTime`, `iMouse`,
+`iTimeDelta`, `iFrame` and `iFrameRate`; `fragCoord` has Shadertoy's bottom-left origin. Channel
+inputs (`iChannel0..3`) are not provided yet.
+
+### Errors
+
+An effect that fails to load or compile is skipped and the rest of the stack keeps drawing. The
+engine writes `%LOCALAPPDATA%\mypaper\stack-errors.json` on every load of a stack:
+`{ "theme": "<folder name>", "errors": [{ "layer": "rain-1", "effect": "rain", "line": 12,
+"message": "..." }] }` (`line` is in the pass file, or `null`; `layer` is `"base"` for the base).
 
 ## Cost rules
 
