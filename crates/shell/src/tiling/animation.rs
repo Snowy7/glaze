@@ -283,6 +283,7 @@ fn native(r: Rect, origin: Rect) -> RECT {
 struct Overlay {
     window: HWND,
     thumbnails: Vec<isize>,
+    snapshots: Vec<Snapshot>,
 }
 impl Drop for Overlay {
     fn drop(&mut self) {
@@ -293,6 +294,7 @@ impl Drop for Overlay {
             }
             let _ = DestroyWindow(self.window);
         }
+        self.snapshots.clear();
     }
 }
 unsafe extern "system" fn procedure(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
@@ -358,6 +360,7 @@ fn run(
     let mut overlay = Overlay {
         window,
         thumbnails: Vec::new(),
+        snapshots: Vec::new(),
     };
     let mut sources = Vec::new();
     for change in changes {
@@ -373,7 +376,24 @@ fn run(
         if !overlaps(change.from) && !overlaps(change.to) {
             continue;
         }
-        let source = change.identity.window();
+        let resizing =
+            (change.from.w - change.to.w).abs() > 2.0 || (change.from.h - change.to.h).abs() > 2.0;
+        let source = if resizing && platform::responsive(change.identity.window()) {
+            match Snapshot::capture(
+                change.identity.window(),
+                platform::frame(change.identity.window()).unwrap_or(change.from),
+                bounds,
+            ) {
+                Ok(snapshot) => {
+                    let h = snapshot.window;
+                    overlay.snapshots.push(snapshot);
+                    h
+                }
+                Err(_) => change.identity.window(),
+            }
+        } else {
+            change.identity.window()
+        };
         // SAFETY: source and destination are top-level, destination is our own HWND.
         if let Ok(thumbnail) = unsafe { DwmRegisterThumbnail(window, source) } {
             overlay.thumbnails.push(thumbnail);
@@ -528,6 +548,121 @@ fn run(
     Ok(Outcome::Finished)
 }
 
+struct Snapshot {
+    window: HWND,
+    bitmap: HBITMAP,
+}
+impl Snapshot {
+    fn capture(source: HWND, rect: Rect, bounds: Rect) -> Result<Self> {
+        let outer = platform::outer(source)
+            .ok_or_else(|| anyhow::anyhow!("snapshot source disappeared"))?;
+        // SAFETY: the DC/bitmap are local GDI resources; restored and released on every path.
+        unsafe {
+            let dc = GetWindowDC(Some(source));
+            let memory = CreateCompatibleDC(Some(dc));
+            let bitmap = CreateCompatibleBitmap(dc, outer.w as i32, outer.h as i32);
+            let previous = SelectObject(memory, HGDIOBJ(bitmap.0));
+            let printed = windows::Win32::Storage::Xps::PrintWindow(
+                source,
+                memory,
+                windows::Win32::Storage::Xps::PRINT_WINDOW_FLAGS(2),
+            )
+            .as_bool();
+            SelectObject(memory, previous);
+            let _ = DeleteDC(memory);
+            ReleaseDC(Some(source), dc);
+            if !printed {
+                let _ = DeleteObject(HGDIOBJ(bitmap.0));
+                anyhow::bail!("PrintWindow refused snapshot");
+            }
+            let class = WNDCLASSEXW {
+                cbSize: size_of::<WNDCLASSEXW>() as u32,
+                lpfnWndProc: Some(snapshot_proc),
+                hInstance: GetModuleHandleW(None)?.into(),
+                lpszClassName: w!("mypaper.tiling.snapshot"),
+                ..Default::default()
+            };
+            RegisterClassExW(&class);
+            let window = match CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                w!("mypaper.tiling.snapshot"),
+                w!("Tiling snapshot"),
+                WS_POPUP,
+                (bounds.x + bounds.w + 8.0) as i32,
+                bounds.y as i32,
+                rect.w as i32,
+                rect.h as i32,
+                None,
+                None,
+                None,
+                None,
+            ) {
+                Ok(h) => h,
+                Err(e) => {
+                    let _ = DeleteObject(HGDIOBJ(bitmap.0));
+                    return Err(e.into());
+                }
+            };
+            SetWindowLongPtrW(window, GWLP_USERDATA, bitmap.0 as isize);
+            let snapshot = Self { window, bitmap };
+            SetPropW(
+                window,
+                w!("mypaper.crop.x"),
+                Some(windows::Win32::Foundation::HANDLE(
+                    (rect.x - outer.x).round() as usize as *mut _,
+                )),
+            )?;
+            SetPropW(
+                window,
+                w!("mypaper.crop.y"),
+                Some(windows::Win32::Foundation::HANDLE(
+                    (rect.y - outer.y).round() as usize as *mut _,
+                )),
+            )?;
+            let _ = ShowWindow(window, SW_SHOWNOACTIVATE);
+            let _ = UpdateWindow(window);
+            Ok(snapshot)
+        }
+    }
+}
+impl Drop for Snapshot {
+    fn drop(&mut self) {
+        /* SAFETY: our own window and bitmap, released on the creating thread. */
+        unsafe {
+            let _ = DestroyWindow(self.window);
+            let _ = DeleteObject(HGDIOBJ(self.bitmap.0));
+        }
+    }
+}
+unsafe extern "system" fn snapshot_proc(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    if msg == WM_PAINT {
+        // SAFETY: WM_PAINT bracket; bitmap lives until the window is destroyed.
+        unsafe {
+            let mut paint = PAINTSTRUCT::default();
+            let dc = BeginPaint(h, &mut paint);
+            let memory = CreateCompatibleDC(Some(dc));
+            let bitmap = HBITMAP(GetWindowLongPtrW(h, GWLP_USERDATA) as *mut _);
+            let old = SelectObject(memory, HGDIOBJ(bitmap.0));
+            let _ = BitBlt(
+                dc,
+                0,
+                0,
+                paint.rcPaint.right,
+                paint.rcPaint.bottom,
+                Some(memory),
+                GetPropW(h, w!("mypaper.crop.x")).0 as usize as i32,
+                GetPropW(h, w!("mypaper.crop.y")).0 as usize as i32,
+                SRCCOPY,
+            );
+            SelectObject(memory, old);
+            let _ = DeleteDC(memory);
+            let _ = EndPaint(h, &paint);
+        }
+        return LRESULT(0);
+    }
+    // SAFETY: default handling of the original message.
+    unsafe { DefWindowProcW(h, msg, w, l) }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
