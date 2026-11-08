@@ -112,6 +112,7 @@ pub struct Tiler {
     edge_at: Instant,
     recently_hidden: VecDeque<(tiling_recovery::Identity, Instant)>,
     focus_settle: Instant,
+    intake_retries: HashMap<WindowId, u8>,
 }
 impl Tiler {
     /// Reveal a dock target without asking Windows to activate it.
@@ -228,6 +229,7 @@ impl Tiler {
             edge_at: Instant::now(),
             recently_hidden: VecDeque::new(),
             focus_settle: Instant::now() - Duration::from_secs(1),
+            intake_retries: HashMap::new(),
         };
         tiler.refresh_displays();
         tiler.enumerate();
@@ -489,6 +491,30 @@ impl Tiler {
     }
     /// Process at most one coalesced event batch; empty queues do no Win32 work.
     pub fn process(&mut self) {
+        if self.display_events.intake_ready() {
+            let before = self.windows.len();
+            let pending = std::mem::take(&mut self.intake_retries);
+            for (window, attempt) in pending {
+                if !platform::intake_candidate(hwnd(window)) {
+                    continue;
+                }
+                self.admit(window);
+                if !self.windows.contains_key(&window) && attempt < 2 {
+                    self.intake_retries.insert(window, attempt + 1);
+                }
+            }
+            if !self.intake_retries.is_empty() && !self.display_events.retry_intake() {
+                self.intake_retries.clear();
+                log::warn!("tiling intake retry timer unavailable");
+            }
+            if self.windows.len() != before {
+                self.update_process_hooks();
+                if let Err(e) = self.commit(true) {
+                    log::warn!("settled window intake: {e:#}");
+                }
+                self.refresh_overview();
+            }
+        }
         if !animation::busy() {
             let mut queue = self.queue.lock().unwrap();
             let deferred = std::mem::take(&mut queue.deferred);
@@ -731,6 +757,18 @@ impl Tiler {
                     } else {
                         let n = self.windows.len();
                         self.admit(window);
+                        // SHOW can precede DWM/virtual-desktop readiness. Retry only this
+                        // event's eligible HWND, at most three times; never scan or poll idle.
+                        if !self.windows.contains_key(&window)
+                            && platform::intake_candidate(h)
+                            && self.intake_retries.len() < 128
+                        {
+                            let first = self.intake_retries.is_empty();
+                            self.intake_retries.entry(window).or_insert(0);
+                            if first && !self.display_events.retry_intake() {
+                                self.intake_retries.clear();
+                            }
+                        }
                         changed |= self.windows.len() != n;
                         processes_changed |= self.windows.len() != n;
                     }

@@ -23,6 +23,7 @@ use windows::{
 };
 static DISPLAY_DIRTY: AtomicBool = AtomicBool::new(false);
 static DRAG_FRAME: AtomicBool = AtomicBool::new(false);
+static INTAKE_READY: AtomicBool = AtomicBool::new(false);
 static EXPLORER_MESSAGE: AtomicU32 = AtomicU32::new(0);
 static ELEVATION_HINTED: AtomicBool = AtomicBool::new(false);
 /// Kernel-side eligibility only: safe before queuing an intake event or querying another process.
@@ -49,6 +50,14 @@ pub fn desktop_window(h: HWND) -> bool {
 /// Hidden top-level receiver: broadcasts do not reach message-only windows.
 pub struct DisplayEvents(HWND);
 impl DisplayEvents {
+    /// Retry only an intake burst whose native desktop/cloak state was not ready at SHOW.
+    pub fn retry_intake(&self) -> bool {
+        // SAFETY: owned hidden receiver; this timer is killed at its sole firing.
+        unsafe { SetTimer(Some(self.0), 3, 100, None) != 0 }
+    }
+    pub fn intake_ready(&self) -> bool {
+        INTAKE_READY.swap(false, Ordering::Relaxed)
+    }
     /// A frame timer exists only while the user is in a native move/resize loop.
     pub fn dragging(&self, on: bool) {
         /* SAFETY: owned window, distinct timer ID. */
@@ -104,6 +113,7 @@ impl Drop for DisplayEvents {
         /* SAFETY: owned window on its creating thread. */
         unsafe {
             let _ = KillTimer(Some(self.0), 1);
+            let _ = KillTimer(Some(self.0), 3);
             let _ = DestroyWindow(self.0);
         }
     }
@@ -133,6 +143,12 @@ unsafe extern "system" fn display_proc(
         if msg == WM_TIMER && w.0 == 2 {
             DRAG_FRAME.store(true, Ordering::Relaxed);
             crate::inbox::post(crate::inbox::WM_CONFIG + 25, 0);
+            return Default::default();
+        }
+        if msg == WM_TIMER && w.0 == 3 {
+            let _ = KillTimer(Some(h), 3);
+            INTAKE_READY.store(true, Ordering::Relaxed);
+            crate::inbox::post(crate::inbox::WM_CONFIG + 26, 0);
             return Default::default();
         }
         DefWindowProcW(h, msg, w, l)
