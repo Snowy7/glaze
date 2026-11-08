@@ -14,7 +14,6 @@ mod app;
 mod builder;
 mod dialogs;
 mod docs;
-mod glass;
 mod images;
 mod library;
 mod look;
@@ -45,7 +44,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use glaze_ui::{Kind, Role, Surface, Ui, next_event};
-use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HANDLE, LPARAM, WAIT_OBJECT_0, WPARAM};
+use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, LPARAM, WPARAM};
 use windows::Win32::System::Threading::{CreateMutexW, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, FindWindowW, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE,
@@ -498,30 +497,11 @@ fn set_window_icons(hwnd: windows::Win32::Foundation::HWND, scale: f32) -> Resul
 fn pump(studio: &Rc<RefCell<Studio>>, rx: &Receiver<Msg>) -> Result<()> {
     let mut msg = MSG::default();
     loop {
-        let (handles, timeout): (Vec<HANDLE>, u32) = {
-            let s = studio.borrow();
-            let handles = s.app.glass.borrow().handle().into_iter().collect();
-            let timeout = s.app.deadline().map_or(u32::MAX, |d| {
-                d.saturating_duration_since(Instant::now()).as_millis().min(u32::MAX as u128 - 1) as u32
-            });
-            (handles, timeout)
-        };
-        // SAFETY: the handles stay open while waited on (owned by `glass`).
-        let woke = unsafe {
-            MsgWaitForMultipleObjectsEx(
-                (!handles.is_empty()).then_some(handles.as_slice()),
-                timeout,
-                QS_ALLINPUT,
-                MWMO_INPUTAVAILABLE,
-            )
-        };
-        if !handles.is_empty() && woke == WAIT_OBJECT_0 {
-            let s = studio.borrow();
-            if s.app.glass.borrow_mut().arrived() {
-                drop(s);
-                studio.borrow_mut().app.dirty = true;
-            }
-        }
+        let timeout = studio.borrow().app.deadline().map_or(u32::MAX, |d| {
+            d.saturating_duration_since(Instant::now()).as_millis().min(u32::MAX as u128 - 1) as u32
+        });
+        // SAFETY: waits on this thread's queue only.
+        unsafe { MsgWaitForMultipleObjectsEx(None, timeout, QS_ALLINPUT, MWMO_INPUTAVAILABLE) };
         // SAFETY: the standard pump on the thread that owns the window.
         unsafe {
             while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
@@ -531,7 +511,7 @@ fn pump(studio: &Rc<RefCell<Studio>>, rx: &Receiver<Msg>) -> Result<()> {
                 if msg.hwnd.is_invalid() {
                     match msg.message {
                         WM_STUDIO => continue,
-                        // The shell's icon service (in the stage) has news.
+                        // The shell's icon service (app lists) has news.
                         glaze_bars_wake::WM_WAKE => {
                             let s = studio.borrow();
                             let rebuilt = s.app.stage.borrow_mut().icons_arrived();

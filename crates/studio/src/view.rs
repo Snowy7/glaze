@@ -10,7 +10,6 @@ use crate::actions::{Action, Bar};
 use crate::app::{App, Overlay};
 use crate::docs::DocId;
 use crate::panel::{Command, Page};
-use crate::stage::{Item, Show, What};
 use crate::theme::glyph;
 use crate::ui::B;
 
@@ -159,19 +158,6 @@ pub fn inspector_width(app: &App) -> f32 {
     app.px(width.clamp(300.0, max))
 }
 
-/// During frame motion reuse one stage raster; shell views and glass are rebuilt on settle.
-pub fn resizing(app: &App) -> bool {
-    app.panel.as_ref().is_some_and(|s| s.window.sidebar.is_some() || s.window.inspector_drag.is_some())
-}
-
-fn stage_show(app: &App) -> Show {
-    match crate::panel::current_page(app) {
-        Page::Bars | Page::Top | Page::Dock | Page::Module | Page::BarDesign | Page::AddModule => Show::Bars,
-        Page::Widgets | Page::Widget | Page::AddWidget => Show::Widgets,
-        _ => Show::Desktop,
-    }
-}
-
 pub fn regions(app: &App) -> Regions {
     let (w, h) = (app.size.0 as f32, app.size.1 as f32);
     let side = app.px(sidebar_width(app));
@@ -239,131 +225,6 @@ pub struct Built {
     pub overlay_from: usize,
 }
 
-/// Prepare at the display's scale for 100%, or at the fitted picture's scale for Fit.
-fn prepare_stage(app: &App, ui: &mut glaze_ui::Ui, viewport: Rect) -> Rect {
-    let actual = app.panel.as_ref().unwrap().stage_actual;
-    let show = stage_show(app);
-    let mut frame = if show == Show::Bars && !actual {
-        let height = app.px(280.0).min(viewport.height() - app.px(48.0));
-        Rect::new(viewport.left, viewport.top + (viewport.height() - height - app.px(48.0)) / 2.0, viewport.width(), height)
-    } else if actual {
-        let (w, h) = app.display().map_or((1280.0, 720.0), |m| {
-            let dpi = m.dpi as f32 / 96.0;
-            (m.rect.width as f32 / dpi, m.rect.height as f32 / dpi)
-        });
-        Rect::new(viewport.left, viewport.top, app.px(w), app.px(h))
-    } else {
-        // Reserve the chips beneath the desktop and center the whole composition.
-        let available = Rect::new(
-            viewport.left,
-            viewport.top,
-            viewport.width(),
-            viewport.height() - app.px(48.0),
-        );
-        crate::stage::frame(app, available)
-    };
-    if resizing(app) && app.stage.borrow().content.size.0 > 0 {
-        if app.stage.borrow().picture.is_none() {
-            let size = app.stage.borrow().content.size;
-            let p = crate::panel::palette_for(app);
-            let mut b = crate::ui::builder(&mut ui.text, &p, &app.theme.ty, app.scale, &app.input);
-            crate::stage::draw(app, &mut b, Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32), show, |_| Action::None);
-            let list = b.list;
-            if let Ok(image) = glaze_ui::render(ui, &list, size.0, size.1) {
-                app.stage.borrow_mut().picture = Some(std::sync::Arc::new(image));
-            }
-        }
-        return frame;
-    }
-    app.stage.borrow_mut().picture = None;
-    crate::stage::prepare(
-        app,
-        ui,
-        (frame.width() as u32, frame.height() as u32),
-        show,
-    );
-    if actual {
-        let cache = app.stage.borrow();
-        let center = cache
-            .content
-            .items
-            .iter()
-            .find(|item| selected(app, &item.what))
-            .map_or(
-                Point::new(frame.width() / 2.0, frame.height() / 2.0),
-                |item| {
-                    Point::new(
-                        (item.rect.left + item.rect.right) / 2.0,
-                        (item.rect.top + item.rect.bottom) / 2.0,
-                    )
-                },
-            );
-        frame = Rect::new(
-            (viewport.left + viewport.width() / 2.0 - center.x).clamp(
-                (viewport.right - frame.width()).min(viewport.left),
-                viewport.left,
-            ),
-            (viewport.top + viewport.height() / 2.0 - center.y).clamp(
-                (viewport.bottom - frame.height()).min(viewport.top),
-                viewport.top,
-            ),
-            frame.width(),
-            frame.height(),
-        );
-    }
-    frame
-}
-
-/// Display chips stay with the desktop they switch, below its fitted picture.
-fn stage_controls(app: &App, b: &mut B, picture: Rect, viewport: Rect) {
-    let order = crate::panel::controls::display_order(app);
-    let labels: Vec<_> = order
-        .iter()
-        .map(|&i| crate::panel::controls::display_name(app, i))
-        .collect();
-    let labels: Vec<_> = labels.iter().map(String::as_str).collect();
-    let width = b.segmented_width(&labels).min(viewport.width());
-    let rect = Rect::new(
-        viewport.left + (viewport.width() - width) / 2.0,
-        (picture.bottom + b.px(16.0)).min(viewport.bottom - b.px(32.0)),
-        width,
-        b.px(32.0),
-    );
-    b.segmented(
-        key("stage-displays"),
-        rect,
-        &labels,
-        order.iter().position(|&i| i == app.nav.display),
-        "Stage display",
-        true,
-        |i| Action::Panel(Command::Display(order[i])),
-    );
-}
-
-fn selected(app: &App, what: &What) -> bool {
-    let page = crate::panel::current_page(app);
-    match what {
-        What::Widget(id) => (page == Page::Widget || matches!(&app.drag, Some(crate::app::Drag::Widget { instance, .. }) if instance == id)) && app.nav.widget.as_ref() == Some(id),
-        What::Module(slot) => page == Page::Module && app.nav.module.as_ref() == Some(slot),
-        What::Bar(bar) => {
-            matches!(page, Page::Top | Page::Dock | Page::BarDesign) && app.nav.bar == Some(*bar)
-        }
-    }
-}
-
-fn stage_pick(item: Option<&Item>) -> Action {
-    match item.map(|item| &item.what) {
-        None => Action::Panel(Command::Open(Page::Wallpapers)),
-        Some(What::Widget(id)) => Action::SelectWidget(Some(id.clone())),
-        Some(What::Module(slot)) => Action::SelectModule(Some(slot.clone())),
-        Some(What::Bar(bar)) => Action::Panel(Command::Open(if *bar == Bar::Top {
-            Page::Top
-        } else {
-            Page::Dock
-        })),
-    }
-}
-
 pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
     let page = crate::panel::prepare_page(app, &mut ui.text);
     if page == Page::FirstRun && matches!(app.overlay, Some(Overlay::FirstRun { .. })) {
@@ -371,7 +232,6 @@ pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
     }
     let r = regions(app);
     let (host, _) = content_regions(app);
-    let picture = r.stage.map(|viewport| prepare_stage(app, ui, viewport));
     let p = crate::panel::palette_for(app);
     let ty = app.theme.ty.clone();
     let mut b = crate::ui::builder(&mut ui.text, &p, &ty, app.scale, &app.input);
@@ -406,7 +266,7 @@ pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
         tab_strip(&mut b, Rect::new(r.bar.left, r.bar.bottom, r.bar.width(), r.body.top - r.bar.bottom), list, open);
     }
     let mut focus_regions = vec![r.sidebar, r.bar];
-    if let (Some(viewport), Some(picture)) = (r.stage, picture) {
+    if let Some(viewport) = r.stage {
         b.scroll(key("window-stage"), viewport, 0.0, Action::None, |b, _| {
             if crate::builder::stage(app, b, viewport) { return viewport.bottom; }
             if page == Page::Windows {
@@ -421,22 +281,9 @@ pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
                 );
                 return viewport.bottom;
             }
-            if page == Page::DesktopMenu {
-                crate::panel::specimens::backdrop(app, b, viewport);
-                stage_menu(app, b, viewport);
-                return viewport.bottom;
-            }
-            let items = crate::stage::draw(app, b, picture, stage_show(app), stage_pick);
-            for item in items.iter().filter(|item| selected(app, &item.what)) {
-                crate::stage::outline(b, item.rect, item.radius, false);
-            }
-            if let Some(item) = items.iter().find(|item| selected(app, &item.what)) {
-                stage_tag(b, item, viewport);
-            }
-            if !app.system.running() {
-                off_card(b, picture, viewport);
-            }
-            stage_controls(app, b, picture, viewport);
+            // The desktop menu: a drawing of it over the wallpaper.
+            crate::panel::specimens::backdrop(app, b, viewport);
+            stage_menu(app, b, viewport);
             viewport.bottom
         });
         focus_regions.push(viewport);
@@ -1008,22 +855,7 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
         Align::Start,
     );
     b.announce(status, app.docs.version);
-    let mut end = r
-        .inspector
-        .map_or(right - b.px(12.0), |inspector| inspector.left.min(right) - b.px(12.0));
-    if r.stage.is_some() {
-        let zoom = Rect::new(end - b.px(104.0), y, b.px(104.0), b.px(28.0));
-        b.segmented(
-            key("stage-zoom"),
-            zoom,
-            &["Fit", "100%"],
-            Some(usize::from(app.panel.as_ref().unwrap().stage_actual)),
-            "Stage zoom",
-            true,
-            |i| Action::Panel(Command::StageZoom(i == 1)),
-        );
-        end = zoom.left - b.px(8.0);
-    }
+    let end = right - b.px(12.0);
     let mut x = bar.left + b.px(12.0);
     let toggle = Rect::new(x, y, b.px(28.0), b.px(28.0));
     let k = key("sidebar-toggle");
@@ -1187,79 +1019,6 @@ pub fn sheet(app: &App, b: &mut B, title: &str, width: f32, height: f32) -> Rect
         w - b.px(48.0),
         h - b.px(60.0),
     )
-}
-
-/// Labels stay within the stage and use the same dark plate over light or dark imagery.
-fn stage_tag(b: &mut B, item: &Item, viewport: Rect) {
-    let font = b.font(Font::Caption);
-    let width = (b.measure(&item.label, &font).0 + b.px(16.0)).min(viewport.width() - b.px(16.0));
-    let beside = item.rect.right + b.px(8.0);
-    let (x, y) = if beside + width <= viewport.right - b.px(8.0) {
-        (
-            beside,
-            item.rect.top + (item.rect.height() - b.px(24.0)) / 2.0,
-        )
-    } else {
-        (
-            item.rect.left.clamp(
-                viewport.left + b.px(8.0),
-                viewport.right - width - b.px(8.0),
-            ),
-            item.rect.bottom + b.px(8.0),
-        )
-    };
-    let y = y.clamp(viewport.top + b.px(8.0), viewport.bottom - b.px(32.0));
-    let rect = Rect::new(x, y, width, b.px(24.0));
-    b.fill(
-        rect,
-        b.px(radius::SMALL),
-        glaze_ui::Rgba::new(0.04, 0.04, 0.04, 0.9),
-    );
-    b.text_in(
-        Rect::new(x + b.px(8.0), y, width - b.px(16.0), rect.height()),
-        &item.label,
-        &font,
-        glaze_ui::Rgba::new(0.95, 0.95, 0.95, 1.0),
-        Align::Start,
-    );
-}
-
-fn off_card(b: &mut B, picture: Rect, viewport: Rect) {
-    let visible = glaze_ui::controls::intersect(picture, viewport).unwrap_or(viewport);
-    let width = b.px(340.0).min(viewport.width() - b.px(32.0));
-    let rect = Rect::new(
-        viewport.left + (viewport.width() - width) / 2.0,
-        visible.top + (visible.height() - b.px(100.0)) / 2.0,
-        width,
-        b.px(100.0),
-    );
-    b.elevated(rect, b.px(b.kit.radius.card));
-    let title = b.font(Font::Title2);
-    let caption = b.font(Font::Caption);
-    b.text_in(
-        Rect::new(
-            rect.left + b.px(16.0),
-            rect.top + b.px(16.0),
-            rect.width() - b.px(32.0),
-            b.px(28.0),
-        ),
-        "Glaze is off",
-        &title,
-        b.p.ink1,
-        Align::Center,
-    );
-    b.text_in(
-        Rect::new(
-            rect.left + b.px(12.0),
-            rect.top + b.px(50.0),
-            rect.width() - b.px(24.0),
-            b.px(26.0),
-        ),
-        "Changes apply when Glaze starts",
-        &caption,
-        b.p.ink3,
-        Align::Center,
-    );
 }
 
 /// A drawing of the configured desktop menu; its commands never execute inside the stage.

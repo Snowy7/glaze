@@ -147,14 +147,6 @@ pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
     bars::field_initial(app, id)
 }
 
-/// Creation and its room check must use the same display grid as the shell.
-pub fn prepare_widget_grid(app: &App) {
-    if let Some(monitor) = app.display() {
-        let layout = crate::editing::widgets::layout(app);
-        app.stage.borrow_mut().content.grid = Some((crate::stage::grid_for(&layout, monitor), 1.0));
-    }
-}
-
 pub fn widget_has_room(app: &App, id: &str) -> bool {
     let Some(manifest) = app.registry.get(id).map(|w| &w.manifest) else {
         return false;

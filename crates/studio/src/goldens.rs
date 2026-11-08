@@ -614,18 +614,17 @@ fn render_window_interaction_states() {
     let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
     let mut ui = Ui::new().unwrap();
     for dark in [true, false] {
-        for (page, name, size, actual) in [
-            (Page::General, "large-text", (1280, 800), false),
-            (Page::DesktopMenu, "desktop-menu", (1280, 800), false),
-            (Page::AddWidget, "add-widget-rail", (960, 640), false),
-            (Page::AddWidget, "gallery-weather", (1280, 800), false),
-            (Page::Widget, "faces", (1280, 800), false),
-            (Page::BarDesign, "bar-presets", (1280, 800), false),
-            (Page::History, "history-restore", (1280, 800), false),
+        for (page, name, size) in [
+            (Page::General, "large-text", (1280, 800)),
+            (Page::DesktopMenu, "desktop-menu", (1280, 800)),
+            (Page::AddWidget, "add-widget-rail", (960, 640)),
+            (Page::AddWidget, "gallery-weather", (1280, 800)),
+            (Page::Widget, "faces", (1280, 800)),
+            (Page::BarDesign, "bar-presets", (1280, 800)),
+            (Page::History, "history-restore", (1280, 800)),
         ] {
             let mut app = window_app(dark, &ui, size);
             app.run(Action::Panel(Command::Open(page)));
-            app.panel.as_mut().unwrap().stage_actual = actual;
             app.nav.widget = Some("clock-1".into());
             if name == "gallery-weather" {
                 app.texts.insert(crate::actions::FieldId::WidgetSearch, "weather".into());

@@ -85,15 +85,6 @@ pub enum Drag {
         grab: f32,
         start: f32,
     },
-    /// A widget on the canvas: moving, or resizing by its corner.
-    Widget {
-        instance: String,
-        from: Point,
-        resize: bool,
-        moved: bool,
-    },
-    /// A module on the bars stage or a list row.
-    Module { slot: Slot, from: Point, moved: bool },
 }
 
 /// The overlay over the page (one at a time).
@@ -133,7 +124,7 @@ pub enum Msg {
     PeekEnded,
 }
 
-/// What the glass and image workers post back to wake the loop.
+/// What the image workers post back to wake the loop.
 pub const WM_STUDIO: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 41;
 
 pub struct App {
@@ -156,7 +147,6 @@ pub struct App {
     pub toast: Option<Toast>,
     pub images: RefCell<crate::images::Images>,
     pub stage: RefCell<crate::stage::Cache>,
-    pub glass: RefCell<crate::glass::Glass>,
     pub flash: Option<(&'static str, Instant)>,
     /// A setting the palette opened: scrolled to once its row is drawn.
     pub pending_reveal: Option<&'static str>,
@@ -276,7 +266,6 @@ impl App {
             toast: None,
             images: RefCell::new(crate::images::Images::default()),
             stage: RefCell::new(crate::stage::Cache::default()),
-            glass: RefCell::new(crate::glass::Glass::default()),
             flash: None,
             pending_reveal: None,
             pending_value: None,
@@ -492,18 +481,7 @@ impl App {
 
     fn release(&mut self, p: Point) {
         if self.drag.is_some() {
-            let clicked = matches!(
-                &self.drag,
-                Some(Drag::Widget { moved: false, .. } | Drag::Module { moved: false, .. })
-            );
-            let pressed = self.input.pressed;
             self.end_drag();
-            if clicked
-                && let Some(t) = pressed.and_then(|k| self.target(k))
-            {
-                let action = t.action.clone();
-                self.run(action);
-            }
             return;
         }
         let pressed = self.input.pressed.take();
@@ -591,9 +569,6 @@ impl App {
                     self.scroll_to(view, start + (p.y - grab) * ratio, area);
                 }
             }
-            Drag::Widget { .. } | Drag::Module { .. } => {
-                crate::editing::drag_to(self, drag, p);
-            }
         }
     }
 
@@ -604,24 +579,6 @@ impl App {
                 self.capture(true);
                 self.panel.as_mut().unwrap().window.inspector_drag = Some(width);
                 self.drag = Some(Drag::Inspector { from: p.x, width });
-            }
-            Action::SelectWidget(Some(instance)) => {
-                let resize = matches!(self.target_at(p).map(|t| t.key), Some(k) if k == key(("resize", instance.as_str())));
-                self.capture(true);
-                self.drag = Some(Drag::Widget {
-                    instance: instance.clone(),
-                    from: p,
-                    resize,
-                    moved: false,
-                });
-            }
-            Action::SelectModule(Some(slot)) => {
-                self.capture(true);
-                self.drag = Some(Drag::Module {
-                    slot: slot.clone(),
-                    from: p,
-                    moved: false,
-                });
             }
             other => {
                 let other = other.clone();
@@ -634,8 +591,6 @@ impl App {
         let drag = self.drag.take();
         let history_label = match &drag {
             Some(Drag::Slider { edit, .. }) => Some(edit.label.to_string()),
-            Some(Drag::Widget { resize, .. }) => Some(if *resize { "Resize widget" } else { "Move widget" }.into()),
-            Some(Drag::Module { .. }) => Some("Move module".into()),
             _ => None,
         };
         self.capture(false);
@@ -661,9 +616,6 @@ impl App {
                     self.alert(format!("{e:#}"));
                 }
                 self.after_edit(&[edit.doc]);
-            }
-            Some(drag @ (Drag::Widget { .. } | Drag::Module { .. })) => {
-                crate::editing::drop_drag(self, drag);
             }
             _ => {}
         }

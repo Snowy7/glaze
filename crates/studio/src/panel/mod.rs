@@ -157,7 +157,6 @@ pub struct State {
     pub editing: bool,
     /// Asks the window's loop to enter (`true`) or leave (`false`) edit mode.
     pub edit_request: Option<bool>,
-    pub stage_actual: bool,
     pub chooser: std::cell::RefCell<choosers::State>,
     reclaim_heap: std::cell::Cell<bool>,
     raster: measure::Raster,
@@ -203,7 +202,6 @@ pub enum Command {
     Open(Page),
     /// Enter or leave edit mode on the desktop.
     EditDesktop(bool),
-    StageZoom(bool),
     Back,
     Done,
     PickWidget(String),
@@ -270,7 +268,6 @@ pub fn run(app: &mut App, command: Command) {
         Command::Sidebar => crate::view::toggle_sidebar(app),
         Command::SidebarSettings => crate::view::toggle_settings(app),
         Command::ResizeInspector => {}, // Pointer drags are handled by App; no click action.
-        Command::StageZoom(actual) => app.panel.as_mut().unwrap().stage_actual = actual,
         Command::PickFont(edit, current) => pickers::open_font(app, edit, current),
         Command::Design(bar) => {
             app.nav.bar = bar;
@@ -856,9 +853,6 @@ pub fn fit_height(app: &mut App, surface: &glaze_ui::Surface, built: &Built) -> 
 pub fn before_action(app: &mut App, action: &Action) {
     if matches!(action, Action::LookReset) && let Some(panel) = &app.panel {
         app.nav.look_windows = panel.page == Page::Windows;
-    }
-    if app.panel.is_some() && matches!(action, Action::AddWidget(_) | Action::DuplicateWidget) {
-        editors::prepare_widget_grid(app);
     }
     if matches!(action, Action::AddWallpaper | Action::Panel(Command::Open(Page::AddWallpaper))) {
         app.texts.remove(&FieldId::Text(crate::docs::DocId::Studio, "/add_use_now".into()));
