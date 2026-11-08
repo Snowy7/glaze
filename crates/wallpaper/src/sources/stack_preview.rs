@@ -112,7 +112,8 @@ pub fn run(args: PreviewArgs) -> Result<()> {
             Some(source) => {
                 let clock = started.elapsed();
                 frame += 1;
-                let pixels = render(&gpu, source.as_mut(), args.size, clock, frame);
+                let center = [args.size.0 as f32 / 2.0, args.size.1 as f32 / 2.0];
+                let pixels = render(&gpu, source.as_mut(), args.size, clock, frame, center);
                 if let Err(e) = crate::snapshot::save_jpeg(&gpu, args.size, &pixels, &args.out) {
                     log::error!("preview: {e:#}");
                 }
@@ -141,14 +142,18 @@ pub fn run(args: PreviewArgs) -> Result<()> {
     }
 }
 
-/// Draws one frame of `source` at `size` and returns tightly packed BGRA.
+/// Draws one frame of `source` at `size` with the cursor at `mouse` (pixels) and returns the
+/// target's tightly packed texels (BGRA in the engine's format; the effect tests also read
+/// RGBA16F).
 pub fn render(
     gpu: &Gpu,
     source: &mut dyn Source,
     size: (u32, u32),
     clock: Duration,
     frame: u32,
+    mouse: [f32; 2],
 ) -> Vec<u8> {
+    let texel = gpu.format.block_copy_size(None).unwrap_or(4);
     let target = gpu.texture(
         "preview",
         size,
@@ -164,14 +169,14 @@ pub fn render(
         Frame {
             screen: 0,
             size,
-            mouse: [size.0 as f32 / 2.0, size.1 as f32 / 2.0],
+            mouse,
             clock,
             frame,
             view: &view,
             encoder: &mut encoder,
         },
     );
-    let row = (size.0 * 4).next_multiple_of(256);
+    let row = (size.0 * texel).next_multiple_of(256);
     let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("preview readback"),
         size: u64::from(row * size.1),
@@ -200,7 +205,7 @@ pub fn render(
     let mapped = buffer.get_mapped_range(..).expect("mapped readback");
     mapped
         .chunks(row as usize)
-        .flat_map(|r| &r[..(size.0 * 4) as usize])
+        .flat_map(|r| &r[..(size.0 * texel) as usize])
         .copied()
         .collect()
 }

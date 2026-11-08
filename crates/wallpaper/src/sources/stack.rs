@@ -772,8 +772,17 @@ impl StackSource {
     }
 }
 
+/// Tests pin `paper.clock_hours` here (f32 bits; `u32::MAX` reads the real clock).
+#[cfg(test)]
+static TEST_CLOCK_HOURS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(u32::MAX);
+
 /// The local wall-clock hour, 0..24, for `paper.clock_hours`.
 fn clock_hours() -> f32 {
+    #[cfg(test)]
+    match TEST_CLOCK_HOURS.load(std::sync::atomic::Ordering::Relaxed) {
+        u32::MAX => {}
+        bits => return f32::from_bits(bits),
+    }
     // SAFETY: no preconditions.
     let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
     f32::from(t.wHour) + f32::from(t.wMinute) / 60.0 + f32::from(t.wSecond) / 3600.0
@@ -1411,10 +1420,13 @@ fn watch(dirs: &[PathBuf], _theme: &Path) -> Vec<mypaper_fswatch::Watch> {
 }
 
 #[cfg(test)]
+mod effects_real;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    fn repo() -> PathBuf {
+    pub(super) fn repo() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
     }
 

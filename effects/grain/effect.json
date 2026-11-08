@@ -11,7 +11,7 @@
   "cost_estimated": false,
   "passes": [{ "source": "grain.wgsl", "scale": 1.0 }],
   "params": [
-    { "id": "amount", "label": "Amount", "type": "float", "min": 0, "max": 0.3, "default": 0.018, "step": 0.005 },
+    { "id": "amount", "label": "Amount", "type": "float", "min": 0, "max": 0.3, "default": 0.04, "step": 0.005 },
     { "id": "size", "label": "Size", "type": "float", "min": 0.5, "max": 4, "default": 1.0, "step": 0.1 },
     { "id": "colored", "label": "Colored", "type": "bool", "default": false }
   ]

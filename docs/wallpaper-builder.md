@@ -142,6 +142,22 @@ reports the pass file's line. `stack::check::glsl` does the same for a Shadertoy
 A multi-pass effect, such as a separable blur, lists several passes. Each pass reads the previous
 pass as `src`. A pass may run at a lower `scale`; the engine upsamples its output.
 
+Rules the engine's real path imposes (every bundled effect is checked against them by
+`crates/wallpaper/src/sources/stack/effects_real.rs`, through the same `StackSource` Studio's
+preview and the desktop use):
+
+- The engine compiles with **FXC** (DX12). Never write a vector component at a dynamic index
+  (`v[i] = x`): FXC miscompiled exactly that into a black `crt`. Build the value with
+  `select`/`mix` instead.
+- Size things in 1080p units (`paper.resolution.y / 1080`, or `uv`), never in raw pixels, so an
+  effect looks the same on a 1080p and a 1440p screen. Keep a whole-pixel pitch for patterns
+  that would otherwise alias (scanlines, phosphor masks).
+- Tone curves must not assume a bright photo: a fixed luma threshold turns a low-key picture
+  into a flat field. Adapt to the input (e.g. `halftone` levels from a 5x5 sample of `src`).
+- Defaults must visibly change a photo: adding an effect that does nothing reads as broken.
+- Studio writes `params` as JSON: a color as `"#rrggbb"`, a bool as `true`/`false`, an enum as
+  its option name (an index also works).
+
 ### Shader params in Studio
 
 Studio turns these comments in a shader base into sliders, the same way it does for effects:

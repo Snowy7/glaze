@@ -10,7 +10,7 @@
   "name": "Print halftone",
   "params": [
     {
-      "default": 18,
+      "default": 12,
       "id": "size",
       "label": "Dot spacing",
       "max": 24,

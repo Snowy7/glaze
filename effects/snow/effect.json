@@ -37,7 +37,7 @@
       "type": "float"
     },
     {
-      "default": 1.5,
+      "default": 2.5,
       "id": "size",
       "label": "Flake size",
       "max": 4,
