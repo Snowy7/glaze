@@ -142,6 +142,30 @@ fn floating_toggle_remembers_geometry_and_constraints() {
     check(&l);
 }
 #[test]
+fn first_float_uses_niris_offset_unless_columns_are_always_centered() {
+    for center in [Center::Never, Center::Always] {
+        let mut l = layout();
+        l.settings.center_focused_column = center;
+        open(&mut l, 1);
+        let before = l.targets()[0].rect;
+        l.command(Command::Floating);
+        let after = l.targets()[0].rect;
+        if center == Center::Always {
+            assert_eq!(after, before);
+        } else {
+            assert_eq!(
+                after,
+                Rect {
+                    x: 66.0,
+                    y: 32.0,
+                    ..before
+                }
+            );
+        }
+        check(&l);
+    }
+}
+#[test]
 fn fullscreen_float_returns_to_its_geometry_even_after_maximizing() {
     let mut l = layout();
     let original = Rect {

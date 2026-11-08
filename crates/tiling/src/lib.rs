@@ -1026,9 +1026,30 @@ impl Layout {
                             .find(|t| t.id == id)
                             .unwrap()
                             .constraints;
-                        let rect = self.floating_memory.get(&id).map_or(rect, |memory| {
-                            memory.rect(self.monitors[mi].area, self.monitors[mi].scale)
-                        });
+                        let m = &self.monitors[mi];
+                        let rect = self.floating_memory.get(&id).map_or_else(
+                            || {
+                                // niri offsets the first float, except with always-centered columns.
+                                let offset =
+                                    if self.settings.center_focused_column == Center::Always {
+                                        0.0
+                                    } else {
+                                        50.0 * m.scale
+                                    };
+                                Rect {
+                                    x: (rect.x + offset).clamp(
+                                        m.area.x,
+                                        (m.area.x + m.area.w - rect.w).max(m.area.x),
+                                    ),
+                                    y: (rect.y + offset).clamp(
+                                        m.area.y,
+                                        (m.area.y + m.area.h - rect.h).max(m.area.y),
+                                    ),
+                                    ..rect
+                                }
+                            },
+                            |memory| memory.rect(m.area, m.scale),
+                        );
                         let owner = self.floating_memory.get(&id).and_then(|m| m.window.owner);
                         self.remove_inner(id);
                         self.floating_memory.remove(&id);
