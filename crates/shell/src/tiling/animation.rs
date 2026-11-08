@@ -284,6 +284,7 @@ struct Overlay {
     window: HWND,
     thumbnails: Vec<isize>,
     snapshots: Vec<Snapshot>,
+    source_region: HRGN,
 }
 impl Drop for Overlay {
     fn drop(&mut self) {
@@ -292,6 +293,7 @@ impl Drop for Overlay {
             for t in self.thumbnails.drain(..) {
                 let _ = DwmUnregisterThumbnail(t);
             }
+            let _ = DeleteObject(HGDIOBJ(self.source_region.0));
             let _ = DestroyWindow(self.window);
         }
         self.snapshots.clear();
@@ -361,7 +363,13 @@ fn run(
         window,
         thumbnails: Vec::new(),
         snapshots: Vec::new(),
+        // SAFETY: this region stays ours; per-frame copies are transferred to our host HWND.
+        source_region: unsafe { CreateRectRgn(0, 0, 0, 0) },
     };
+    anyhow::ensure!(
+        !overlay.source_region.is_invalid(),
+        "creating source clip region"
+    );
     let mut sources = Vec::new();
     for change in changes {
         if !change.identity.valid() {
@@ -397,6 +405,22 @@ fn run(
         // SAFETY: source and destination are top-level, destination is our own HWND.
         if let Ok(thumbnail) = unsafe { DwmRegisterThumbnail(window, source) } {
             overlay.thumbnails.push(thumbnail);
+            // The real source stays put until the final commit. Its mask is constant for this
+            // projection, including retargets whose `from` is a moving proxy rather than native bounds.
+            if let Some(real) = platform::frame(change.identity.window()) {
+                let r = native(real, bounds);
+                // SAFETY: both regions are ours; the temporary part is deleted after union.
+                unsafe {
+                    let part = CreateRoundRectRgn(r.left, r.top, r.right, r.bottom, 16, 16);
+                    CombineRgn(
+                        Some(overlay.source_region),
+                        Some(overlay.source_region),
+                        Some(part),
+                        RGN_OR,
+                    );
+                    let _ = DeleteObject(HGDIOBJ(part.0));
+                }
+            }
             let crop = platform::frame(source)
                 .zip(platform::outer(source))
                 .map(|(frame, outer)| RECT {
@@ -446,10 +470,11 @@ fn run(
         let elapsed = start.elapsed().as_secs_f64();
         let t = progress(elapsed);
         let frame = Instant::now();
-        // The region covers old real windows plus the moving proxies, so no input is intercepted.
+        // Copy the stationary native mask, then add only the current proxy rectangles.
         // SAFETY: GDI regions are owned locally until SetWindowRgn transfers the union to USER.
         unsafe {
             let region = CreateRectRgn(0, 0, 0, 0);
+            CombineRgn(Some(region), Some(overlay.source_region), None, RGN_COPY);
             for (thumbnail, c, crop) in &sources {
                 let r = lerp(c.from, c.to, t);
                 let dest = native(r, bounds);
@@ -474,12 +499,9 @@ fn run(
                     ..properties
                 };
                 let _ = DwmUpdateThumbnailProperties(*thumbnail, &properties);
-                for rect in [native(c.from, bounds), dest] {
-                    let part =
-                        CreateRoundRectRgn(rect.left, rect.top, rect.right, rect.bottom, 16, 16);
-                    CombineRgn(Some(region), Some(region), Some(part), RGN_OR);
-                    let _ = DeleteObject(HGDIOBJ(part.0));
-                }
+                let part = CreateRoundRectRgn(dest.left, dest.top, dest.right, dest.bottom, 16, 16);
+                CombineRgn(Some(region), Some(region), Some(part), RGN_OR);
+                let _ = DeleteObject(HGDIOBJ(part.0));
             }
             if SetWindowRgn(window, Some(region), true) == 0 {
                 let _ = DeleteObject(HGDIOBJ(region.0));
