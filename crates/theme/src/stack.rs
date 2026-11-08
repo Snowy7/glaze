@@ -56,6 +56,31 @@ pub enum Base {
     Shader(ShaderBase),
     Glsl(GlslBase),
     Scene(SceneBase),
+    /// Another theme's wallpaper, drawn as it is (images, prefilters and bakes included).
+    Theme(ThemeBase),
+}
+
+/// `{ "kind": "theme", "theme": "rain-city-amber" }`: a theme id (folder name, resolved like
+/// `config.theme`) or a path. Web and app wallpapers draw in child windows and can't be a base.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ThemeBase {
+    pub theme: String,
+}
+
+impl ThemeBase {
+    /// The referenced theme, loaded; an error when it is missing, a web/app wallpaper, or a
+    /// stack (stacks are edited directly, so a base never nests).
+    pub fn load(&self) -> Result<crate::LoadedTheme> {
+        let dir = crate::locate(Some(&self.theme))?;
+        let loaded = crate::LoadedTheme::load(&dir)?;
+        match loaded.theme.wallpaper {
+            crate::Wallpaper::Web(_) | crate::Wallpaper::App(_) => {
+                bail!("web and app wallpapers draw in their own windows and can't be a base")
+            }
+            crate::Wallpaper::Stack(_) => bail!("a composition can't be the base of another"),
+            _ => Ok(loaded),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -297,6 +322,11 @@ impl Base {
             Base::Video(_) | Base::Shader(_) | Base::Glsl(_) => true,
             Base::Scene(s) => s.orbit != 0.0 || s.parallax != 0.0,
             Base::Image(_) | Base::Color(_) | Base::Gradient(_) => false,
+            // A still picture bakes; everything else (shader, video, slideshow, scene) moves.
+            // A missing theme draws black, which is still.
+            Base::Theme(t) => t.load().is_ok_and(|l| {
+                !matches!(l.theme.wallpaper, crate::Wallpaper::Image(_))
+            }),
         }
     }
 }
@@ -319,6 +349,8 @@ impl StackWallpaper {
             Base::Glsl(b) => crate::check_path(&b.source)?,
             Base::Scene(b) => crate::check_path(&b.source)?,
             Base::Gradient(g) if g.stops.is_empty() => bail!("a gradient needs at least one stop"),
+            Base::Theme(t) if t.theme.trim().is_empty() => bail!("a theme base needs a theme id"),
+            Base::Theme(_) => {}
             Base::Color(_) | Base::Gradient(_) => {}
         }
         for layer in &self.layers {

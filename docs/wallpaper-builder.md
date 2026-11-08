@@ -53,6 +53,7 @@ and update this file in the same commit.
 | `shader` | `source` .wgsl defining `fn wallpaper(frag: vec2f) -> vec4f` (the `shader` theme contract), `params` {} |
 | `glsl` | `source` .glsl in Shadertoy style (`mainImage`), plus `author`, `license` and `url`, which are kept for credits |
 | `scene` | the `scene` theme fields (`source` .glb/.gltf, `orbit`, `parallax`, `background`, `interactive`), plus `environment` (`sky`/`color`/`transparent`) and `exposure` |
+| `theme` | `theme`: another theme's id (its folder name, resolved like `config.theme`) or path. Its own source renders offscreen as the base, exactly as it would on the desktop: a shader keeps its images, prefilters and bakes. Web and app wallpapers (child windows) and other stacks can't be a base |
 
 A `scene` base also provides **depth**. Effects that read depth, such as depth of field and fog,
 use it. Any other base gives a flat depth of 1.0.
@@ -176,6 +177,9 @@ engine writes `%LOCALAPPDATA%\mypaper\stack-errors.json` on every load of a stac
 - **A still stack costs nothing at rest.** A stack is still when no layer is animated, the base is
   not video, shader or scene, and no param is time-driven. The engine renders it once per screen
   size and keeps it as the frame, exactly like an `image` theme.
+- **A `theme` base follows its theme.** A still image theme bakes like an `image` base. Any other
+  theme moves at its own rate (a 30 fps shader stays 30 fps; a slideshow keeps its own schedule while
+  no layer moves).
 - **A moving stack is split.** The static prefix of the layers (everything before the first
   animated layer) is baked once. Only the rest runs at `fps`, at `scale`.
 - Studio shows the sum of the `cost` of the active layers that run every frame, scaled by
@@ -186,7 +190,11 @@ engine writes `%LOCALAPPDATA%\mypaper\stack-errors.json` on every load of a stac
 
 ## Studio's Create mode
 
-Create mode is a page under Wallpapers.
+Create mode is a page under Wallpapers. Every wallpaper card has **Edit** (on hover and in its menu):
+a stack opens as it is; any other kind opens a new draft whose base is `{"kind": "theme"}` of that
+wallpaper. Saving never changes a built-in theme: an edit of one is saved to your themes as
+"<Name> (edited)". Your own stack saves in place (**Save as copy** makes a new one). Web and app
+wallpapers show Edit disabled, because they draw in child windows.
 
 - **Canvas:** the big live preview, showing the real engine output on a stage.
 - **Side panel:**

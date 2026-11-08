@@ -213,6 +213,12 @@ enum BaseDraw {
         last: Duration,
     },
     Scene(SceneRenderer),
+    /// Another theme's own source (`Base::Theme`), rendered offscreen as it is. `every` is its
+    /// redraw interval when it moves; `None` keeps it baked like a picture.
+    Theme {
+        source: Box<dyn Source>,
+        every: Option<Duration>,
+    },
 }
 
 enum LayerDraw {
@@ -371,12 +377,21 @@ impl StackSource {
                     || matches!(&base, BaseDraw::Glsl { .. })
             }
             Base::Scene(s) => s.parallax != 0.0 || s.interactive,
+            Base::Theme(_) => matches!(&base, BaseDraw::Theme { source, .. } if !source.shared()),
             _ => false,
         } || config
             .layers
             .iter()
             .any(|l| matches!(l, Layer::Model(m) if m.enabled && m.parallax != 0.0));
-        let releasable = !matches!(config.base, Base::Video(_) | Base::Scene(_));
+        let releasable = match &base {
+            BaseDraw::Theme { source, .. } => source.releasable(),
+            _ => !matches!(config.base, Base::Video(_) | Base::Scene(_)),
+        };
+        // A moving theme base keeps its own frame rate (a 30 fps shader stays 30 fps).
+        let interval = match &base {
+            BaseDraw::Theme { every: Some(every), .. } => *every,
+            _ => Duration::from_secs(1) / config.fps,
+        };
         write_errors(theme, &errors);
         let watches = watch(&effect_dirs, &theme.dir);
         Ok(Self {
@@ -384,7 +399,7 @@ impl StackSource {
             layers,
             split: per_frame.unwrap_or(config.layers.len()),
             moving,
-            interval: Duration::from_secs(1) / config.fps,
+            interval,
             scale: config.scale,
             shared: !reads_mouse,
             releasable,
@@ -443,7 +458,7 @@ impl StackSource {
                 pass.set_bind_group(0, &*group, &[]);
                 pass.draw(0..3, 0..1);
             }
-            BaseDraw::Source(source) => source.render(
+            BaseDraw::Source(source) | BaseDraw::Theme { source, .. } => source.render(
                 gpu,
                 Frame {
                     screen: frame.screen,
@@ -786,7 +801,7 @@ impl Source for StackSource {
     }
 
     fn update(&mut self, gpu: &Gpu, clock: Duration) {
-        if let BaseDraw::Source(source) = &mut self.base {
+        if let BaseDraw::Source(source) | BaseDraw::Theme { source, .. } = &mut self.base {
             source.update(gpu, clock);
         }
     }
@@ -820,7 +835,13 @@ impl Source for StackSource {
         }
     }
 
-    fn redraw(&self, _clock: Duration) -> Redraw {
+    fn redraw(&self, clock: Duration) -> Redraw {
+        // Over still layers, a theme base keeps its own schedule (a slideshow's next slide).
+        if let BaseDraw::Theme { source, .. } = &self.base
+            && !self.layers.iter().any(LayerDraw::moves)
+        {
+            return source.redraw(clock);
+        }
         if self.moving {
             Redraw::Every(self.interval)
         } else {
@@ -1014,6 +1035,17 @@ impl BaseDraw {
                 )?))
             }
             Base::Glsl(b) => glsl(gpu, &theme.asset(&b.source))?,
+            Base::Theme(b) => {
+                let other = b.load()?;
+                let source = super::load(gpu, &other, &[])?;
+                let every = match source.redraw(Duration::ZERO) {
+                    super::Redraw::Every(every) => Some(every),
+                    // A slideshow schedules its own frames; see `redraw`.
+                    super::Redraw::At(_) => Some(Duration::from_secs(1) / config.fps),
+                    super::Redraw::OnChange => None,
+                };
+                BaseDraw::Theme { source, every }
+            }
             Base::Scene(b) => BaseDraw::Scene(SceneRenderer::load(
                 gpu,
                 &theme.asset(&b.source),
@@ -1035,6 +1067,7 @@ impl BaseDraw {
             BaseDraw::Picture(..) | BaseDraw::Color(_) | BaseDraw::Gradient { .. } => false,
             BaseDraw::Source(_) | BaseDraw::Glsl { .. } => true,
             BaseDraw::Scene(scene) => scene.animated(),
+            BaseDraw::Theme { every, .. } => every.is_some(),
         }
     }
 }
