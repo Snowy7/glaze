@@ -467,7 +467,11 @@ impl Layout {
                 }
                 w.floating.retain(|f| f.id != id);
                 if w.focused == Some(id) {
-                    w.focused = w.columns.first().map(|c| c.tiles[0].id);
+                    w.focused = w
+                        .columns
+                        .first()
+                        .map(|c| c.tiles[0].id)
+                        .or_else(|| w.floating.last().map(|f| f.id));
                 }
             }
         }

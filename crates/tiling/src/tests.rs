@@ -20,29 +20,37 @@ fn open(l: &mut Layout, id: u64) {
 }
 fn check(l: &Layout) {
     let mut ids = std::collections::HashSet::new();
+    let mut workspaces = std::collections::HashSet::new();
     for m in &l.monitors {
         assert!(m.workspaces.iter().any(|w| w.id == m.active));
         assert!(m.workspaces.last().unwrap().empty());
-        for w in &m.workspaces {
-            assert!(w.view.is_finite());
-            for c in &w.columns {
-                assert!(!c.tiles.is_empty());
-                assert!(c.active < c.tiles.len());
-                for t in &c.tiles {
-                    assert!(ids.insert(t.id));
-                }
+    }
+    for w in l
+        .monitors
+        .iter()
+        .flat_map(|m| &m.workspaces)
+        .chain(&l.detached)
+    {
+        assert!(workspaces.insert(w.id));
+        assert!(w.view.is_finite());
+        assert_eq!(w.empty(), w.focused.is_none());
+        for c in &w.columns {
+            assert!(!c.tiles.is_empty());
+            assert!(c.active < c.tiles.len());
+            for t in &c.tiles {
+                assert!(ids.insert(t.id));
             }
-            for f in &w.floating {
-                assert!(ids.insert(f.id));
-            }
-            assert!(
-                w.focused.is_none_or(
-                    |id| w.column(id).is_some() || w.floating.iter().any(|f| f.id == id)
-                )
-            );
         }
+        for f in &w.floating {
+            assert!(ids.insert(f.id));
+        }
+        assert!(
+            w.focused
+                .is_none_or(|id| w.column(id).is_some() || w.floating.iter().any(|f| f.id == id))
+        );
     }
     for t in l.targets() {
+        assert!(ids.contains(&t.window) && workspaces.contains(&t.workspace));
         assert!(t.rect.x.is_finite() && t.rect.y.is_finite() && t.rect.w > 0.0 && t.rect.h > 0.0);
     }
 }
@@ -301,6 +309,23 @@ fn zero_monitors_preserves_windows() {
     assert!(l.locate(WindowId(1)).is_some());
 }
 #[test]
+fn closing_a_float_without_any_outputs_keeps_the_remaining_float_focused() {
+    let mut l = layout();
+    for id in 1..=2 {
+        l.insert(
+            WindowId(id),
+            Constraints::default(),
+            None,
+            Some(area()),
+            true,
+        );
+    }
+    l.remove_monitor("a");
+    l.remove(WindowId(2));
+    assert_eq!(l.detached[0].focused, Some(WindowId(1)));
+    check(&l);
+}
+#[test]
 fn a_smaller_output_refits_the_focused_column() {
     let mut l = layout();
     for id in 1..=4 {
@@ -465,14 +490,24 @@ fn stacked_minima_are_allocated_before_weighted_heights() {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(128))]
     #[test]
-    fn random_operations_preserve_invariants(ops in prop::collection::vec((0u8..16,0u64..24,1u16..2000),1..200)){
+    fn random_operations_preserve_invariants(ops in prop::collection::vec((0u8..36,0u64..24,1u16..2000),1..200)){
         let mut l=layout();
         for (op,id,size) in ops{
             let id=WindowId(id);
             match op{
-                0|1=>{let old=l.targets();l.insert(id,Constraints{min_w:f64::from(size),max_w:Some(f64::from(size)/2.0),..Constraints::default()},None,None,op==0);for t in old{if let Some(new)=l.targets().iter().find(|n|n.window==t.window){prop_assert_eq!((new.rect.w,new.rect.h),(t.rect.w,t.rect.h));}}},
+                0|1=>{let old=l.targets();l.insert(id,Constraints{min_w:f64::from(size),min_h:f64::from(size%400),max_w:Some(f64::from(size)/2.0),max_h:Some(f64::from(size)/3.0)},None,None,op==0);for t in old{if let Some(new)=l.targets().iter().find(|n|n.window==t.window){prop_assert_eq!((new.rect.w,new.rect.h),(t.rect.w,t.rect.h));}}},
                 2=>{let focused=l.focused();let before=l.targets().into_iter().find(|t|Some(t.window)==focused);l.remove(id);if focused!=Some(id){if let Some(before)=before{let after=l.targets().into_iter().find(|t|Some(t.window)==focused).unwrap();prop_assert!((before.rect.x-after.rect.x).abs()<0.00001 );}}},
-                3=>{l.focus(id);},4=>{l.command(Command::Focus(Direction::Left));},5=>{l.command(Command::Focus(Direction::Right));},6=>{l.command(Command::Consume);},7=>{l.command(Command::Expel);},8=>{l.command(Command::Tabbed);},9=>{l.command(Command::Workspace(Direction::Down));},10=>{l.command(Command::Workspace(Direction::Up));},11=>{l.remove_monitor("a");},12=>{l.add_monitor("a".into(),area(),area(),f64::from(size)/400.0);},13=>{l.command(Command::Maximize);},14=>{l.command(Command::Floating);},_=>{l.command(Command::Move(Direction::Right));}
+                3=>{l.focus(id);},4=>{l.command(Command::Focus(Direction::Left));},5=>{l.command(Command::Focus(Direction::Right));},6=>{l.command(Command::Consume);},7=>{l.command(Command::Expel);},8=>{l.command(Command::Tabbed);},9=>{l.command(Command::Workspace(Direction::Down));},10=>{l.command(Command::Workspace(Direction::Up));},11=>{l.remove_monitor("a");},12=>{l.add_monitor("a".into(),area(),area(),f64::from(size)/400.0);},13=>{l.command(Command::Maximize);},14=>{l.command(Command::Floating);},15=>{l.command(Command::Move(Direction::Right));},
+                16=>{l.command(Command::Fullscreen);},17=>{l.command(Command::FullWidth);},18=>{l.command(Command::FocusLayer);},
+                19=>{l.command(Command::CycleWidth);},20=>{l.command(Command::CycleHeight);},21=>{l.learn_minimum(id,f64::from(size));},
+                22=>{l.resize_column(id,f64::from(size));},23=>{if let Some(saved)=l.suspend(id){l.resume(saved,false);}},
+                24=>{l.float_at(id,Rect{x:50.0,y:60.0,w:300.0,h:200.0});},25=>{l.drop_at(id,f64::from(size%1200),f64::from(size%800));},
+                26=>{l.drop_on_workspace(id,"a",usize::from(size%3),size%2==0);},
+                27=>{l.add_monitor("b".into(),area(),area(),1.5);},28=>{l.remove_monitor("b");},
+                29=>{l.command(Command::FocusMonitor(Direction::Right));},
+                30|31=>{l.insert(id,Constraints::default(),Some(WindowId((id.0+1)%24)),(op==31).then_some(area()),false);},
+                32=>{l.command(Command::MoveWorkspace(Direction::Down));},33=>{l.command(Command::MoveMonitor(Direction::Right));},
+                34=>{l.command(Command::Focus(Direction::Up));},_=>{l.command(Command::Focus(Direction::Down));}
             }
             check(&l);
         }
