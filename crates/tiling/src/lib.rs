@@ -139,6 +139,44 @@ pub struct Layout {
 }
 
 impl Layout {
+    pub fn is_floating(&self, window: WindowId) -> bool {
+        self.locate(window).is_some_and(|(mi, wi)| {
+            self.monitors[mi].workspaces[wi]
+                .floating
+                .iter()
+                .any(|f| f.id == window)
+        })
+    }
+    /// Floating geometry is screen-fixed within its workspace and follows user/app moves.
+    pub fn move_floating(&mut self, window: WindowId, rect: Rect) -> Vec<Target> {
+        if let Some((mi, wi)) = self.locate(window) {
+            if let Some(f) = self.monitors[mi].workspaces[wi]
+                .floating
+                .iter_mut()
+                .find(|f| f.id == window)
+            {
+                f.rect = rect;
+            }
+        }
+        self.targets()
+    }
+    /// A user resize or a rate-limited app width request replaces the proportional width.
+    pub fn resize_column(&mut self, window: WindowId, logical_size: f64) -> Vec<Target> {
+        if logical_size.is_finite() && logical_size > 0.0 {
+            if let Some((mi, wi)) = self.locate(window) {
+                let m = &mut self.monitors[mi];
+                let length = m.axis.length(m.area) / m.scale;
+                let w = &mut m.workspaces[wi];
+                if let Some(ci) = w.column(window) {
+                    w.columns[ci].width = ((logical_size + self.settings.gaps)
+                        / (length - self.settings.gaps).max(1.0))
+                    .clamp(0.05, 1.0);
+                }
+                self.fit(mi, wi);
+            }
+        }
+        self.targets()
+    }
     pub fn new(settings: Settings) -> Self {
         Self {
             settings,
