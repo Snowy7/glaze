@@ -537,6 +537,33 @@ pub enum ItemsAlign {
     Center,
 }
 
+/// A UI choice over the two legacy dock flags; never a new field in bars.json.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DockHide {
+    Never,
+    WhenFilled,
+    Always,
+}
+
+impl DockHide {
+    pub const fn from_flags(autohide: bool, hide_when_maximized: bool) -> Self {
+        match (autohide, hide_when_maximized) {
+            (true, _) => Self::Always,
+            (false, true) => Self::WhenFilled,
+            (false, false) => Self::Never,
+        }
+    }
+
+    pub const fn flags(self) -> (bool, bool) {
+        match self {
+            Self::Never => (false, false),
+            Self::WhenFilled => (false, true),
+            Self::Always => (true, false),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct DockConfig {
@@ -641,6 +668,10 @@ impl Default for DockConfig {
 }
 
 impl DockConfig {
+    pub const fn hide_mode(&self) -> DockHide {
+        DockHide::from_flags(self.autohide, self.hide_when_maximized)
+    }
+
     pub fn size(&self) -> f64 {
         self.size.unwrap_or(match self.style {
             DockStyle::Floating => 48.0,
@@ -1323,6 +1354,29 @@ pub fn set(root: &mut Map<String, Value>, section: &str, key: &str, value: Value
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dock_hide_round_trips_legacy_flags_without_changing_the_format() {
+        for (flags, expected) in [
+            ((false, false), super::DockHide::Never),
+            ((false, true), super::DockHide::WhenFilled),
+            ((true, false), super::DockHide::Always),
+            ((true, true), super::DockHide::Always),
+        ] {
+            let mode = super::DockHide::from_flags(flags.0, flags.1);
+            assert_eq!(mode, expected);
+            let (autohide, hide_when_maximized) = mode.flags();
+            assert_eq!(super::DockHide::from_flags(autohide, hide_when_maximized), mode);
+            let raw = serde_json::json!({"dock": {"autohide": autohide,
+                "hide_when_maximized": hide_when_maximized}});
+            let config = super::BarsConfig::parse(&raw.to_string()).unwrap();
+            assert_eq!(config.dock.hide_mode(), mode);
+            let saved = serde_json::to_value(&config.dock).unwrap();
+            assert_eq!(saved["autohide"], autohide);
+            assert_eq!(saved["hide_when_maximized"], hide_when_maximized);
+            assert!(saved.get("hide").is_none());
+        }
+    }
+
     #[test]
     fn maximized_hiding_defaults_and_monitor_overrides() {
         let defaults = super::BarsConfig::parse("{}").unwrap();

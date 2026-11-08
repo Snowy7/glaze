@@ -1,4 +1,5 @@
 use crate::panel::tokens::radius;
+use mypaper_bars::config::DockHide;
 use mypaper_ui::Rect;
 use mypaper_ui::controls::Align;
 use serde_json::{Value, json};
@@ -172,6 +173,31 @@ fn same_pair(app: &App) -> bool {
 fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str, caption: &str) {
     use crate::settings::Kind;
     let s = crate::settings::Setting::get(id).expect("bar setting");
+    if id == "dock_hide" {
+        crate::ui::anchor(app, id, c.view, c.y);
+        let dock = resolved(app);
+        let mode = DockHide::from_flags(
+            dock.pointer("/dock/autohide")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            dock.pointer("/dock/hide_when_maximized")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        );
+        select(
+            b, c, label, json!(mode),
+            Edit::new(DocId::Studio, "/panel/dock-hide", "Dock visibility"),
+            [
+                (DockHide::Never, "Always shown"),
+                (DockHide::WhenFilled, "Hide when a window fills the screen"),
+                (DockHide::Always, "Always hide (like Mac)"),
+            ]
+            .into_iter()
+            .map(|(mode, label)| (json!(mode), label.into()))
+            .collect(),
+        );
+        return;
+    }
     if s.doc != DocId::Bars
         || shared(s.path)
         || matches!(s.place, crate::settings::Place::BarsPanel(_))
@@ -586,6 +612,25 @@ pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
     if edit.doc != DocId::Studio {
         return false;
     }
+    if edit.path.as_ref() == "/panel/dock-hide" {
+        if let Ok(mode) = serde_json::from_value::<DockHide>(value.clone()) {
+            let (autohide, hide_when_maximized) = mode.flags();
+            // One undoable edit of the existing fields, scoped to the selected display.
+            let ops = [
+                ("/dock/autohide", autohide),
+                ("/dock/hide_when_maximized", hide_when_maximized),
+            ]
+            .into_iter()
+            .map(|(path, value)| crate::docs::Op {
+                doc: DocId::Bars,
+                path: bar_path(app, path),
+                value: Some(json!(value)),
+            })
+            .collect();
+            app.apply(&edit.label, ops);
+        }
+        return true;
+    }
     if let Some(which) = edit.path.strip_prefix("/panel/pins/") {
         let which = if which == "dock" {
             Pins::Dock
@@ -800,7 +845,7 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
                 "dock_edge",
                 "dock_size",
                 "dock_magnify",
-                "dock_autohide",
+                "dock_hide",
             ]
         };
         for &id in ids {
@@ -1838,6 +1883,57 @@ fn default_click(app: &App, id: &str, bar: Bar) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dock_visibility_updates_only_legacy_flags_on_selected_display_and_undoes_together() {
+        let ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = fixture(&ui, json!({"dock":{"autohide":true,"hide_when_maximized":true},
+            "top":{"height":40}}));
+        app.nav.display = 1;
+        let before = app.docs.doc(DocId::Bars).raw.clone();
+        app.set(&Edit::new(DocId::Studio, "/panel/dock-hide", "Dock visibility"), json!(DockHide::Never));
+        let after = &app.docs.doc(DocId::Bars).raw;
+        assert_eq!(after["dock"], before["dock"]);
+        assert_eq!(after["top"], before["top"]);
+        assert_eq!(after["overrides"]["DISPLAY2"]["dock"], json!({"autohide":false,"hide_when_maximized":false}));
+        app.run(Action::Undo);
+        assert_eq!(app.docs.doc(DocId::Bars).raw, before);
+    }
+
+    #[test]
+    fn render_dock_visibility_window_goldens() {
+        let baseline = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        for dark in [true, false] {
+            let mut app = crate::goldens::window_app(dark, &ui, (1280, 800));
+            app.run(Action::Panel(Command::Open(Page::Dock)));
+            let scheme = if dark { "dark" } else { "light" };
+            let image = crate::goldens::shot(&mut app, &mut ui);
+            mypaper_ui::golden::check(&image, &baseline.join(format!("dock-visibility-1280x800-{scheme}.png"))).unwrap();
+            let choices = app.frame.targets.iter().find_map(|target| match &target.action {
+                Action::Choose(choices) if choices.edit.path.as_ref() == "/panel/dock-hide" => Some(choices.clone()),
+                _ => None,
+            }).expect("dock visibility selector");
+            assert_eq!(choices.options.len(), 3);
+            let items: Vec<_> = choices.options.iter().enumerate().map(|(i, (value, label))|
+                mypaper_ui::menu::Entry::check(label, i, choices.current.as_ref() == Some(value))).collect();
+            let p = crate::panel::palette_for(&app);
+            let mut tokens = p.theme().tokens();
+            tokens.material.tint = p.panel;
+            tokens.colors.hover = p.selected;
+            let layout = mypaper_ui::menu::layout(&items, &tokens, 1.0, &mut ui.text);
+            let list = mypaper_ui::menu::view(&items, &layout, None, &tokens);
+            let size = layout.size();
+            let image = mypaper_ui::render(&mut ui, &list, size.0 as u32 + 32, size.1 as u32 + 32).unwrap();
+            mypaper_ui::golden::check(&image, &baseline.join(format!("dock-visibility-choices-{scheme}.png"))).unwrap();
+            for (i, mode) in [DockHide::Never, DockHide::WhenFilled, DockHide::Always].into_iter().enumerate() {
+                app.chose(&choices, i);
+                let flags = mode.flags();
+                assert_eq!(bar_value(&app, "/dock/autohide"), Some(json!(flags.0)));
+                assert_eq!(bar_value(&app, "/dock/hide_when_maximized"), Some(json!(flags.1)));
+            }
+        }
+    }
 
     fn fixture(ui: &mypaper_ui::Ui, bars: Value) -> App {
         let mut app = crate::goldens::app(true, ui);

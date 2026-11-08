@@ -258,7 +258,7 @@ fn liquid_material_uses_the_resolved_style_controls() {
     assert_eq!(material.tint, Rgba::rgb8([0x12, 0x34, 0x56], 0.17));
 }
 
-fn model() -> services::Model {
+pub(super) fn model() -> services::Model {
     let (tx, _) = std::sync::mpsc::channel();
     services::Model {
         foreground: Some(1),

@@ -972,8 +972,8 @@ pub static SETTINGS: &[Setting] = &[
         48.0,
         DOCK,
     ),
-    sw("dock_autohide", "Auto-hide", "", B, "/dock/autohide", false, DOCK),
-    sw("dock_hide_maximized", "Hide when a window is maximized", "The dock slides away and comes back when you point at its edge", B, "/dock/hide_when_maximized", true, DOCK),
+    custom("dock_hide", "Visibility", "Hidden docks reveal at the edge and hide a second after you leave", DOCK)
+        .words("autohide auto hide maximized screen always Mac"),
     sw(
         "dock_magnify",
         "Magnify",

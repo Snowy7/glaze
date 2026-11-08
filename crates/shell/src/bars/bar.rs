@@ -12,7 +12,7 @@ use mypaper_bars::{
     actions::{BarKind, bar_topics},
     appbar::{self, Edge},
     apps::Item,
-    config::{DockPosition, DockStyle, TopPosition},
+    config::{DockHide, DockPosition, DockStyle, TopPosition},
     events::Reservation,
 };
 use mypaper_desktop::{Monitor, Rect as DesktopRect};
@@ -151,7 +151,7 @@ impl Bar {
             },
             Role::Toolbar,
         )?;
-        let autohide = kind == BarKind::Dock && config.dock.autohide;
+        let autohide = kind == BarKind::Dock && config.dock.hide_mode() == DockHide::Always;
         let reservation = None;
         let edge_surface = autohide
             .then(|| Surface::new_deferred_accessibility(Kind::Bar, "Reveal dock", Role::Toolbar))
@@ -463,11 +463,12 @@ impl Bar {
     pub fn hide_when_maximized(&self) -> bool {
         match self.kind {
             BarKind::Top => self.config.top.hide_when_maximized,
-            BarKind::Dock => self.config.dock.hide_when_maximized,
+            BarKind::Dock => self.config.dock.hide_mode() == DockHide::WhenFilled,
         }
     }
     fn auto_hides(&self) -> bool {
-        (self.kind == BarKind::Dock && self.config.dock.autohide) || self.maximized.active
+        (self.kind == BarKind::Dock && self.config.dock.hide_mode() == DockHide::Always)
+            || self.maximized.active
     }
     /// A visibility transition changes only this reservation. Explorer resizes maximized apps;
     /// restored windows keep their positions (no global work-area setter or window enumeration).
@@ -494,6 +495,9 @@ impl Bar {
     }
     pub fn reserve(&mut self) {
         if self.studio_only || self.studio_base.is_some() { return; }
+        if self.auto_hides() {
+            self.reservation = None;
+        }
         if self.reservation.is_none() && !self.auto_hides() {
             self.reservation = Reservation::new(edge(self.kind, &self.config))
                 .inspect_err(|e| log::error!("app-bar reservation: {e:#}"))
@@ -1161,6 +1165,47 @@ mod tests {
     use mypaper_ui::glass::{Backdrop, Shape};
     use windows::Win32::Foundation::HWND;
     struct Available;
+
+    #[test]
+    fn always_hidden_dock_reveals_over_filled_windows_and_hides_one_second_after_leaving() {
+        let config = BarsConfig::parse(r#"{"dock":{"enabled":true,"autohide":true,"hide_when_maximized":true}}"#).unwrap();
+        let tokens = Tokens::resolve(&config.dock.look, &Default::default(), &mypaper_bars::accent::read());
+        // Native surfaces stay offscreen; no input or user windows are touched.
+        let monitor = Monitor {
+            device: "test".into(), dpi: 96, primary: true,
+            rect: DesktopRect { x: -30000, y: -30000, width: 1280, height: 720 },
+            work: DesktopRect { x: -30000, y: -29968, width: 1280, height: 688 },
+        };
+        let mut bar = Bar::new(BarKind::Dock, config, monitor, tokens, false).unwrap();
+        let mut ui = Ui::new().unwrap();
+        let model = super::super::tests::model();
+        let mut images = Images::default();
+        let now = Instant::now();
+        bar.reserve();
+        assert!(bar.reservation.is_none());
+        assert!(bar.auto_hides());
+        bar.paint(&mut ui, &model, &mut images, now, false).unwrap();
+        assert!(!bar.surface.is_visible());
+        assert!(bar.edge_surface.as_ref().unwrap().is_visible());
+        bar.maximized.active = true;
+        bar.reveal(now);
+        bar.paint(&mut ui, &model, &mut images, now, false).unwrap();
+        assert!(bar.surface.is_visible());
+        bar.pointer = Some(Point::new(10.0, 10.0));
+        bar.paint(&mut ui, &model, &mut images, now + Duration::from_secs(2), false).unwrap();
+        assert!(bar.surface.is_visible());
+        let leave = now + Duration::from_secs(2);
+        bar.leave(leave);
+        bar.paint(&mut ui, &model, &mut images, leave + Duration::from_millis(999), false).unwrap();
+        assert!(bar.surface.is_visible());
+        bar.paint(&mut ui, &model, &mut images, leave + Duration::from_secs(1), false).unwrap();
+        assert!(!bar.surface.is_visible());
+        assert!(bar.reservation.is_none());
+        bar.maximized.active = false;
+        bar.recover(bar.monitor.work, now);
+        assert!(bar.auto_hides());
+        assert!(bar.reservation.is_none());
+    }
 
     #[test]
     fn studio_preview_restores_auto_hide_and_keeps_reservations_untouched() {
