@@ -153,7 +153,7 @@ preview and the desktop use):
   effect looks the same on a 1080p and a 1440p screen. Keep a whole-pixel pitch for patterns
   that would otherwise alias (scanlines, phosphor masks).
 - Tone curves must not assume a bright photo: a fixed luma threshold turns a low-key picture
-  into a flat field. Adapt to the input (e.g. `halftone` levels from a 5x5 sample of `src`).
+  into a flat field. Adapt to the input (e.g. `halftone` levels from a 3x3 sample of `src`).
 - Defaults must visibly change a photo: adding an effect that does nothing reads as broken.
 - Studio writes `params` as JSON: a color as `"#rrggbb"`, a bool as `true`/`false`, an enum as
   its option name (an index also works).

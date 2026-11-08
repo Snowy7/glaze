@@ -1,18 +1,18 @@
 // Original mypaper effect. SPDX-License-Identifier: MIT
 
-// The input's tonal range from a 5x5 sample: (low, high) luma. Dots then span the picture's own
+// The input's tonal range from a 3x3 sample: (low, high) luma. Dots then span the picture's own
 // range, so a low-key photo keeps its shapes instead of turning into solid ink.
 fn tone_range() -> vec2f {
     var sum = 0.0;
     var squares = 0.0;
-    for (var i = 0; i < 25; i++) {
-        let at = (vec2f(f32(i % 5), f32(i / 5)) + 0.5) / 5.0;
+    for (var i = 0; i < 9; i++) {
+        let at = (vec2f(f32(i % 3), f32(i / 3)) + 0.5) / 3.0;
         let l = luma(sample_src(at).rgb);
         sum += l;
         squares += l * l;
     }
-    let mean = sum / 25.0;
-    let spread = sqrt(max(squares / 25.0 - mean * mean, 0.0));
+    let mean = sum / 9.0;
+    let spread = sqrt(max(squares / 9.0 - mean * mean, 0.0));
     let half_width = max(spread * 1.8, 0.16);
     let low = clamp(mean - half_width, 0.0, 0.7);
     return vec2f(low, min(low + half_width * 2.0, 1.0));

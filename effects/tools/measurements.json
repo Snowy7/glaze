@@ -28,7 +28,7 @@
     {
       "animated": false,
       "category": "stylize",
-      "gpu_ms": 0.58128,
+      "gpu_ms": 0.254,
       "id": "crt"
     },
     {
@@ -94,7 +94,7 @@
     {
       "animated": false,
       "category": "stylize",
-      "gpu_ms": 1.03236,
+      "gpu_ms": 1.193,
       "id": "halftone"
     },
     {
@@ -209,6 +209,7 @@
   "frames": 24,
   "height": 1080,
   "integrated": true,
+  "note_engine_path": "crt, halftone and color remeasured 2026-11-08 through the engine (time_effects: whole stack frame minus a layer-free baseline, 1920x1080, iGPU).",
   "photo": "themes/rain-city-amber/media/city.jpg",
   "width": 1920
 }

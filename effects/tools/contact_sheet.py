@@ -1,4 +1,4 @@
-"""Build labeled before/after sheets from effects-lab captures (requires Pillow)."""
+"""Build labeled before/after sheets from engine captures (effects_real.rs dumps; requires Pillow)."""
 import argparse
 import json
 from pathlib import Path

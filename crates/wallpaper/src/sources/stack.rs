@@ -1675,7 +1675,8 @@ mod tests {
     }
 
     /// GPU ms of each reference effect at 1920x1080 over the demo photo, minus a layer-free
-    /// baseline (`cargo test -p mypaper-wallpaper --release time_effects -- --ignored --nocapture`).
+    /// baseline: the `cost` in effect.json
+    /// (`cargo test -p mypaper-wallpaper --release --bins time_effects -- --ignored --nocapture`).
     #[test]
     #[ignore]
     fn time_effects() {
@@ -1761,7 +1762,10 @@ mod tests {
         };
         let baseline = time("");
         eprintln!("baseline (image + copy): {baseline:.3} ms");
-        for id in ["rain", "blur", "color", "vignette", "grain"] {
+        // `MYPAPER_EFFECTS_ONLY=id,id` times those effects instead.
+        let only = std::env::var("MYPAPER_EFFECTS_ONLY")
+            .unwrap_or_else(|_| "rain,blur,color,vignette,grain".into());
+        for id in only.split(',') {
             let ms = time(&format!(r#"{{ "kind": "effect", "effect": "{id}" }}"#));
             eprintln!("{id}: {:.3} ms (total {ms:.3})", (ms - baseline).max(0.0));
         }
