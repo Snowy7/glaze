@@ -40,6 +40,10 @@ foreach ($profile in $profiles) {
     # Change only known app paths, executable names and our repository URL. User content,
     # plugin IDs and encrypted credentials retain their values. Preserve JSON formatting.
     foreach ($file in Get-ChildItem -LiteralPath $destination -Recurse -File -Filter '*.json') {
+        # Index checkpoints contain packed name blobs with byte offsets. Rewriting a
+        # filename there corrupts those offsets; the index reconciles moved paths itself.
+        if ($profile.Root -eq $env:LOCALAPPDATA -and $profile.Old -eq 'mypaper' -and
+            $file.FullName.StartsWith((Join-Path $destination 'index') + '\', [StringComparison]::OrdinalIgnoreCase)) { continue }
         $text = [IO.File]::ReadAllText($file.FullName)
         $updated = $text
         foreach ($pair in $replacements) {
