@@ -187,6 +187,10 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
                     "New or unproven features. Each one turns on and off live.",
                 );
                 setting(
+                    app, b, c, "experimental_tiling", "Scrolling tiling",
+                    "Replaces Snap: windows in an endless row of columns",
+                );
+                setting(
                     app,
                     b,
                     c,

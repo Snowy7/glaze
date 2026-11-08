@@ -1,0 +1,16 @@
+[package]
+name = "mypaper-tiling"
+description = "Pure scrolling layout and input vocabulary for mypaper"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+proptest = "1"
+serde_json.workspace = true
+
+[lints]
+workspace = true

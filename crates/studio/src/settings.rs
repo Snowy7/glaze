@@ -329,6 +329,11 @@ pub static SETTINGS: &[Setting] = &[
     .words("theme dark light mode"),
     // Experimental features (`config.json` › `experimental`): new or unproven, each its own switch.
     sw(
+        "experimental_tiling", "Scrolling tiling",
+        "Replaces Snap: windows in an endless row of columns",
+        C, "/experimental/tiling", false, GENERAL,
+    ).words("experimental scrolling tiling windows snap columns niri"),
+    sw(
         "experimental_file_index",
         "File index",
         "Instant file search and folder sizes in the launcher",

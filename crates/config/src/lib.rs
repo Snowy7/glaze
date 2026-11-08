@@ -15,6 +15,7 @@ pub use system::{PowerMode, SystemConfig};
 pub use apps::{AppRules, AppsStyle};
 pub use look::Look;
 pub use windows::{Backdrop, Color, Corners, Paint, WindowsStyle};
+pub use mypaper_tiling::Settings as Tiling;
 
 use std::path::PathBuf;
 
@@ -31,6 +32,9 @@ pub struct Config {
     pub system: SystemConfig,
     /// Optional native services. Every experiment is off until explicitly enabled.
     pub experimental: Experimental,
+    /// Scrolling layout preferences; unused while the experiment is off.
+    #[serde(skip_serializing_if = "Tiling::is_default")]
+    pub tiling: Tiling,
     /// File-name index rules layered over its built-in cache/build exclusions.
     #[serde(skip_serializing_if = "IndexConfig::is_empty")]
     pub index: IndexConfig,
@@ -67,6 +71,7 @@ impl Default for Config {
         Self {
             system: SystemConfig::default(),
             experimental: Experimental::default(),
+            tiling: Tiling::default(),
             index: IndexConfig::default(),
             engine: EngineConfig::default(),
             theme: "aurora".into(),
@@ -113,6 +118,9 @@ impl IndexConfig {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Experimental {
+    /// Replace Snap with a scrolling strip. No tiler exists while disabled.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub tiling: bool,
     /// Route folder launches and Win+E to the on-demand native Files app.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub files_default: bool,
@@ -155,6 +163,7 @@ impl Config {
         config.desktop_menu.validate()?;
         config.engine.validate()?;
         config.look.validate()?;
+        config.tiling.validate().map_err(anyhow::Error::msg)?;
         Ok(config)
     }
 
@@ -172,6 +181,20 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn tiling_is_opt_in_and_validates_geometry_and_keys() {
+        let off = super::Config::parse("{}").unwrap();
+        assert!(!off.experimental.tiling);
+        let json = serde_json::to_value(&off).unwrap();
+        assert!(json["experimental"].get("tiling").is_none());
+        assert!(json.get("tiling").is_none());
+        let on = super::Config::parse(r#"{"experimental":{"tiling":true},"tiling":{"gaps":8,"center_focused_column":"on-overflow"}}"#).unwrap();
+        assert!(on.experimental.tiling);
+        assert_eq!(super::Config::parse(&serde_json::to_string(&on).unwrap()).unwrap(), on);
+        assert!(super::Config::parse(r#"{"tiling":{"preset_widths":[]}}"#).is_err());
+        assert!(super::Config::parse(r#"{"tiling":{"default_width":0}}"#).is_err());
+        assert!(super::Config::parse(r#"{"tiling":{"gaps":-1}}"#).is_err());
+    }
     #[test]
     fn index_startup_policy_defaults_and_explicit_seconds_round_trip() {
         let config = super::Config::parse("{}").unwrap();
