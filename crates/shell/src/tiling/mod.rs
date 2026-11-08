@@ -301,12 +301,16 @@ impl Tiler {
         self.update_process_hooks();
     }
     fn admit(&mut self, window: WindowId) {
-        if self.windows.contains_key(&window) || !self.current_desktop(hwnd(window)) {
+        if self.windows.contains_key(&window) {
             return;
         }
         let Some(admission) = platform::admit(hwnd(window), &self.scope, &self.rules) else {
             return;
         };
+        // The COM desktop query comes after cached eligibility, PID scope and integrity.
+        if !self.current_desktop(hwnd(window)) {
+            return;
+        }
         self.recently_hidden
             .retain(|(_, at)| at.elapsed() < Duration::from_secs(300));
         if self
