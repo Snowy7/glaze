@@ -1763,6 +1763,29 @@
       "sha256": "f8cea036fa1a3bbebc5399442b14f3a08a6a6a915a8d33aed37782767e0322d2"
     },
     {
+      "path": "examples/builder-demo/media/city.jpg",
+      "title": "Builder demo: rain on a city",
+      "author": "David Iliff (Diliff)",
+      "license": "CC-BY-3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Hong_Kong_Skyline_Restitch_-_Dec_2007.jpg",
+      "changes": "Same file as rain-city/media/city.jpg (downscaled to 2560 px wide, JPEG quality 90).",
+      "license_url": "https://creativecommons.org/licenses/by/3.0/",
+      "upstream_sha256": "589358eb1752270abededef0a4338a7fc4c1242eb74465380c443c69b645f90e",
+      "bytes": 885858,
+      "sha256": "c1b56787489c5724fcb6dcb94b220915db2b383524f2af84e093e1c1297f41d3"
+    },
+    {
+      "path": "examples/builder-demo/theme.json",
+      "title": "builder-demo",
+      "author": "mypaper contributors",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit/",
+      "source": "../LICENSE",
+      "changes": "Original stack manifest (docs/wallpaper-builder.md); hidden.",
+      "bytes": 689,
+      "sha256": "4726e1ef01850f3b5797b3eb0133a2f8284c7c72204c31f148b7043b903119f2"
+    },
+    {
       "path": "examples/webdemo/index.html",
       "title": "webdemo",
       "author": "mypaper contributors",

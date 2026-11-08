@@ -12,6 +12,7 @@ mod image;
 mod scene;
 pub mod shader;
 mod slideshow;
+mod stack;
 mod video;
 mod web;
 mod wic;
@@ -136,7 +137,7 @@ pub fn load(gpu: &Gpu, theme: &LoadedTheme, screens: &[HWND]) -> Result<Box<dyn 
         Wallpaper::Scene(w) => Box::new(scene::SceneSource::new(gpu, theme, w)?),
         Wallpaper::Web(w) => Box::new(web::WebSource::new(theme, w, screens)?),
         Wallpaper::App(w) => Box::new(app::AppSource::new(theme, w, screens)?),
-        Wallpaper::Stack(_) => anyhow::bail!("stack wallpapers need sources/stack.rs (in progress)"),
+        Wallpaper::Stack(w) => Box::new(stack::StackSource::new(gpu, theme, w)?),
     })
 }
 

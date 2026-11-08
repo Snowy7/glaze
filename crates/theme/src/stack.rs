@@ -174,6 +174,9 @@ pub struct EffectLayer {
     /// Only values that differ from the effect's defaults; unknown ids are ignored.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub params: BTreeMap<String, Value>,
+    /// How the effect's output combines with its input before `mix`.
+    #[serde(default)]
+    pub blend: Blend,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -218,6 +221,8 @@ pub struct ModelLayer {
     /// A glTF clip name to loop, or `null` for none.
     #[serde(default)]
     pub animation: Option<String>,
+    #[serde(default)]
+    pub blend: Blend,
 }
 
 fn default_light() -> [f32; 3] {
@@ -248,6 +253,14 @@ impl Layer {
             Layer::Effect(l) => l.enabled,
             Layer::Image(l) => l.enabled,
             Layer::Model(l) => l.enabled,
+        }
+    }
+
+    pub fn blend(&self) -> Blend {
+        match self {
+            Layer::Effect(l) => l.blend,
+            Layer::Image(l) => l.blend,
+            Layer::Model(l) => l.blend,
         }
     }
 
@@ -515,6 +528,21 @@ pub fn shader_params_wgsl(params: &[Param], values: &BTreeMap<String, Value>) ->
     format!(
         "{}const params = Params({fields});\n",
         params_struct(params)
+    )
+}
+
+/// The shader theme prelude (the engine's `prelude.wgsl`), appended after a shader's code.
+pub const SHADER_PRELUDE: &str = include_str!("../../wallpaper/src/prelude.wgsl");
+
+/// A shader base exactly as the engine compiles it: `source` first (so compiler lines are the
+/// file's lines), then its `// @param` struct and `const params`, then [`SHADER_PRELUDE`].
+pub fn shader_base_wgsl(source: &str, values: &BTreeMap<String, Value>) -> String {
+    let params = shader_params(source);
+    format!(
+        "{source}
+{}
+{SHADER_PRELUDE}",
+        shader_params_wgsl(&params, values)
     )
 }
 
@@ -794,6 +822,17 @@ pub mod check {
         Ok(module)
     }
 
+    /// Checks a shader base as built by [`shader_base_wgsl`]; lines are the file's own.
+    pub fn shader_base(
+        source: &str,
+        values: &BTreeMap<String, Value>,
+    ) -> Result<naga::Module, Diagnostic> {
+        let lines = source.lines().count() as u32;
+        wgsl(&shader_base_wgsl(source, values), |l| {
+            (l <= lines).then_some(l)
+        })
+    }
+
     /// Checks one effect pass as built by [`pass_wgsl`], with errors on the pass file's lines.
     pub fn pass(manifest: &EffectManifest, source: &str) -> Result<naga::Module, Diagnostic> {
         let built = pass_wgsl(manifest, source);
@@ -1034,6 +1073,19 @@ mod tests {
         check::wgsl(&shader_params_wgsl(&params, &BTreeMap::new()), Some).unwrap();
         let toy = "void mainImage(out vec4 fragColor, in vec2 fragCoord) {\n    vec2 uv = fragCoord / iResolution.xy;\n    fragColor = vec4(uv, 0.5 + 0.5 * sin(iTime), 1.0);\n}\n";
         check::glsl(toy).unwrap();
+        let base = "// @param amount float 0..1 = 0.5
+fn wallpaper(frag: vec2f) -> vec4f {
+    return vec4f(params.amount * frag.x / paper.resolution.x);
+}
+";
+        check::shader_base(base, &BTreeMap::new()).unwrap();
+        let typo = base.replace("params.amount", "params.amont");
+        assert_eq!(
+            check::shader_base(&typo, &BTreeMap::new())
+                .unwrap_err()
+                .line,
+            Some(3)
+        );
         let broken = "void mainImage(out vec4 fragColor, in vec2 fragCoord) {\n    fragColor = vec4(nope);\n}\n";
         assert_eq!(check::glsl(broken).unwrap_err().line, Some(2));
     }

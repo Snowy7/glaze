@@ -64,6 +64,17 @@ impl ShaderSource {
         let path = theme.asset(&config.source);
         let code = std::fs::read_to_string(&path)
             .with_context(|| format!("reading {}", path.display()))?;
+        Self::with_code(gpu, theme, config, &code)
+    }
+
+    /// [`Self::new`] with the shader's code given (a stack's shader base adds its params).
+    pub fn with_code(
+        gpu: &Gpu,
+        theme: &LoadedTheme,
+        config: &ShaderWallpaper,
+        code: &str,
+    ) -> Result<Self> {
+        let path = theme.asset(&config.source);
         let mut entries = Vec::new();
         let texture_entry = |binding, filterable| wgpu::BindGroupLayoutEntry {
             binding,

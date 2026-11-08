@@ -1,0 +1,17 @@
+{
+  "name": "Builder demo: rain on a city",
+  "hidden": true,
+  "wallpaper": {
+    "kind": "stack",
+    "fps": 30,
+    "scale": 0.75,
+    "base": { "kind": "image", "source": "media/city.jpg", "fit": "cover" },
+    "layers": [
+      { "id": "soft", "kind": "effect", "effect": "blur", "params": { "radius": 0.25 } },
+      { "id": "grade", "kind": "effect", "effect": "color",
+        "params": { "exposure": -0.3, "saturation": 0.85, "warmth": -0.35, "contrast": 1.08 } },
+      { "id": "rain", "kind": "effect", "effect": "rain", "params": { "amount": 0.65, "tint": "#e4ecff" } },
+      { "id": "edges", "kind": "effect", "effect": "vignette", "params": { "amount": 0.55 } }
+    ]
+  }
+}

@@ -14,7 +14,7 @@ mypaper-glass-ipc.workspace = true
 mypaper-config.workspace = true
 mypaper-desktop.workspace = true
 mypaper-fswatch.workspace = true
-mypaper-theme.workspace = true
+mypaper-theme = { workspace = true, features = ["check"] }
 mypaper-tweaks.workspace = true
 # All Liquid Glass (plates and overlays): a vendored copy of al1h3n/liquid-rust.
 liquid-rust = { path = "../liquid-rust" }
@@ -24,7 +24,9 @@ bytemuck.workspace = true
 log.workspace = true
 pollster.workspace = true
 raw-window-handle.workspace = true
-wgpu.workspace = true
+# naga-ir: stack effects and Shadertoy bases hand wgpu the module naga already checked.
+wgpu = { workspace = true, features = ["naga-ir"] }
+serde_json.workspace = true
 glam.workspace = true
 gltf.workspace = true
 # WebView2 bindings for `web` wallpapers (0.39 is the line built on windows 0.62).

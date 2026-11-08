@@ -1,0 +1,18 @@
+{
+  "id": "blur",
+  "name": "Blur",
+  "category": "camera",
+  "description": "A soft Gaussian blur, drawn at half resolution.",
+  "author": "mypaper",
+  "license": "MIT",
+  "url": null,
+  "animated": false,
+  "cost": 0.0,
+  "passes": [
+    { "source": "blur-x.wgsl", "scale": 0.5 },
+    { "source": "blur-y.wgsl", "scale": 0.5 }
+  ],
+  "params": [
+    { "id": "radius", "label": "Radius", "type": "float", "min": 0, "max": 1, "default": 0.4, "step": 0.01 }
+  ]
+}

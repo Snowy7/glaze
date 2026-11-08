@@ -1,0 +1,20 @@
+{
+  "id": "rain",
+  "name": "Rain on glass",
+  "category": "weather",
+  "description": "Beads and sliding drops on a fogged window; drops refract what is behind.",
+  "author": "mypaper",
+  "license": "MIT",
+  "url": null,
+  "animated": true,
+  "cost": 0.0,
+  "passes": [{ "source": "rain.wgsl", "scale": 1.0 }],
+  "params": [
+    { "id": "amount", "label": "Amount", "type": "float", "min": 0, "max": 1, "default": 0.6, "step": 0.01 },
+    { "id": "size", "label": "Drop size", "type": "float", "min": 0.5, "max": 2, "default": 1, "step": 0.01 },
+    { "id": "speed", "label": "Speed", "type": "float", "min": 0, "max": 2, "default": 1, "step": 0.01 },
+    { "id": "fog", "label": "Fog", "type": "float", "min": 0, "max": 1, "default": 0.5, "step": 0.01 },
+    { "id": "tint", "label": "Tint", "type": "color", "default": "#ffffff" },
+    { "id": "streaks", "label": "Streaks", "type": "bool", "default": true }
+  ]
+}

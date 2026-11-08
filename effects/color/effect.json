@@ -1,0 +1,19 @@
+{
+  "id": "color",
+  "name": "Color",
+  "category": "color",
+  "description": "Exposure, contrast, saturation, warmth and tint.",
+  "author": "mypaper",
+  "license": "MIT",
+  "url": null,
+  "animated": false,
+  "cost": 0.0,
+  "passes": [{ "source": "color.wgsl", "scale": 1.0 }],
+  "params": [
+    { "id": "exposure", "label": "Exposure", "type": "float", "min": -2, "max": 2, "default": 0, "step": 0.01 },
+    { "id": "contrast", "label": "Contrast", "type": "float", "min": 0, "max": 2, "default": 1, "step": 0.01 },
+    { "id": "saturation", "label": "Saturation", "type": "float", "min": 0, "max": 2, "default": 1, "step": 0.01 },
+    { "id": "warmth", "label": "Warmth", "type": "float", "min": -1, "max": 1, "default": 0, "step": 0.01 },
+    { "id": "tint", "label": "Tint", "type": "color", "default": "#ffffff" }
+  ]
+}

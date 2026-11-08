@@ -296,6 +296,13 @@ These are excluded from the curated filesystem gallery, but old IDs and old `the
 | `examples/midnight/theme.json` | mypaper contributors | [MIT](https://opensource.org/license/mit/) | [Source](../LICENSE) | Existing manifest moved under examples/; hidden=true added. Wallpaper content and selected IDs preserved. |
 | `examples/midnight/widgets.css` | mypaper contributors | [MIT](https://opensource.org/license/mit/) | [Source](../LICENSE) | Existing mypaper legacy/example asset preserved; moved under examples/. |
 
+### `examples/builder-demo`
+
+| File | Author | License | Original source | Changes |
+|---|---|---|---|---|
+| `examples/builder-demo/media/city.jpg` | David Iliff (Diliff) | [CC-BY-3.0](https://creativecommons.org/licenses/by/3.0/) | [Source](https://commons.wikimedia.org/wiki/File:Hong_Kong_Skyline_Restitch_-_Dec_2007.jpg) | Same file as rain-city/media/city.jpg (downscaled to 2560 px wide, JPEG quality 90). |
+| `examples/builder-demo/theme.json` | mypaper contributors | [MIT](https://opensource.org/license/mit/) | [Source](../LICENSE) | Original stack manifest (docs/wallpaper-builder.md); hidden. |
+
 ### `examples/photo`
 
 | File | Author | License | Original source | Changes |

@@ -34,7 +34,7 @@ and update this file in the same commit.
   into `media/`.
 - `rect` is `[x, y, w, h]` as fractions of the screen.
 - `mix` (0..1) blends the layer's output over its input.
-- `blend` is one of `normal`, `add`, `screen` or `multiply`.
+- `blend` is one of `normal`, `add`, `screen` or `multiply` (default `normal`), on every layer kind.
 - `enabled: false` keeps the layer in the file but skips it.
 - Bases and layers ignore fields they do not know, so a newer Studio can add one without
   breaking an older engine. Layer `id`, `enabled` (true) and `mix` (1) are optional.
@@ -61,9 +61,9 @@ use it. Any other base gives a flat depth of 1.0.
 
 | `kind` | What it does |
 |---|---|
-| `effect` | Runs an effect package over the input |
+| `effect` | Runs an effect package over the input. Fields: `effect` (id), `params`, `blend` |
 | `image` | Draws a PNG/JPG/WebP into `rect`, with `blend` |
-| `model` | Renders a glTF into `rect` with a transparent background, then composites it. Fields: `orbit`, `parallax`, `light`, `scale`, `rotation` [x, y, z] in degrees, and `animation` (glTF clip name, or `null`) |
+| `model` | Renders a glTF into `rect` with a transparent background, then composites it. Fields: `orbit`, `parallax`, `light`, `scale`, `rotation` [x, y, z] in degrees, `animation` (glTF clip name, or `null`) and `blend` |
 
 ## Effect packages
 
