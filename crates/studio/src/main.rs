@@ -250,17 +250,21 @@ impl Studio {
 
 fn run() -> Result<()> {
     let panel_mode = panel::enabled();
+    // UI Automation can inspect and invoke Studio without interrupting the user's foreground app.
+    let no_activate = std::env::args().any(|arg| arg == "--no-activate");
     let title = if panel_mode { panel::TITLE } else { TITLE };
     // SAFETY: a named mutex held (never closed) for the life of the process.
     unsafe {
         let name = if panel_mode { w!("Local\\mypaper-studio-panel") } else { w!("Local\\mypaper-studio") };
         let _mutex = CreateMutexW(None, true, name).context("mutex")?;
         if GetLastError() == ERROR_ALREADY_EXISTS {
-            if let Ok(hwnd) = FindWindowW(w!("mypaper.ui.app"), &windows::core::HSTRING::from(title)) {
+            if !no_activate
+                && let Ok(hwnd) = FindWindowW(w!("mypaper.ui.app"), &windows::core::HSTRING::from(title))
+            {
                 let _ = ShowWindow(hwnd, SW_RESTORE);
                 let _ = SetForegroundWindow(hwnd);
             }
-            log::info!("Studio is already open; brought it to the front");
+            log::info!("Studio is already open{}", if no_activate { "" } else { "; brought it to the front" });
             return Ok(());
         }
     }
@@ -295,7 +299,11 @@ fn run() -> Result<()> {
         s.sync_frame();
         s.app.size = s.surface.client_size();
         s.render();
-        s.surface.show_active(maximized);
+        if no_activate {
+            s.surface.show();
+        } else {
+            s.surface.show_active(maximized);
+        }
     }
     // `READY component=studio open_ms=…`, counted from process creation (the ≤300 ms gate).
     mypaper_desktop::startup::ready("studio", "open_ms");
