@@ -1143,6 +1143,14 @@ impl App {
     /// Applies edits as one step, keeping the shell's look files in step with the user's
     /// look (`look.rs`).
     pub fn apply(&mut self, label: &str, mut ops: Vec<Op>) {
+        // The tiling flag is opt-in on disk as well as in the typed config serializer.
+        for op in &mut ops {
+            if op.doc == DocId::Config && op.path == "/experimental/tiling"
+                && op.value == Some(Value::Bool(false))
+            {
+                op.value = None;
+            }
+        }
         // Legacy theme controls use a folder-qualified pseudo pointer. Resolve it before
         // editing, so picks, resets and typed values share the same document transaction.
         let mut resolved = Vec::new();
