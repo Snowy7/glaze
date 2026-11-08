@@ -322,6 +322,35 @@ fn fullscreen_returns_to_original_column_and_width() {
     assert_eq!(w.columns[1].width, 2.0 / 3.0);
 }
 #[test]
+fn native_fullscreen_returns_to_its_original_stack_and_tab() {
+    let mut l = layout();
+    open(&mut l, 1);
+    open(&mut l, 2);
+    l.command(Command::Consume);
+    l.command(Command::Tabbed);
+    let saved = l.suspend(WindowId(2)).unwrap();
+    l.resume(saved, true);
+    let w = &l.monitors[0].workspaces[0];
+    assert_eq!(w.columns.len(), 1);
+    assert_eq!(w.columns[0].tiles.len(), 2);
+    assert!(w.columns[0].tabbed);
+    assert_eq!(w.columns[0].tiles[w.columns[0].active].id, WindowId(2));
+    check(&l);
+}
+#[test]
+fn fullscreen_shows_only_the_active_tile_of_a_stack() {
+    let mut l = layout();
+    open(&mut l, 1);
+    open(&mut l, 2);
+    l.command(Command::Consume);
+    l.command(Command::Fullscreen);
+    let targets = l.targets();
+    assert_eq!(targets.iter().filter(|t| t.visible).count(), 1);
+    assert!(targets.iter().any(|t| t.window == WindowId(2) && t.visible));
+    l.command(Command::Fullscreen);
+    assert_eq!(l.targets().iter().filter(|t| t.visible).count(), 2);
+}
+#[test]
 fn drop_at_column_center_joins_and_edge_inserts() {
     let mut l = layout();
     open(&mut l, 1);

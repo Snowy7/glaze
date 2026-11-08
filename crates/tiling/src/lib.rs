@@ -951,7 +951,7 @@ impl Layout {
                         r.h *= m.scale;
                         // Whole columns only: no window may bleed onto an adjacent output.
                         let visible = w.id == m.active
-                            && (!c.tabbed || ti == c.active)
+                            && (!(c.tabbed || c.mode == Mode::Fullscreen) || ti == c.active)
                             && r.x >= area.x - 0.5
                             && r.y >= area.y - 0.5
                             && r.x + r.w <= area.x + area.w + 0.5
@@ -994,6 +994,12 @@ pub struct Suspended {
     width: f64,
     constraints: Constraints,
     floating: Option<Rect>,
+    neighbor: Option<WindowId>,
+    tile_index: usize,
+    height: f64,
+    tabbed: bool,
+    mode: Mode,
+    learned_min: f64,
 }
 impl Layout {
     /// Untile a fixed-size or incompatible client while preserving its workspace.
@@ -1010,6 +1016,7 @@ impl Layout {
         let m = &self.monitors[mi];
         let w = &m.workspaces[wi];
         let column = w.column(window);
+        let source = column.map(|ci| &w.columns[ci]);
         let saved = Suspended {
             window,
             monitor: m.id.clone(),
@@ -1020,6 +1027,18 @@ impl Layout {
                 .and_then(|i| w.columns[i].tiles.iter().find(|t| t.id == window))
                 .map_or(Constraints::default(), |t| t.constraints),
             floating: w.floating.iter().find(|f| f.id == window).map(|f| f.rect),
+            neighbor: source
+                .and_then(|c| c.tiles.iter().find(|t| t.id != window))
+                .map(|t| t.id),
+            tile_index: source
+                .and_then(|c| c.tiles.iter().position(|t| t.id == window))
+                .unwrap_or(0),
+            height: source
+                .and_then(|c| c.tiles.iter().find(|t| t.id == window))
+                .map_or(1.0, |t| t.height),
+            tabbed: source.is_some_and(|c| c.tabbed),
+            mode: source.map_or(Mode::Normal, |c| c.mode),
+            learned_min: source.map_or(0.0, |c| c.learned_min),
         };
         self.remove(window);
         Some(saved)
@@ -1053,8 +1072,31 @@ impl Layout {
             let w = &mut self.monitors[mi].workspaces[wi];
             if let Some(ci) = w.column(saved.window) {
                 let mut c = w.columns.remove(ci);
-                c.width = saved.width;
-                w.columns.insert(saved.column.min(w.columns.len()), c);
+                if let Some(neighbor) = saved.neighbor.and_then(|id| w.column(id)) {
+                    let tile = c.tiles.pop().unwrap();
+                    let c = &mut w.columns[neighbor];
+                    let active = c.tiles[c.active].id;
+                    let index = saved.tile_index.min(c.tiles.len());
+                    c.tiles.insert(
+                        index,
+                        Tile {
+                            height: saved.height,
+                            ..tile
+                        },
+                    );
+                    c.active = if activate {
+                        index
+                    } else {
+                        c.tiles.iter().position(|t| t.id == active).unwrap()
+                    };
+                } else {
+                    c.width = saved.width;
+                    c.tabbed = saved.tabbed;
+                    c.mode = saved.mode;
+                    c.learned_min = saved.learned_min;
+                    c.tiles[0].height = saved.height;
+                    w.columns.insert(saved.column.min(w.columns.len()), c);
+                }
             }
             self.fit(mi, wi);
         }
