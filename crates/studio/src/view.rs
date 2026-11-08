@@ -126,11 +126,11 @@ pub struct Regions {
     pub rail: bool,
 }
 
-/// Pages with a picture beside them: the wallpaper editor's canvas, and drawings of things
-/// that aren't on the desktop (the desktop menu, app windows). What is on the desktop is edited
-/// on the desktop itself (edit mode), so those pages are plain reading pages.
+/// Pages with a picture beside them: the wallpaper editor's canvas, and app windows in your
+/// look. What is on the desktop is edited on the desktop itself (edit mode), and the desktop
+/// menu previews itself on its page, so those are plain reading pages.
 pub fn has_stage(page: Page) -> bool {
-    matches!(page, Page::Windows | Page::DesktopMenu | Page::Create | Page::Effects | Page::Shader)
+    matches!(page, Page::Windows | Page::Create | Page::Effects | Page::Shader)
 }
 
 /// Pages about what's on the desktop; they offer edit mode.
@@ -269,21 +269,9 @@ pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
     if let Some(viewport) = r.stage {
         b.scroll(key("window-stage"), viewport, 0.0, Action::None, |b, _| {
             if crate::builder::stage(app, b, viewport) { return viewport.bottom; }
-            if page == Page::Windows {
-                crate::panel::specimens::window_stage(app, b, viewport);
-                b.hit(
-                    key("window-look-preview"),
-                    viewport,
-                    Role::Image,
-                    "Windows look preview",
-                    Action::None,
-                    Behavior::Click,
-                );
-                return viewport.bottom;
-            }
-            // The desktop menu: a drawing of it over the wallpaper.
-            crate::panel::specimens::backdrop(app, b, viewport);
-            stage_menu(app, b, viewport);
+            // App windows in your look.
+            crate::panel::specimens::window_stage(app, b, viewport);
+            b.hit(key("window-look-preview"), viewport, Role::Image, "Windows look preview", Action::None, Behavior::Click);
             viewport.bottom
         });
         focus_regions.push(viewport);
@@ -1019,40 +1007,6 @@ pub fn sheet(app: &App, b: &mut B, title: &str, width: f32, height: f32) -> Rect
         w - b.px(48.0),
         h - b.px(60.0),
     )
-}
-
-/// A drawing of the configured desktop menu; its commands never execute inside the stage.
-fn stage_menu(app: &App, b: &mut B, picture: Rect) {
-    use glaze_shell::preview::menu;
-    let config = app
-        .get(DocId::Config, "/desktop_menu")
-        .and_then(|value| serde_json::from_value(value.clone()).ok())
-        .unwrap_or_default();
-    let mut tokens = menu::tokens(
-        &crate::app::theme_name(&app.docs).unwrap_or_default(),
-        b.text,
-    );
-    tokens.shadow = false;
-    let entries = menu::build(
-        &config,
-        menu::ViewState {
-            icons_visible: true,
-            ..Default::default()
-        },
-    );
-    let layout = glaze_ui::menu::layout(&entries, &tokens, b.s, b.text);
-    let list = glaze_ui::menu::view(&entries, &layout, None, &tokens);
-    let x = picture.left + (picture.width() - layout.width) / 2.0;
-    let y = picture.top + (picture.height() - layout.height) / 2.0;
-    b.list.ops.extend(crate::stage::offset(&list.ops, x, y));
-    b.hit(
-        key("stage-menu"),
-        Rect::new(x, y, layout.width, layout.height),
-        Role::Image,
-        "Desktop menu preview",
-        Action::None,
-        Behavior::Click,
-    );
 }
 
 #[cfg(test)]

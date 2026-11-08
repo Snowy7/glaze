@@ -204,7 +204,7 @@ fn inspector_drag_is_bounded_remembered_and_does_not_edit_the_desktop() {
     use glaze_ui::{Button, Event, Point, Pointer};
     let mut ui = Ui::new().unwrap();
     let mut app = window_app(true, &ui, (1280, 800));
-    app.run(Action::Panel(crate::panel::Command::Open(crate::panel::Page::DesktopMenu)));
+    app.run(Action::Panel(crate::panel::Command::Open(crate::panel::Page::Windows)));
     let before = [
         crate::docs::DocId::Config,
         crate::docs::DocId::Bars,
@@ -546,7 +546,7 @@ fn window_layout_keeps_the_stage_inspector_band_and_footer_fixed() {
         ((1920, 1080), false, 576.0),
     ] {
         let mut app = window_app(true, &ui, size);
-        app.run(Action::Panel(Command::Open(Page::DesktopMenu)));
+        app.run(Action::Panel(Command::Open(Page::Windows)));
         let r = crate::view::regions(&app);
         let (column, live) = crate::view::content_regions(&app);
         assert_eq!(r.rail, rail);
@@ -686,7 +686,7 @@ fn render_studio_refinements() {
     let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
     let mut ui = Ui::new().unwrap();
     for dark in [true, false] {
-        for (page, name) in [(Page::DesktopMenu, "wide-sidebar"), (Page::Look, "look-color"), (Page::Bars, "bars-focused"), (Page::Connections, "connections-rows"), (Page::DesktopMenu, "sidebar-resizing")] {
+        for (page, name) in [(Page::Windows, "wide-sidebar"), (Page::Look, "look-color"), (Page::Bars, "bars-focused"), (Page::Connections, "connections-rows"), (Page::Windows, "sidebar-resizing")] {
             let mut app = window_app(dark, &ui, (1920, 1080));
             app.run(Action::Panel(Command::Open(page)));
             app.apply("Sidebar width", vec![Op { doc: DocId::Studio, path: crate::view::INSPECTOR_SETTING.into(), value: Some(json!(680.0)) }]);
