@@ -1,5 +1,6 @@
 // Original mypaper effect. SPDX-License-Identifier: MIT
 fn aperture(uv: vec2f, radius: f32) -> vec3f {
+    if radius < 0.25 { return sample_src(uv).rgb; }
     let pixel = radius / max(paper.resolution, vec2f(1.0));
     var sum = sample_src(uv).rgb;
     for (var i = 0u; i < 12u; i++) {

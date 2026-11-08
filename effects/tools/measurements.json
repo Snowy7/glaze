@@ -1,0 +1,208 @@
+{
+  "adapter": "AMD Radeon(TM) Graphics",
+  "effects": [
+    {
+      "animated": false,
+      "category": "camera",
+      "gpu_ms": 1.55544,
+      "id": "bloom"
+    },
+    {
+      "animated": true,
+      "category": "camera",
+      "gpu_ms": 0.91812,
+      "id": "bokeh"
+    },
+    {
+      "animated": false,
+      "category": "camera",
+      "gpu_ms": 0.45012,
+      "id": "chromatic"
+    },
+    {
+      "animated": true,
+      "category": "weather",
+      "gpu_ms": 0.74872,
+      "id": "clouds"
+    },
+    {
+      "animated": false,
+      "category": "stylize",
+      "gpu_ms": 0.59232,
+      "id": "crt"
+    },
+    {
+      "animated": false,
+      "category": "camera",
+      "gpu_ms": 2.4784,
+      "id": "dof"
+    },
+    {
+      "animated": true,
+      "category": "weather",
+      "gpu_ms": 0.78588,
+      "id": "drizzle"
+    },
+    {
+      "animated": false,
+      "category": "color",
+      "gpu_ms": 0.57188,
+      "id": "duotone"
+    },
+    {
+      "animated": false,
+      "category": "stylize",
+      "gpu_ms": 0.67804,
+      "id": "edge-glow"
+    },
+    {
+      "animated": true,
+      "category": "weather",
+      "gpu_ms": 0.92744,
+      "id": "fireflies"
+    },
+    {
+      "animated": true,
+      "category": "weather",
+      "gpu_ms": 0.8822,
+      "id": "fog"
+    },
+    {
+      "animated": true,
+      "category": "stylize",
+      "gpu_ms": 0.46368,
+      "id": "glitch"
+    },
+    {
+      "animated": false,
+      "category": "light",
+      "gpu_ms": 2.06948,
+      "id": "glow"
+    },
+    {
+      "animated": false,
+      "category": "light",
+      "gpu_ms": 2.67544,
+      "id": "god-rays"
+    },
+    {
+      "animated": false,
+      "category": "stylize",
+      "gpu_ms": 1.04092,
+      "id": "halftone"
+    },
+    {
+      "animated": false,
+      "category": "camera",
+      "gpu_ms": 2.59512,
+      "id": "lens-dirt"
+    },
+    {
+      "animated": true,
+      "category": "camera",
+      "gpu_ms": 0.73752,
+      "id": "light-leaks"
+    },
+    {
+      "animated": true,
+      "category": "weather",
+      "gpu_ms": 0.5194,
+      "id": "lightning"
+    },
+    {
+      "animated": false,
+      "category": "color",
+      "gpu_ms": 0.46116,
+      "id": "looks"
+    },
+    {
+      "animated": false,
+      "category": "stylize",
+      "gpu_ms": 6.51952,
+      "id": "paint"
+    },
+    {
+      "animated": true,
+      "category": "motion",
+      "gpu_ms": 0.86232,
+      "id": "parallax"
+    },
+    {
+      "animated": false,
+      "category": "stylize",
+      "gpu_ms": 0.37172,
+      "id": "pixelate"
+    },
+    {
+      "animated": false,
+      "category": "color",
+      "gpu_ms": 0.385,
+      "id": "posterize"
+    },
+    {
+      "animated": true,
+      "category": "motion",
+      "gpu_ms": 0.54412,
+      "id": "ripple"
+    },
+    {
+      "animated": false,
+      "category": "color",
+      "gpu_ms": 0.73252,
+      "id": "sharpen"
+    },
+    {
+      "animated": true,
+      "category": "motion",
+      "gpu_ms": 0.859,
+      "id": "shimmer"
+    },
+    {
+      "animated": true,
+      "category": "weather",
+      "gpu_ms": 0.89124,
+      "id": "snow"
+    },
+    {
+      "animated": true,
+      "category": "weather",
+      "gpu_ms": 0.4988,
+      "id": "stars"
+    },
+    {
+      "animated": false,
+      "category": "light",
+      "gpu_ms": 1.32604,
+      "id": "sun-flare"
+    },
+    {
+      "animated": true,
+      "category": "motion",
+      "gpu_ms": 0.8654,
+      "id": "sway"
+    },
+    {
+      "animated": false,
+      "category": "camera",
+      "gpu_ms": 2.04008,
+      "id": "tiltshift"
+    },
+    {
+      "animated": true,
+      "category": "color",
+      "gpu_ms": 0.56316,
+      "id": "time-of-day"
+    },
+    {
+      "animated": true,
+      "category": "motion",
+      "gpu_ms": 0.34172,
+      "id": "zoom-pan"
+    }
+  ],
+  "frames": 24,
+  "height": 1080,
+  "integrated": true,
+  "photo": "themes/rain-city-amber/media/city.jpg",
+  "width": 1920
+}

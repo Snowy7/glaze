@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "color",
-  "cost": 0.384,
+  "cost": 0.385,
   "cost_estimated": false,
   "description": "Clean tonal steps with a little ordered dither to keep gradients intentional.",
   "id": "posterize",

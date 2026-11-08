@@ -1,0 +1,47 @@
+{
+  "animated": true,
+  "author": "mypaper",
+  "category": "color",
+  "cost": 0.563,
+  "cost_estimated": false,
+  "description": "A gentle photographic grade follows the real local clock through dawn, daylight, sunset and night.",
+  "id": "time-of-day",
+  "license": "MIT",
+  "name": "Daylight rhythm",
+  "params": [
+    {
+      "default": 0.55,
+      "id": "strength",
+      "label": "Strength",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.6,
+      "id": "warmth",
+      "label": "Golden hour",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.12,
+      "id": "night_dim",
+      "label": "Night dimming",
+      "max": 0.5,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "time-of-day.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

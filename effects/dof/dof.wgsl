@@ -1,5 +1,6 @@
 // Original mypaper effect. SPDX-License-Identifier: MIT
 fn aperture(uv: vec2f, radius: f32) -> vec3f {
+    if radius < 0.25 { return sample_src(uv).rgb; }
     let pixel = radius / max(paper.resolution, vec2f(1.0));
     var sum = sample_src(uv).rgb;
     for (var i = 0u; i < 12u; i++) {
@@ -13,7 +14,7 @@ fn aperture(uv: vec2f, radius: f32) -> vec3f {
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let base = sample_src(uv);
     let d = sample_depth(uv);
-    let has_depth = sample_depth(vec2f(0.2, 0.2)) < 0.99999 || sample_depth(vec2f(0.8, 0.8)) < 0.99999 || d < 0.99999;
+    let has_depth = sample_depth(vec2f(0.2, 0.2)) < 0.99999 || sample_depth(vec2f(0.8, 0.8)) < 0.99999 || sample_depth(vec2f(0.5)) < 0.99999 || d < 0.99999;
     let distance = select(uv.y, d, has_depth);
     let coc = smoothstep(clamp(params.width, 0.02, 0.8) * 0.5, clamp(params.width, 0.02, 0.8) * 0.5 + 0.3, abs(distance - clamp(params.focus, 0.0, 1.0)));
     let radius = coc * clamp(params.size, 0.0, 24.0) * paper.resolution.y / 1080.0;

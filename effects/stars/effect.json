@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "weather",
-  "cost": 1.053,
+  "cost": 0.499,
   "cost_estimated": false,
   "description": "Fine twinkling pinpoints appear in dark sky, with a soft horizon fade.",
   "id": "stars",
@@ -19,7 +19,7 @@
       "type": "float"
     },
     {
-      "default": 0.7,
+      "default": 0.9,
       "id": "brightness",
       "label": "Brightness",
       "max": 2,
@@ -42,6 +42,15 @@
       "label": "Twinkle",
       "max": 1,
       "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 1,
+      "id": "size",
+      "label": "Star size",
+      "max": 3,
+      "min": 0.5,
       "step": 0.01,
       "type": "float"
     }

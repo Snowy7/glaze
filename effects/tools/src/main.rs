@@ -18,7 +18,11 @@ fn main() -> Result<()> {
         .unwrap()
         .to_owned();
     let args: Vec<String> = std::env::args().collect();
-    let rendering = args.iter().any(|s| s == "--render");
+    let missing_previews = args.iter().any(|s| s == "--missing-previews");
+    let rendering = missing_previews || args.iter().any(|s| s == "--render");
+    let finite = args.iter().any(|s| s == "--check-finite");
+    let bloom_identity = args.iter().any(|s| s == "--check-bloom-identity");
+    let previews = !args.iter().any(|s| s == "--no-previews");
     let update = args.iter().any(|s| s == "--update-costs");
     let option = |name: &str, default: &str| {
         args.windows(2)
@@ -27,8 +31,16 @@ fn main() -> Result<()> {
     };
     let out = PathBuf::from(option("--out", "C:/mypaper-targets/effects-sheet"));
     let photo = PathBuf::from(option("--photo", "themes/rain-city-amber/media/city.jpg"));
-    let lab = if rendering {
-        Some(Lab::new(&photo)?)
+    let only = option("--only", "");
+    let lab = if rendering || finite || bloom_identity {
+        Some(Lab::new(
+            &photo,
+            args.iter().any(|s| s == "--depth-ramp"),
+            option("--clock-hours", "17.5")
+                .parse::<f32>()?
+                .clamp(0.0, 24.0),
+            bloom_identity,
+        )?)
     } else {
         None
     };
@@ -54,18 +66,89 @@ fn main() -> Result<()> {
             sources.push(source);
             count += 1;
         }
-        // The engine owns its five reference packages; render and update only our packages.
+        // Reference packages get thumbnails only when explicitly requested; never edit their costs.
         let id = manifest["id"].as_str().unwrap().to_owned();
-        if ["rain", "blur", "color", "vignette", "grain"].contains(&id.as_str()) {
+        let reference = ["rain", "blur", "color", "vignette", "grain"].contains(&id.as_str());
+        if reference && !missing_previews {
+            continue;
+        }
+        if missing_previews && entry.path().join("preview.jpg").exists() {
+            continue;
+        }
+        if !only.is_empty() && !only.split(',').any(|name| name == id) {
             continue;
         }
         if let Some(lab) = &lab {
-            let (image, ms) = lab.render(&manifest, &sources, &id)?;
+            if bloom_identity {
+                if id == "bloom" {
+                    let (image, _) = lab.render(
+                        &manifest,
+                        &sources,
+                        &id,
+                        &BTreeMap::from([("amount".to_owned(), serde_json::json!(0))]),
+                        false,
+                    )?;
+                    let error = image
+                        .as_raw()
+                        .iter()
+                        .zip(lab.photo.as_raw())
+                        .map(|(a, b)| a.abs_diff(*b))
+                        .max()
+                        .unwrap_or(0);
+                    anyhow::ensure!(
+                        error <= 1,
+                        "zero-strength bloom changed the sharp layer input by {error} byte levels"
+                    );
+                    println!(
+                        "bloom: zero strength preserves sharp layer input (max error {error}/255), with a different original base"
+                    );
+                }
+                continue;
+            }
+            if finite {
+                let mut cases = vec![BTreeMap::new(), BTreeMap::new(), BTreeMap::new()];
+                for p in &loaded.manifest.params {
+                    use mypaper_theme::stack::ParamKind;
+                    match &p.kind {
+                        ParamKind::Float { min, max, .. } => {
+                            cases[1].insert(p.id.clone(), serde_json::json!(min));
+                            cases[2].insert(p.id.clone(), serde_json::json!(max));
+                        }
+                        ParamKind::Bool { .. } => {
+                            cases[1].insert(p.id.clone(), serde_json::json!(false));
+                            cases[2].insert(p.id.clone(), serde_json::json!(true));
+                        }
+                        ParamKind::Enum { options, .. } => {
+                            for option in options {
+                                cases.push(BTreeMap::from([(
+                                    p.id.clone(),
+                                    serde_json::json!(option),
+                                )]));
+                            }
+                        }
+                        ParamKind::Color { .. } => {
+                            cases[1].insert(p.id.clone(), serde_json::json!("#000000"));
+                            cases[2].insert(p.id.clone(), serde_json::json!("#ffffff"));
+                        }
+                    }
+                }
+                for values in &cases {
+                    lab.render(&manifest, &sources, &id, values, true)
+                        .with_context(|| format!("{id}: {values:?}"))?;
+                }
+                println!("{id}: {} finite RGBA16F cases", cases.len());
+                continue;
+            }
+            let (image, ms) = lab.render(&manifest, &sources, &id, &BTreeMap::new(), false)?;
             let rgb = image::DynamicImage::ImageRgba8(image).to_rgb8();
-            rgb.save(out.join(format!("{id}.jpg")))?;
-            image::imageops::resize(&rgb, 320, 180, image::imageops::FilterType::Lanczos3)
-                .save(entry.path().join("preview.jpg"))?;
-            if update {
+            save_jpeg(&rgb, &out.join(format!("{id}.jpg")))?;
+            if previews {
+                save_jpeg(
+                    &image::imageops::resize(&rgb, 320, 180, image::imageops::FilterType::Lanczos3),
+                    &entry.path().join("preview.jpg"),
+                )?;
+            }
+            if update && !reference {
                 manifest["cost"] = serde_json::json!((ms * 1000.0).round() / 1000.0);
                 manifest["cost_estimated"] = serde_json::json!(!lab.integrated);
                 fs::write(&path, serde_json::to_string_pretty(&manifest)? + "\n")?;
@@ -75,10 +158,12 @@ fn main() -> Result<()> {
         }
     }
     println!("Validated {count} passes with naga 30.");
-    if let Some(lab) = &lab {
-        image::DynamicImage::ImageRgba8(lab.photo.clone())
-            .to_rgb8()
-            .save(out.join("before.jpg"))?;
+    if rendering && !finite {
+        let lab = lab.as_ref().unwrap();
+        save_jpeg(
+            &image::DynamicImage::ImageRgba8(lab.photo.clone()).to_rgb8(),
+            &out.join("before.jpg"),
+        )?;
         fs::write(
             out.join("timings.json"),
             serde_json::to_string_pretty(
@@ -87,6 +172,21 @@ fn main() -> Result<()> {
         )?;
     }
     Ok(())
+}
+
+/// Keep unchanged thumbnails intact, including when a gallery has their files mapped open.
+fn save_jpeg(image: &image::RgbImage, path: &Path) -> Result<()> {
+    let mut bytes = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new(&mut bytes).encode(
+        image.as_raw(),
+        image.width(),
+        image.height(),
+        image::ExtendedColorType::Rgb8,
+    )?;
+    if fs::read(path).ok().as_deref() == Some(bytes.as_slice()) {
+        return Ok(());
+    }
+    fs::write(path, bytes).with_context(|| format!("writing {}", path.display()))
 }
 
 fn validate(path: &Path, code: &str) -> Result<()> {
@@ -107,15 +207,22 @@ struct Lab {
     layout: wgpu::BindGroupLayout,
     pipeline_layout: wgpu::PipelineLayout,
     original: wgpu::Texture,
+    base_original: wgpu::Texture,
     depth: wgpu::Texture,
     sampler: wgpu::Sampler,
     photo: image::RgbaImage,
     adapter: String,
     integrated: bool,
+    clock_hours: f32,
 }
 
 impl Lab {
-    fn new(photo: &Path) -> Result<Self> {
+    fn new(
+        photo: &Path,
+        depth_ramp: bool,
+        clock_hours: f32,
+        different_original: bool,
+    ) -> Result<Self> {
         let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
         descriptor.backends = wgpu::Backends::DX12;
         let instance = wgpu::Instance::new(descriptor);
@@ -160,6 +267,7 @@ impl Lab {
                 },
                 texture_entry(2, true),
                 texture_entry(3, false),
+                texture_entry(5, true),
                 wgpu::BindGroupLayoutEntry {
                     binding: 4,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -191,14 +299,46 @@ impl Lab {
             },
             original.size(),
         );
-        let depth = texture(&device, 1, 1, wgpu::TextureFormat::R32Float);
+        let base_original = if different_original {
+            let black = texture(&device, 1, 1, FORMAT);
+            queue.write_texture(
+                black.as_image_copy(),
+                &[0, 0, 0, 255],
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(4),
+                    rows_per_image: Some(1),
+                },
+                black.size(),
+            );
+            black
+        } else {
+            original.clone()
+        };
+        let depth_width = if depth_ramp { WIDTH } else { 1 };
+        let depth_height = if depth_ramp { HEIGHT } else { 1 };
+        let depth = texture(
+            &device,
+            depth_width,
+            depth_height,
+            wgpu::TextureFormat::R32Float,
+        );
+        let depth_data: Vec<f32> = (0..depth_width * depth_height)
+            .map(|i| {
+                if depth_ramp {
+                    1.0 - (i % depth_width) as f32 / (depth_width - 1) as f32
+                } else {
+                    1.0
+                }
+            })
+            .collect();
         queue.write_texture(
             depth.as_image_copy(),
-            bytemuck::bytes_of(&1.0f32),
+            bytemuck::cast_slice(&depth_data),
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(4),
-                rows_per_image: Some(1),
+                bytes_per_row: Some(depth_width * 4),
+                rows_per_image: Some(depth_height),
             },
             depth.size(),
         );
@@ -213,11 +353,13 @@ impl Lab {
             layout,
             pipeline_layout,
             original,
+            base_original,
             depth,
             sampler,
             photo,
             adapter: info.name,
             integrated: info.device_type == wgpu::DeviceType::IntegratedGpu,
+            clock_hours,
         })
     }
 
@@ -226,9 +368,16 @@ impl Lab {
         manifest: &Value,
         sources: &[String],
         id: &str,
+        values: &BTreeMap<String, Value>,
+        finite: bool,
     ) -> Result<(image::RgbaImage, f64)> {
         let typed = mypaper_theme::stack::parse_effect(&serde_json::to_string(manifest)?)?;
-        let uniform = mypaper_theme::stack::params_bytes(&typed.params, &BTreeMap::new());
+        let uniform = mypaper_theme::stack::params_bytes(&typed.params, values);
+        let format = if finite {
+            wgpu::TextureFormat::Rgba16Float
+        } else {
+            FORMAT
+        };
         let buffer = self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -245,7 +394,7 @@ impl Lab {
                 &self.device,
                 (f64::from(WIDTH) * scale).round() as u32,
                 (f64::from(HEIGHT) * scale).round() as u32,
-                FORMAT,
+                format,
             ));
             let shader = self
                 .device
@@ -272,7 +421,7 @@ impl Lab {
                             entry_point: Some("mypaper_fx"),
                             compilation_options: Default::default(),
                             targets: &[Some(wgpu::ColorTargetState {
-                                format: FORMAT,
+                                format,
                                 blend: None,
                                 write_mask: wgpu::ColorWrites::ALL,
                             })],
@@ -303,7 +452,7 @@ impl Lab {
                     wgpu::BindGroupEntry {
                         binding: 2,
                         resource: wgpu::BindingResource::TextureView(
-                            &self.original.create_view(&Default::default()),
+                            &self.base_original.create_view(&Default::default()),
                         ),
                     },
                     wgpu::BindGroupEntry {
@@ -316,11 +465,17 @@ impl Lab {
                         binding: 4,
                         resource: buffer.as_entire_binding(),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::TextureView(
+                            &self.original.create_view(&Default::default()),
+                        ),
+                    },
                 ],
             }));
         }
         let passes = sources.len() as u32;
-        let frames = 24;
+        let frames = if finite { 1 } else { 24 };
         let queries = self.device.create_query_set(&wgpu::QuerySetDescriptor {
             label: Some(id),
             ty: wgpu::QueryType::Timestamp,
@@ -376,9 +531,9 @@ impl Lab {
                     h,
                     w * 0.63,
                     h * 0.42,
-                    12.0 + frame as f32 / 30.0,
+                    capture_time(manifest, id, values, frame),
                     f32::from_bits(frame),
-                    0.0,
+                    self.clock_hours,
                     0.0,
                 ];
                 pass.set_immediates(0, bytemuck::bytes_of(&paper));
@@ -390,14 +545,18 @@ impl Lab {
         self.queue.submit([encoder.finish()]);
         let bytes = self.map(&read)?;
         let stamps: Vec<u64> = bytes
-            .chunks_exact(8)
-            .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|b| u64::from_le_bytes(*b))
             .collect();
         let mut times: Vec<f64> = stamps
             .chunks_exact((passes * 2) as usize)
             .map(|frame| {
                 frame
-                    .chunks_exact(2)
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
                     .map(|s| (s[1] - s[0]) as f64)
                     .sum::<f64>()
                     * f64::from(self.queue.get_timestamp_period())
@@ -406,6 +565,15 @@ impl Lab {
             .collect();
         times.sort_by(f64::total_cmp);
         let ms = times[times.len() / 2];
+        if finite {
+            for target in &textures {
+                for word in self.read_texture(target, 8)?.as_chunks::<2>().0 {
+                    let bits = u16::from_le_bytes(*word);
+                    anyhow::ensure!(bits & 0x7c00 != 0x7c00, "non-finite output in {id}");
+                }
+            }
+            return Ok((image::RgbaImage::new(1, 1), ms));
+        }
         let image = self.pixels(textures.last().unwrap())?;
         Ok((image, ms))
     }
@@ -423,9 +591,18 @@ impl Lab {
     }
 
     fn pixels(&self, texture: &wgpu::Texture) -> Result<image::RgbaImage> {
+        image::RgbaImage::from_raw(
+            texture.width(),
+            texture.height(),
+            self.read_texture(texture, 4)?,
+        )
+        .context("image readback")
+    }
+
+    fn read_texture(&self, texture: &wgpu::Texture, bytes_per_pixel: u32) -> Result<Vec<u8>> {
         let w = texture.width();
         let h = texture.height();
-        let row = (w * 4).div_ceil(256) * 256;
+        let row = (w * bytes_per_pixel).div_ceil(256) * 256;
         let read = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: u64::from(row * h),
@@ -449,10 +626,39 @@ impl Lab {
         let bytes = self.map(&read)?;
         let packed: Vec<u8> = bytes
             .chunks_exact(row as usize)
-            .flat_map(|row| row[..(w * 4) as usize].iter().copied())
+            .flat_map(|row| row[..(w * bytes_per_pixel) as usize].iter().copied())
             .collect();
-        image::RgbaImage::from_raw(w, h, packed).context("image readback")
+        Ok(packed)
     }
+}
+
+/// Capture rare effects during an event so their gallery thumbnail shows what they do.
+fn capture_time(manifest: &Value, id: &str, values: &BTreeMap<String, Value>, frame: u32) -> f32 {
+    let freq = values
+        .get("frequency")
+        .and_then(Value::as_f64)
+        .or_else(|| {
+            manifest["params"]
+                .as_array()?
+                .iter()
+                .find(|p| p["id"] == "frequency")?["default"]
+                .as_f64()
+        })
+        .unwrap_or(4.0) as f32;
+    match id {
+        "lightning" => hash21([0.0, 17.0]) * 0.5 * 60.0 / freq.clamp(0.5, 15.0) + 0.025,
+        "glitch" => hash21([0.0, 31.0]) * 0.65 * 60.0 / freq.clamp(0.5, 20.0) + 0.02,
+        _ => 12.0 + frame as f32 / 30.0,
+    }
+}
+
+fn hash21(p: [f32; 2]) -> f32 {
+    let mut x = (p[0] * 123.34).fract();
+    let mut y = (p[1] * 456.21).fract();
+    let dot = x * (x + 45.32) + y * (y + 45.32);
+    x += dot;
+    y += dot;
+    (x * y).fract()
 }
 
 fn texture(

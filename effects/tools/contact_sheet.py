@@ -9,9 +9,19 @@ parser.add_argument('captures', type=Path)
 args = parser.parse_args()
 root = Path(__file__).resolve().parent.parent
 effects = sorted((json.loads(p.read_text(encoding='utf8')) for p in root.glob('*/effect.json')
-                  if (args.captures / (p.parent.name + '.jpg')).exists()),
+                  if p.parent.name not in {'rain', 'blur', 'color', 'vignette', 'grain'}
+                  and (args.captures / (p.parent.name + '.jpg')).exists()),
                  key=lambda m: (m['category'], m['id']))
 before = Image.open(args.captures / 'before.jpg').convert('RGB').resize((320, 180), Image.Resampling.LANCZOS)
+timing_path = args.captures / 'timings.json'
+photo = str(json.loads(timing_path.read_text())['photo']) if timing_path.exists() else ''
+if 'snow-forest' in photo:
+    credit = 'Spring frame (105 s) / Blender Foundation, Andy Goralczyk / CC BY 4.0 / cropped, resized and effect-processed'
+    source = 'https://studio.blender.org/films/spring/'
+else:
+    credit = 'Hong Kong Skyline Restitch - Dec 2007 / David Iliff (Diliff) / CC BY 3.0 / cropped, resized and effect-processed'
+    source = 'https://commons.wikimedia.org/wiki/File:Hong_Kong_Skyline_Restitch_-_Dec_2007.jpg'
+(args.captures / 'CREDITS.txt').write_text(credit+'\n'+source+'\nOriginal effect code: mypaper, MIT.\n', encoding='utf8')
 try:
     font = ImageFont.truetype('C:/Windows/Fonts/segoeui.ttf', 16)
     small = ImageFont.truetype('C:/Windows/Fonts/segoeui.ttf', 12)
@@ -20,7 +30,7 @@ except OSError:
 
 def sheet(items, pairs, name):
     width = pairs * 648 + 16
-    height = ((len(items) + pairs - 1) // pairs) * 224 + 50
+    height = ((len(items) + pairs - 1) // pairs) * 224 + 90
     image = Image.new('RGB', (width, height), '#10151c')
     draw = ImageDraw.Draw(image)
     draw.text((16, 12), 'mypaper / ' + name + ' / before → after', font=font, fill='#e6edf5')
@@ -31,6 +41,8 @@ def sheet(items, pairs, name):
         image.paste(before, (x, y+28))
         after = Image.open(args.captures / (m['id']+'.jpg')).convert('RGB').resize((320,180), Image.Resampling.LANCZOS)
         image.paste(after, (x+324, y+28))
+    draw.text((16, height-34), credit, font=small, fill='#9eafc1')
+    draw.text((16, height-18), source, font=small, fill='#9eafc1')
     target = args.captures / (name+'.jpg')
     image.save(target, quality=94)
     print(target)

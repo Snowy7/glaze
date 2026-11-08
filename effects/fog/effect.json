@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "weather",
-  "cost": 0.991,
+  "cost": 0.882,
   "cost_estimated": false,
   "description": "Slow billows settle near the ground and build up in distant scene depth.",
   "id": "fog",
@@ -19,7 +19,7 @@
       "type": "float"
     },
     {
-      "default": 0.6,
+      "default": 0.5,
       "id": "height",
       "label": "Mist height",
       "max": 1,
@@ -28,7 +28,7 @@
       "type": "float"
     },
     {
-      "default": 0.35,
+      "default": 0.3,
       "id": "softness",
       "label": "Falloff",
       "max": 0.7,

@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "camera",
-  "cost": 5.331,
+  "cost": 1.555,
   "cost_estimated": false,
   "description": "Half-resolution light diffusion gives highlights a soft photographic bloom.",
   "id": "bloom",
@@ -41,6 +41,10 @@
     {
       "scale": 0.5,
       "source": "bloom.wgsl"
+    },
+    {
+      "scale": 0.5,
+      "source": "vertical.wgsl"
     },
     {
       "scale": 1.0,

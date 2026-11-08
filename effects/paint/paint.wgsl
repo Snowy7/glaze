@@ -9,9 +9,9 @@ fn effect(frag: vec2f, uv: vec2f) -> vec4f {
         var mean = vec3f(0.0);
         var square = vec3f(0.0);
         for (var y = 0u; y < 3u; y++) { for (var x = 0u; x < 3u; x++) {
-            let rgb = sample_src(uv + vec2f(f32(x), f32(y)) * direction * px).rgb;
-            mean += rgb;
-            square += rgb * rgb;
+                let rgb = sample_src(uv + vec2f(f32(x), f32(y)) * direction * px).rgb;
+                mean += rgb;
+                square += rgb * rgb;
         }}
         mean /= 9.0;
         let variance = abs(square / 9.0 - mean * mean);
