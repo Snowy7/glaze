@@ -947,6 +947,12 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
     verify_placements(tiler.as_ref().unwrap())?;
     tiler.as_mut().unwrap().command(Op::Maximize);
     pump(tiler, Duration::from_millis(300));
+    // Exercise dock reveal directly, without taking foreground or sending keyboard input.
+    tiler
+        .as_mut()
+        .unwrap()
+        .reveal(glaze_tiling::WindowId(controller.hwnd as u64));
+    pump(tiler, Duration::from_millis(300));
     for on in [true, false] {
         unsafe {
             PostMessageW(

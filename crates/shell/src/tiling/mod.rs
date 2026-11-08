@@ -60,13 +60,7 @@ pub fn configure_keys(settings: Option<&Settings>) {
 pub fn process_commands(tiler: &mut Tiler) {
     let focus = std::mem::take(&mut *DOCK_FOCUS.lock().unwrap());
     for window in focus {
-        if let Some(w) = tiler.windows.get(&window) {
-            tiler.current = w.desktop.clone();
-            if let Some(l) = tiler.layouts.get_mut(&w.desktop) {
-                l.focus(window);
-            }
-            let _ = tiler.commit(true);
-        }
+        tiler.reveal(window);
     }
     let commands = std::mem::take(&mut *COMMANDS.lock().unwrap());
     for command in commands {
@@ -120,6 +114,18 @@ pub struct Tiler {
     focus_settle: Instant,
 }
 impl Tiler {
+    /// Reveal a dock target without asking Windows to activate it.
+    pub fn reveal(&mut self, window: WindowId) {
+        if let Some(w) = self.windows.get(&window) {
+            self.current = w.desktop.clone();
+            if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                l.focus(window);
+            }
+            if let Err(e) = self.commit(true) {
+                log::warn!("revealing dock target: {e:#}");
+            }
+        }
+    }
     /// Fixture/recovery diagnostics: expected physical bounds for the current managed set.
     pub fn placements(&self) -> Vec<(tiling_recovery::Identity, Rect)> {
         self.windows
