@@ -16,6 +16,7 @@ const STARTUP: Duration = Duration::from_secs(1);
 pub(super) enum Decision {
     Wait,
     Resume,
+    Release,
     Close,
 }
 
@@ -33,6 +34,7 @@ pub(super) struct Hold {
     visible: Vec<isize>,
     return_to: isize,
     menu_front: Option<isize>,
+    resumed: bool,
     mouse: Option<HHOOK>,
     keyboard: Option<HHOOK>,
 }
@@ -64,6 +66,7 @@ impl Hold {
             visible,
             return_to,
             menu_front: None,
+            resumed: false,
             mouse,
             keyboard,
         }
@@ -100,7 +103,7 @@ impl Hold {
         let activated = self.seen && self.menu_front != Some(front) && front != self.return_to;
         let newly_shown =
             visible && front != flyout && (activated || !self.visible.contains(&front));
-        let decision = decide(
+        let mut decision = decide(
             cancelled,
             menu,
             self.seen,
@@ -111,7 +114,23 @@ impl Hold {
         if menu {
             self.menu_front = Some(front);
         }
+        if decision == Decision::Resume {
+            // Windows may deny the foreground handback. Keep observing outside clicks/Escape
+            // until focus really returns, rather than dismissing on a delayed deactivation.
+            decision = handback(&mut self.resumed, front == flyout);
+        }
         decision
+    }
+}
+
+fn handback(attempted: &mut bool, focused: bool) -> Decision {
+    if focused {
+        Decision::Release
+    } else if *attempted {
+        Decision::Wait
+    } else {
+        *attempted = true;
+        Decision::Resume
     }
 }
 
@@ -277,6 +296,14 @@ mod tests {
         assert_eq!(decide(false, false, false, true, false), Decision::Wait);
         assert_eq!(decide(false, true, false, true, false), Decision::Wait);
         assert_eq!(decide(false, true, true, false, true), Decision::Wait);
+    }
+
+    #[test]
+    fn denied_foreground_handback_keeps_observers_until_focus_really_returns() {
+        let mut attempted = false;
+        assert_eq!(handback(&mut attempted, false), Decision::Resume);
+        assert_eq!(handback(&mut attempted, false), Decision::Wait);
+        assert_eq!(handback(&mut attempted, true), Decision::Release);
     }
 
     #[test]

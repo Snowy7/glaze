@@ -877,9 +877,9 @@ impl Flyouts {
             menu_hold::Decision::Wait => {}
             menu_hold::Decision::Close => self.close(),
             menu_hold::Decision::Resume => {
-                self.open.as_mut().unwrap().held = None;
                 self.surface.take_focus();
             }
+            menu_hold::Decision::Release => self.open.as_mut().unwrap().held = None,
         }
     }
 
@@ -1392,6 +1392,9 @@ impl Flyouts {
             }
             // A tray menu borrows focus; `follow_held` decides when to resume or dismiss.
             Event::Deactivated if self.open.as_ref().is_some_and(|o| o.held.is_some()) => {}
+            // Input is queued: a menu can return focus before its old deactivation is drained.
+            // SAFETY: read-only foreground query for our own surface.
+            Event::Deactivated if unsafe { GetForegroundWindow() } == self.surface.hwnd() => {}
             Event::Deactivated if !self.menu.as_ref().is_some_and(mypaper_ui::Menu::is_open) => {
                 let kind = self.open.as_ref().map(|o| o.kind);
                 self.close();
