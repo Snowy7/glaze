@@ -83,6 +83,57 @@ fn closing_left_column_preserves_focused_screen_position() {
     );
 }
 #[test]
+fn closing_a_left_column_keeps_the_temporary_views_anchor() {
+    let mut l = layout();
+    for id in 1..=3 {
+        open(&mut l, id);
+    }
+    let before = l
+        .targets()
+        .into_iter()
+        .find(|t| t.window == WindowId(3))
+        .unwrap()
+        .rect;
+    open(&mut l, 4);
+    l.remove(WindowId(1));
+    l.remove(WindowId(4));
+    assert_eq!(l.focused(), Some(WindowId(3)));
+    assert_eq!(
+        l.targets()
+            .into_iter()
+            .find(|t| t.window == WindowId(3))
+            .unwrap()
+            .rect,
+        before
+    );
+}
+#[test]
+fn closing_a_float_returns_focus_to_the_tiled_layer() {
+    let mut l = layout();
+    open(&mut l, 1);
+    l.insert(
+        WindowId(2),
+        Constraints::default(),
+        None,
+        Some(area()),
+        true,
+    );
+    l.focus(WindowId(1));
+    l.focus(WindowId(2));
+    l.remove(WindowId(2));
+    assert_eq!(l.focused(), Some(WindowId(1)));
+}
+#[test]
+fn closing_a_temporary_window_after_its_anchor_closed_still_refocuses() {
+    let mut l = layout();
+    for id in 1..=3 {
+        open(&mut l, id);
+    }
+    l.remove(WindowId(2));
+    l.remove(WindowId(3));
+    assert_eq!(l.focused(), Some(WindowId(1)));
+}
+#[test]
 fn explicit_focus_forgets_temporary_view() {
     let mut l = layout();
     for id in 1..4 {

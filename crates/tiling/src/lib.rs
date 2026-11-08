@@ -90,6 +90,14 @@ pub struct Floating {
     pub rect: Rect,
     pub owner: Option<WindowId>,
 }
+/// The previous column is an anchor, so deleting columns to its left cannot corrupt the view.
+#[derive(Debug, Clone)]
+struct RememberedView {
+    opened: WindowId,
+    previous: WindowId,
+    offset: f64,
+    position: Option<f64>,
+}
 #[derive(Debug, Clone)]
 pub struct Workspace {
     pub id: WorkspaceId,
@@ -98,7 +106,7 @@ pub struct Workspace {
     pub focused: Option<WindowId>,
     pub view: f64,
     pub original_output: String,
-    remembered: Option<(WindowId, WindowId, f64)>,
+    remembered: Option<RememberedView>,
     tiled_focus: Option<WindowId>,
     floating_focus: Option<WindowId>,
 }
@@ -350,7 +358,12 @@ impl Layout {
         }
         if activate || old.is_none() {
             w.focused = Some(id);
-            w.remembered = old.map(|old| (id, old, old_view));
+            w.remembered = old.map(|previous| RememberedView {
+                opened: id,
+                previous,
+                offset: old_view,
+                position: before,
+            });
             self.monitors[mi].active = self.monitors[mi].workspaces[wi].id;
             self.focused_monitor = Some(self.monitors[mi].id.clone());
             self.fit(mi, wi);
@@ -372,6 +385,7 @@ impl Layout {
     pub fn remove(&mut self, id: WindowId) -> Vec<Target> {
         if let Some((mi, wi)) = self.locate(id) {
             let before = self.focus_position(mi, wi);
+            let mut restored_position = None;
             let w = &mut self.monitors[mi].workspaces[wi];
             let index = w.column(id);
             if let Some(ci) = index {
@@ -384,25 +398,34 @@ impl Layout {
             }
             w.floating.retain(|f| f.id != id);
             if w.focused == Some(id) {
-                if let Some((opened, previous, view)) =
-                    w.remembered.take().filter(|(opened, _, _)| *opened == id)
-                {
-                    let _ = opened;
+                if let Some(saved) = w.remembered.take().filter(|saved| saved.opened == id) {
+                    let previous = saved.previous;
                     if w.column(previous).is_some() || w.floating.iter().any(|f| f.id == previous) {
                         w.focused = Some(previous);
-                        w.view = view;
+                        w.view = saved.offset;
+                        restored_position = saved.position;
                     } else {
-                        w.focused = None;
+                        w.focused = w
+                            .columns
+                            .first()
+                            .map(|c| c.tiles[c.active].id)
+                            .or_else(|| w.floating.last().map(|f| f.id));
+                        self.fit(mi, wi);
                     }
                 } else {
                     w.focused = index
                         .and_then(|i| w.columns.get(i.min(w.columns.len().saturating_sub(1))))
                         .map(|c| c.tiles[c.active].id)
-                        .or_else(|| w.floating.last().map(|f| f.id));
+                        .or_else(|| w.floating.last().map(|f| f.id))
+                        .or_else(|| w.tiled_focus.filter(|id| w.column(*id).is_some()))
+                        .or_else(|| w.columns.first().map(|c| c.tiles[c.active].id));
                     self.fit(mi, wi);
                 }
             } else if let Some(before) = before {
                 self.preserve_focus(mi, wi, before);
+            }
+            if let Some(position) = restored_position {
+                self.preserve_focus(mi, wi, position);
             }
         } else {
             for w in &mut self.detached {
