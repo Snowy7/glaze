@@ -383,7 +383,14 @@ fn lab_transparency_depth_and_cost() {
         std::fs::write(output.join(format!("{name}-depth-{scale}.f32")), &bytes).unwrap();
     }
     renderer.options.scale = 1.0;
-    for (i, t) in [0.0, 0.7, 1.4].into_iter().enumerate() {
+    // Capture distinct phases rather than accidentally sampling one walk-cycle period.
+    let duration = renderer
+        .clip
+        .map_or(2.8, |i| renderer.data.clips[i].duration);
+    for (i, t) in [0.0, duration * 0.25, duration * 0.5]
+        .into_iter()
+        .enumerate()
+    {
         let mut e = gpu.device.create_command_encoder(&Default::default());
         renderer.render_into(
             &gpu,
