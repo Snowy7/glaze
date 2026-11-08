@@ -488,6 +488,11 @@ fn nav_place(app: &App) -> Page {
     if SETTINGS.contains(&active) { Page::Settings } else { active }
 }
 
+/// Whether a page is one of a set of tabs (the tab names it).
+pub fn tabbed(page: Page) -> bool {
+    tabs(page).is_some()
+}
+
 /// Sibling pages shown as tabs under the page bar, and the one that is open.
 fn tabs(page: Page) -> Option<(&'static [(Page, &'static str)], Page)> {
     const SETTINGS_TABS: [(Page, &str); 6] = [
@@ -739,6 +744,8 @@ fn status_block(app: &App, b: &mut B, rect: Rect, rail: bool) {
 fn parent(app: &App, page: Page) -> Option<Page> {
     match page {
         Page::Windows => Some(Page::Look),
+        // Every Settings tab sits under Settings in the breadcrumbs.
+        page if SETTINGS.contains(&page) => Some(Page::Settings),
         Page::Module | Page::AddModule | Page::BarDesign => Some(match app.nav.bar {
             Some(Bar::Dock) => Page::Dock,
             Some(Bar::Top) => Page::Top,
@@ -771,9 +778,10 @@ fn page_title(app: &App, page: Page) -> String {
     window_title(page).to_owned()
 }
 
+/// Pages you drilled into get one back button, before the breadcrumbs. Tabs don't.
 pub fn header_back(app: &App) -> bool {
     let page = crate::panel::current_page(app);
-    !PLACES.contains(&page) && !SETTINGS.contains(&page) && page != Page::Settings
+    !PLACES.contains(&page) && !SETTINGS.contains(&page) && page != Page::Settings && !tabbed(page)
 }
 
 fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) {
@@ -855,7 +863,10 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
     b.hit(k, toggle, Role::Button, if collapsed(app) { "Expand sidebar (Ctrl+B)" } else { "Collapse sidebar (Ctrl+B)" }, Action::Panel(Command::Sidebar), Behavior::Click);
     b.focus_ring(k, toggle, b.px(radius::CONTROL));
     x += b.px(36.0);
-    let top_level = PLACES.contains(&page) || SETTINGS.contains(&page) || page == Page::Settings;
+    if header_back(app) {
+        b.icon_button(key("window-back"), Rect::new(x, y, b.px(28.0), b.px(28.0)), glyph::CHEVRON_LEFT, "Back", false, true, Action::Panel(Command::Back));
+        x += b.px(32.0);
+    }
     let mut crumbs = vec![page];
     let mut next = parent(app, page);
     while let Some(level) = next.filter(|level| *level != Page::Root) {
@@ -865,10 +876,6 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
     crumbs.reverse();
     for (index, level) in crumbs.iter().enumerate() {
         let current = index + 1 == crumbs.len();
-        if current && !top_level && matches!(page, Page::Create | Page::Effects | Page::Shader | Page::FirstRun) {
-            b.icon_button(key("window-back"), Rect::new(x, y, b.px(28.0), b.px(28.0)), glyph::CHEVRON_LEFT, "Back", false, true, Action::Panel(Command::Back));
-            x += b.px(32.0);
-        }
         let title = page_title(app, *level);
         let font = b.font(if current { Font::Strong } else { Font::Caption });
         let width = (b.measure(&title, &font).0 + b.px(12.0)).min((end - x).max(0.0));

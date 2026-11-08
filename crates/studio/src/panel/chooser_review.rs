@@ -193,7 +193,7 @@ fn render_chooser_review() {
         let layout = crate::editing::widgets::layout(&app);
         let own = crate::panel::widget_look::appearance(&app, &layout.instances[0], Style::Liquid);
         app.run(Action::Set(
-            Edit::new(DocId::Widgets, "/instances/0/appearance", "Its own look"),
+            Edit::new(DocId::Widgets, "/instances/0/appearance", "Use a different look"),
             own,
         ));
         shot(&mut app, &mut ui, "clock-own-material", None, dark);
@@ -211,7 +211,7 @@ fn render_chooser_review() {
             Edit::new(
                 DocId::Widgets,
                 format!("/instances/{index}/appearance"),
-                "Its own look",
+                "Use a different look",
             ),
             own,
         ));

@@ -110,7 +110,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::Connections => connections::list(app, b, c),
         Page::Connection => connections::details(app, b, c),
         Page::General => settings::general(app, b, c),
-        Page::Keyboard => settings::keyboard(b, c),
+        Page::Keyboard => settings::keyboard(app, b, c),
         Page::Troubleshoot => settings::troubleshoot(app, b, c),
         Page::About => settings::about(app, b, c),
         Page::DesktopMenu => settings::desktop_menu(app, b, c),

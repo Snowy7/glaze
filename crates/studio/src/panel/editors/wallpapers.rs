@@ -247,25 +247,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
                 b.p.ink3,
                 Align::Start,
             );
-            if wallpaper
-                .credit
-                .as_ref()
-                .is_some_and(|credit| credit.noncommercial)
-            {
-                let label = "Personal use";
-                let badge_w = b
-                    .measure(label, &crate::panel::controls::font(b, 10.0, 500))
-                    .0
-                    + b.px(12.0);
-                let badge = Rect::new(
-                    r.right - badge_w - b.px(5.0),
-                    r.bottom - height(b, 22.0) - b.px(5.0),
-                    badge_w,
-                    height(b, 22.0),
-                );
-                b.fill(badge, b.px(radius::SMALL), b.p.chrome);
-                text(b, badge, label, 10.0, 500, b.p.ink2, Align::Center);
-            }
+            // The license sits in the details (Credit), not on every card.
             if wallpaper.brings_look {
                 b.badge(x, r.bottom + height(b, 51.0), "Brings a look", None, false);
             }
@@ -395,7 +377,7 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                 }
             });
         }
-        group(b, c, "Its look", |b, c| {
+        group(b, c, "Look", |b, c| {
             notice(
                 b,
                 c,

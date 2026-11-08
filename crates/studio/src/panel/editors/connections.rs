@@ -100,8 +100,14 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                     continue;
                 }
                 let item = &app.plugins.installed[index - legacy::LIST.len()];
-                let status = plugin_status(app, &item.id);
-                let detail = {
+                // A status with a reason shows one word; the reason becomes the caption.
+                let (status, reason) = match plugin_status(app, &item.id).split_once(": ") {
+                    Some((word, reason)) => (word, Some(reason)),
+                    None => (plugin_status(app, &item.id), None),
+                };
+                let detail = if let Some(reason) = reason {
+                    reason.to_owned()
+                } else {
                     let faces = item
                         .faces
                         .iter()

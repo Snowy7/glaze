@@ -154,7 +154,13 @@ pub fn displays(app: &App, b: &mut B, c: &mut Col) {
         });
         return;
     }
-    let r = Rect::new(c.x, c.y + b.px(6.0), c.w, height(b, 30.0));
+    // "Display" says what Left and Right mean; the switch is as wide as its labels.
+    let caption = font(b, 13.0, 500);
+    let label_w = b.measure("Display", &caption).0 + b.px(12.0);
+    let row = Rect::new(c.x, c.y + b.px(6.0), c.w, height(b, 30.0));
+    text(b, Rect::new(row.left, row.top, label_w, row.height()), "Display", 13.0, 500, b.p.ink2, Align::Start);
+    let w = b.segmented_width(&labels).max(b.px(200.0)).min(c.w - label_w);
+    let r = Rect::new(row.left + label_w, row.top, w, row.height());
     b.segmented(
         key(("panel-displays", c.view)),
         r,
@@ -472,14 +478,13 @@ pub fn title(b: &mut B, c: &mut Col, title: &str, subtitle: &str) {
 
 /// Keep a sub-page's return action beside its actual heading in the editor column.
 pub fn page_title(app: &App, b: &mut B, c: &mut Col, heading: &str, subtitle: &str) {
-    if app.panel.as_ref().is_some_and(|state| state.windowed) && crate::view::header_back(app) {
-        icon_button(b, Rect::new(c.x, c.y + b.px(6.0), b.px(28.0), b.px(28.0)), glyph::CHEVRON_LEFT, "Back", true, Action::Panel(super::Command::Back));
-        let mut text = Col { x: c.x + b.px(36.0), w: c.w - b.px(36.0), ..*c };
-        title(b, &mut text, heading, subtitle);
-        c.y = text.y;
-    } else {
-        title(b, c, heading, subtitle);
+    let windowed = app.panel.as_ref().is_some_and(|state| state.windowed);
+    // A tab already names the page; the page starts with its content.
+    if windowed && crate::view::tabbed(crate::panel::current_page(app)) {
+        return;
     }
+    // The window's back button sits before its breadcrumbs; the docked panel has its header's.
+    title(b, c, heading, subtitle);
 }
 
 pub fn group(b: &mut B, c: &mut Col, heading: &str, content: impl FnOnce(&mut B, &mut Col)) {

@@ -440,7 +440,7 @@ fn playback_status(app: &App) -> String {
 fn root(app: &App, b: &mut B, c: &mut Col) {
     let windowed = app.panel.as_ref().is_some_and(|state| state.windowed);
     if windowed {
-        title(b, c, "Your desktop", "Edit on desktop to pick anything where it is");
+        title(b, c, "Your desktop", "Change things where they are with Edit on desktop");
     }
     if app.system.running() && !app.system.parts[2].running {
         ui::feedback(
@@ -450,6 +450,17 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             vec![("Start bars", Action::StartBars)],
         );
     }
+    // The window's sidebar already shows what's playing; the docked panel shows it here.
+    if !windowed {
+        playing_card(app, b, c);
+        ui::displays(app, b, c);
+        ui::search(app, b, c);
+    }
+    desktop_rows(app, b, c, windowed);
+}
+
+/// What's playing, with its one control (Pause, Resume, Start or Restart).
+fn playing_card(app: &App, b: &mut B, c: &mut Col) {
     let h = height(b, 80.0);
     let status = Rect::new(c.x, c.y, c.w, h);
     b.fill(status, b.px(b.kit.radius.card), b.p.panel);
@@ -484,9 +495,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
     text(
         b,
         Rect::new(x, c.y + b.px(18.0), available, height(b, 21.0)),
-        &if playing && windowed {
-            "Playing".into()
-        } else if playing {
+        &if playing {
             format!("Playing · {}", wallpaper_name(app))
         } else {
             playback_status(app)
@@ -504,7 +513,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             available,
             height(b, 18.0),
         ),
-        &if playing && !windowed { playback_status(app) } else { wallpaper_name(app).into() },
+        &if playing { playback_status(app) } else { wallpaper_name(app).into() },
         12.0,
         400,
         b.p.ink3,
@@ -525,10 +534,10 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
         action,
     );
     c.y += h + b.px(12.0);
-    if !windowed { ui::displays(app, b, c); }
-    if !windowed {
-        ui::search(app, b, c);
-    }
+}
+
+/// Everything on the desktop, one row each.
+fn desktop_rows(app: &App, b: &mut B, c: &mut Col, windowed: bool) {
     group(b, c, if windowed { "On your desktop" } else { "Your desktop" }, |b, c| {
         row(
             b,
@@ -581,11 +590,6 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             }
             c.y += b.px(58.0);
             b.hline(c.x, c.right(), c.y - 1.0, b.p.line);
-        }
-        if windowed {
-            c.y += b.px(12.0);
-            notice(b, c, &format!("{} widgets on this display", crate::editing::widgets::count_here(app)));
-            return;
         }
         let look = crate::editing::look::summary(app)
             .split(" · ")
@@ -707,9 +711,10 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
         &format!("{} · {} widgets", crate::panel::controls::display_name(app, app.nav.display), items.len()),
     );
     super::controls::displays(app, b, c);
-    notice(b, c, "Drag widgets in the preview to arrange them. They snap to empty grid cells.");
-    if app.monitors.len() > 1 {
-        notice(b, c, "Drag onto a display button below the preview to move it there.");
+    if app.panel.as_ref().is_some_and(|state| state.windowed) {
+        notice(b, c, "Use Edit on desktop to move widgets where they are.");
+    } else {
+        notice(b, c, "Drag a widget on your desktop to move it. Widgets snap to empty grid cells.");
     }
     group(b, c, "On this display", |b, c| {
         if items.is_empty() {
@@ -819,7 +824,7 @@ fn settings(_app: &App, b: &mut B, c: &mut Col) {
 }
 
 fn performance(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "Performance and power", "");
+    super::controls::page_title(app, b, c, "Performance and power", "");
     if let Some(memory) = super::measure::memory(app.fixture) {
         notice(b, c, &format!("Studio uses {:.0} MB", memory.working_mb));
     }

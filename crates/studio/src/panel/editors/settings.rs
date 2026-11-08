@@ -37,7 +37,7 @@ pub fn frame_cap(app: &App, b: &mut B, c: &mut Col, path: &str, inherit: &str) {
     select(
         b,
         c,
-        "Cap",
+        "Frame rate cap",
         if custom || !known {
             serde_json::json!("custom")
         } else {
@@ -243,13 +243,9 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
     );
 }
 
-pub fn keyboard(b: &mut B, c: &mut Col) {
-    crate::panel::controls::title(
-        b,
-        c,
-        "Keyboard",
-        "Reference · shortcuts cannot be changed yet",
-    );
+pub fn keyboard(app: &App, b: &mut B, c: &mut Col) {
+    page_title(app, b, c, "Keyboard", "");
+    notice(b, c, "A reference: shortcuts can't be changed yet.");
     let sections = [
         (
             "Anywhere",

@@ -114,7 +114,7 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
             notice(b, c, "Drag the corner brackets on the desktop to resize.");
         }
     });
-    group(b, c, "Its look", |b, c| {
+    group(b, c, "Look", |b, c| {
         let own = instance.appearance != Default::default();
         let inherited = crate::panel::widget_look::inherited_style(app);
         let reset = Action::Unset(Edit::new(
@@ -125,14 +125,14 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
         toggle(
             b,
             c,
-            "Its own look",
+            "Use a different look",
             if own { "Only this widget" } else { "" },
             own,
             if own {
                 reset.clone()
             } else {
                 Action::Set(
-                    Edit::new(DocId::Widgets, format!("{base}/appearance"), "Its own look"),
+                    Edit::new(DocId::Widgets, format!("{base}/appearance"), "Use a different look"),
                     crate::panel::widget_look::appearance(app, instance, inherited),
                 )
             },
@@ -274,61 +274,35 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
     c.y += b.px(44.0);
 }
 
-/// Wide and Tall measure grid cells, with separate named steppers on the same line.
+/// Width and Height in grid cells: one row each, the value between its − and + buttons.
 fn size_controls(b: &mut B, c: &mut Col, instance: &Instance) {
-    let gap = b.px(12.0);
-    let width = (c.w - gap) / 2.0;
-    let h = height(b, 34.0);
-    for (axis, label) in ["Wide", "Tall"].into_iter().enumerate() {
-        let r = Rect::new(c.x + axis as f32 * (width + gap), c.y, width, h);
-        let button_width = b.px(28.0);
-        text(
-            b,
-            Rect::new(
-                r.left,
-                r.top,
-                r.width() - button_width * 2.0 - b.px(4.0),
-                r.height(),
-            ),
-            &format!("{label} {}", instance.size[axis]),
-            13.0,
-            400,
-            b.p.ink1,
-            Align::Start,
-        );
+    let h = height(b, 44.0);
+    let button = b.px(28.0);
+    let value_w = b.px(64.0);
+    for (axis, label) in ["Width", "Height"].into_iter().enumerate() {
+        let r = Rect::new(c.x, c.y, c.w, h);
+        text(b, Rect::new(r.left, r.top, r.width() - b.px(140.0), h), label, 13.0, 500, b.p.ink1, Align::Start);
+        let pill = Rect::new(r.right - button * 2.0 - value_w, r.top + (h - button) / 2.0, button * 2.0 + value_w, button);
+        b.fill(pill, button / 2.0, b.p.fill);
+        let cells = instance.size[axis];
+        text(b, Rect::new(pill.left + button, pill.top, value_w, button), &format!("{cells} {}", if cells == 1 { "cell" } else { "cells" }), 13.0, 500, b.p.ink1, Align::Center);
         for (i, delta) in [-1, 1].into_iter().enumerate() {
-            let action = if axis == 0 {
-                Action::ResizeWidget(delta, 0)
-            } else {
-                Action::ResizeWidget(0, delta)
-            };
+            let action = if axis == 0 { Action::ResizeWidget(delta, 0) } else { Action::ResizeWidget(0, delta) };
             crate::panel::controls::icon_button(
                 b,
-                Rect::new(
-                    r.right - button_width * (2 - i) as f32,
-                    r.top,
-                    button_width,
-                    h,
-                ),
-                if delta < 0 {
-                    glaze_ui::icons::Icon::Remove.into()
-                } else {
-                    glyph::ADD
-                },
-                &format!(
-                    "{label}: {}",
-                    if delta < 0 {
-                        "one cell less"
-                    } else {
-                        "one cell more"
-                    }
-                ),
-                instance.size[axis] > 1 || delta > 0,
+                Rect::new(if i == 0 { pill.left } else { pill.right - button }, pill.top, button, button),
+                if delta < 0 { glaze_ui::icons::Icon::Remove.into() } else { glyph::ADD },
+                &format!("{label}: {}", if delta < 0 { "one cell less" } else { "one cell more" }),
+                cells > 1 || delta > 0,
                 action,
             );
         }
+        if axis == 0 {
+            b.hline(r.left, r.right, r.bottom - 1.0, b.p.line.with_alpha(0.45));
+        }
+        c.y += h;
     }
-    c.y += h + b.px(6.0);
+    c.y += b.px(6.0);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1609,52 +1583,23 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         )
         .chain((app_count > 0).then_some(("From your apps", app_count, Some("@apps"))))
         .collect();
-    let folded = c.w < b.px(340.0) || b.t.text_scale > 1.0;
-    let disclosure = key("panel-widget-filters");
-    if folded {
-        let label = categories
-            .iter()
-            .find(|(_, _, value)| *value == category)
-            .map_or("All", |(label, _, _)| *label);
-        action_button(
-            b,
-            c,
-            &format!("Categories: {label}"),
-            Action::More(disclosure),
-        );
-    }
-    if !folded || app.is_open(disclosure) {
-        let font = crate::panel::controls::font(b, 11.0, 500);
-        let mut x = c.x;
-        let h = height(b, 29.0);
-        for (label, count, value) in categories {
-            let label = format!("{label} ({count})");
-            let width = (b.measure(&label, &font).0 + b.px(18.0)).min(c.w);
-            if x > c.x && x + width > c.right() {
-                x = c.x;
-                c.y += h + b.px(6.0);
-            }
-            let rect = Rect::new(x, c.y, width, h);
-            let k = key(("widget-category", value));
-            let on = category == value;
-            b.plate(k, rect, b.px(radius::SMALL), on);
-            text(b, rect, &label, 11.0, 500, b.p.ink1, Align::Center);
-            b.hit_checked(
-                k,
-                rect,
-                glaze_ui::Role::RadioButton,
-                &label,
-                Some(on),
-                Action::Panel(Command::Category(
-                    value.map(|value| format!("widget:{value}")),
-                )),
-                glaze_ui::controls::Behavior::Click,
-            );
-            b.focus_ring(k, rect, b.px(radius::SMALL));
-            x += width + b.px(6.0);
-        }
-        c.y += h + b.px(8.0);
-    }
+    // Which widgets to show, as one dropdown.
+    let shown = categories
+        .iter()
+        .find(|(_, _, value)| *value == category)
+        .map_or_else(|| format!("All ({total})"), |(label, count, _)| format!("{label} ({count})"));
+    let menu = categories
+        .iter()
+        .map(|(label, count, value)| {
+            crate::actions::MenuItem::choice(
+                format!("{label} ({count})"),
+                *value == category,
+                Action::Panel(Command::Category(value.map(|value| format!("widget:{value}")))),
+            )
+        })
+        .collect();
+    dropdown(b, key("widget-category"), c.x, c.y, "Category", &shown, Action::Menu(menu));
+    c.y += height(b, 32.0) + b.px(12.0);
     for ((kind, heading), widgets) in sections {
         if category.is_some_and(|category| {
             if category == "@apps" {

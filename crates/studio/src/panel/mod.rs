@@ -646,6 +646,10 @@ pub(crate) fn save_status(app: &App, page: Page) -> &'static str {
             crate::docs::ReadIssue::Malformed { .. } => "Read only",
         };
     }
+    // The wallpaper editor's status is its draft's, not the settings files'.
+    if crate::builder::is_page(page) && crate::builder::unsaved(app) {
+        return "Wallpaper not saved";
+    }
     let state = app.panel.as_ref().unwrap();
     if !state.save_errors.borrow().is_empty() || !state.theme_errors.borrow().is_empty()
         || matches!(app.docs.saved, crate::docs::Saved::Failed(_)) {
