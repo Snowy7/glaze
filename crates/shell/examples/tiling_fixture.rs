@@ -992,11 +992,27 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
         }
     }
     tiler.as_mut().unwrap().update(Settings::default());
-    // Force a real pan even when the preceding fullscreen return retained a centered view.
-    tiler.as_mut().unwrap().command(Op::Focus(Direction::Right));
-    tiler.as_mut().unwrap().command(Op::Center);
-    pump(tiler, Duration::from_millis(60));
-    let animation = owned_overlay("glaze.tiling.animation")?;
+    tiler
+        .as_mut()
+        .unwrap()
+        .reveal(glaze_tiling::WindowId(controller.hwnd as u64));
+    pump(tiler, Duration::from_millis(400));
+    // A workspace transfer guarantees motion even for a minimum-sized or floating focus.
+    tiler
+        .as_mut()
+        .unwrap()
+        .command(Op::MoveWorkspace(Direction::Down));
+    let deadline = Instant::now() + Duration::from_millis(250);
+    let animation = loop {
+        if let Ok(window) = owned_overlay("glaze.tiling.animation") {
+            break window;
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "animation overlay did not appear"
+        );
+        pump(tiler, Duration::from_millis(10));
+    };
     ensure!(
         above(extras[2].window(), animation),
         "animation covered a topmost fixture window"
