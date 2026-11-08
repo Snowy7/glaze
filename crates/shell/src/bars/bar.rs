@@ -51,6 +51,7 @@ pub(super) fn total_repaints() -> u64 {
 }
 
 pub struct Bar {
+    tiling_revision:u64,
     studio_active: bool,
     studio_base: Option<BarsConfig>,
     studio_band: Option<DesktopRect>,
@@ -180,6 +181,7 @@ impl Bar {
         let mut slide = Value::new(if autohide { 1.0 } else { 0.0 });
         slide.settings = slide_settings;
         let mut bar = Self {
+            tiling_revision:0,
             studio_active: false,
             studio_base: None,
             studio_band: None,
@@ -710,6 +712,8 @@ impl Bar {
         now: Instant,
         keep_open: bool,
     ) -> Result<bool> {
+        let revision=crate::tiling::indicator::revision();
+        if revision!=self.tiling_revision{self.tiling_revision=revision;self.dirty=true;}
         if self.hidden || !self.enabled() {
             if self.reveal_snapshots.iter().any(Option::is_some) {
                 self.surface.release();
@@ -826,6 +830,7 @@ impl Bar {
             self.focus = self
                 .focus
                 .filter(|id| self.frame.list.hits.iter().any(|h| h.id == *id));
+            if self.kind==BarKind::Top{crate::tiling::indicator::draw(&mut self.frame,&self.monitor.device,scale);}
             // The view drew the kit's focus ring for it (keyboard focus only).
             self.frame.list.focus = self.focus;
             self.dirty = false;

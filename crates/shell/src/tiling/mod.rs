@@ -12,3 +12,4 @@ fn near(a: Rect, b: Rect) -> bool {
         && (a.h - b.h).abs() < 2.0
 }
 mod overview;
+pub(crate) mod indicator;
