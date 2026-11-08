@@ -518,11 +518,11 @@ fn run(
         costs.push(frame.elapsed().as_secs_f64() * 1e6);
         // SAFETY: synchronize our worker to DWM, and dispatch only its own window messages.
         unsafe {
-            DwmFlush()?;
             let mut msg = MSG::default();
             while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
                 DispatchMessageW(&msg);
             }
+            DwmFlush()?;
         }
         drop(previous.take());
         let completed = Instant::now();
