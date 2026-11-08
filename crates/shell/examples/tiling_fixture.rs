@@ -184,6 +184,32 @@ fn run(
         .ok()?;
     }
     let mut report = serde_json::json!({"count":count,"off":off,"seconds":seconds,"cpu_ms":(after-before) as f64/10000.0,"one_core_percent":(after-before) as f64/100000.0/seconds,"private_bytes":memory.PrivateUsage,"message_wakes":wakes,"foreground_before":foreground.0 as isize});
+    let mut outputs = Vec::new();
+    for monitor in glaze_desktop::monitor_infos() {
+        if !originals.iter().any(|(_, r)| {
+            monitor
+                .rect
+                .contains_point((r[0] + r[2]) / 2, (r[1] + r[3]) / 2)
+        }) {
+            continue;
+        }
+        let mut mode = DEVMODEW {
+            dmSize: size_of::<DEVMODEW>() as u16,
+            ..Default::default()
+        };
+        // SAFETY: read-only current display mode into an initialized output buffer.
+        let hz = unsafe {
+            EnumDisplaySettingsW(
+                &HSTRING::from(&monitor.device),
+                ENUM_CURRENT_SETTINGS,
+                &mut mode,
+            )
+        }
+        .as_bool()
+        .then_some(mode.dmDisplayFrequency);
+        outputs.push(serde_json::json!({ "device": monitor.device, "rect": [monitor.rect.x, monitor.rect.y, monitor.rect.width, monitor.rect.height], "refresh_hz": hz }));
+    }
+    report["outputs"] = outputs.into();
     if cases {
         exercise_cases(output, &mut tiler, &identities).context("running window cases")?;
         report["window_cases"] = true.into();
