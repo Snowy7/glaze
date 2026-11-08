@@ -358,4 +358,49 @@ pub fn responsive(h: HWND) -> bool {
     }
 }
 
+pub struct Placement {
+    pub identity: Identity,
+    pub rect: Rect,
+    pub border: [f64; 4],
+    pub hung: bool,
+}
+/// All changed HWNDs are committed once. Hung clients receive asynchronous positioning.
+pub fn apply(placements: &[Placement]) -> Result<()> {
+    if placements.is_empty() {
+        return Ok(());
+    }
+    // SAFETY: each window is revalidated immediately before adding it to the owned HDWP.
+    unsafe {
+        let mut batch = BeginDeferWindowPos(placements.len() as i32)?;
+        for p in placements {
+            if !p.identity.valid()
+                || !IsWindowVisible(p.identity.window()).as_bool()
+                || IsIconic(p.identity.window()).as_bool()
+                || hands_off(p.identity.window())
+            {
+                continue;
+            }
+            let r = p.rect;
+            let b = p.border;
+            batch = DeferWindowPos(
+                batch,
+                p.identity.window(),
+                None,
+                (r.x + b[0]).round() as i32,
+                (r.y + b[1]).round() as i32,
+                (r.w + b[2]).round().max(1.0) as i32,
+                (r.h + b[3]).round().max(1.0) as i32,
+                SWP_NOACTIVATE
+                    | SWP_NOZORDER
+                    | if p.hung {
+                        SWP_ASYNCWINDOWPOS
+                    } else {
+                        SET_WINDOW_POS_FLAGS(0)
+                    },
+            )?;
+        }
+        EndDeferWindowPos(batch)?;
+    }
+    Ok(())
+}
 use windows::Win32::Foundation::{LPARAM, WPARAM};
