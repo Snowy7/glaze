@@ -2,8 +2,8 @@
 //!
 //! Bundled plugins are found
 //! beside the executable or in any parent folder, like themes, so
-//! `target\debug\mypaper-shell.exe` finds the repo's copies. User folders
-//! live under `%APPDATA%\mypaper`.
+//! `target\debug\glaze-shell.exe` finds the repo's copies. User folders
+//! live under `%APPDATA%\glaze`.
 
 use std::path::{Path, PathBuf};
 
@@ -57,19 +57,19 @@ pub fn bundled_plugins() -> Option<PathBuf> {
     find_up(&exe()?, "plugins", |dir| dir.is_dir())
 }
 
-/// `%APPDATA%\mypaper\<name>`.
+/// `%APPDATA%\glaze\<name>`.
 pub fn user(name: &str) -> Result<PathBuf> {
-    Ok(mypaper_config::dir()?.join(name))
+    Ok(glaze_config::dir()?.join(name))
 }
 
 pub fn layout() -> Result<PathBuf> {
     user("widgets.json")
 }
 
-/// `%LOCALAPPDATA%\mypaper\<name>`.
+/// `%LOCALAPPDATA%\glaze\<name>`.
 pub fn local(name: &str) -> Result<PathBuf> {
     let local = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?;
-    Ok(PathBuf::from(local).join("mypaper").join(name))
+    Ok(PathBuf::from(local).join("glaze").join(name))
 }
 
 /// Writes a file atomically (temp file plus rename), so readers and watchers
@@ -94,7 +94,7 @@ pub fn plain(path: &Path) -> String {
 
 #[cfg(test)]
 pub(crate) fn temp_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("mypaper-widgets-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("glaze-widgets-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir

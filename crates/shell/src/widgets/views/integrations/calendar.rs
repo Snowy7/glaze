@@ -1,8 +1,8 @@
 //! Account controls wrap the calendar's existing month/agenda renderer.
 use crate::integrations::calendar::*;
 use crate::widgets::views::Ctx;
-use mypaper_integrations::Data;
-use mypaper_ui::{Align, ButtonKind, Rect, TextRole, icons::Icon, layout::SizeClass};
+use glaze_integrations::Data;
+use glaze_ui::{Align, ButtonKind, Rect, TextRole, icons::Icon, layout::SizeClass};
 
 pub(crate) fn controls(c: &mut Ctx, r: Rect) -> Rect {
     if c.m.event_draft.is_some() {

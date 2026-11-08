@@ -1,7 +1,7 @@
 //! The widget-only executable uses the same shared media adapter without linking bar/flyout UI.
 #[path = "media.rs"]
 pub mod media;
-use mypaper_integrations::{Hub, Lease, Provider, config::Config};
+use glaze_integrations::{Hub, Lease, Provider, config::Config};
 use std::{
     cell::RefCell,
     sync::{

@@ -6,9 +6,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::time::Instant;
 
-use mypaper_plugin_sdk::View;
-use mypaper_ui::kit::Frame;
-use mypaper_ui::{HitId, Rect, Spring, Tween};
+use glaze_plugin_sdk::View;
+use glaze_ui::kit::Frame;
+use glaze_ui::{HitId, Rect, Spring, Tween};
 
 type NodeSprings = HashMap<(i32, i32, i32), Vec<(f32, Tween)>>;
 
@@ -82,7 +82,7 @@ pub fn draw(f: &mut Frame<'_>, rect: Rect, child: &View, (stiffness, damping): (
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mypaper_plugin_sdk::Tone;
+    use glaze_plugin_sdk::Tone;
 
     #[test]
     fn values_round_trip_through_the_child() {

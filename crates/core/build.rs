@@ -1,10 +1,10 @@
 fn main() {
     let manifest = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
-        .join("mypaper-core.manifest");
+        .join("glaze-core.manifest");
     println!("cargo:rerun-if-changed={}", manifest.display());
-    println!("cargo:rustc-link-arg-bin=mypaper-core=/MANIFEST:EMBED");
+    println!("cargo:rustc-link-arg-bin=glaze-core=/MANIFEST:EMBED");
     println!(
-        "cargo:rustc-link-arg-bin=mypaper-core=/MANIFESTINPUT:{}",
+        "cargo:rustc-link-arg-bin=glaze-core=/MANIFESTINPUT:{}",
         manifest.display()
     );
 }

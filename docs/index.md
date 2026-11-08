@@ -6,8 +6,8 @@ follow-up `6ebad2c` remains included, as recorded in the
 [night log](../plans/night/2026-11-06.md). Its isolated replay passed; the earlier independent
 review's broad post-repair production game certification remains separate from this startup work.
 
-`mypaper-index` is an optional native process, enabled with
-`"experimental": { "file_index": true }` in `%APPDATA%\mypaper\config.json`.
+`glaze-index` is an optional native process, enabled with
+`"experimental": { "file_index": true }` in `%APPDATA%\glaze\config.json`.
 The default is **false**. Core starts it when enabled, stops it on disable/quit/panic,
 and supervises crashes with its existing backoff. A wait-only parent handle also makes
 the helper exit if core disappears. Disabled means no index process, watch, thread or timer.
@@ -44,7 +44,7 @@ thread CPU-time budget sleeps at work boundaries to target **25% of one logical 
 over time; it yields between directories. This is not a hard instantaneous process cap:
 directory batches can burst, and live notifications/queries have their own work. Overflow,
 returning-volume and explicit rule-change recovery retain their full-reconciliation paths.
-`mypaper-index --rescan` requests an immediate full catch-up of every online volume through
+`glaze-index --rescan` requests an immediate full catch-up of every online volume through
 the running service, bypassing freshness and delay while retaining the game gate and CPU
 budget. `--status.scanning` describes active reconciliation, not a future deadline.
 
@@ -64,7 +64,7 @@ until the age deadline or a manual rescan. Live changes after the watch starts a
 Measured on the live desktop without input or foreground test windows. The baseline used
 core's normal index-only off/on config path with the old deployed binary; the after sample
 began before the **single** `scripts/deploy-local.ps1` deployment from
-`C:/mypaper-targets/main`. Both record CPU from the helper's process start, rather than
+`C:/glaze-targets/main`. Both record CPU from the helper's process start, rather than
 sampling an already-settled process. They are one live pair, with ordinary filesystem
 activity; other machine workload was not held constant.
 
@@ -116,7 +116,7 @@ Implementation commits: `8b4d885`, `f18aa06`. Index/config tests: **35 + 24 pass
 five affected service tests passed again after the recovery-freshness follow-up. Index/config
 Clippy on all targets with warnings denied and the shared release workspace build passed.
 Only owned index paths, additive config fields, and this document changed. No push.
-`C:/mypaper-targets/index/debug` was removed using `cargo clean --profile dev` with the
+`C:/glaze-targets/index/debug` was removed using `cargo clean --profile dev` with the
 explicit target directory; release fixture artifacts are separate from deployment.
 
 The deployed index, shared-target release, and fixture binary all had SHA-256
@@ -137,7 +137,7 @@ but an 11M-entry query after resident-page trimming was measured above 100 ms.
   attributes, modified time (Unix seconds), logical size and subtree file count.
 - One UTF-8 name blob; lowercase names share the original bytes when possible.
   Unicode lowercase is locale-independent, without accent removal or normalization.
-- `%LOCALAPPDATA%\mypaper\index\snapshot.bin` is a read-only file mapping. Small
+- `%LOCALAPPDATA%\glaze\index\snapshot.bin` is a read-only file mapping. Small
   live changes use a bounded record/name overlay, atomically persisted to `changes.json`
   with a snapshot generation. Ordinary changes do not rewrite the roughly 900 MB base.
   Above 50,000 overlay records or 4 MiB new names, a checkpoint compacts tombstones and
@@ -204,7 +204,7 @@ Existing snapshots remain readable and gain the column when reconciled/checkpoin
 Built-in exclusions prune `node_modules`, `.git`, `__pycache__`, `.venv`, `venv`, `.gradle`,
 `$Recycle.Bin`, `System Volume Information`, drive-root `Windows/WinSxS` and
 `Windows/Installer`, `AppData/Local/Temp`, `AppData/Local/**/Cache*`, `npm-cache`,
-`pnpm-store`, `.cargo/registry`, `.rustup/toolchains`, and `C:/mypaper-targets`.
+`pnpm-store`, `.cargo/registry`, `.rustup/toolchains`, and `C:/glaze-targets`.
 `target` is excluded only when it contains `CACHEDIR.TAG` or `.rustc_info.json`;
 `bin` and `obj` only when their parent contains a `.csproj` file. Scans decide those
 markers once per directory and pass the decision to their children; `.csproj` presence
@@ -212,7 +212,7 @@ comes from the parent's existing enumeration. Notification batches reuse a bound
 directory-decision cache. A plain folder called
 `target` or `bin` remains searchable. Reparse traversal remains disabled.
 
-User rules layer onto these defaults in `%APPDATA%/mypaper/config.json`:
+User rules layer onto these defaults in `%APPDATA%/glaze/config.json`:
 
 ```json
 {
@@ -239,7 +239,7 @@ restores a known parent size. The launcher displays “Size unknown” for incom
 Notification readers discard changes below static exclusions while preserving boundary
 create/delete events; Rust/.NET marker changes re-evaluate the affected subtree.
 
-The helper also consumes `mypaper_tweaks::game_activity::Snapshot`: scan workers,
+The helper also consumes `glaze_tweaks::game_activity::Snapshot`: scan workers,
 generation streams and cache validators block at work boundaries while `pause_background`
 is true. Native notification readers keep draining and rearming their 2 MiB buffers during
 the game. They decode names into a bounded set of dirty **parent directories**, without
@@ -328,7 +328,7 @@ recovery and narrower overflow repair depend on that future work.
 
 ## Pipe API
 
-`\\.\pipe\mypaper-index` is a local, message-mode named pipe with an explicit current-user
+`\\.\pipe\glaze-index` is a local, message-mode named pipe with an explicit current-user
 SID DACL and remote clients rejected. First-instance creation rejects an existing pipe.
 Each transaction is one UTF-8 JSON request message and one UTF-8 JSON response message,
 without a newline or length prefix. Requests are limited to 8 KiB and replies to 1 MiB.
@@ -344,12 +344,12 @@ transaction panic: the helper exits and core restarts it from its cached snapsho
 the intended fallback for a bug we haven't seen. Known panic sources (the folded-offset slice)
 are fixed at the source. `crates/index/tools/build-release.ps1` still builds an unwinding
 index for experiments, and the injected-panic regression runs with
-`cargo test --release -p mypaper-index` (Windows' Cranelift debug backend cannot unwind).
+`cargo test --release -p glaze-index` (Windows' Cranelift debug backend cannot unwind).
 
 The Rust library's bounded client is the preferred integration:
 
 ```rust
-use mypaper_index::{Request, pipe};
+use glaze_index::{Request, pipe};
 
 let result = pipe::request(&Request::Search {
     query: "ext:rs path:projects index".into(), limit: 50,
@@ -381,12 +381,12 @@ hits. `scanning` describes initial reconciliation; cached data can be stale duri
 CLI:
 
 ```powershell
-mypaper-index --query 'ext:rs index'
-mypaper-index --sizes 'D:\Coding'
-mypaper-index --status
-mypaper-index --bench 1000000
-mypaper-index --bench-query
-mypaper-index --bench-scan 'D:\some-representative-tree'
+glaze-index --query 'ext:rs index'
+glaze-index --sizes 'D:\Coding'
+glaze-index --status
+glaze-index --bench 1000000
+glaze-index --bench-query
+glaze-index --bench-scan 'D:\some-representative-tree'
 ```
 
 `--root PATH [CACHE]` runs a standalone service for an isolated fixture. Core passes
@@ -447,7 +447,7 @@ Evidence: `review-game-before*.json`, PNGs and the interrupted-run log. The full
 and restored captures were inspected; the fixture covered the primary (right) display.
 
 The single deployment completed at **10:54 local** via `scripts/deploy-local.ps1`, from
-`C:/mypaper-targets/main/release`. The core-owned helper, PID **78592**, logged
+`C:/glaze-targets/main/release`. The core-owned helper, PID **78592**, logged
 `start; panic=unwind`; its deployed SHA-256 matched the build evidence:
 `4E70DA4E6E80E8A529C7FDEF63BA98830E5CB4BEBF271D8CF940FCDD37BC513F`.
 It completed all C:/D:/E: generations and buffered replay in **142.95 s**, without
@@ -549,8 +549,8 @@ process and its full 724.15 MiB lifetime high-water retained in the evidence.
 Diagnostic commands (read-only input snapshot, isolated output scratch):
 
 ```powershell
-C:/mypaper-targets/index/release/mypaper-index.exe --bench-offline-query SNAPSHOT 'E:\'
-C:/mypaper-targets/index/release/mypaper-index.exe --bench-replay SNAPSHOT $env:LOCALAPPDATA C:/mypaper-targets/index/measurements
+C:/glaze-targets/index/release/glaze-index.exe --bench-offline-query SNAPSHOT 'E:\'
+C:/glaze-targets/index/release/glaze-index.exe --bench-replay SNAPSHOT $env:LOCALAPPDATA C:/glaze-targets/index/measurements
 ```
 
 Evidence: `review-final-search.json`, `review-offline-query-followup*.json`,
@@ -621,7 +621,7 @@ reader/delivery thread recorded zero switches in that game sample. The installed
 `notify` 8.2.1 Windows backend unconditionally waits with
 `WaitForSingleObjectEx(wakeup_sem, 100, TRUE)`; its Windows constructor ignores the
 poll-interval config. This misses the handful-of-wakes target even though index work is
-parked. Those shared config/game watches now use `mypaper_fswatch::Watch`, blocking indefinitely
+parked. Those shared config/game watches now use `glaze_fswatch::Watch`, blocking indefinitely
 on overlapped I/O while idle; `31b51d2` consolidated the desktop wrapper onto the same watcher.
 These historical samples do not measure that later migration.
 
@@ -802,8 +802,8 @@ failures delayed deployment during this timebox; those files were left to their 
 
 ## Earlier measurements (2026-11-06, Ryzen 7 7800X3D, Windows)
 
-Release mode; checks/tests use `C:\mypaper-targets\index`; the deployment build uses
-`C:\mypaper-targets\main`. Initial million-entry baseline missed the query gate and
+Release mode; checks/tests use `C:\glaze-targets\index`; the deployment build uses
+`C:\glaze-targets\main`. Initial million-entry baseline missed the query gate and
 was optimized before integration. Raw evidence is in `crates/index/evidence/`.
 
 | Gate | Measured | Result |
@@ -823,7 +823,7 @@ was optimized before integration. Raw evidence is in `crates/index/evidence/`.
 | Full-volume 60 s sample, no test queries, concurrent filesystem writes | **3.65% of one core**, **18 MiB private**, **10 MiB settled working set** | Active desktop, not a zero-change idle measurement |
 | Final full reconciliation, 11.41M record slots | **77.34 MiB peak private**; **1,359 MiB sampled peak working set**; settled **17.31 MiB private / 7.82 MiB working set** | Uninterrupted 566 s observation; initial scans/replay finished by about 535 s; zero scratch files afterward |
 | Full-volume CPU during concurrent builds, 180 s | **2.17% of one core**, **22 MiB private**, **757 MiB working set** | Active workload, not idle; before sparse scratch change |
-| Flag lifecycle | Disable: **0 processes**, **4.11 s** from config write; enable cached-ready **3.24 s**, parent verified `mypaper-core` | Enabled in the user's config after validation; can be switched off |
+| Flag lifecycle | Disable: **0 processes**, **4.11 s** from config write; enable cached-ready **3.24 s**, parent verified `glaze-core` | Enabled in the user's config after validation; can be switched off |
 
 The snapshot's mapped bytes are file-backed, not private allocation; the working set is
 reported separately. The original private-buffer reconciliation peaked at **2.44 GiB**
@@ -859,9 +859,9 @@ build/temp-file activity. These are workload observations, not controlled idle c
 
 ## Validation and commits
 
-`cargo test -p mypaper-index`: 11 passed. `cargo clippy -p mypaper-index --all-targets
+`cargo test -p glaze-index`: 11 passed. `cargo clippy -p glaze-index --all-targets
 -- -D warnings`: passed. Focused launcher tests: 5 passed, 1 installed-app timing test
-intentionally ignored. `cargo check -p mypaper-config -p mypaper-core` and the release
+intentionally ignored. `cargo check -p glaze-config -p glaze-core` and the release
 workspace build passed. Existing warnings in other crates remain outside this slice.
 
 An earlier live UI Automation capture returned the indexed demo folder (`launcher.json`).

@@ -1,12 +1,12 @@
 //! Embeds Studio's manifest and the same application icon used by the installer.
 fn main() {
     let root = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
-    let manifest = root.join("mypaper-studio.manifest");
+    let manifest = root.join("glaze-studio.manifest");
     println!("cargo:rerun-if-changed={}", manifest.display());
     println!("cargo:rustc-link-arg-bins=/MANIFEST:EMBED");
     println!("cargo:rustc-link-arg-bins=/MANIFESTINPUT:{}", manifest.display());
-    println!("cargo:rerun-if-changed=mypaper-studio.rc");
-    println!("cargo:rerun-if-changed=../../assets/logo/mypaper.ico");
+    println!("cargo:rerun-if-changed=glaze-studio.rc");
+    println!("cargo:rerun-if-changed=../../assets/logo/glaze.ico");
     println!("cargo:rerun-if-env-changed=RC");
     let resource =
         std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("studio.res");
@@ -33,12 +33,12 @@ fn main() {
         .current_dir(&root)
         .arg("/nologo")
         .arg(format!("/fo{}", resource.display()))
-        .arg("mypaper-studio.rc")
+        .arg("glaze-studio.rc")
         .status()
         .expect("compile Studio icon resource");
     assert!(status.success(), "Studio resource compilation failed");
     println!(
-        "cargo:rustc-link-arg-bin=mypaper-studio={}",
+        "cargo:rustc-link-arg-bin=glaze-studio={}",
         resource.display()
     );
 }

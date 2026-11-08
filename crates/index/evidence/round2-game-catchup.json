@@ -1,5 +1,5 @@
 ﻿{
-    "file":  "C:\\Users\\you\\mypaper-index-fixtures\\game-e6432ac7ea7846c8949730657cbd9396\\mypaper-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
+    "file":  "C:\\Users\\you\\glaze-index-fixtures\\game-e6432ac7ea7846c8949730657cbd9396\\glaze-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
     "created_at":  "2026-11-06T08:56:02.7041518+03:00",
     "resumed_at":  "2026-11-06T08:56:42.0483527+03:00",
     "catchup_ms":  207768.0003,
@@ -15,8 +15,8 @@
     "search":  {
                    "hits":  [
                                 {
-                                    "name":  "mypaper-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
-                                    "path":  "C:\\Users\\you\\mypaper-index-fixtures\\game-e6432ac7ea7846c8949730657cbd9396\\mypaper-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
+                                    "name":  "glaze-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
+                                    "path":  "C:\\Users\\you\\glaze-index-fixtures\\game-e6432ac7ea7846c8949730657cbd9396\\glaze-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
                                     "directory":  false,
                                     "size":  32768,
                                     "files":  1,
@@ -33,7 +33,7 @@
                   "hits":  [
                                {
                                    "name":  "game-e6432ac7ea7846c8949730657cbd9396",
-                                   "path":  "C:\\Users\\you\\mypaper-index-fixtures\\game-e6432ac7ea7846c8949730657cbd9396",
+                                   "path":  "C:\\Users\\you\\glaze-index-fixtures\\game-e6432ac7ea7846c8949730657cbd9396",
                                    "directory":  true,
                                    "size":  32768,
                                    "files":  1,
@@ -42,8 +42,8 @@
                                    "excluded":  false
                                },
                                {
-                                   "name":  "mypaper-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
-                                   "path":  "C:\\Users\\you\\mypaper-index-fixtures\\game-e6432ac7ea7846c8949730657cbd9396\\mypaper-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
+                                   "name":  "glaze-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
+                                   "path":  "C:\\Users\\you\\glaze-index-fixtures\\game-e6432ac7ea7846c8949730657cbd9396\\glaze-game-resume-dc45dc7a69f34ab48e15ae95ae53deb5.txt",
                                    "directory":  false,
                                    "size":  32768,
                                    "files":  1,

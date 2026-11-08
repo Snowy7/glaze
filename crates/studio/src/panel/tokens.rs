@@ -1,7 +1,7 @@
 //! One monochrome One UI palette for the standalone window and docked panel.
 
-use mypaper_ui::Rgba;
-use mypaper_ui::controls::Palette;
+use glaze_ui::Rgba;
+use glaze_ui::controls::Palette;
 
 /// Studio's radius scale, independent of the desktop style being edited.
 pub mod radius {
@@ -17,7 +17,7 @@ pub fn hex(v: u32) -> Rgba {
 }
 
 #[cfg(test)]
-pub use mypaper_ui::controls::segment_fill as thumb;
+pub use glaze_ui::controls::segment_fill as thumb;
 
 pub fn palette(dark: bool) -> Palette {
     let mut p = if dark {

@@ -1,14 +1,14 @@
 //! Tailscale SDK trees rendered by the actual host, including disconnected and stale states.
 use crate::widgets::{model::{Model, Widget}, time::Stamp, views};
-use mypaper_ui::{DisplayList, Op, Rect, Rgba, TextStyle, Tokens, Ui, golden, render};
-use mypaper_widgets::{layout::Placed, storage::Storage};
+use glaze_ui::{DisplayList, Op, Rect, Rgba, TextStyle, Tokens, Ui, golden, render};
+use glaze_widgets::{layout::Placed, storage::Storage};
 use serde_json::{Map, Value, json};
 use std::{path::PathBuf, sync::Arc, time::Instant};
 const NOW: i64 = 1_793_875_200_000;
 
 #[test]
 fn tailscale_plugin_faces_render_on_the_kit() {
-    let live = std::env::var_os("MYPAPER_TAILSCALE_LIVE_FACES").map(PathBuf::from);
+    let live = std::env::var_os("GLAZE_TAILSCALE_LIVE_FACES").map(PathBuf::from);
     let faces: Value = match &live {
         Some(path) => serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap(),
         None => serde_json::from_str(include_str!("../../../../../plugins/tailscale/golden/faces.json")).unwrap(),
@@ -25,7 +25,7 @@ fn tailscale_plugin_faces_render_on_the_kit() {
         sheet.ops.push(Op::Text { rect: Rect::new(24.0, y, 1000.0, 24.0), text: format!("tailscale / {name} — compact · regular · large").into(), style: TextStyle::new("Segoe UI Variable", 14.0), color: Rgba::rgb8([220, 228, 240], 1.0) });
         for &(x, size, class) in &sizes {
             let placed = Placed { instance: "tailscale-plugin".into(), widget: "clock".into(), cell: [0, 0], size: [8, 5], settings: Map::new(), appearance: Map::new(), own: Map::new() };
-            let mut m = Model::new(placed, &mut Storage::new(std::env::temp_dir().join("mypaper-tailscale-fixture")), Stamp::at(NOW)).unwrap();
+            let mut m = Model::new(placed, &mut Storage::new(std::env::temp_dir().join("glaze-tailscale-fixture")), Stamp::at(NOW)).unwrap();
             m.kind = Widget::Plugin;
             m.visible = true;
             let face = if live.is_some() { &faces[name] } else { &faces[name][class] };

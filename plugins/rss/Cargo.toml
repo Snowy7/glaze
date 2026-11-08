@@ -1,6 +1,6 @@
 [package]
-name = "mypaper-plugin-rss"
-description = "RSS/Atom feed plugin for mypaper widgets: merged, cached headlines (JSON-RPC over stdio)."
+name = "glaze-plugin-rss"
+description = "RSS/Atom feed plugin for Glaze widgets: merged, cached headlines (JSON-RPC over stdio)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

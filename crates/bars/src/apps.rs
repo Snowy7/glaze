@@ -527,10 +527,10 @@ mod tests {
     fn an_exe_renamed_aside_reads_as_the_original() {
         let dir = r"d:\wallpaper\target\release";
         assert_eq!(
-            renamed_aside(&format!(r"{dir}\mypaper-studio.exe.old-20261105183342")),
-            Some(format!(r"{dir}\mypaper-studio.exe"))
+            renamed_aside(&format!(r"{dir}\glaze-studio.exe.old-20261105183342")),
+            Some(format!(r"{dir}\glaze-studio.exe"))
         );
-        assert_eq!(renamed_aside(&format!(r"{dir}\mypaper-studio.exe")), None);
+        assert_eq!(renamed_aside(&format!(r"{dir}\glaze-studio.exe")), None);
     }
 
     fn app_window() -> Facts {

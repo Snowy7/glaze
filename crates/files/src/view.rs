@@ -6,7 +6,7 @@ use crate::{
     shell,
 };
 use anyhow::Result;
-use mypaper_ui::{icons::Icon, *};
+use glaze_ui::{icons::Icon, *};
 use std::time::Instant;
 
 pub fn column_widths(app: &App, width: f32) -> Vec<f32> {

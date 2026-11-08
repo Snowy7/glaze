@@ -698,11 +698,11 @@ fn check_effect_id(id: &str) -> Result<()> {
     Ok(())
 }
 
-/// The shared effect folders: `%APPDATA%\mypaper\effects` (if it exists), then the bundled
+/// The shared effect folders: `%APPDATA%\glaze\effects` (if it exists), then the bundled
 /// `effects/` beside the executable or a parent. A theme's own `effects/` comes after them in
 /// [`locate_effect`].
 pub fn effect_roots() -> Vec<PathBuf> {
-    let user = mypaper_config::dir()
+    let user = glaze_config::dir()
         .ok()
         .map(|dir| dir.join("effects"))
         .filter(|dir| dir.is_dir());
@@ -822,23 +822,23 @@ pub fn glsl_fragment(main_image: &str) -> String {
 }
 
 const GLSL_HEADER: &str = "#version 450
-layout(set = 0, binding = 0, std140) uniform MypaperShadertoy {
+layout(set = 0, binding = 0, std140) uniform GlazeShadertoy {
     vec3 iResolution; float iTime; vec4 iMouse; float iTimeDelta; int iFrame; float iFrameRate;
     vec3 iChannelResolution[4];
 };
-layout(set = 0, binding = 1) uniform texture2D mypaper_noise;
-layout(set = 0, binding = 2) uniform sampler mypaper_repeat;
-#define iChannel0 sampler2D(mypaper_noise, mypaper_repeat)
-#define iChannel1 sampler2D(mypaper_noise, mypaper_repeat)
-#define iChannel2 sampler2D(mypaper_noise, mypaper_repeat)
-#define iChannel3 sampler2D(mypaper_noise, mypaper_repeat)
-layout(location = 0) out vec4 mypaper_color;
+layout(set = 0, binding = 1) uniform texture2D glaze_noise;
+layout(set = 0, binding = 2) uniform sampler glaze_repeat;
+#define iChannel0 sampler2D(glaze_noise, glaze_repeat)
+#define iChannel1 sampler2D(glaze_noise, glaze_repeat)
+#define iChannel2 sampler2D(glaze_noise, glaze_repeat)
+#define iChannel3 sampler2D(glaze_noise, glaze_repeat)
+layout(location = 0) out vec4 glaze_color;
 ";
 
 const GLSL_FOOTER: &str = "void main() {
     vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
     mainImage(color, vec2(gl_FragCoord.x, iResolution.y - gl_FragCoord.y));
-    mypaper_color = vec4(color.rgb, 1.0);
+    glaze_color = vec4(color.rgb, 1.0);
 }
 ";
 
@@ -1093,7 +1093,7 @@ mod tests {
 
     #[test]
     fn effects_resolve_theme_then_user_then_bundled() {
-        let root = std::env::temp_dir().join(format!("mypaper-effects-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("glaze-effects-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let write = |dir: &Path, name: &str| {
             std::fs::create_dir_all(dir).unwrap();

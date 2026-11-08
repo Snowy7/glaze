@@ -27,7 +27,7 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
 
 fn main() -> Result<()> {
     ensure!(
-        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock")
+        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock")
             .is_dir(),
         "take the desktop lock first"
     );
@@ -54,7 +54,7 @@ fn main() -> Result<()> {
         let class = WNDCLASSW {
             lpfnWndProc: Some(proc),
             hInstance: instance.into(),
-            lpszClassName: w!("mypaper.index.game.fixture"),
+            lpszClassName: w!("glaze.index.game.fixture"),
             hbrBackground: HBRUSH(GetStockObject(BLACK_BRUSH).0),
             ..Default::default()
         };
@@ -63,7 +63,7 @@ fn main() -> Result<()> {
         let window = CreateWindowExW(
             WS_EX_TOPMOST,
             class.lpszClassName,
-            w!("mypaper index fullscreen measurement"),
+            w!("Glaze index fullscreen measurement"),
             WS_POPUP,
             r.left,
             r.top,

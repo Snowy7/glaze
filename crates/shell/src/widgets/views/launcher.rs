@@ -2,8 +2,8 @@
 //! magnified), a **grid** of icons with names, or a **list** of rows. Short widgets keep only
 //! the search field.
 use super::{Ctx, ITEM, field};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Accessory, Align, Lead, ListRow, Op, Rect, Role, TextRole};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Accessory, Align, Lead, ListRow, Op, Rect, Role, TextRole};
 use std::sync::Arc;
 
 pub fn draw(c: &mut Ctx, r: Rect) {
@@ -67,7 +67,7 @@ fn app_icon(c: &mut Ctx, rect: Rect, i: usize) {
     }
 }
 
-fn contain(c: &mut Ctx, rect: Rect, image: &Arc<mypaper_ui::Image>) {
+fn contain(c: &mut Ctx, rect: Rect, image: &Arc<glaze_ui::Image>) {
     let ratio = (rect.width() / image.width as f32).min(rect.height() / image.height as f32);
     let (w, h) = (image.width as f32 * ratio, image.height as f32 * ratio);
     c.f.push(Op::Image {
@@ -140,7 +140,7 @@ fn grid(c: &mut Ctx, r: Rect, n: usize) {
             let cell = Rect::new(r.left + (i % cols) as f32 * w, top + (i / cols) as f32 * row_h, w, row_h);
             let id = ITEM + i as u32;
             let name = label(c, i);
-            c.control(id, cell.inset(mypaper_ui::Insets::all(c.px(2.0))), radius, Role::Button, &name, None);
+            c.control(id, cell.inset(glaze_ui::Insets::all(c.px(2.0))), radius, Role::Button, &name, None);
             let at = Rect::new((cell.center().x - icon / 2.0).round(), cell.top + c.px(8.0) - bounce(c, i), icon, icon);
             app_icon(c, at, i);
             if labels {

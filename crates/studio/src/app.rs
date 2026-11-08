@@ -6,8 +6,8 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use mypaper_ui::controls::{Behavior, Input, Key, ScrollArea, Target, key};
-use mypaper_ui::{Button, Event, Point, Rect};
+use glaze_ui::controls::{Behavior, Input, Key, ScrollArea, Target, key};
+use glaze_ui::{Button, Event, Point, Rect};
 use serde_json::{Value, json};
 
 use crate::actions::{Action, Bar, Choices, Edit, FieldId, Page, Panel, Section, Slot, Source};
@@ -120,12 +120,12 @@ pub struct Toast {
 /// The one live text field (windowless RichEdit) and what it edits.
 pub struct Field {
     pub id: FieldId,
-    pub field: mypaper_ui::TextField,
+    pub field: glaze_ui::TextField,
 }
 
 /// Messages from Studio's worker threads and the file watcher.
 pub enum Msg {
-    PluginPrepared(Result<mypaper_widgets::plugin_manager::Package, String>),
+    PluginPrepared(Result<glaze_widgets::plugin_manager::Package, String>),
     PluginInstalled(Result<String, String>),
     Files(Vec<crate::watch::Change>),
     Image(crate::images::Loaded),
@@ -147,8 +147,8 @@ pub struct App {
     pub nav: Nav,
     pub library: Library,
     pub system: System,
-    pub registry: mypaper_widgets::registry::Registry,
-    pub monitors: Vec<mypaper_desktop::Monitor>,
+    pub registry: glaze_widgets::registry::Registry,
+    pub monitors: Vec<glaze_desktop::Monitor>,
     pub input: Input,
     pub frame: Frame,
     pub drag: Option<Drag>,
@@ -185,7 +185,7 @@ pub struct App {
 
 impl App {
     /// Studio as it opens: the files, the wallpapers, the machine.
-    pub fn new(text: &mypaper_ui::Text, scale: f32, size: (u32, u32)) -> Self {
+    pub fn new(text: &glaze_ui::Text, scale: f32, size: (u32, u32)) -> Self {
         let docs = Docs::load();
         let docked = crate::panel::enabled();
         let appearance = Appearance::parse(
@@ -196,7 +196,7 @@ impl App {
         let theme = Theme::resolve(appearance, text);
         let library = Library::scan(theme_name(&docs).as_deref());
         let mut app = Self::with(docs, theme, library, scale, size, false);
-        app.monitors = mypaper_desktop::monitor_infos();
+        app.monitors = glaze_desktop::monitor_infos();
         app.system = System::probe();
         app.panel = Some(crate::panel::State::default());
         app.panel.as_mut().unwrap().windowed = !docked;
@@ -215,15 +215,15 @@ impl App {
     pub fn fixture(docs: Docs, theme: Theme, library: Library, size: (u32, u32)) -> Self {
         let mut app = Self::with(docs, theme, library, 1.0, size, true);
         app.monitors = vec![
-            mypaper_desktop::Monitor {
+            glaze_desktop::Monitor {
                 device: "\\\\.\\DISPLAY1".into(),
-                rect: mypaper_desktop::Rect {
+                rect: glaze_desktop::Rect {
                     x: 0,
                     y: 0,
                     width: 2560,
                     height: 1440,
                 },
-                work: mypaper_desktop::Rect {
+                work: glaze_desktop::Rect {
                     x: 0,
                     y: 0,
                     width: 2560,
@@ -232,15 +232,15 @@ impl App {
                 dpi: 96,
                 primary: true,
             },
-            mypaper_desktop::Monitor {
+            glaze_desktop::Monitor {
                 device: "\\\\.\\DISPLAY2".into(),
-                rect: mypaper_desktop::Rect {
+                rect: glaze_desktop::Rect {
                     x: -2560,
                     y: 9,
                     width: 2560,
                     height: 1440,
                 },
-                work: mypaper_desktop::Rect {
+                work: glaze_desktop::Rect {
                     x: -2560,
                     y: 9,
                     width: 2560,
@@ -265,7 +265,7 @@ impl App {
             nav: Nav::default(),
             library,
             system: System::default(),
-            registry: mypaper_widgets::registry::builtins(),
+            registry: glaze_widgets::registry::builtins(),
             monitors: Vec::new(),
             input: Input::default(),
             frame: Frame::default(),
@@ -327,7 +327,7 @@ impl App {
     }
 
     /// The display the stages show.
-    pub fn display(&self) -> Option<&mypaper_desktop::Monitor> {
+    pub fn display(&self) -> Option<&glaze_desktop::Monitor> {
         self.monitors
             .get(self.nav.display)
             .or_else(|| self.monitors.iter().find(|m| m.primary))
@@ -408,7 +408,7 @@ impl App {
             }
             Event::SettingChanged => {
                 self.retheme();
-                self.monitors = mypaper_desktop::monitor_infos();
+                self.monitors = glaze_desktop::monitor_infos();
             }
             Event::Close => self.quit = true,
             _ => {}
@@ -940,10 +940,10 @@ impl App {
             return;
         };
         let initial = self.field_initial(&id);
-        let size = self.theme.ty.style(mypaper_ui::controls::Font::Body, self.scale).size
+        let size = self.theme.ty.style(glaze_ui::controls::Font::Body, self.scale).size
             * if self.panel.is_some() { 13.0 / 14.0 } else { 1.0 };
         let color = self.theme.palette.ink1;
-        match mypaper_ui::TextField::new(hwnd, Rect::new(-1000.0, -1000.0, 10.0, 10.0), matches!(id, FieldId::ShaderCode), size, color) {
+        match glaze_ui::TextField::new(hwnd, Rect::new(-1000.0, -1000.0, 10.0, 10.0), matches!(id, FieldId::ShaderCode), size, color) {
             Ok(field) => {
                 let _ = field.set_text(&initial);
                 field.focus();
@@ -1061,7 +1061,7 @@ impl App {
             FieldId::Hex(path) => {
                 // "#ff8800" or "ff8800".
                 let hex = format!("#{}", text.trim().trim_start_matches('#'));
-                if let Some(color) = mypaper_config::Color::parse(&hex) {
+                if let Some(color) = glaze_config::Color::parse(&hex) {
                     self.apply("Colour", vec![Op {
                         doc: DocId::Config,
                         path: path.to_string(),
@@ -1086,8 +1086,8 @@ impl App {
         }
         let thread = self.thread;
         std::thread::spawn(move || {
-            use mypaper_plugin_weather::service::Source;
-            let found = mypaper_plugin_weather::client::OpenMeteo::new()
+            use glaze_plugin_weather::service::Source;
+            let found = glaze_plugin_weather::client::OpenMeteo::new()
                 .search(&query)
                 .map_err(|e| format!("{e:?}"))
                 .and_then(|list| serde_json::to_value(list).map_err(|e| e.to_string()))
@@ -1406,7 +1406,7 @@ impl App {
             Msg::PluginInstalled(result) => {
                 self.plugins.busy = None;
                 match result {
-                    Ok(id) => { let _ = mypaper_widgets::plugin_manager::send(&mypaper_widgets::plugin_manager::Request::Enable(id.clone())); self.plugins.refresh(); self.plugins.selected = Some(id); self.toast("Plugin installed", None); }
+                    Ok(id) => { let _ = glaze_widgets::plugin_manager::send(&glaze_widgets::plugin_manager::Request::Enable(id.clone())); self.plugins.refresh(); self.plugins.selected = Some(id); self.toast("Plugin installed", None); }
                     Err(error) => self.alert(error),
                 }
                 self.dirty = true;
@@ -1494,12 +1494,12 @@ impl App {
                 let paused = self.get(DocId::Config, "/paused").and_then(Value::as_bool).unwrap_or(false);
                 self.set(&Edit::new(DocId::Config, "/paused", if paused { "Resume" } else { "Pause" }), json!(!paused));
             }
-            Action::StartMypaper => match crate::system::start() {
-                Ok(()) => self.toast("Starting mypaper", None),
+            Action::StartGlaze => match crate::system::start() {
+                Ok(()) => self.toast("Starting Glaze", None),
                 Err(e) => self.alert(format!("{e:#}")),
             },
-            Action::StopMypaper => match crate::system::stop() {
-                Ok(()) => self.toast("mypaper is stopped. Windows is back as it was.", None),
+            Action::StopGlaze => match crate::system::stop() {
+                Ok(()) => self.toast("Glaze is stopped. Windows is back as it was.", None),
                 Err(e) => self.alert(format!("{e:#}")),
             },
             Action::Restart(part) => match crate::system::restart(part) {
@@ -1546,7 +1546,7 @@ impl App {
                     self.run(action);
                 }
             }
-            Action::Open(target) if target == "mypaper-custom:new" => crate::editing::widgets::new_custom(self),
+            Action::Open(target) if target == "glaze-custom:new" => crate::editing::widgets::new_custom(self),
             Action::Open(target) => crate::system::open(&target),
             Action::Reveal(path) => crate::system::reveal(&path),
             other => crate::editing::run(self, other),

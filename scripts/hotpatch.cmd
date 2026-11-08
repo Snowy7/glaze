@@ -19,7 +19,7 @@ set "CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm"
 rem A short target dir: with a long repo path (a worktree) the engine's rustc command line
 rem passes 32 KB, cargo hands rustc a response file, and dx cannot capture its arguments
 rem ("Missing rustc capture").
-if not defined CARGO_TARGET_DIR set "CARGO_TARGET_DIR=%SystemDrive%\mypaper-hotpatch"
+if not defined CARGO_TARGET_DIR set "CARGO_TARGET_DIR=%SystemDrive%\glaze-hotpatch"
 set "ARGS=%*"
 if "%ARGS%"=="" set "ARGS=--windowed themes/aurora"
 cd /d "%~dp0.."
@@ -29,4 +29,4 @@ del /q "%CARGO_TARGET_DIR%\x86_64-pc-windows-msvc\desktop-dev\libdeps-*.a" 2>nul
 copy /b "crates\wallpaper\src\main.rs" +,, >nul
 rem /INCREMENTAL:NO: with incremental linking a function's address is a jump thunk, which
 rem is not what dx's jump table maps, so Engine::tick would never be redirected.
-dx serve --hotpatch -p mypaper-wallpaper --features hotpatch "--rustc-args=-Clink-arg=/INCREMENTAL:NO" "--args=%ARGS%" %DX_FLAGS%
+dx serve --hotpatch -p glaze-wallpaper --features hotpatch "--rustc-args=-Clink-arg=/INCREMENTAL:NO" "--args=%ARGS%" %DX_FLAGS%

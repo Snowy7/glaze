@@ -1,5 +1,5 @@
 //! Wall-clock deadlines follow the least significant visible digit, including across suspension.
-use mypaper_ui::calendar::Date;
+use glaze_ui::calendar::Date;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use windows::Win32::Foundation::{FILETIME, SYSTEMTIME};
 use windows::Win32::System::SystemInformation::GetLocalTime;

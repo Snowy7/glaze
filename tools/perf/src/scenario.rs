@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use mypaper_desktop::{covered_monitors, monitor_infos};
+use glaze_desktop::{covered_monitors, monitor_infos};
 use serde_json::{Value, json};
 
 /// The shell bars in a scenario.
@@ -106,12 +106,12 @@ pub const ALL: &[Scenario] = &[
 impl Scenario {
     /// The executables this scenario runs (core starts whichever are next to it).
     pub fn exes(&self) -> Vec<&'static str> {
-        let mut exes = vec!["mypaper-core.exe", "mypaper-wallpaper.exe"];
+        let mut exes = vec!["glaze-core.exe", "glaze-wallpaper.exe"];
         if self.widgets {
-            exes.push("mypaper-widgets.exe");
+            exes.push("glaze-widgets.exe");
         }
         if self.bars != Bars::Off {
-            exes.push("mypaper-bars.exe");
+            exes.push("glaze-bars.exe");
         }
         exes
     }
@@ -136,20 +136,20 @@ pub struct Env {
 }
 
 impl Env {
-    /// The log every mypaper process of the run appends to.
+    /// The log every Glaze process of the run appends to.
     pub fn log(&self) -> PathBuf {
-        self.local.join("mypaper").join("mypaper.log")
+        self.local.join("glaze").join("glaze.log")
     }
 
     pub fn config(&self) -> PathBuf {
-        self.appdata.join("mypaper").join("config.json")
+        self.appdata.join("glaze").join("config.json")
     }
 
     /// Where a test run's bars would journal the native taskbar.
     pub fn taskbar_journal(&self) -> PathBuf {
         self.local
-            .join("mypaper")
-            .join(mypaper_bars::taskbar::JOURNAL)
+            .join("glaze")
+            .join(glaze_bars::taskbar::JOURNAL)
     }
 
     /// Creates a fresh environment for `scenario` under `root`: a theme copy that points at the
@@ -161,9 +161,9 @@ impl Env {
             appdata: root.join("appdata"),
             local: root.join("local"),
         };
-        let settings = env.appdata.join("mypaper");
+        let settings = env.appdata.join("glaze");
         std::fs::create_dir_all(&settings)?;
-        std::fs::create_dir_all(env.local.join("mypaper"))?;
+        std::fs::create_dir_all(env.local.join("glaze"))?;
 
         let theme_name = format!("perf-{}", scenario.name);
         let bundled = content.join("themes").join(scenario.theme);
@@ -260,7 +260,7 @@ fn starter_widgets() -> Value {
     })
 }
 
-/// Writes JSON atomically, as mypaper's own writers do, so watchers never see half a file.
+/// Writes JSON atomically, as Glaze's own writers do, so watchers never see half a file.
 fn write_json(path: &Path, value: &Value) -> Result<()> {
     let temp = path.with_extension("json.tmp");
     std::fs::write(&temp, serde_json::to_string_pretty(value)? + "\n")?;
@@ -281,7 +281,7 @@ mod tests {
 
     #[test]
     fn perf_themes_drop_styling_and_point_at_the_bundled_assets() {
-        let dir = std::env::temp_dir().join(format!("mypaper-perf-theme-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("glaze-perf-theme-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("theme.json"),

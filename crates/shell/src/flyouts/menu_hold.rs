@@ -177,7 +177,7 @@ fn class_is(window: HWND, name: &str) -> bool {
 }
 
 fn is_shell_tray_menu(window: HWND) -> bool {
-    if !class_is(window, "mypaper.ui") {
+    if !class_is(window, "glaze.ui") {
         return false;
     }
     let mut title = [0u16; 64];
@@ -186,7 +186,7 @@ fn is_shell_tray_menu(window: HWND) -> bool {
     title[..len]
         .iter()
         .copied()
-        .eq("mypaper commands".encode_utf16())
+        .eq("Glaze commands".encode_utf16())
 }
 
 unsafe extern "system" fn mouse(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
@@ -254,7 +254,7 @@ mod tests {
             let owner = CreateWindowExW(
                 WS_EX_TOOLWINDOW,
                 w!("STATIC"),
-                w!("mypaper menu test"),
+                w!("Glaze menu test"),
                 WS_OVERLAPPEDWINDOW,
                 -30000,
                 -30000,

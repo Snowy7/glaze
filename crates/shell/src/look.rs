@@ -4,15 +4,15 @@
 //! menu is a nearly opaque tint unless the engine draws glass), and `surface: none` still
 //! draws a panel.
 
-use mypaper_theme::{Appearance, LoadedTheme, TextTone};
-use mypaper_ui::{Colors, Material, Rgba, Text, TextStyle, Tokens, icons};
+use glaze_theme::{Appearance, LoadedTheme, TextTone};
+use glaze_ui::{Colors, Material, Rgba, Text, TextStyle, Tokens, icons};
 
 #[path = "look_settings.rs"]
 pub mod settings;
 
 /// The tokens for theme `theme_name` (a name or a folder), with the installed icon font.
 pub fn tokens(theme_name: &str, text: &Text) -> Tokens {
-    let appearance = mypaper_theme::locate(Some(theme_name))
+    let appearance = glaze_theme::locate(Some(theme_name))
         .and_then(LoadedTheme::load)
         .inspect_err(|e| log::debug!("desktop menu look: {e:#}"))
         .ok()
@@ -67,7 +67,7 @@ fn font_family(css: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mypaper_theme::{Color, Paint};
+    use glaze_theme::{Color, Paint};
 
     #[test]
     fn without_a_theme_look_the_defaults_apply() {

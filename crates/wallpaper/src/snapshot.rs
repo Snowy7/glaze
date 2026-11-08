@@ -1,15 +1,15 @@
 //! Static snapshot: a still of the theme as the *Windows* desktop wallpaper, so Windows shows the
-//! theme's look even before mypaper starts at login.
+//! theme's look even before Glaze starts at login.
 //!
 //! Once per theme load, right after the first presented frame, the engine calls
 //! [`Snapshot::capture`]. That draws the source once more per screen into an offscreen texture at
 //! the screen's size and copies it into a readback buffer: the only main-thread work, no waiting
 //! for the GPU. A worker thread (own COM apartment, below-normal priority) then waits for the
 //! copy, encodes a JPEG (quality 90) through WIC, writes it atomically and sets it as that
-//! monitor's wallpaper through [`mypaper_desktop::desktop_wallpaper`], which journals the
+//! monitor's wallpaper through [`glaze_desktop::desktop_wallpaper`], which journals the
 //! user's original so it can be put back.
 //!
-//! Files are named `<theme>-<screen>-<key>.jpg` under `%LOCALAPPDATA%\mypaper\snapshot`. The key
+//! Files are named `<theme>-<screen>-<key>.jpg` under `%LOCALAPPDATA%\glaze\snapshot`. The key
 //! hashes the theme folder, the name, size and modification time of every file in it, the screen
 //! index and its size, so any change gives a new name (Windows caches a transcoded copy per path)
 //! and an unchanged theme is skipped: no draw, no encode, and no `SetWallpaper` when the monitor
@@ -30,8 +30,8 @@ use std::thread;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
-use mypaper_desktop::Rect;
-use mypaper_desktop::desktop_wallpaper::{self, Apartment, SNAPSHOT_DIR, Wallpapers};
+use glaze_desktop::Rect;
+use glaze_desktop::desktop_wallpaper::{self, Apartment, SNAPSHOT_DIR, Wallpapers};
 use windows::Win32::Foundation::{GENERIC_WRITE, LPARAM, WPARAM};
 use windows::Win32::Graphics::Imaging::{
     CLSID_WICImagingFactory, GUID_ContainerFormatJpeg, GUID_WICPixelFormat24bppBGR,
@@ -72,7 +72,7 @@ pub struct Target {
 
 /// The engine's side of the feature: decides when to capture and hands the work to a thread.
 pub struct Snapshot {
-    /// `%LOCALAPPDATA%\mypaper`; `None` if it can't be found (the feature is off).
+    /// `%LOCALAPPDATA%\glaze`; `None` if it can't be found (the feature is off).
     base: Option<PathBuf>,
     enabled: bool,
     /// The current theme loaded (it isn't the "broken" screen).
@@ -91,7 +91,7 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
-    /// Off until [`set_enabled`](Self::set_enabled); files go under `%LOCALAPPDATA%\mypaper`.
+    /// Off until [`set_enabled`](Self::set_enabled); files go under `%LOCALAPPDATA%\glaze`.
     pub fn new() -> Self {
         let base = desktop_wallpaper::local_dir()
             .inspect_err(|e| log::warn!("no static snapshot: {e:#}"))
@@ -141,7 +141,7 @@ impl Snapshot {
 
     /// Turns the feature on or off. Returns whether it was just turned on, so the engine draws
     /// a frame to capture. Turning it off restores the user's wallpaper (also when it was never
-    /// on in this run, e.g. it was turned off while mypaper wasn't running).
+    /// on in this run, e.g. it was turned off while Glaze wasn't running).
     pub fn set_enabled(&mut self, enabled: bool) -> bool {
         let Some(base) = self.base.clone() else {
             return false;
@@ -683,7 +683,7 @@ fn walk(dir: &Path, depth: usize, seen: &mut usize, hash: &mut u64) {
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 
 /// FNV-1a, folded over `bytes` from `hash`. Stable across Rust versions, unlike `DefaultHasher`,
-/// so a file keeps its name from one mypaper build to the next.
+/// so a file keeps its name from one Glaze build to the next.
 fn fnv(mut hash: u64, bytes: &[u8]) -> u64 {
     for &byte in bytes {
         hash = (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
@@ -722,7 +722,7 @@ mod tests {
     /// A scratch folder, empty.
     fn temp_dir(name: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("mypaper-snapshot-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-snapshot-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -766,7 +766,7 @@ mod tests {
                 &gpu.queue,
                 (2, 2),
                 frame.size,
-                mypaper_theme::Fit::Stretch,
+                glaze_theme::Fit::Stretch,
                 1.0,
             );
             let mut pass = crate::sources::begin(
@@ -938,13 +938,13 @@ mod tests {
     /// (shader, image, slideshow, video, scene); video is drawn until its first frame is decoded.
     ///
     /// ```text
-    /// set MYPAPER_STILL=themes\examples\islands;out.jpg;12;2560x1440
-    /// cargo test -p mypaper-wallpaper --release still_of_a_theme -- --ignored --nocapture
+    /// set GLAZE_STILL=themes\examples\islands;out.jpg;12;2560x1440
+    /// cargo test -p glaze-wallpaper --release still_of_a_theme -- --ignored --nocapture
     /// ```
     #[test]
-    #[ignore = "dev tool: MYPAPER_STILL=<theme>;<out.jpg>[;<seconds>[;<W>x<H>]]"]
+    #[ignore = "dev tool: GLAZE_STILL=<theme>;<out.jpg>[;<seconds>[;<W>x<H>]]"]
     fn still_of_a_theme() {
-        let spec = std::env::var("MYPAPER_STILL").expect("set MYPAPER_STILL");
+        let spec = std::env::var("GLAZE_STILL").expect("set GLAZE_STILL");
         let parts: Vec<&str> = spec.split(';').collect();
         // Relative paths are from the repo root (tests run in the crate folder).
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -958,7 +958,7 @@ mod tests {
 
         let gpu = Gpu::headless().expect("a DX12 GPU");
         let _apartment = Apartment::enter().unwrap();
-        let theme = mypaper_theme::LoadedTheme::load(theme_dir).unwrap();
+        let theme = glaze_theme::LoadedTheme::load(theme_dir).unwrap();
         let mut source = crate::sources::load(&gpu, &theme, &[]).unwrap();
         let mut target = target(width, height);
         target.mouse = [width as f32 * 0.5, height as f32 * 0.5];
@@ -982,7 +982,7 @@ mod tests {
     /// Windows shows them, turns the feature off and checks that the originals are back. Prints
     /// the wallpapers before and after, and what the capture cost.
     ///
-    /// `cargo nextest run -p mypaper-wallpaper --run-ignored only real_wallpaper --no-capture`
+    /// `cargo nextest run -p glaze-wallpaper --run-ignored only real_wallpaper --no-capture`
     #[test]
     #[ignore = "changes the real Windows wallpaper for a moment"]
     fn real_wallpaper_round_trip() {
@@ -1025,7 +1025,7 @@ mod tests {
         }
 
         let Some(gpu) = Gpu::headless() else { return };
-        mypaper_desktop::init_logging();
+        glaze_desktop::init_logging();
         let _apartment = Apartment::enter().unwrap();
 
         let before = current();
@@ -1041,9 +1041,9 @@ mod tests {
 
         let base = temp_dir("real");
         let theme_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../themes/examples/aurora");
-        let theme = mypaper_theme::LoadedTheme::load(&theme_dir).unwrap();
+        let theme = glaze_theme::LoadedTheme::load(&theme_dir).unwrap();
         let mut source = crate::sources::load(&gpu, &theme, &[]).unwrap();
-        let screens = mypaper_desktop::monitors();
+        let screens = glaze_desktop::monitors();
         let targets: Vec<Target> = screens
             .iter()
             .map(|&rect| Target {

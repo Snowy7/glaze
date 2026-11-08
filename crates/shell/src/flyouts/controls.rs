@@ -3,7 +3,7 @@
 //! can switch are not represented. Reads run on the quick lane and never query slow display
 //! DDC/CI.
 use super::toggles;
-use mypaper_bars::flyouts::quick::{PowerMode, RadioInfo, RadioKind};
+use glaze_bars::flyouts::quick::{PowerMode, RadioInfo, RadioKind};
 use windows::Devices::Radios::{Radio, RadioAccessStatus, RadioKind as Kind, RadioState};
 use windows::Networking::Connectivity::NetworkInformation;
 use windows::Networking::NetworkOperators::{

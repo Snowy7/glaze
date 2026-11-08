@@ -7,9 +7,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use mypaper_plugin_sdk::{Draw, Paint, Tone};
-use mypaper_ui::kit::Frame;
-use mypaper_ui::{Image, Op, Point, Rect, Rgba};
+use glaze_plugin_sdk::{Draw, Paint, Tone};
+use glaze_ui::kit::Frame;
+use glaze_ui::{Image, Op, Point, Rect, Rgba};
 
 static IMAGES: Mutex<Option<HashMap<u32, Arc<Image>>>> = Mutex::new(None);
 
@@ -35,18 +35,18 @@ fn image(id: u32) -> Option<Arc<Image>> {
     IMAGES.lock().expect("canvas images").as_ref()?.get(&id).cloned()
 }
 
-/// Images from `ui.put-image`: the runtime's named mappings `Local\mypaper-image-<pid>-<id>`
+/// Images from `ui.put-image`: the runtime's named mappings `Local\glaze-image-<pid>-<id>`
 /// (`crates/plugins/src/images.rs`: a 16-byte `MPI1` header with width, height and stride as
 /// `u32` LE, then BGRA8 premultiplied rows), copied once into a kit image. Ids are unique in the
 /// helper process, so a copy never goes stale.
 mod shared {
-    use mypaper_ui::Image;
+    use glaze_ui::Image;
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS};
     use windows::Win32::System::Memory::{FILE_MAP_READ, MEMORY_BASIC_INFORMATION, MapViewOfFile, OpenFileMappingW, UnmapViewOfFile, VirtualQuery};
     use windows::core::HSTRING;
 
-    /// The plugin runtime this shell started (`mypaper-plugins.exe`, a child of this process).
+    /// The plugin runtime this shell started (`glaze-plugins.exe`, a child of this process).
     fn helper() -> Option<u32> {
         let me = std::process::id();
         // SAFETY: a process snapshot walked with a correctly sized entry, then closed.
@@ -58,7 +58,7 @@ mod shared {
             while more {
                 let len = entry.szExeFile.iter().position(|c| *c == 0).unwrap_or(entry.szExeFile.len());
                 let exe = String::from_utf16_lossy(&entry.szExeFile[..len]);
-                if entry.th32ParentProcessID == me && exe.eq_ignore_ascii_case("mypaper-plugins.exe") {
+                if entry.th32ParentProcessID == me && exe.eq_ignore_ascii_case("glaze-plugins.exe") {
                     found = Some(entry.th32ProcessID);
                     break;
                 }
@@ -70,7 +70,7 @@ mod shared {
     }
 
     pub fn open(id: u32) -> Option<Image> {
-        let name = HSTRING::from(format!(r"Local\mypaper-image-{}-{id}", helper()?));
+        let name = HSTRING::from(format!(r"Local\glaze-image-{}-{id}", helper()?));
         // SAFETY: a read-only view, bounds-checked against the region's size before any read,
         // unmapped and closed before returning.
         unsafe {
@@ -335,9 +335,9 @@ mod tests {
     #[test]
     fn a_canvas_face_draws_natively_and_damages_only_what_moved() {
         use crate::widgets::{model::{Model, Widget}, time::Stamp, views};
-        use mypaper_plugin_sdk::{Role, View};
-        use mypaper_ui::{Tokens, Ui, golden, render};
-        use mypaper_widgets::{layout::Placed, storage::Storage};
+        use glaze_plugin_sdk::{Role, View};
+        use glaze_ui::{Tokens, Ui, golden, render};
+        use glaze_widgets::{layout::Placed, storage::Storage};
         let face = |dot: f32| {
             let canvas = View::Canvas {
                 height: 44.0,
@@ -362,7 +362,7 @@ mod tests {
             appearance: Default::default(),
             own: Default::default(),
         };
-        let storage = &mut Storage::new(std::env::temp_dir().join("mypaper-canvas-fixture"));
+        let storage = &mut Storage::new(std::env::temp_dir().join("glaze-canvas-fixture"));
         let now = Stamp::at(1_793_875_200_000);
         let mut m = Model::new(placed, storage, now).unwrap();
         m.kind = Widget::Plugin;

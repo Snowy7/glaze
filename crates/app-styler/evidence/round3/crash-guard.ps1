@@ -3,12 +3,12 @@
 # incidents). The guard must stop styling Explorer and the *surviving* Explorer process (the
 # shell, 76024) must put its look back and detach. Only the separate processes this script starts
 # are ended. Holds the desktop lock per step.
-param([string]$Out = "C:\mypaper-targets\app-styler\round3\crash-guard.txt")
+param([string]$Out = "C:\glaze-targets\app-styler\round3\crash-guard.txt")
 $ErrorActionPreference = 'Stop'
-$dir = Join-Path $env:LOCALAPPDATA 'mypaper\app-styler'
+$dir = Join-Path $env:LOCALAPPDATA 'glaze\app-styler'
 $tapLog = Join-Path $dir 'styler.log'
-$appLog = Join-Path $env:LOCALAPPDATA 'mypaper\mypaper.log'
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$appLog = Join-Path $env:LOCALAPPDATA 'glaze\glaze.log'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 function Note([string]$m) { $l = '{0} {1}' -f (Get-Date -Format 'HH:mm:ss.fff'), $m; Add-Content -LiteralPath $Out -Value $l; Write-Host $l }
 function Take { for ($i = 0; -not (New-Item -ItemType Directory $lock -ErrorAction SilentlyContinue); $i++) { if ($i -gt 240) { throw 'desktop lock busy' }; Start-Sleep -Milliseconds 500 } }
 function Drop { if (Test-Path -LiteralPath $lock) { Remove-Item -LiteralPath $lock -Recurse -Force } }
@@ -45,6 +45,6 @@ foreach ($round in 1, 2) {
 Start-Sleep -Seconds 3
 Note "marker exists: $(Test-Path (Join-Path $dir 'explorer.off')); explorer processes now: $((Get-Process explorer | ForEach-Object Id) -join ', ')"
 Note '--- helper log'
-Get-Content -LiteralPath $appLog | Select-Object -Skip $appMark | Where-Object { $_ -match 'mypaper_styler' } | ForEach-Object { Note "  $_" }
+Get-Content -LiteralPath $appLog | Select-Object -Skip $appMark | Where-Object { $_ -match 'glaze_styler' } | ForEach-Object { Note "  $_" }
 Note '--- TAP log (survivors)'
 Get-Content -LiteralPath $tapLog | Select-Object -Skip $tapMark | Where-Object { $_ -match ($survivors -join '|') -and $_ -match 'stopped|restoring|put back|detached|forgot|leaving' } | ForEach-Object { Note "  $_" }

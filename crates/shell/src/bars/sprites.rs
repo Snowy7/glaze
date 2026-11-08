@@ -3,7 +3,7 @@
 //! each frame. The layered window keeps only the invisible hit fills, laid out so a magnification
 //! frame damages little of it (the plate in fixed tiles; hit under magnified icons only).
 use anyhow::Result;
-use mypaper_ui::{
+use glaze_ui::{
     DisplayList, Image, Op, Rect, Rgba, Ui,
     compose::{Compositor, Sprite},
 };
@@ -210,7 +210,7 @@ impl Sprites {
             ops: vec![moved],
             ..Default::default()
         };
-        let image = mypaper_ui::render(ui, &list, w as u32, h as u32)?;
+        let image = glaze_ui::render(ui, &list, w as u32, h as u32)?;
         let sprite = self.compositor.sprite(&image)?;
         self.cache.push((Key::Op(key), sprite, true));
         Ok((self.cache.len() - 1, at))

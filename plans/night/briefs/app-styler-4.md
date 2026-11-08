@@ -32,6 +32,6 @@ Styling Explorer must not grow its memory beyond the flag-off control. Investiga
    down exactly what holds the memory and what would fix it.
 
 Same safety rules as rounds 2-3. Test in separate Explorer processes first. Deploy only from
-`C:\mypaper-targets\main`. **No deploy, core restart or lock use 09:12-09:32 local** (index window).
-`CARGO_TARGET_DIR=C:\mypaper-targets\app-styler`. Stop when clean, or after 2.5 hours.
+`C:\glaze-targets\main`. **No deploy, core restart or lock use 09:12-09:32 local** (index window).
+`CARGO_TARGET_DIR=C:\glaze-targets\app-styler`. Stop when clean, or after 2.5 hours.
 Report: the cause, the fix, the burst table vs control, the soak, the final flag state, commits.

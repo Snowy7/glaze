@@ -1,6 +1,6 @@
 use crate::panel::tokens::radius;
-use mypaper_ui::controls::{Align, Behavior, key};
-use mypaper_ui::{Rect, Role};
+use glaze_ui::controls::{Align, Behavior, key};
+use glaze_ui::{Rect, Role};
 use serde_json::{Value, json};
 
 use super::controls::{
@@ -144,7 +144,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
         if alert {
             b.icon(
                 Rect::new(x, b.px(10.0), b.px(16.0), b.px(28.0)),
-                mypaper_ui::icons::Icon::Warning,
+                glaze_ui::icons::Icon::Warning,
                 14.0,
                 b.p.ink1,
             );
@@ -290,7 +290,7 @@ pub fn header(app: &App, b: &mut B, r: Rect, page: Page) {
     let caption = if editing { "" } else { "Off" };
     if !editing {
         b.announce(
-            "mypaper is off. Changes apply when it starts.",
+            "Glaze is off. Changes apply when it starts.",
             app.docs.version,
         );
     }
@@ -373,12 +373,12 @@ fn metrics(app: &App) -> String {
         .get(DocId::Config, "/engine/fps")
         .and_then(Value::as_u64)
         .map_or("Wallpaper's fps".into(), |n| format!("{n} fps cap"));
-    format!("{gpu} · {fps} · {cpu:.1}% CPU · mypaper uses {memory:.0} MB")
+    format!("{gpu} · {fps} · {cpu:.1}% CPU · Glaze uses {memory:.0} MB")
 }
 
 fn playback_status(app: &App) -> String {
     if !app.system.running() {
-        return "mypaper is off".into();
+        return "Glaze is off".into();
     }
     if !app.system.parts[1].running {
         return "Wallpaper stopped".into();
@@ -393,9 +393,9 @@ fn playback_status(app: &App) -> String {
     let Some(wallpaper) = app.library.active().map(|i| &app.library.items[i]) else {
         return "No wallpaper selected".into();
     };
-    let loaded: Option<mypaper_theme::Theme> =
+    let loaded: Option<glaze_theme::Theme> =
         serde_json::from_value(super::saving::theme_value(app, wallpaper).as_ref().clone()).ok();
-    let engine: mypaper_config::EngineConfig = app
+    let engine: glaze_config::EngineConfig = app
         .get(DocId::Config, "/engine")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
@@ -405,9 +405,9 @@ fn playback_status(app: &App) -> String {
     );
     let cap = resolved.fps;
     let source = loaded.as_ref().and_then(|theme| match &theme.wallpaper {
-        mypaper_theme::Wallpaper::Shader(source) => Some(source.fps),
-        mypaper_theme::Wallpaper::Video(source) => Some(source.fps),
-        mypaper_theme::Wallpaper::Scene(source) => Some(source.fps),
+        glaze_theme::Wallpaper::Shader(source) => Some(source.fps),
+        glaze_theme::Wallpaper::Video(source) => Some(source.fps),
+        glaze_theme::Wallpaper::Scene(source) => Some(source.fps),
         _ => None,
     });
     let rate: String = match (source, cap, wallpaper.kind) {
@@ -419,19 +419,19 @@ fn playback_status(app: &App) -> String {
         _ => "At the wallpaper's frame rate".into(),
     };
     let gpu = match resolved.gpu {
-        mypaper_config::GpuPreference::Integrated => app
+        glaze_config::GpuPreference::Integrated => app
             .system
             .gpus
             .as_ref()
             .and_then(|gpus| gpus.iter().find(|(_, integrated)| *integrated))
             .map(|(name, _)| name.as_str()),
-        mypaper_config::GpuPreference::HighPerformance => app
+        glaze_config::GpuPreference::HighPerformance => app
             .system
             .gpus
             .as_ref()
             .and_then(|gpus| gpus.iter().find(|(_, integrated)| !*integrated))
             .map(|(name, _)| name.as_str()),
-        mypaper_config::GpuPreference::Auto => app.system.display_gpu.as_deref(),
+        glaze_config::GpuPreference::Auto => app.system.display_gpu.as_deref(),
     }
     .unwrap_or("Windows' choice");
     format!("{rate} · {gpu}")
@@ -469,7 +469,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let (label, action, icon) = if !app.system.running() {
-        ("Start mypaper", Action::StartMypaper, glyph::PLAY)
+        ("Start Glaze", Action::StartGlaze, glyph::PLAY)
     } else if !app.system.parts[1].running {
         ("Restart", Action::Restart("engine"), glyph::REDO)
     } else if paused {
@@ -543,7 +543,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
         let recent = crate::editing::home::recent(app);
         if !recent.is_empty() {
             // The thumbnails belong to the Wallpaper row, above its separator.
-            if matches!(b.list.ops.last(), Some(mypaper_ui::Op::Line { .. })) {
+            if matches!(b.list.ops.last(), Some(glaze_ui::Op::Line { .. })) {
                 b.list.ops.pop();
             }
             let gap = b.px(8.0);
@@ -636,7 +636,7 @@ fn root(app: &App, b: &mut B, c: &mut Col) {
             c,
             Some(glyph::NOTES),
             "Desktop menu",
-            if own_menu { "mypaper's" } else { "Windows'" },
+            if own_menu { "Glaze's" } else { "Windows'" },
             "",
             None,
             open(Page::DesktopMenu),
@@ -773,7 +773,7 @@ fn bars(app: &App, b: &mut B, c: &mut Col) {
 }
 
 fn settings(_app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "Settings", "mypaper and Studio");
+    title(b, c, "Settings", "Glaze and Studio");
     group(b, c, "", |b, c| {
         row(
             b,
@@ -831,7 +831,7 @@ fn performance(app: &App, b: &mut B, c: &mut Col) {
         &if app.system.running() {
             format!("Now: {}", metrics(app))
         } else {
-            "Now: mypaper is off".into()
+            "Now: Glaze is off".into()
         },
     );
     let current = app
@@ -940,7 +940,7 @@ pub fn toast(app: &App, b: &mut B, window: Rect) {
 mod tests {
     use super::*;
 
-    fn fixture(ui: &mypaper_ui::Ui) -> App {
+    fn fixture(ui: &glaze_ui::Ui) -> App {
         let mut app = crate::goldens::app(true, ui);
         app.panel = Some(super::super::State::default());
         app.size = (480, 760);
@@ -949,9 +949,9 @@ mod tests {
 
     #[test]
     fn playback_states_offer_the_action_they_can_perform_without_stale_fps() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         for (running, engine, paused, status, action) in [
-            (false, false, true, "mypaper is off", Action::StartMypaper),
+            (false, false, true, "Glaze is off", Action::StartGlaze),
             (
                 true,
                 false,
@@ -977,7 +977,7 @@ mod tests {
             );
             assert!(
                 !built.list.ops.iter().any(
-                    |op| matches!(op, mypaper_ui::Op::Text { text, .. } if text.contains("fps"))
+                    |op| matches!(op, glaze_ui::Op::Text { text, .. } if text.contains("fps"))
                 )
             );
         }
@@ -985,7 +985,7 @@ mod tests {
 
     #[test]
     fn creation_exits_live_in_the_footer_and_history_keeps_done() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(&ui);
         for page in [
             Page::AddWidget,
@@ -1053,7 +1053,7 @@ mod tests {
 
     #[test]
     fn unreadable_files_have_readable_status_and_inert_editors_while_newer_stays_newer() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         for (source, label) in [
             ("{broken", "Read only"),
             ("{\"future_setting\":true}", "Newer"),
@@ -1062,7 +1062,7 @@ mod tests {
             app.docs = crate::docs::Docs::fixture([source, "{}", "{}", "{}"]);
             app.panel.as_mut().unwrap().page = Page::Look;
             let built = super::super::build(&app, &mut ui.text);
-            assert!(built.list.ops.iter().any(|op| matches!(op, mypaper_ui::Op::Text { text, style, color, .. } if text.as_ref() == label && (label == "Newer" || style.size >= 12.0 && *color == super::super::palette_for(&app).ink1))));
+            assert!(built.list.ops.iter().any(|op| matches!(op, glaze_ui::Op::Text { text, style, color, .. } if text.as_ref() == label && (label == "Newer" || style.size >= 12.0 && *color == super::super::palette_for(&app).ink1))));
             assert!(
                 !built
                     .targets
@@ -1076,7 +1076,7 @@ mod tests {
     #[test]
     fn widget_switcher_reports_only_the_selected_display_and_positions_keep_grid_details_accessible()
      {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(&ui);
         app.panel.as_mut().unwrap().page = Page::Widgets;
         let first = super::super::build(&app, &mut ui.text);
@@ -1090,7 +1090,7 @@ mod tests {
         assert!(rows.iter().all(|hit| hit.label.contains("row ")));
         assert!(
             !first.list.ops.iter().any(
-                |op| matches!(op, mypaper_ui::Op::Text { text, .. } if text.contains("column "))
+                |op| matches!(op, glaze_ui::Op::Text { text, .. } if text.contains("column "))
             )
         );
         let version = app.docs.version;
@@ -1108,7 +1108,7 @@ mod tests {
 
     #[test]
     fn home_uses_the_windows_pages_preset_match_including_custom() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(&ui);
         let edit = Edit::new(DocId::Config, "/look/windows", "Windows look");
         for (value, summary) in [
@@ -1123,7 +1123,7 @@ mod tests {
 
     #[test]
     fn home_uses_the_wallpapers_frame_rate_and_honors_a_lower_user_cap() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(&ui);
         for wallpaper in &mut app.library.items {
             wallpaper.active = wallpaper.id == "rain-city";

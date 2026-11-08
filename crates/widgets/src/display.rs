@@ -22,7 +22,7 @@ use windows::core::{PCWSTR, w};
 /// displays changed.
 pub const WM_DISPLAY: u32 = WM_APP + 11;
 
-const CLASS: PCWSTR = w!("mypaper.widgets.display");
+const CLASS: PCWSTR = w!("glaze.widgets.display");
 
 /// Does this window message mean monitors, their work areas or the icon spacing (the grid's
 /// cell size) changed?
@@ -59,7 +59,7 @@ impl DisplayWatcher {
             CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
                 CLASS,
-                w!("mypaper display watcher"),
+                w!("Glaze display watcher"),
                 WS_POPUP,
                 0,
                 0,

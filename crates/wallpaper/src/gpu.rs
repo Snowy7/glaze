@@ -7,7 +7,7 @@ use std::num::NonZeroIsize;
 use std::rc::Rc;
 
 use anyhow::{Context, Result, anyhow, bail};
-use mypaper_config::GpuPreference;
+use glaze_config::GpuPreference;
 use raw_window_handle::{Win32WindowHandle, WindowsDisplayHandle};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 
@@ -104,7 +104,7 @@ impl Opening {
 /// (docs/glass.md). Integrated and high-performance pick by power class, as Windows does.
 fn pick_adapter(instance: &wgpu::Instance, preference: GpuPreference) -> Result<wgpu::Adapter> {
     if preference == GpuPreference::Auto
-        && let Some(display) = mypaper_desktop::display_gpu::display_adapter()
+        && let Some(display) = glaze_desktop::display_gpu::display_adapter()
     {
         let adapters = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::DX12));
         if let Some(adapter) = adapters.into_iter().find(|a| luid(a) == Some(display.luid)) {
@@ -233,11 +233,11 @@ impl Gpu {
 
     /// A device with no windows, for tests that render to textures, with timestamp queries
     /// where the adapter has them (the frame lab). `None` on a machine without a DX12 GPU.
-    /// The integrated GPU, or the high-performance one with `MYPAPER_LAB_GPU=high`.
+    /// The integrated GPU, or the high-performance one with `GLAZE_LAB_GPU=high`.
     #[cfg(test)]
     pub fn headless() -> Option<Self> {
         let instance = instance();
-        let preference = match std::env::var("MYPAPER_LAB_GPU").as_deref() {
+        let preference = match std::env::var("GLAZE_LAB_GPU").as_deref() {
             Ok("high") => GpuPreference::HighPerformance,
             _ => GpuPreference::Integrated,
         };
@@ -440,7 +440,7 @@ impl KeptFrame {
                 &gpu.queue,
                 self.size(),
                 (target.width(), target.height()),
-                mypaper_theme::Fit::Stretch,
+                glaze_theme::Fit::Stretch,
                 1.0,
             );
             // SAFETY: `cover` writes every pixel and reads none of the target before it does.
@@ -575,7 +575,7 @@ const DESCRIPTORS: u32 = 16_384;
 /// one-off covered refresh uses it.
 fn open_device(adapter: &wgpu::Adapter, _timing: bool) -> Result<(wgpu::Device, wgpu::Queue)> {
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-        label: Some("mypaper"),
+        label: Some("Glaze"),
         // Immediate data (every DX12 adapter has it): a shader wallpaper's inputs ride in its
         // draw. 16-bit normalized formats: the planes of 10-bit (P010) video.
         required_features:

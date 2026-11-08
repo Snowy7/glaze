@@ -1,5 +1,5 @@
 [package]
-name = "mypaper-widgets"
+name = "glaze-widgets"
 description = "Native widget services: layout, storage, media, stats, audio, icons and JSON-RPC plugins."
 version.workspace = true
 edition.workspace = true
@@ -9,11 +9,11 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-mypaper-config.workspace = true
-mypaper-theme.workspace = true
-mypaper-integrations = { path = "../integrations" }
-mypaper-plugin-sdk = { path = "../plugin-sdk" }
-mypaper-plugin-api = { path = "../plugin-api" }
+glaze-config.workspace = true
+glaze-theme.workspace = true
+glaze-integrations = { path = "../integrations" }
+glaze-plugin-sdk = { path = "../plugin-sdk" }
+glaze-plugin-api = { path = "../plugin-api" }
 
 anyhow.workspace = true
 log.workspace = true

@@ -3,7 +3,7 @@
 //! flashes it); Space flips a switch in place. Results are grouped Settings, Actions,
 //! Wallpapers, Widgets, Integrations, Go to; with nothing typed, recent ones come first.
 
-use mypaper_ui::controls::Glyph;
+use glaze_ui::controls::Glyph;
 use serde_json::{Value, json};
 
 use crate::actions::{Action, Edit, FieldId, Page, Section};
@@ -461,7 +461,7 @@ pub fn step(app: &mut App, delta: i32) {
 mod tests {
     use super::*;
     use crate::panel::{Command, Page as PanelPage, State};
-    fn fixture(ui: &mypaper_ui::Ui) -> App {
+    fn fixture(ui: &glaze_ui::Ui) -> App {
         let mut app = crate::goldens::app(true, ui);
         app.panel = Some(State::default());
         app.size = (480, 760);
@@ -470,7 +470,7 @@ mod tests {
     }
     #[test]
     fn panel_search_routes_to_the_exact_bar_panel() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(&ui);
         let setting = SETTINGS
             .iter()
@@ -492,7 +492,7 @@ mod tests {
     }
     #[test]
     fn panel_search_includes_plugin_connections_desktop_widgets_and_history() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(&ui);
         crate::panel::record_drag(&app, "First desktop");
         let entries = all(&app);

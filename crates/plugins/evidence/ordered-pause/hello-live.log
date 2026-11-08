@@ -1,15 +1,15 @@
-quiet_helper.exe : [2026-11-06T07:43:53Z INFO  mypaper_plugins::host] plugin hello loaded
+quiet_helper.exe : [2026-11-06T07:43:53Z INFO  glaze_plugins::host] plugin hello loaded
 At line:2 char:1
-+ & 'C:\mypaper-targets\files\debug\examples\quiet_helper.exe' 'D:\Codi ...
++ & 'C:\glaze-targets\files\debug\examples\quiet_helper.exe' 'D:\Codi ...
 + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: ([2026-11-06T07:...in hello loaded:String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
 
 helper pid=58020, paused=false, measuring 5s
-[2026-11-06T07:43:58Z INFO  mypaper_plugins::host] game background pause: true
+[2026-11-06T07:43:58Z INFO  glaze_plugins::host] game background pause: true
 helper pid=58020, paused=true, measuring 5s
-[2026-11-06T07:44:03Z INFO  mypaper_plugins::host] game background pause: false
-[2026-11-06T07:44:03Z INFO  mypaper_plugins::host] plugin hello unloaded
+[2026-11-06T07:44:03Z INFO  glaze_plugins::host] game background pause: false
+[2026-11-06T07:44:03Z INFO  glaze_plugins::host] plugin hello unloaded
 [
   {
     "cpu_core_pct": 0.0,

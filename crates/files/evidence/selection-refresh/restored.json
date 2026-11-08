@@ -4,19 +4,19 @@
     "owned_hello_helper_exited":  true,
     "desktop":  [
                     {
-                        "ProcessName":  "mypaper-core",
+                        "ProcessName":  "glaze-core",
                         "Id":  41180,
-                        "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-core.exe"
+                        "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\glaze-core.exe"
                     },
                     {
-                        "ProcessName":  "mypaper-shell",
+                        "ProcessName":  "glaze-shell",
                         "Id":  45568,
-                        "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-shell.exe"
+                        "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\glaze-shell.exe"
                     },
                     {
-                        "ProcessName":  "mypaper-wallpaper",
+                        "ProcessName":  "glaze-wallpaper",
                         "Id":  56932,
-                        "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-wallpaper.exe"
+                        "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\glaze-wallpaper.exe"
                     }
                 ],
     "files_hash":  "BC95347E45336F53D80D4BCD80C3D91C22B11F889B703ACBEAF036B10C72E203",

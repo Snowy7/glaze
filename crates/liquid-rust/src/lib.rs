@@ -1,5 +1,5 @@
 // Vendored from liquid-rust (https://github.com/al1h3n/liquid-rust, commit 2073cd9) by al1h3n,
-// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "mypaper:".
+// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "Glaze:".
 //! # Liquid Rust
 //!
 //! Apple-style Liquid Glass for [`wgpu`], on native GPUs and on the web through WebGPU.
@@ -37,6 +37,6 @@ mod scene;
 pub use glam::Vec2;
 pub use material::{Appearance, Color, Material, Shadow, Tone};
 pub use motion::{Animated, Spring};
-// mypaper: `Profiler`, the frame lab's per-pass GPU timestamps.
+// Glaze: `Profiler`, the frame lab's per-pass GPU timestamps.
 pub use renderer::{Frame, Profiler, Renderer};
 pub use scene::{Container, ContainerId, Glass, GlassId, IOS_SMOOTHING, Rect, Scene, Shape, smooth_corner};

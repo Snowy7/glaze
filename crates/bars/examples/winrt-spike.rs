@@ -1,11 +1,11 @@
 //! Spike (docs/bars.md, "Flyouts" → "Notifications"): which WinRT APIs answer an unpackaged
 //! desktop process on this build? Prints what each call returns and changes nothing, except with
 //! `--toast`: that registers a throwaway app id (`HKCU\Software\Classes\AppUserModelId\
-//! mypaper.spike`), posts one silent toast from it (no banner), removes it through the listener,
+//! glaze.spike`), posts one silent toast from it (no banner), removes it through the listener,
 //! and deletes the app id again.
 //!
 //! ```text
-//! cargo run -p mypaper-bars --example winrt-spike [-- --toast]
+//! cargo run -p glaze-bars --example winrt-spike [-- --toast]
 //! ```
 
 use windows::ApplicationModel::DataTransfer::Clipboard;
@@ -20,13 +20,13 @@ use windows::Win32::System::Registry::{
 };
 use windows::core::{HSTRING, w};
 
-const SPIKE_APP: &str = "mypaper.spike";
+const SPIKE_APP: &str = "glaze.spike";
 
 /// Posts a silent toast from a throwaway app id, removes it through the listener, and reports
 /// whether removing worked.
 fn toast_round_trip(listener: &UserNotificationListener) -> windows::core::Result<()> {
-    let key = w!(r"Software\Classes\AppUserModelId\mypaper.spike");
-    let name: Vec<u16> = "mypaper spike\0".encode_utf16().collect();
+    let key = w!(r"Software\Classes\AppUserModelId\glaze.spike");
+    let name: Vec<u16> = "Glaze spike\0".encode_utf16().collect();
     // SAFETY: a value under our own throwaway key; the data pointer and size describe `name`.
     unsafe {
         RegSetKeyValueW(
@@ -42,7 +42,7 @@ fn toast_round_trip(listener: &UserNotificationListener) -> windows::core::Resul
     let result = (|| {
         let xml = XmlDocument::new()?;
         xml.LoadXml(&HSTRING::from(
-            "<toast><visual><binding template=\"ToastGeneric\"><text>mypaper spike</text><text>removed right away</text></binding></visual></toast>",
+            "<toast><visual><binding template=\"ToastGeneric\"><text>Glaze spike</text><text>removed right away</text></binding></visual></toast>",
         ))?;
         let toast = ToastNotification::CreateToastNotification(&xml)?;
         toast.SetSuppressPopup(true)?;
@@ -58,7 +58,7 @@ fn toast_round_trip(listener: &UserNotificationListener) -> windows::core::Resul
                     n.AppInfo()
                         .and_then(|a| a.DisplayInfo())
                         .and_then(|d| d.DisplayName())
-                        .is_ok_and(|name| name == "mypaper spike")
+                        .is_ok_and(|name| name == "Glaze spike")
                 })
                 .filter_map(|n| n.Id().ok())
                 .collect())

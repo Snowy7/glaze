@@ -1,4 +1,4 @@
-//! Integration UI/registration. Shared providers live in `mypaper-integrations`; all drawing stays here.
+//! Integration UI/registration. Shared providers live in `glaze-integrations`; all drawing stays here.
 pub mod media;
 pub mod widgets;
 #[cfg(test)]
@@ -10,10 +10,10 @@ mod panels;
 #[cfg(test)]
 mod tests;
 
-use mypaper_bars::{Module, ModuleRef};
-use mypaper_integrations::{Availability, Data, Hub, Lease, Provider, Snapshot, config::Config};
-use mypaper_ui::FileWatch;
-use mypaper_ui::{DisplayList, Op, Rect, Rgba, TextStyle, Ui};
+use glaze_bars::{Module, ModuleRef};
+use glaze_integrations::{Availability, Data, Hub, Lease, Provider, Snapshot, config::Config};
+use glaze_ui::FileWatch;
+use glaze_ui::{DisplayList, Op, Rect, Rgba, TextStyle, Ui};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -52,7 +52,7 @@ struct State {
     fixtures: BTreeMap<Provider, Snapshot>,
 }
 pub fn config_path() -> PathBuf {
-    PathBuf::from(std::env::var_os("APPDATA").unwrap_or_default()).join("mypaper/integrations.json")
+    PathBuf::from(std::env::var_os("APPDATA").unwrap_or_default()).join("glaze/integrations.json")
 }
 fn load() -> anyhow::Result<Config> {
     match std::fs::read_to_string(config_path()) {
@@ -124,7 +124,7 @@ fn request_notification_consent(thread: u32, complete: &Arc<AtomicBool>) {
         return;
     }
     let complete = complete.clone();
-    if let Err(e) = mypaper_integrations::notifications::request_access_once(move || {
+    if let Err(e) = glaze_integrations::notifications::request_access_once(move || {
         complete.store(true, Ordering::Release);
         wake(thread);
     }) {
@@ -167,7 +167,7 @@ pub fn set_game_activity(active: bool) {
     if changed { media::changed(true); }
 }
 pub fn fact(wparam: usize, lparam: isize) {
-    use mypaper_desktop::hold::Fact;
+    use glaze_desktop::hold::Fact;
     let changed = STATE.with_borrow_mut(|s| {
         let before = s.locked || s.display_off;
         match Fact::from_wparam(wparam) {
@@ -280,7 +280,7 @@ pub fn bar_subscriptions<'a>(modules: impl Iterator<Item = &'a ModuleRef>, dock:
     });
 }
 
-pub fn foreground(group: Option<&mypaper_bars::apps::Group>) {
+pub fn foreground(group: Option<&glaze_bars::apps::Group>) {
     STATE.with_borrow_mut(|s| {
         s.foreground_id = group.and_then(|g| {
             g.aumid.clone().or_else(|| {
@@ -344,7 +344,7 @@ pub fn bar_content(module: &ModuleRef) -> Option<(String, &'static str)> {
     ))
 }
 
-pub fn module_click(module: &ModuleRef, anchor: Rect, monitor: &mypaper_desktop::Monitor) -> bool {
+pub fn module_click(module: &ModuleRef, anchor: Rect, monitor: &glaze_desktop::Monitor) -> bool {
     if let Some(provider) = provider(module) {
         crate::flyouts::open(
             if provider == Provider::Notifications {
@@ -370,7 +370,7 @@ pub fn notification_center(cx: &mut crate::flyouts::Cx) -> Box<dyn crate::flyout
 pub fn dock_badge(
     list: &mut DisplayList,
     ui: &mut Ui,
-    app: &mypaper_bars::apps::Item,
+    app: &glaze_bars::apps::Item,
     icon: Rect,
     scale: f32,
 ) {
@@ -386,7 +386,7 @@ pub fn dock_badge(
     // Teams classic in the tray), matched as Windows does: case-insensitively.
     let ids: Vec<String> = app_id(app)
         .into_iter()
-        .chain(app.exe.as_deref().and_then(mypaper_bars::apps::squirrel_aumid))
+        .chain(app.exe.as_deref().and_then(glaze_bars::apps::squirrel_aumid))
         .collect();
     let count: usize = state
         .counts
@@ -431,7 +431,7 @@ pub fn dock_badge(
         color: Rgba::rgb8([255, 255, 255], 1.0),
     });
 }
-fn app_id(app: &mypaper_bars::apps::Item) -> Option<String> {
+fn app_id(app: &glaze_bars::apps::Item) -> Option<String> {
     app.aumid.clone().or_else(|| {
         STATE.with_borrow(|s| {
             s.config
@@ -443,7 +443,7 @@ fn app_id(app: &mypaper_bars::apps::Item) -> Option<String> {
         })
     })
 }
-pub fn open_app(app: &mypaper_bars::apps::Item, anchor: Rect, monitor: &mypaper_desktop::Monitor) {
+pub fn open_app(app: &glaze_bars::apps::Item, anchor: Rect, monitor: &glaze_desktop::Monitor) {
     let id = app_id(app).unwrap_or_default();
     STATE.with_borrow_mut(|s| s.app = Some((id, app.name.clone())));
     crate::flyouts::open(crate::flyouts::Kind::AppActions, anchor, monitor);
@@ -453,13 +453,13 @@ pub fn app_panel() -> Box<dyn crate::flyouts::Panel> {
     Box::new(panels::AppActions::new(app.0, app.1))
 }
 
-pub fn launcher_entries(apps: &mut Vec<mypaper_bars::flyouts::index::App>) {
+pub fn launcher_entries(apps: &mut Vec<glaze_bars::flyouts::index::App>) {
     let config = config();
     if !config.launcher.enabled {
         return;
     }
     let mut add = |id: String, name: String, path: String| {
-        apps.push(mypaper_bars::flyouts::index::App {
+        apps.push(glaze_bars::flyouts::index::App {
             id,
             name,
             path,

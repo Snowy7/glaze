@@ -1,13 +1,13 @@
 //! A harness session under the desktop lock protocol (docs/performance.md, "Running it"):
 //!
-//! 1. take `%LOCALAPPDATA%\Temp\mypaper-tools\desktop.lock` (an atomic `mkdir`; retried every
+//! 1. take `%LOCALAPPDATA%\Temp\glaze-tools\desktop.lock` (an atomic `mkdir`; retried every
 //!    5 s; a lock older than 5 minutes is stale and removed);
-//! 2. stop the user's mypaper: `WM_QUIT` to every thread of `mypaper-core`, then wait until no
-//!    `mypaper-*` engine process is left;
+//! 2. stop the user's Glaze: `WM_QUIT` to every thread of `glaze-core`, then wait until no
+//!    `glaze-*` engine process is left;
 //! 3. run;
 //! 4. always put things back, also after an error, a panic or Ctrl+C: stop leftover test
 //!    processes, replay test taskbar journals, restore the Windows wallpaper if it changed,
-//!    restart the user's mypaper, release the lock.
+//!    restart the user's Glaze, release the lock.
 //!
 //! The cleanup lives in a global so the panic hook and the Ctrl+C handler can run it: release
 //! builds abort on panic, so `Drop` alone wouldn't.
@@ -24,11 +24,11 @@ use windows::core::BOOL;
 use crate::procs::{self, Handle};
 
 const ENGINE: [&str; 5] = [
-    "mypaper-core.exe",
-    "mypaper-wallpaper.exe",
-    "mypaper-widgets.exe",
-    "mypaper-bars.exe",
-    "mypaper-plates.exe",
+    "glaze-core.exe",
+    "glaze-wallpaper.exe",
+    "glaze-widgets.exe",
+    "glaze-bars.exe",
+    "glaze-plates.exe",
 ];
 const LOCK_RETRY: Duration = Duration::from_secs(5);
 const LOCK_STALE: Duration = Duration::from_secs(5 * 60);
@@ -40,7 +40,7 @@ struct Cleanup {
     lock: PathBuf,
     /// The test binaries' folder: leftovers running from under it are ours to stop.
     stage: PathBuf,
-    /// The mypaper-core to start again.
+    /// The glaze-core to start again.
     user_core: Option<PathBuf>,
     /// The Windows wallpaper per monitor before the session.
     wallpapers: Vec<(String, String)>,
@@ -56,8 +56,8 @@ pub struct Session {
 }
 
 impl Session {
-    /// Takes the lock and stops the user's mypaper. `restart` is started afterwards when no
-    /// mypaper was running.
+    /// Takes the lock and stops the user's glaze. `restart` is started afterwards when no
+    /// Glaze was running.
     pub fn begin(lock: &Path, stage: &Path, restart: Option<PathBuf>) -> Result<Self> {
         install_hooks();
         acquire(lock)?;
@@ -75,7 +75,7 @@ impl Session {
         let session = Self {
             started: Instant::now(),
         };
-        let running = stop_user_mypaper(stage)?;
+        let running = stop_user_Glaze(stage)?;
         if let (Some(core), Some(cleanup)) = (running, pending().as_mut()) {
             cleanup.user_core = Some(core);
         }
@@ -114,8 +114,8 @@ fn run_cleanup() {
         eprintln!("warning: {left} test processes are still running");
     }
     for journal in &cleanup.journals {
-        let mut taskbar = mypaper_bars::taskbar::Taskbar::new(
-            mypaper_bars::taskbar::NativeShell,
+        let mut taskbar = glaze_bars::taskbar::Taskbar::new(
+            glaze_bars::taskbar::NativeShell,
             journal.clone(),
         );
         match taskbar.restore() {
@@ -193,8 +193,8 @@ fn acquire(lock: &Path) -> Result<()> {
     }
 }
 
-/// Stops a running mypaper that isn't one of ours, and returns its core's path.
-fn stop_user_mypaper(stage: &Path) -> Result<Option<PathBuf>> {
+/// Stops a running Glaze that isn't one of ours, and returns its core's path.
+fn stop_user_Glaze(stage: &Path) -> Result<Option<PathBuf>> {
     let mut user_core = None;
     for proc in procs::list()
         .iter()
@@ -206,7 +206,7 @@ fn stop_user_mypaper(stage: &Path) -> Result<Option<PathBuf>> {
         }
         let threads = procs::post_quit(proc.pid);
         eprintln!(
-            "stopping mypaper-core {} ({} threads told to quit)",
+            "stopping glaze-core {} ({} threads told to quit)",
             proc.pid, threads
         );
         user_core = user_core.or(image);
@@ -223,12 +223,12 @@ fn stop_user_mypaper(stage: &Path) -> Result<Option<PathBuf>> {
             .any(|p| ENGINE.iter().any(|e| p.name.eq_ignore_ascii_case(e)))
     });
     if !gone {
-        bail!("mypaper didn't stop within {STOP_TIMEOUT:?}");
+        bail!("Glaze didn't stop within {STOP_TIMEOUT:?}");
     }
     Ok(user_core)
 }
 
-/// Kills mypaper processes still running from under `stage` (only ours). Returns how many are
+/// Kills Glaze processes still running from under `stage` (only ours). Returns how many are
 /// left afterwards.
 pub fn stop_test_processes(stage: &Path) -> usize {
     let ours = || {

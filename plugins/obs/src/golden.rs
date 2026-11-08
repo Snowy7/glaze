@@ -1,5 +1,5 @@
 use crate::{Availability, Data, Snapshot, obs};
-use mypaper_plugin_sdk::SizeClass;
+use glaze_plugin_sdk::SizeClass;
 use serde_json::json;
 pub const NOW: i64 = 1_793_875_200_000;
 pub fn fixture() -> Snapshot {
@@ -23,6 +23,6 @@ fn faces_match_the_view_golden() {
         .into_iter().map(|(name, size)| (name.into(), json!(crate::faces::face(size, &offline, NOW)))).collect();
     let actual = serde_json::to_string_pretty(&json!({"controls": sizes, "offline": offline_sizes})).unwrap() + "\n";
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("golden/faces.json");
-    if std::env::var_os("MYPAPER_BLESS").is_some() { std::fs::write(&path, &actual).unwrap(); }
+    if std::env::var_os("GLAZE_BLESS").is_some() { std::fs::write(&path, &actual).unwrap(); }
     assert_eq!(std::fs::read_to_string(path).unwrap().replace("\r\n", "\n"), actual);
 }

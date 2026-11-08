@@ -19,7 +19,7 @@
                         "passed":  20,
                         "failed":  0,
                         "seconds":  1.81,
-                        "isolated_profile":  "C:\\mypaper-targets\\files\\scratch\\regression-profile"
+                        "isolated_profile":  "C:\\glaze-targets\\files\\scratch\\regression-profile"
                     },
     "cargo_check":  "passed",
     "clippy":  "passed with existing warnings in plugin I/O/runtime"

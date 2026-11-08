@@ -5,7 +5,7 @@
 ## Changes
 
 - `31b51d2`: shared config watches (engine, core, styler) and the recursive engine theme watch
-  now use `mypaper-fswatch`. Deleted `desktop::dir_watch`. Kept the config wrapper's filename
+  now use `glaze-fswatch`. Deleted `desktop::dir_watch`. Kept the config wrapper's filename
   matching, atomic replacement/removal handling, and theme recursion. Added creation-time
   notifications to the shared watcher to retain the old native filter.
 - The same commit fixes watch recovery: close failed I/O, reopen with a cancellable 25 ms–1 s
@@ -38,13 +38,13 @@ Afterward it receives the recovery rescan, later writes, and stops promptly whil
 absent. A second test removes/recreates multiple parent levels and checks named-file filtering.
 
 `cargo check` passed for fswatch, desktop, wallpaper, core, and app-styler. `rustfmt --check` and
-the owned-path whitespace check passed. `cargo tree -i notify` reports only `mypaper-studio`;
+the owned-path whitespace check passed. `cargo tree -i notify` reports only `glaze-studio`;
 no `notify` watcher import or `dir_watch` user remains elsewhere. The root workspace declaration
 and lockfile still describe Studio's dependency.
 
 ## Deployment and live reload
 
-One `cargo build --release --workspace` completed using `C:\mypaper-targets\main` (6m 17s including
+One `cargo build --release --workspace` completed using `C:\glaze-targets\main` (6m 17s including
 waiting for another build). One `scripts/deploy-local.ps1` deployment followed. The script left the
 already-open Studio running and put its new executable in place, as intended.
 
@@ -86,9 +86,9 @@ before the fixture's four-second exit; the log confirms no resource release. The
 samples were taken at fixture exit, so the long run above supplies the timed resume sequence.
 
 Raw full-resolution captures and capture timestamps are retained under
-`C:\mypaper-targets\watch-merge\evidence\`. Reproduce with [capture-game.ps1](capture-game.ps1)
-and [compare-captures.py](compare-captures.py). Cargo tests/checks use `C:\mypaper-targets\watch-merge`;
-the release build/deployment alone uses `C:\mypaper-targets\main`.
+`C:\glaze-targets\watch-merge\evidence\`. Reproduce with [capture-game.ps1](capture-game.ps1)
+and [compare-captures.py](compare-captures.py). Cargo tests/checks use `C:\glaze-targets\watch-merge`;
+the release build/deployment alone uses `C:\glaze-targets\main`.
 
 No changes were made to other agents' index, files, plugins, UI, or styling work. Outside the
 implementation paths, the only dependency edit was Cargo.lock's desktop→fswatch edge; engine

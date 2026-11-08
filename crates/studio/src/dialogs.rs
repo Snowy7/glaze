@@ -55,6 +55,6 @@ pub const WALLPAPER_FILES: &[(&str, &str)] = &[
 
 pub const PROGRAMS: &[(&str, &str)] = &[("Programs", "*.exe")];
 pub const PAGES: &[(&str, &str)] = &[("Web pages", "*.html;*.htm")];
-/// What an icon pack can hold (`mypaper_bars::icon_pack`).
+/// What an icon pack can hold (`glaze_bars::icon_pack`).
 pub const ICONS: &[(&str, &str)] = &[("Icons and pictures", "*.svg;*.png;*.ico;*.webp;*.jpg;*.jpeg")];
 pub const PICTURES: &[(&str, &str)] = &[("Pictures", "*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp")];

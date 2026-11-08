@@ -12,8 +12,8 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "paths": {
-      "mypaper:plugin/*@0.1.0": ["./src/generated/interfaces/mypaper-plugin-*.d.ts"],
-      "@mypaper/plugin-sdk": ["./src/index.ts"]
+      "glaze:plugin/*@0.1.0": ["./src/generated/interfaces/glaze-plugin-*.d.ts"],
+      "@glaze/plugin-sdk": ["./src/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "../../plugins/hello-ts/src/index.ts"]

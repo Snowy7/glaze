@@ -12,7 +12,7 @@
                       },
     "processes":  [
                       {
-                          "name":  "mypaper-core",
+                          "name":  "glaze-core",
                           "pid":  62864,
                           "cpu_ms":  0,
                           "cpu_core_pct":  0,
@@ -71,7 +71,7 @@
                                       ]
                       },
                       {
-                          "name":  "mypaper-index",
+                          "name":  "glaze-index",
                           "pid":  13756,
                           "cpu_ms":  0,
                           "cpu_core_pct":  0,
@@ -202,7 +202,7 @@
                                       ]
                       },
                       {
-                          "name":  "mypaper-plugins",
+                          "name":  "glaze-plugins",
                           "pid":  65904,
                           "cpu_ms":  0,
                           "cpu_core_pct":  0,
@@ -261,7 +261,7 @@
                                       ]
                       },
                       {
-                          "name":  "mypaper-shell",
+                          "name":  "glaze-shell",
                           "pid":  94052,
                           "cpu_ms":  15.625,
                           "cpu_core_pct":  0.026,
@@ -416,7 +416,7 @@
                                       ]
                       },
                       {
-                          "name":  "mypaper-studio",
+                          "name":  "glaze-studio",
                           "pid":  32732,
                           "cpu_ms":  0,
                           "cpu_core_pct":  0,
@@ -475,7 +475,7 @@
                                       ]
                       },
                       {
-                          "name":  "mypaper-styler",
+                          "name":  "glaze-styler",
                           "pid":  93016,
                           "cpu_ms":  0,
                           "cpu_core_pct":  0,
@@ -510,7 +510,7 @@
                                       ]
                       },
                       {
-                          "name":  "mypaper-wallpaper",
+                          "name":  "glaze-wallpaper",
                           "pid":  80768,
                           "cpu_ms":  78.125,
                           "cpu_core_pct":  0.1302,

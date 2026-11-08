@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
-use mypaper_config::IndexConfig;
+use glaze_config::IndexConfig;
 use serde::{Deserialize, Serialize};
 
 use crate::store::{DIRECTORY, NONE, Store};
@@ -150,7 +150,7 @@ mod tests {
 
     #[test]
     fn persisted_age_survives_checkpoints_and_policy_edits_but_rules_invalidate_it() {
-        let cache = std::env::temp_dir().join(format!("mypaper-freshness-{}", std::process::id()));
+        let cache = std::env::temp_dir().join(format!("glaze-freshness-{}", std::process::id()));
         std::fs::create_dir_all(&cache).unwrap();
         let config = IndexConfig::default();
         let root = Path::new("C:/");

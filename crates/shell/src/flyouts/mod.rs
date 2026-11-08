@@ -1,17 +1,17 @@
 //! Native flyuts (docs/bars.md, "Flyouts"): calendar, quick settings, Wi-Fi, mixer,
 //! notification center, launcher, power, tray overflow and language, each a panel drawn with
-//! `mypaper-ui` in one reused popup window, with engine glass under it (crate::glass).
+//! `glaze-ui` in one reused popup window, with engine glass under it (crate::glass).
 //!
 //! - **The seam.** The bars call [`open`] for every panel-opening click; the request is queued
 //!   and [`Flyouts::process`] opens it in the same loop pass (content on screen in ms; data
-//!   follows from provider lanes). Win, Win+N and Win+A come through `mypaper_bars::flyouts::
+//!   follows from provider lanes). Win, Win+N and Win+A come through `glaze_bars::flyouts::
 //!   winkey` and open the launcher, notifications and quick settings.
 //! - **One at a time, never overlapping.** Opening another replaces it; the same one again
 //!   closes it. It closes on Escape, on a click elsewhere (deactivation), and when an action
 //!   hands over to Windows.
 //! - **Motion** is position and alpha only (a spring), on the shared ticker armed only while it
 //!   moves: once settled nothing redraws until its data changes.
-//! - **Providers** run on lanes (`mypaper_bars::flyouts::Lane`) started on first use and
+//! - **Providers** run on lanes (`glaze_bars::flyouts::Lane`) started on first use and
 //!   dropped a few seconds after the flyout closes; nothing polls while closed.
 
 pub(crate) mod calendar;
@@ -43,17 +43,17 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use mypaper_bars::actions::Topic;
-use mypaper_bars::audio::Audio;
-use mypaper_bars::flyouts::index::Builder;
-use mypaper_bars::flyouts::mixer::MixerLane;
-use mypaper_bars::flyouts::quick::QuickLane;
-use mypaper_bars::flyouts::wifi::WifiLane;
-use mypaper_bars::flyouts::winkey::{self, WinKey};
-use mypaper_bars::flyouts::{self as providers, Done, Lane, Watched};
-use mypaper_bars::wake::{Msg, Waker};
-use mypaper_desktop::Monitor;
-use mypaper_ui::{
+use glaze_bars::actions::Topic;
+use glaze_bars::audio::Audio;
+use glaze_bars::flyouts::index::Builder;
+use glaze_bars::flyouts::mixer::MixerLane;
+use glaze_bars::flyouts::quick::QuickLane;
+use glaze_bars::flyouts::wifi::WifiLane;
+use glaze_bars::flyouts::winkey::{self, WinKey};
+use glaze_bars::flyouts::{self as providers, Done, Lane, Watched};
+use glaze_bars::wake::{Msg, Waker};
+use glaze_desktop::Monitor;
+use glaze_ui::{
     Button, Event, Glass, HitId, Image, Kind as SurfaceKind, Rect, Role, Surface, SurfaceId,
     TextField, Ticker, Ui, focus,
 };
@@ -71,7 +71,7 @@ use crate::bars::Bars;
 /// What a bar click (or a Windows key shortcut) opens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
-    Integration(mypaper_integrations::Provider),
+    Integration(glaze_integrations::Provider),
     AppActions,
     Calendar,
     Quick,
@@ -133,28 +133,28 @@ pub enum Effect {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PanelCommand {
-    PinLauncher(mypaper_bars::config::Pinned),
+    PinLauncher(glaze_bars::config::Pinned),
     UnpinLauncher(String),
-    PinDock(mypaper_bars::config::Pinned),
+    PinDock(glaze_bars::config::Pinned),
 }
 
 /// A provider's answer, from a lane.
 pub enum Reply {
-    Quick(mypaper_bars::flyouts::quick::Quick),
+    Quick(glaze_bars::flyouts::quick::Quick),
     QuickControl(controls::State, Option<String>),
     /// Do not disturb as Windows reports it, and why a change failed (`toggles::dnd`).
     Dnd(Option<bool>, Option<String>),
-    Mixer(mypaper_bars::flyouts::mixer::MixerState),
-    Wifi(mypaper_bars::flyouts::wifi::WifiState),
+    Mixer(glaze_bars::flyouts::mixer::MixerState),
+    Wifi(glaze_bars::flyouts::wifi::WifiState),
     NotificationIcons(Vec<(String, Option<String>)>),
     NotificationAccess(Result<(), String>),
-    Apps(Vec<mypaper_bars::flyouts::index::App>),
-    Files(Vec<mypaper_bars::flyouts::index::RecentFile>),
+    Apps(Vec<glaze_bars::flyouts::index::App>),
+    Files(Vec<glaze_bars::flyouts::index::RecentFile>),
     IndexedFiles {
         query: String,
-        hits: Option<Vec<mypaper_index::Hit>>,
+        hits: Option<Vec<glaze_index::Hit>>,
     },
-    Clipboard(mypaper_bars::flyouts::clipboard::History),
+    Clipboard(glaze_bars::flyouts::clipboard::History),
     /// An action failed; the panel shows why.
     Failed(String),
     /// An action finished; the panel reads its state again.
@@ -166,7 +166,7 @@ pub trait Panel {
     fn swipe(&mut self, _id: HitId, _dx: f32, _cx: &mut Cx) -> Effect {
         Effect::None
     }
-    fn menu(&mut self) -> Vec<mypaper_ui::Entry<PanelCommand>> {
+    fn menu(&mut self) -> Vec<glaze_ui::Entry<PanelCommand>> {
         vec![]
     }
     fn command(&mut self, _command: PanelCommand, _cx: &mut Cx) -> Effect {
@@ -288,7 +288,7 @@ pub struct Lanes {
     mixer: Option<Lane<MixerLane>>,
     wifi: Option<Lane<WifiLane>>,
     apps: Option<Lane<Builder>>,
-    clipboard: Option<Lane<mypaper_bars::flyouts::clipboard::ClipboardLane>>,
+    clipboard: Option<Lane<glaze_bars::flyouts::clipboard::ClipboardLane>>,
     /// The default output's volume (quick settings and the mixer), with change notifications.
     pub audio: Option<Audio>,
 }
@@ -367,7 +367,7 @@ impl Lanes {
     pub fn notification_icons(&mut self, ids: Vec<String>) {
         let dir = self.icons.clone();
         self.apps(move |_| {
-            let resolver = mypaper_bars::icons::AppIconResolver::new();
+            let resolver = glaze_bars::icons::AppIconResolver::new();
             Reply::NotificationIcons(
                 ids.into_iter()
                     .map(|id| {
@@ -382,12 +382,12 @@ impl Lanes {
     /// The default output's volume, watched while a flyout shows it.
     pub fn clipboard(
         &mut self,
-        job: impl FnOnce(&mut mypaper_bars::flyouts::clipboard::ClipboardLane) -> Reply + Send + 'static,
+        job: impl FnOnce(&mut glaze_bars::flyouts::clipboard::ClipboardLane) -> Reply + Send + 'static,
     ) {
         Self::run(
             &mut self.clipboard,
             "clipboard",
-            mypaper_bars::flyouts::clipboard::ClipboardLane::new,
+            glaze_bars::flyouts::clipboard::ClipboardLane::new,
             &self.replies,
             &self.waker,
             job,
@@ -432,10 +432,10 @@ struct Open {
     /// Whether it sits below its anchor (slides down into place) or above (slides up).
     below: bool,
     /// Open progress, 0 to 1, while it moves.
-    motion: Option<mypaper_ui::transition::Transition>,
-    motion_style: mypaper_bars::style::MotionStyle,
-    snapshot: Option<mypaper_ui::reveal::Snapshot>,
-    interaction: mypaper_ui::interact::motion::InteractionMotion,
+    motion: Option<glaze_ui::transition::Transition>,
+    motion_style: glaze_bars::style::MotionStyle,
+    snapshot: Option<glaze_ui::reveal::Snapshot>,
+    interaction: glaze_ui::interact::motion::InteractionMotion,
     /// When its motion started (the fade follows the glass from there).
     opened_at: Instant,
     hover: Option<HitId>,
@@ -443,7 +443,7 @@ struct Open {
     focus: Option<HitId>,
     /// The slider being dragged.
     drag: Option<HitId>,
-    swipe: Option<(HitId, mypaper_ui::Point)>,
+    swipe: Option<(HitId, glaze_ui::Point)>,
     /// The hit being activated, in screen px (for `Cx::hit`).
     hit: Rect,
     /// Shown yet, and how often it was drawn: in all, and once its motion had settled.
@@ -474,9 +474,9 @@ pub struct Flyouts {
     winkey: Option<WinKey>,
     /// The foreground window last seen, to follow fullscreen apps for the Windows key.
     foreground: HWND,
-    menu: Option<mypaper_ui::Menu<PanelCommand>>,
+    menu: Option<glaze_ui::Menu<PanelCommand>>,
     index_due: Option<Instant>,
-    _index_watch: Vec<mypaper_fswatch::Watch>,
+    _index_watch: Vec<glaze_fswatch::Watch>,
     /// The flyout a deactivation just closed, and when: a click on its own bar module
     /// deactivates it before that click's request arrives, and the request must close it (it
     /// did), not open it again.
@@ -490,7 +490,7 @@ impl Flyouts {
     /// Creates the (hidden) popup window now: making a layered window costs ~20 ms, which must
     /// not land on a click.
     pub fn new(ui: &Ui, main: HWND) -> Result<Self> {
-        mypaper_bars::wake::make_queue();
+        glaze_bars::wake::make_queue();
         let (tx, rx) = mpsc::channel();
         // SAFETY: no preconditions; the waker posts to this (the UI) thread.
         let thread = unsafe { windows::Win32::System::Threading::GetCurrentThreadId() };
@@ -508,7 +508,7 @@ impl Flyouts {
             lanes: Lanes {
                 waker: waker.clone(),
                 replies: replies_tx,
-                icons: mypaper_bars::files::local("icons")?,
+                icons: glaze_bars::files::local("icons")?,
                 quick: None,
                 mixer: None,
                 wifi: None,
@@ -525,7 +525,7 @@ impl Flyouts {
             release_due: None,
             winkey: None,
             foreground: HWND::default(),
-            menu: Some(mypaper_ui::Menu::new("App commands")?),
+            menu: Some(glaze_ui::Menu::new("App commands")?),
             index_due: Some(Instant::now() + Duration::from_secs(8)),
             _index_watch: Vec::new(),
             dismissed: None,
@@ -533,7 +533,7 @@ impl Flyouts {
         flyouts.follow_win_key(main);
         for dir in providers::index::start_menu_dirs() {
             let waker = flyouts.lanes.waker.clone();
-            if let Ok(watcher) = mypaper_fswatch::Watch::directory(&dir, true, move |_| {
+            if let Ok(watcher) = glaze_fswatch::Watch::directory(&dir, true, move |_| {
                 waker.send(Msg::Flyout(Done::Changed(Watched::Apps)));
             }) {
                 flyouts._index_watch.push(watcher);
@@ -580,7 +580,7 @@ impl Flyouts {
         if let Some(open) = &mut self.open {
             open.scale = open.monitor.dpi.max(96) as f32 / 96.0 * self.look.scale;
             open.motion_style = self.look.opening_style;
-            open.interaction = mypaper_ui::interact::motion::InteractionMotion::new(
+            open.interaction = glaze_ui::interact::motion::InteractionMotion::new(
                 self.look.hover_motion,
                 self.look.press_motion,
             );
@@ -594,9 +594,9 @@ impl Flyouts {
 
     fn follow_win_key(&mut self, main: HWND) {
         WinKey::set_files_enabled(files_shortcut_enabled());
-        let hidden = mypaper_bars::config::path()
-            .and_then(|p| mypaper_bars::BarsConfig::load(&p))
-            .is_ok_and(|c| c.taskbar_mode() == mypaper_bars::TaskbarMode::Hide);
+        let hidden = glaze_bars::config::path()
+            .and_then(|p| glaze_bars::BarsConfig::load(&p))
+            .is_ok_and(|c| c.taskbar_mode() == glaze_bars::TaskbarMode::Hide);
         let wanted = self.look.win_key && hidden;
         if wanted != self.winkey.is_some() {
             self.winkey = wanted
@@ -636,12 +636,12 @@ impl Flyouts {
                     } else {
                         match target {
                             winkey::Target::Files => open_files_shortcut(),
-                            winkey::Target::Launcher => mypaper_bars::system::start_menu(),
-                            winkey::Target::Quick => mypaper_bars::system::action_center(
-                                mypaper_bars::actions::Panel::Quick,
+                            winkey::Target::Launcher => glaze_bars::system::start_menu(),
+                            winkey::Target::Quick => glaze_bars::system::action_center(
+                                glaze_bars::actions::Panel::Quick,
                             ),
-                            winkey::Target::Notifications => mypaper_bars::system::action_center(
-                                mypaper_bars::actions::Panel::Notifications,
+                            winkey::Target::Notifications => glaze_bars::system::action_center(
+                                glaze_bars::actions::Panel::Notifications,
                             ),
                         }
                     }
@@ -658,8 +658,8 @@ impl Flyouts {
         }
         while let Ok(reply) = self.replies.try_recv() {
             if let Reply::Apps(apps) = &reply {
-                if let Ok(path) = mypaper_bars::files::local("apps.json") {
-                    let _ = mypaper_bars::files::write_atomic(
+                if let Ok(path) = glaze_bars::files::local("apps.json") {
+                    let _ = glaze_bars::files::write_atomic(
                         &path,
                         providers::index::cache_json(apps).as_bytes(),
                     );
@@ -704,7 +704,7 @@ impl Flyouts {
             }
         }
         if let Some(open) = &mut self.open {
-            let input = mypaper_ui::Interaction {
+            let input = glaze_ui::Interaction {
                 hover: open.hover,
                 pressed: open.pressed,
                 focus: open.focus,
@@ -764,15 +764,15 @@ impl Flyouts {
                     let entries = open.panel.menu();
                     let point = (open.hit.left as i32, open.hit.bottom as i32);
                     if self.menu.is_none() {
-                        self.menu = mypaper_ui::Menu::new("App commands").ok();
+                        self.menu = glaze_ui::Menu::new("App commands").ok();
                     }
                     if let Some(menu) = &mut self.menu {
                         let _ = menu.open(
                             ui,
                             entries,
                             point,
-                            mypaper_ui::screen_at(point.0, point.1),
-                            &mypaper_ui::Tokens::default(),
+                            glaze_ui::screen_at(point.0, point.1),
+                            &glaze_ui::Tokens::default(),
                         );
                     }
                 }
@@ -843,7 +843,7 @@ impl Flyouts {
             );
             (found, center)
         };
-        let monitors = mypaper_desktop::monitor_infos();
+        let monitors = glaze_desktop::monitor_infos();
         let monitor = monitors
             .iter()
             .find(|m| found && m.rect.contains_point(center.0, center.1))
@@ -894,7 +894,7 @@ impl Flyouts {
         let front = unsafe { GetForegroundWindow() };
         if front != self.foreground {
             self.foreground = front;
-            WinKey::set_fullscreen(mypaper_desktop::fullscreen_app_in_front());
+            WinKey::set_fullscreen(glaze_desktop::fullscreen_app_in_front());
         }
     }
 
@@ -951,7 +951,7 @@ impl Flyouts {
             motion: None,
             motion_style: self.look.opening_style,
             snapshot: None,
-            interaction: mypaper_ui::interact::motion::InteractionMotion::new(
+            interaction: glaze_ui::interact::motion::InteractionMotion::new(
                 self.look.hover_motion,
                 self.look.press_motion,
             ),
@@ -978,7 +978,7 @@ impl Flyouts {
         let drawn = started.elapsed();
         let Some(open) = &mut self.open else { return };
         // Shown at its first frame of motion, then focused (keys, and a click elsewhere closes).
-        let delay = if mypaper_ui::glass::style().is_some() {
+        let delay = if glaze_ui::glass::style().is_some() {
             GLASS_DELAY
         } else {
             Duration::ZERO
@@ -990,7 +990,7 @@ impl Flyouts {
             .then(|| self.look.opening.start(0.0, 1.0, Instant::now() + delay));
         if open.motion.is_some() && crate::bars::motion::reveal(open.motion_style).scales() {
             open.snapshot =
-                mypaper_ui::reveal::Snapshot::new(ui, self.surface.shown().clone(), open.size).ok();
+                glaze_ui::reveal::Snapshot::new(ui, self.surface.shown().clone(), open.size).ok();
         }
         open.opened_at = Instant::now();
         self.animate(ui, Instant::now());
@@ -1039,7 +1039,7 @@ impl Flyouts {
                 .filter(|w| *w != 0 && on_screen(*w));
             self.hide();
             if let Some(window) = restore {
-                mypaper_bars::system::activate(mypaper_bars::system::hwnd(window));
+                glaze_bars::system::activate(glaze_bars::system::hwnd(window));
             }
             self.release_due = Some(Instant::now() + LINGER);
         }
@@ -1076,7 +1076,7 @@ impl Flyouts {
         open.dirty = false;
         let s = open.scale;
         let max_height = (open.monitor.work.height as f32 - 2.0 * GAP * s).max(120.0 * s);
-        let glass = mypaper_ui::glass::style();
+        let glass = glaze_ui::glass::style();
         let state = (open.hover, open.pressed, open.focus);
         // On glass, never shrink while open (the glass would be rebuilt: a flash); the next
         // open takes the new size.
@@ -1113,7 +1113,7 @@ impl Flyouts {
         self.surface.set_glass(glass.map(|material| Glass {
             body: Rect::new(0.0, 0.0, width, height),
             radius,
-            material: mypaper_ui::GlassMaterial {
+            material: glaze_ui::GlassMaterial {
                 blur: material.blur * s,
                 ..material
             },
@@ -1123,7 +1123,7 @@ impl Flyouts {
             Ok(drew) => {
                 if open.snapshot.is_some() {
                     open.snapshot =
-                        mypaper_ui::reveal::Snapshot::new(ui, self.surface.shown().clone(), size)
+                        glaze_ui::reveal::Snapshot::new(ui, self.surface.shown().clone(), size)
                             .ok();
                 }
                 open.draws += u32::from(drew);
@@ -1161,11 +1161,11 @@ impl Flyouts {
             self.surface.set_glass(
                 self.look
                     .glass
-                    .filter(|_| mypaper_ui::glass::available())
+                    .filter(|_| glaze_ui::glass::available())
                     .map(|material| Glass {
                         body,
                         radius: (self.look.radius * open.scale).round() * body.width() / full.width(),
-                        material: mypaper_ui::GlassMaterial {
+                        material: glaze_ui::GlassMaterial {
                             blur: material.blur * open.scale,
                             ..material
                         },
@@ -1173,7 +1173,7 @@ impl Flyouts {
             );
         }
         // Delay for the overlay's first frame, then use the configured curve for the content.
-        let alpha = if mypaper_ui::glass::style().is_some() {
+        let alpha = if glaze_ui::glass::style().is_some() {
             p.clamp(0.0, 1.0)
         } else {
             (0.45 + p * 0.55).clamp(0.0, 1.0)
@@ -1195,7 +1195,7 @@ impl Flyouts {
             && menu.owns(id)
         {
             if let Some(outcome) = menu.handle(ui, id, event) {
-                if let mypaper_ui::Outcome::Chosen(command) = outcome {
+                if let glaze_ui::Outcome::Chosen(command) = outcome {
                     self.with_panel(ui, bars, |panel, cx| panel.command(command, cx));
                 }
                 self.surface.take_focus();
@@ -1397,7 +1397,7 @@ impl Flyouts {
             // Input is queued: a menu can return focus before its old deactivation is drained.
             // SAFETY: read-only foreground query for our own surface.
             Event::Deactivated if unsafe { GetForegroundWindow() } == self.surface.hwnd() => {}
-            Event::Deactivated if !self.menu.as_ref().is_some_and(mypaper_ui::Menu::is_open) => {
+            Event::Deactivated if !self.menu.as_ref().is_some_and(glaze_ui::Menu::is_open) => {
                 let kind = self.open.as_ref().map(|o| o.kind);
                 self.close();
                 self.dismissed = kind.map(|kind| (kind, Instant::now()));
@@ -1500,13 +1500,13 @@ impl Flyouts {
 /// `state` is the hovered, pressed and focused hits.
 pub fn build(
     panel: &dyn Panel,
-    text: &mut mypaper_ui::Text,
+    text: &mut glaze_ui::Text,
     look: &Look,
     s: f32,
     max_height: f32,
     state: (Option<HitId>, Option<HitId>, Option<HitId>),
     glass: bool,
-) -> (mypaper_ui::DisplayList, (u32, u32)) {
+) -> (glaze_ui::DisplayList, (u32, u32)) {
     build_at_least(panel, text, look, s, max_height, state, glass, 0.0)
 }
 
@@ -1516,14 +1516,14 @@ pub fn build(
 #[allow(clippy::too_many_arguments)]
 pub fn build_at_least(
     panel: &dyn Panel,
-    text: &mut mypaper_ui::Text,
+    text: &mut glaze_ui::Text,
     look: &Look,
     s: f32,
     max_height: f32,
     state: (Option<HitId>, Option<HitId>, Option<HitId>),
     glass: bool,
     min_height: f32,
-) -> (mypaper_ui::DisplayList, (u32, u32)) {
+) -> (glaze_ui::DisplayList, (u32, u32)) {
     build_animated(
         panel, text, look, s, max_height, state, glass, min_height, None,
     )
@@ -1532,15 +1532,15 @@ pub fn build_at_least(
 #[allow(clippy::too_many_arguments)]
 fn build_animated(
     panel: &dyn Panel,
-    text: &mut mypaper_ui::Text,
+    text: &mut glaze_ui::Text,
     look: &Look,
     s: f32,
     max_height: f32,
     state: (Option<HitId>, Option<HitId>, Option<HitId>),
     glass: bool,
     min_height: f32,
-    motion: Option<&mypaper_ui::interact::motion::InteractionMotion>,
-) -> (mypaper_ui::DisplayList, (u32, u32)) {
+    motion: Option<&glaze_ui::interact::motion::InteractionMotion>,
+) -> (glaze_ui::DisplayList, (u32, u32)) {
     let width = (panel.width() * s).round();
     let mut kit = Kit::new(text, look, s, width);
     kit.motion = motion;
@@ -1555,7 +1555,7 @@ fn build_animated(
     } = kit;
     list.focus = state.2;
     Kit::body(&mut list, (width, height), radius, &theme, glass);
-    mypaper_ui::geom::continuous::surface(&mut list, Rect::new(0.0, 0.0, width, height), look.glass_style.smoothing);
+    glaze_ui::geom::continuous::surface(&mut list, Rect::new(0.0, 0.0, width, height), look.glass_style.smoothing);
     (list, (width as u32, height as u32))
 }
 
@@ -1618,8 +1618,8 @@ fn on_screen(window: isize) -> bool {
 fn position(open: &Open, now: Instant) -> (i32, i32) {
     // On glass it opens in place: every move makes the engine re-render its glass at the new
     // spot, and a frame of that showed as the glass blinking out while the flyout slid in.
-    if mypaper_ui::glass::style().is_some()
-        || open.motion_style != mypaper_bars::style::MotionStyle::Slide
+    if glaze_ui::glass::style().is_some()
+        || open.motion_style != glaze_bars::style::MotionStyle::Slide
     {
         return open.origin;
     }
@@ -1634,20 +1634,20 @@ pub const LIST: HitId = 1000;
 
 /// Config reload supplies the hook's atomic gate; missing executables leave Win+E untouched.
 fn files_shortcut_enabled() -> bool {
-    mypaper_config::Config::load().is_ok_and(|c| c.experimental.files_default)
-        && std::env::current_exe().is_ok_and(|p| p.with_file_name("mypaper-files.exe").is_file())
+    glaze_config::Config::load().is_ok_and(|c| c.experimental.files_default)
+        && std::env::current_exe().is_ok_and(|p| p.with_file_name("glaze-files.exe").is_file())
 }
 
 fn open_files_shortcut() {
     use std::os::windows::process::CommandExt;
     if files_shortcut_enabled()
         && let Ok(path) = std::env::current_exe()
-        && std::process::Command::new(path.with_file_name("mypaper-files.exe"))
+        && std::process::Command::new(path.with_file_name("glaze-files.exe"))
             .creation_flags(0x08000000)
             .spawn()
             .is_ok()
     {
         return;
     }
-    mypaper_bars::system::open("shell:profile".into());
+    glaze_bars::system::open("shell:profile".into());
 }

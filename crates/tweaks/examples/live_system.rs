@@ -4,9 +4,9 @@
 //! On failure, rerun with the same LOCALAPPDATA: construction recovers its journal.
 
 use anyhow::{Result, ensure};
-use mypaper_config::{PowerMode, SystemConfig};
-use mypaper_tweaks::system::{SystemStore, SystemTweaks, writes};
-use mypaper_tweaks::undo::Store;
+use glaze_config::{PowerMode, SystemConfig};
+use glaze_tweaks::system::{SystemStore, SystemTweaks, writes};
+use glaze_tweaks::undo::Store;
 use std::time::Duration;
 use windows::Win32::UI::Shell::{
     SHELLSTATEA, SHGetSetSettings, SSF_SEPPROCESS, SSF_SHOWALLOBJECTS, SSF_SHOWEXTENSIONS,
@@ -27,7 +27,7 @@ fn shell_flags() -> (i32, i32) {
 
 fn main() -> Result<()> {
     let lock =
-        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock");
+        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock");
     ensure!(
         lock.exists(),
         "caller must hold the desktop lock before running live_system"

@@ -7,14 +7,14 @@ wants, with no injection).
 
 ## Goal
 
-`mypaper-files`: a native file browser built on the kit, launched on demand (its own process,
-nothing resident when closed), that looks like the rest of mypaper and follows the active look
+`glaze-files`: a native file browser built on the kit, launched on demand (its own process,
+nothing resident when closed), that looks like the rest of Glaze and follows the active look
 (tokens, glass/solid surface, light/dark, family). Tonight's scope is a solid, fast, good-looking
 v1, not Explorer parity:
 
 - Window with our title area, back/forward/up, a breadcrumb address bar you can also type into
   (paths and `shell:` locations), a search field, and a sidebar (Home, Desktop, Downloads,
-  Documents, Pictures, drives, pinned folders saved in `%APPDATA%\mypaper\files.json`).
+  Documents, Pictures, drives, pinned folders saved in `%APPDATA%\glaze\files.json`).
 - The folder view: Details (name, modified, type, size; sortable; resizable columns) and Icons
   (thumbnails through `IShellItemImageFactory`, off the UI thread, cached). Real shell names and
   icons (`IShellItem`, `SHGetFileInfo` / system image list), hidden files per Explorer's setting.
@@ -27,10 +27,10 @@ v1, not Explorer parity:
   behave exactly like Explorer's.
 - The right-click menu: our kit menu with the common verbs first, then "Show more options" with the
   shell's own `IContextMenu` for everything else.
-- Search: when `mypaper-index` is running (another agent builds it tonight: `crates/index`,
-  `docs/index.md`, pipe `\\.\pipe\mypaper-index`), search and folder sizes come from it; otherwise
+- Search: when `glaze-index` is running (another agent builds it tonight: `crates/index`,
+  `docs/index.md`, pipe `\\.\pipe\glaze-index`), search and folder sizes come from it; otherwise
   search filters the current folder. Only use its pipe protocol; don't edit `crates/index`.
-- Experimental "Open folders with mypaper Files": `experimental.files_default` in `config.json`
+- Experimental "Open folders with Glaze Files": `experimental.files_default` in `config.json`
   (default `false`) writes the per-user HKCU folder/Win+E keys from the research (§3), journaled
   through the existing undo journal in `crates/tweaks` (value, type and absence; compare before
   restore), and restores them when switched off or on uninstall. Implement and unit-test the
@@ -44,7 +44,7 @@ with a 10k-entry folder open.
 
 ## You own
 
-New `crates/files` (binary `mypaper-files`; add it to the workspace in its own commit), additive
+New `crates/files` (binary `glaze-files`; add it to the workspace in its own commit), additive
 `crates/ui` components (new only, per LIVE.md: other agents use the kit too), additive fields in
 `crates/config`, a small additive entry point in `crates/tweaks` for the folder-routing journal, the
 launch hooks in `crates/shell/src/flyouts` and `crates/shell/src/desktop_menu` (additive, small
@@ -53,12 +53,12 @@ commits), `scripts/deploy-local.ps1` (bundle the exe, additive), and a new `docs
 
 ## How
 
-- `CARGO_TARGET_DIR=C:\mypaper-targets\files` for check/test; `C:\mypaper-targets\main` for deploy
+- `CARGO_TARGET_DIR=C:\glaze-targets\files` for check/test; `C:\glaze-targets\main` for deploy
   builds.
 - Look at DPI-aware captures of your own window (Details, Icons, light and dark, a big folder, the
   menu) before calling anything done, and compare them with the bars and flyouts so it looks like
   the same product: calm, flat translucent tint, no outlines on glass, no gloss.
-- Test file operations only inside a scratch folder you create (e.g. `C:\mypaper-targets\files\scratch`),
+- Test file operations only inside a scratch folder you create (e.g. `C:\glaze-targets\files\scratch`),
   never in the user's own folders.
 
 ## Stop when

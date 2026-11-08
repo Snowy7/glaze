@@ -8,7 +8,7 @@
 
 use std::time::{Duration, Instant};
 
-use mypaper_desktop::Monitor;
+use glaze_desktop::Monitor;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Dwm::{
     DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DwmSetWindowAttribute,
@@ -106,13 +106,13 @@ fn curtain(monitor: &Monitor) -> Option<HWND> {
             lpfnWndProc: Some(curtain_proc),
             hInstance: instance.into(),
             hbrBackground: HBRUSH(GetStockObject(BLACK_BRUSH).0),
-            lpszClassName: w!("mypaper.studio.curtain"),
+            lpszClassName: w!("glaze.studio.curtain"),
             ..Default::default()
         };
         RegisterClassW(&class);
         let hwnd = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
-            w!("mypaper.studio.curtain"),
+            w!("glaze.studio.curtain"),
             w!(""),
             WS_POPUP,
             r.x,

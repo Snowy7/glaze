@@ -1,8 +1,8 @@
 //! Look's five styles projected into the appearance fields today's widget host reads.
 //! No new appearance fields or legacy style names are written into widgets.json.
-use mypaper_config::look::Style;
-use mypaper_theme::{Appearance, Surface, WidgetStyle};
-use mypaper_widgets::layout::Instance;
+use glaze_config::look::Style;
+use glaze_theme::{Appearance, Surface, WidgetStyle};
+use glaze_widgets::layout::Instance;
 use serde_json::{Value, json};
 
 use crate::{app::App, docs::DocId};
@@ -31,8 +31,8 @@ pub fn selected(own: &Appearance) -> Option<Style> {
 
 pub fn appearance(app: &App, instance: &Instance, style: Style) -> Value {
     let theme = super::specimens::style_theme(app, style);
-    let material = mypaper_ui::theme::material(theme.style, theme.color.surface);
-    let mut own = mypaper_widgets::look::json_of(&instance.appearance);
+    let material = glaze_ui::theme::material(theme.style, theme.color.surface);
+    let mut own = glaze_widgets::look::json_of(&instance.appearance);
     own.extend([
         (
             "style".into(),
@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn every_style_round_trips_through_the_current_widget_format() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let app = crate::goldens::app(true, &ui);
         let layout = crate::editing::widgets::layout(&app);
         for style in Style::ALL {
@@ -117,7 +117,7 @@ mod tests {
             actions::{Action, Edit},
             panel::State,
         };
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(State::default());
         crate::panel::history::observe(&app);
@@ -145,11 +145,11 @@ mod tests {
             actions::{Action, Edit},
             panel::{Page, State},
         };
-        use mypaper_ui::{Ui, golden, render};
-        let out = std::env::var_os("MYPAPER_STUDIO_PANEL_SHOTS")
+        use glaze_ui::{Ui, golden, render};
+        let out = std::env::var_os("GLAZE_STUDIO_PANEL_SHOTS")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| {
-                std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a")
+                std::path::PathBuf::from(r"C:\glaze-targets\studio-panel\shots-a")
             });
         let mut ui = Ui::new().unwrap();
         for dark in [true, false] {
@@ -171,7 +171,7 @@ mod tests {
                             own,
                         ));
                     } else {
-                        app.nav.more.insert(mypaper_ui::controls::key((
+                        app.nav.more.insert(glaze_ui::controls::key((
                             "panel-color-picker",
                             DocId::Config,
                             "/look/material/tint",

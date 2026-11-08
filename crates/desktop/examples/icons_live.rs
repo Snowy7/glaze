@@ -2,16 +2,16 @@
 //! them again): the rectangles the right-click hook consults, per monitor.
 //!
 //! ```text
-//! cargo run -p mypaper-desktop --example icons_live
+//! cargo run -p glaze-desktop --example icons_live
 //! ```
 
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use mypaper_desktop::desktop_view::DesktopView;
+use glaze_desktop::desktop_view::DesktopView;
 
 fn main() -> Result<()> {
-    mypaper_desktop::enable_dpi_awareness();
+    glaze_desktop::enable_dpi_awareness();
     let view = DesktopView::open()?;
     let was_visible = view.icons_visible()?;
     if !was_visible {
@@ -27,7 +27,7 @@ fn main() -> Result<()> {
         std::thread::sleep(Duration::from_millis(100));
     }
     println!("{} icons after {:.0?}", rects.len(), started.elapsed());
-    let monitors = mypaper_desktop::monitors();
+    let monitors = glaze_desktop::monitors();
     for (i, monitor) in monitors.iter().enumerate() {
         let inside: Vec<_> = rects
             .iter()
@@ -48,7 +48,7 @@ fn main() -> Result<()> {
     checked
 }
 
-fn cross_check(view: &DesktopView, rects: &[mypaper_desktop::Rect]) -> Result<()> {
+fn cross_check(view: &DesktopView, rects: &[glaze_desktop::Rect]) -> Result<()> {
     use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
     use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation, TreeScope_Descendants};
     use windows::Win32::UI::WindowsAndMessaging::FindWindowExW;

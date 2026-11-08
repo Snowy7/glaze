@@ -1,18 +1,18 @@
 # Repeated release-memory check: every page twice; both galleries scroll from top to end.
 # Saves the lifetime peak even when the 50 MiB budget fails, then closes only its own panel.
 param(
-    [string]$Exe = 'C:\mypaper-targets\studio-panel\target-c\release\mypaper-studio.exe',
-    [string]$Shots = 'C:\mypaper-targets\studio-panel\shots-c-r9',
+    [string]$Exe = 'C:\glaze-targets\studio-panel\target-c\release\glaze-studio.exe',
+    [string]$Shots = 'C:\glaze-targets\studio-panel\shots-c-r9',
     [switch]$HelpersOnly,
     [int]$Passes = 2,
-    [string]$ReportPath = 'C:\mypaper-targets\studio-panel\memory-r9.json'
+    [string]$ReportPath = 'C:\glaze-targets\studio-panel\memory-r9.json'
 )
 $ErrorActionPreference = 'Stop'
 . 'C:\Users\you\.t3\worktrees\wallpaper\t3-d748810f\crates\studio\src\panel\live_check.ps1' -Exe $Exe -Shots $Shots -FunctionsOnly
 
 function SettingsHashes {
     $result=@{}
-    $root=Join-Path $env:APPDATA 'mypaper'
+    $root=Join-Path $env:APPDATA 'Glaze'
     $paths=@('config.json','bars.json','widgets.json','studio.json','integrations.json','studio-panel-history.json','plugin-manager.json'|ForEach-Object {Join-Path $root $_})
     $themes=Join-Path $root 'themes'
     if(Test-Path -LiteralPath $themes){$paths+=@(Get-ChildItem -LiteralPath $themes -Directory|ForEach-Object {Join-Path $_.FullName 'theme.json'})}
@@ -180,15 +180,15 @@ if($HelpersOnly){return}
 [void][System.IO.Directory]::CreateDirectory($Shots)
 $script:scrolls=@()
 $before=SettingsHashes
-$componentsBefore=@(Get-Process -Name 'mypaper-core','mypaper-wallpaper' -ErrorAction SilentlyContinue|Select-Object Id,Path,StartTime)
-$existing=@(Get-Process -Name 'mypaper-studio' -ErrorAction SilentlyContinue | Select-Object Id,Path,MainWindowTitle)
+$componentsBefore=@(Get-Process -Name 'glaze-core','glaze-wallpaper' -ErrorAction SilentlyContinue|Select-Object Id,Path,StartTime)
+$existing=@(Get-Process -Name 'glaze-studio' -ErrorAction SilentlyContinue | Select-Object Id,Path,MainWindowTitle)
 if($existing|Where-Object{$_.MainWindowTitle -like '*Panel*'}){throw 'Another panel is running; it was not touched.'}
 $script:visited=@();$script:memory=@();$captures=@();$uia=@{};$script:process=$null
 $success=$false;$tourCompleted=$false
 $prefix='live'
 $start=New-Object System.Diagnostics.ProcessStartInfo
 $start.FileName=$Exe;$start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardError=$true;$start.RedirectStandardOutput=$true
-$start.EnvironmentVariables['MYPAPER_STUDIO_PANEL']='1'
+$start.EnvironmentVariables['GLAZE_STUDIO_PANEL']='1'
 try {
     WithDesktopLock {$script:process=[System.Diagnostics.Process]::Start($start);$script:errorTask=$script:process.StandardError.ReadToEndAsync();$script:outputTask=$script:process.StandardOutput.ReadToEndAsync()}
     for($attempt=0;$attempt -lt 200;$attempt++){
@@ -249,7 +249,7 @@ try {
     $success=$finalMemory.peakWorkingSetBytes -le 50MB
 } finally {
     if($script:process -and !$script:process.HasExited){if(!$finalMemory){$script:process.Refresh();$finalMemory=@{workingSetMB=[math]::Round($script:process.WorkingSet64/1MB,2);privateMB=[math]::Round($script:process.PrivateMemorySize64/1MB,2);peakWorkingSetMB=[math]::Round($script:process.PeakWorkingSet64/1MB,2);peakWorkingSetBytes=$script:process.PeakWorkingSet64}};[void]$script:process.CloseMainWindow();if(!$script:process.WaitForExit(3000)){Stop-Process -Id $script:process.Id}}
-    $componentsAfter=@(Get-Process -Name 'mypaper-core','mypaper-wallpaper' -ErrorAction SilentlyContinue|Select-Object Id,Path,StartTime)
+    $componentsAfter=@(Get-Process -Name 'glaze-core','glaze-wallpaper' -ErrorAction SilentlyContinue|Select-Object Id,Path,StartTime)
     $componentChanges=@($componentsBefore|Where-Object {
         $beforePart=$_
         !@($componentsAfter|Where-Object {$_.Id -eq $beforePart.Id -and $_.StartTime -eq $beforePart.StartTime}).Count

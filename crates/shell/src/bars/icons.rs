@@ -1,7 +1,7 @@
 //! User icon packs and cached raster/SVG decoding, at the exact device size an icon is drawn
 //! (`Images::sized`). All SVG work is CPU-only and done once per size.
-use mypaper_bars::{apps::Item, icon_pack::IconPack};
-use mypaper_ui::{Image, Rgba, Ui};
+use glaze_bars::{apps::Item, icon_pack::IconPack};
+use glaze_ui::{Image, Rgba, Ui};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -24,7 +24,7 @@ impl Images {
         self.images.clear();
         self.pack = pack
             .and_then(|name| {
-                mypaper_config::dir()
+                glaze_config::dir()
                     .ok()
                     .map(|p| p.join("icons").join(name))
             })
@@ -32,7 +32,7 @@ impl Images {
             .or_else(|| {
                 (pack == Some("mono")).then(|| Pack {
                     dir: PathBuf::from("@builtin/mono"),
-                    data: mypaper_bars::icon_pack::bundled_mono(),
+                    data: glaze_bars::icon_pack::bundled_mono(),
                 })
             });
     }
@@ -111,13 +111,13 @@ impl Images {
             .filter(|p| !p.dir.starts_with("@builtin"))?;
         self.key(key)
     }
-    pub fn glyph(&self, key: &str, set: mypaper_bars::style::Glyphs) -> Option<(String, bool)> {
+    pub fn glyph(&self, key: &str, set: glaze_bars::style::Glyphs) -> Option<(String, bool)> {
         self.key(key).or_else(|| {
-            mypaper_bars::glyphs::svg(set, key).map(|_| {
+            glaze_bars::glyphs::svg(set, key).map(|_| {
                 (
                     format!(
                         "@glyph/{}/{key}.svg",
-                        if set == mypaper_bars::style::Glyphs::Symbols {
+                        if set == glaze_bars::style::Glyphs::Symbols {
                             "symbols"
                         } else {
                             "default"
@@ -172,14 +172,14 @@ impl Images {
             .is_some_and(|x| x.eq_ignore_ascii_case("svg"))
         {
             if let Some(file) = source.replace('\\', "/").strip_prefix("@builtin/mono/") {
-                mypaper_bars::icon_pack::bundled_mono_icon(file).and_then(|b| svg_bytes(b, raster))
+                glaze_bars::icon_pack::bundled_mono_icon(file).and_then(|b| svg_bytes(b, raster))
             } else if let Some(source) = source.strip_prefix("@glyph/") {
                 let (set, file) = source.split_once('/')?;
-                mypaper_bars::glyphs::svg(
+                glaze_bars::glyphs::svg(
                     if set == "symbols" {
-                        mypaper_bars::style::Glyphs::Symbols
+                        glaze_bars::style::Glyphs::Symbols
                     } else {
-                        mypaper_bars::style::Glyphs::Default
+                        glaze_bars::style::Glyphs::Default
                     },
                     file.strip_suffix(".svg")?,
                 )

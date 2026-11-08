@@ -1,5 +1,5 @@
 [package]
-name = "mypaper-index"
+name = "glaze-index"
 description = "Opt-in native file name index and incremental folder sizes."
 version.workspace = true
 edition.workspace = true
@@ -14,9 +14,9 @@ memchr = "2"
 memmap2 = "0.9"
 rayon = "1"
 globset = "0.4"
-mypaper-config.workspace = true
-mypaper-fswatch.workspace = true
-mypaper-tweaks.workspace = true
+glaze-config.workspace = true
+glaze-fswatch.workspace = true
+glaze-tweaks.workspace = true
 
 [dependencies.windows]
 workspace = true

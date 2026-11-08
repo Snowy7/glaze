@@ -3,7 +3,7 @@
   "name": "Activity heatmap",
   "category": "Productivity",
   "version": "1.0.0",
-  "author": "mypaper",
+  "author": "Glaze",
   "description": "A contribution-style heatmap of the tasks you finish and the focus sessions you complete.",
   "size": {
     "default": [8, 4],

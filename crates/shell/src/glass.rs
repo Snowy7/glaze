@@ -1,32 +1,32 @@
 //! The shell's single glass boundary: merges every source's plates into the one snapshot the
-//! engine draws (`mypaper-glass-ipc`). Callers pass monitor-local physical pixels and publish
+//! engine draws (`glaze-glass-ipc`). Callers pass monitor-local physical pixels and publish
 //! only when their plates change (and every frame while something moves); nothing at rest.
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-use mypaper_desktop::Monitor;
-use mypaper_glass_ipc as ipc;
-use mypaper_ui::Rect;
-use mypaper_ui::theme::Knobs;
+use glaze_desktop::Monitor;
+use glaze_glass_ipc as ipc;
+use glaze_ui::Rect;
+use glaze_ui::theme::Knobs;
 
 #[path = "glass_tone.rs"]
 pub mod tone;
 
 /// A plate's material: the kit's, so a surface's glass (`theme::material` tuned by the user's
 /// [`Knobs`]) is published as it is. Blur here is physical px.
-pub type Material = mypaper_ui::GlassMaterial;
+pub type Material = glaze_ui::GlassMaterial;
 
 /// The same quiet Liquid Glass for widgets, menus and flyouts. Theme/instance controls are
 /// applied by the caller; the widget look owns the built-in optical defaults.
-pub fn liquid_material(tint: mypaper_theme::Color) -> Material {
-    let defaults = mypaper_widgets::look::liquid_defaults();
+pub fn liquid_material(tint: glaze_theme::Color) -> Material {
+    let defaults = glaze_widgets::look::liquid_defaults();
     let alpha = defaults.tint.expect("built-in tint");
     Material {
         clarity: 1.0 - alpha,
         blur: defaults.blur.expect("built-in blur"),
         refraction: defaults.refraction.expect("built-in refraction"),
         highlight: defaults.highlight.expect("built-in highlight"),
-        tint: mypaper_ui::Rgba::rgb8(tint.0, alpha),
+        tint: glaze_ui::Rgba::rgb8(tint.0, alpha),
     }
 }
 
@@ -42,7 +42,7 @@ pub enum Family {
 
 /// The user's material controls for `family`: its own over the look's (`config.json` ›
 /// `look`), which Studio's Look sliders edit.
-pub fn knobs(look: &mypaper_config::Look, family: Family) -> Knobs {
+pub fn knobs(look: &glaze_config::Look, family: Family) -> Knobs {
     let own = match family {
         Family::Bars => look.bars.as_ref(),
         Family::Widgets => look.widgets.as_ref(),

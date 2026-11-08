@@ -34,7 +34,7 @@ pub(crate) fn start(tx: SyncSender<Change>) -> Result<usize> {
                     let class = WNDCLASSW {
                         lpfnWndProc: Some(window),
                         hInstance: instance.into(),
-                        lpszClassName: w!("mypaper.index.volumes"),
+                        lpszClassName: w!("glaze.index.volumes"),
                         ..Default::default()
                     };
                     RegisterClassW(&class);

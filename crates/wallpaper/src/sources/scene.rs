@@ -17,7 +17,7 @@ use crate::gpu::Gpu;
 use anyhow::{Context, Result, bail};
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Quat, Vec2, Vec3};
-use mypaper_theme::{LoadedTheme, SceneWallpaper};
+use glaze_theme::{LoadedTheme, SceneWallpaper};
 use std::{path::Path, time::Duration};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use windows::Win32::Foundation::HWND;
@@ -872,9 +872,9 @@ impl SceneSource {
             background: config.background,
             exposure: config.exposure,
             environment: match config.environment {
-                mypaper_theme::Environment::Sky => Environment::Sky,
-                mypaper_theme::Environment::Color => Environment::Color,
-                mypaper_theme::Environment::Transparent => Environment::Transparent,
+                glaze_theme::Environment::Sky => Environment::Sky,
+                glaze_theme::Environment::Color => Environment::Color,
+                glaze_theme::Environment::Transparent => Environment::Transparent,
             },
             ..Default::default()
         };
@@ -887,7 +887,7 @@ impl SceneSource {
                 .transpose()
                 .inspect_err(|e| log::warn!("scene input: {e:#}"))
                 .unwrap_or(None),
-            live: vec![true; mypaper_desktop::monitors().len().max(1)],
+            live: vec![true; glaze_desktop::monitors().len().max(1)],
         })
     }
 }

@@ -1,5 +1,5 @@
 use crate::{Availability, Data, Snapshot, obs};
-use mypaper_plugin_sdk::{Face, Role, SizeClass, Tone, View};
+use glaze_plugin_sdk::{Face, Role, SizeClass, Tone, View};
 
 fn duration(ms: u64) -> String {
     let seconds = ms / 1000;
@@ -26,7 +26,7 @@ fn stats(state: &obs::Stats) -> String {
 }
 fn scenes(state: &obs::Snapshot) -> View {
     View::Select { label: "Scene".into(), action: "scene.select".into(),
-        options: state.scenes.iter().map(|name| mypaper_plugin_sdk::view::SelectOption { label: name.clone(), value: name.clone() }).collect(),
+        options: state.scenes.iter().map(|name| glaze_plugin_sdk::view::SelectOption { label: name.clone(), value: name.clone() }).collect(),
         selected: Some(state.scene.clone()) }
 }
 

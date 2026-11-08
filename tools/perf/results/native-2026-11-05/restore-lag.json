@@ -7,7 +7,7 @@
     "cpu_core_pct": 15.849622331139091,
     "cpu_machine_pct": 0.9906013956961932,
     "visible_screens": 2,
-    "timing_file": "C:\\mypaper-targets\\hillclimb\\results\\restore-lag.run0.jsonl",
+    "timing_file": "C:\\glaze-targets\\hillclimb\\results\\restore-lag.run0.jsonl",
     "sample_started_qpc": 3633065603092,
     "sample_ended_qpc": 3633265726161
   }

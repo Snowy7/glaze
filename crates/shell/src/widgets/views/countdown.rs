@@ -4,7 +4,7 @@
 //! ("Since …") or stops.
 use super::Ctx;
 use crate::widgets::time::{self, Stamp};
-use mypaper_ui::{Align, Point, Rect, TextRole};
+use glaze_ui::{Align, Point, Rect, TextRole};
 
 pub fn draw(c: &mut Ctx, r: Rect) {
     let color = c.color();
@@ -100,7 +100,7 @@ pub fn draw(c: &mut Ctx, r: Rect) {
     let hero_w = c.f.text.measure(&hero, &probe).0 + c.f.text.measure(&unit, &unit_probe).0 + 8.0 * s;
     let room_h = r.height() - title_h - rest_h - foot_h - track_h;
     let size = ((r.width() / hero_w * 100.0 / s).min(room_h / s / 1.05)).clamp(16.0, 96.0).floor();
-    let style = mypaper_ui::TextStyle {
+    let style = glaze_ui::TextStyle {
         tracking: -0.035 * size * s,
         ..c.display(size, 500)
     };

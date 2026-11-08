@@ -1,4 +1,4 @@
-//! `mypaper-styler --dump PID --props SELECTOR`: the property values of the elements a selector
+//! `glaze-styler --dump PID --props SELECTOR`: the property values of the elements a selector
 //! picks, with where each comes from (local, style, template, visual state...), so rules can
 //! target the property and element that actually draw.
 

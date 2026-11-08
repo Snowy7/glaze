@@ -1,10 +1,10 @@
 //! Calendar data hookup: imported events join local events without entering local persistence.
 use crate::widgets::model::Model as WidgetModel;
-use mypaper_integrations::{
+use glaze_integrations::{
     Data,
     calendar_oauth::{self, Service},
 };
-use mypaper_ui::HitId;
+use glaze_ui::HitId;
 
 pub const SOURCES: HitId = 7100;
 pub const GOOGLE: HitId = 7101;
@@ -36,7 +36,7 @@ pub fn sync(widget: &mut WidgetModel) {
     if state.calendar.revision != Some(state.snapshot.revision) {
         state.calendar.revision = Some(state.snapshot.revision);
         if let Some(Data::Calendar(snapshot)) = &state.snapshot.data {
-            state.calendar.events = mypaper_integrations::calendar::view_events(snapshot);
+            state.calendar.events = glaze_integrations::calendar::view_events(snapshot);
             widget.dirty = true;
         }
     }
@@ -110,7 +110,7 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
                 config.calendar.microsoft_client_id
             };
             state.calendar.task = Some(super::Task::spawn(move || {
-                let Some(id) = mypaper_integrations::calendar_setup::configure(service, &id)?
+                let Some(id) = glaze_integrations::calendar_setup::configure(service, &id)?
                 else {
                     return Ok(());
                 };
@@ -120,14 +120,14 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
                 } else {
                     config.calendar.microsoft_client_id = id.clone();
                 }
-                mypaper_widgets::files::write_atomic(
+                glaze_widgets::files::write_atomic(
                     &super::config_path(),
                     &serde_json::to_vec_pretty(&config)?,
                 )?;
                 calendar_oauth::connect(service, &id)?;
                 let mut config = super::load()?;
                 config.calendar.enabled = true;
-                mypaper_widgets::files::write_atomic(
+                glaze_widgets::files::write_atomic(
                     &super::config_path(),
                     &serde_json::to_vec_pretty(&config)?,
                 )
@@ -148,7 +148,7 @@ pub fn action(widget: &mut WidgetModel, hit: HitId) -> bool {
                 let mut config = super::load()?;
                 config.calendar.enabled = true;
                 config.calendar.windows = true;
-                mypaper_widgets::files::write_atomic(
+                glaze_widgets::files::write_atomic(
                     &super::config_path(),
                     &serde_json::to_vec_pretty(&config)?,
                 )

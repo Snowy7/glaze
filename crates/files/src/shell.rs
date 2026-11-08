@@ -2,7 +2,7 @@
 //! owned by the browser's workers, never on the drawing thread.
 use crate::model::Entry;
 use anyhow::{Context, Result, ensure};
-use mypaper_ui::Image;
+use glaze_ui::Image;
 use std::{path::Path, sync::Arc};
 use windows::{
     Win32::{
@@ -564,9 +564,9 @@ mod tests {
     #[test]
     fn enumeration_names_and_shell_operations_round_trip_in_a_private_scratch_folder() {
         let _apartment = Apartment::new().unwrap();
-        let root = Path::new(r"C:\mypaper-targets\files\scratch")
+        let root = Path::new(r"C:\glaze-targets\files\scratch")
             .join(format!("operations-{}", std::process::id()));
-        assert!(root.starts_with(r"C:\mypaper-targets\files\scratch"));
+        assert!(root.starts_with(r"C:\glaze-targets\files\scratch"));
         std::fs::create_dir_all(&root).unwrap();
         let path = |name: &str| root.join(name).to_string_lossy().into_owned();
         std::fs::write(path("source.txt"), b"file operation fixture").unwrap();

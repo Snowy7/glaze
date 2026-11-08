@@ -23,8 +23,8 @@ codegen-backend = "llvm"
 codegen-backend = "llvm"
 
 [alias]
-paper = "run -p mypaper-wallpaper --"          # cargo paper --windowed themes/aurora
-core = "run -p mypaper-core --"                # cargo core themes/aurora
+paper = "run -p glaze-wallpaper --"          # cargo paper --windowed themes/aurora
+core = "run -p glaze-core --"                # cargo core themes/aurora
 
 # Private git dependencies (stillkit) fetch through git, which has the GitHub credentials.
 [net]

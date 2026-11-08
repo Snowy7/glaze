@@ -18,7 +18,7 @@ impl Http {
     pub fn new() -> Self {
         let agent = ureq::Agent::config_builder()
             .timeout_global(Some(TIMEOUT))
-            .user_agent("mypaper-rss/1.0 (feed reader plugin for the mypaper wallpaper app)")
+            .user_agent("glaze-rss/1.0 (feed reader plugin for the Glaze wallpaper app)")
             .build()
             .into();
         Self { agent }

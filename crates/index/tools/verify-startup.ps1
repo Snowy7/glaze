@@ -1,12 +1,12 @@
 # Isolated service fixture. Production index stops/starts only through core's config flag.
-param([string]$Exe = 'C:\mypaper-targets\index\release\mypaper-index.exe')
+param([string]$Exe = 'C:\glaze-targets\index\release\glaze-index.exe')
 $ErrorActionPreference = 'Stop'
-$base = [IO.Path]::GetFullPath('C:\mypaper-targets\index\startup-fixture-' + [Guid]::NewGuid().ToString('N'))
+$base = [IO.Path]::GetFullPath('C:\glaze-targets\index\startup-fixture-' + [Guid]::NewGuid().ToString('N'))
 $root = Join-Path $base 'root'
 $cache = Join-Path $base 'cache'
 $appData = Join-Path $base 'appdata'
-$configPath = Join-Path $env:APPDATA 'mypaper/config.json'
-$lockPath = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$configPath = Join-Path $env:APPDATA 'glaze/config.json'
+$lockPath = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 $original = [bool](Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json).experimental.file_index
 $fixture = $null
 $ownsLock = $false
@@ -16,7 +16,7 @@ using System; using System.IO; using System.IO.Pipes; using System.Text;
 public static class IndexFixturePipe {
   public static void Replace(string s, string d) { File.Replace(s,d,null); }
   public static string Request(string json) {
-    using (var pipe = new NamedPipeClientStream(".", "mypaper-index", PipeDirection.InOut)) {
+    using (var pipe = new NamedPipeClientStream(".", "glaze-index", PipeDirection.InOut)) {
       pipe.Connect(100); pipe.ReadMode = PipeTransmissionMode.Message;
       byte[] input = Encoding.UTF8.GetBytes(json); pipe.Write(input,0,input.Length);
       using (var output = new MemoryStream()) {
@@ -63,7 +63,7 @@ function Wait-Until([scriptblock]$Test, [string]$Message) {
 }
 function Start-Fixture([int]$After, [int]$Delay) {
   $config = @{index=@{include=@(($root.Replace('\','/')+'/**'));startup_rescan_after=$After;startup_rescan_delay=$Delay}}
-  [IO.File]::WriteAllText((Join-Path $appData 'mypaper/config.json'), ($config | ConvertTo-Json -Depth 6))
+  [IO.File]::WriteAllText((Join-Path $appData 'glaze/config.json'), ($config | ConvertTo-Json -Depth 6))
   $savedAppData = $env:APPDATA
   try {
     $env:APPDATA = $appData
@@ -79,14 +79,14 @@ function Stop-Fixture {
 try {
   $null = [IO.Directory]::CreateDirectory((Join-Path $root 'top/deep'))
   $null = [IO.Directory]::CreateDirectory($cache)
-  $null = [IO.Directory]::CreateDirectory((Join-Path $appData 'mypaper'))
+  $null = [IO.Directory]::CreateDirectory((Join-Path $appData 'Glaze'))
   [IO.File]::WriteAllText((Join-Path $root 'top/deep/seed.txt'),'old')
   [IO.File]::WriteAllText((Join-Path $root 'top/deep/delete-offline.txt'),'gone')
   Take-Lock
   try {
     Set-Flag $false
     $until = [DateTime]::UtcNow.AddSeconds(20)
-    while (Get-Process mypaper-index -ErrorAction SilentlyContinue) {
+    while (Get-Process glaze-index -ErrorAction SilentlyContinue) {
       if ([DateTime]::UtcNow -gt $until) { throw 'Production helper did not stop' }
       Start-Sleep -Milliseconds 50
     }
@@ -132,6 +132,6 @@ try {
     Take-Lock
     try { Set-Flag $original } finally { Release-Lock }
   }
-  if (-not $base.StartsWith('C:\mypaper-targets\index\startup-fixture-', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid fixture cleanup path' }
+  if (-not $base.StartsWith('C:\glaze-targets\index\startup-fixture-', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid fixture cleanup path' }
   if (Test-Path -LiteralPath $base) { Remove-Item -LiteralPath $base -Recurse -Force }
 }

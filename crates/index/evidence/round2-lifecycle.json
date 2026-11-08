@@ -3,6 +3,6 @@
     "disable_ms":  2836.82,
     "cached_ready_ms":  5289.25,
     "cached_entries":  6012521,
-    "supervisor":  "mypaper-core",
+    "supervisor":  "glaze-core",
     "final_flag":  true
 }

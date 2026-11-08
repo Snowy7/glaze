@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use mypaper_tweaks::game_activity::{self, Owner};
+use glaze_tweaks::game_activity::{self, Owner};
 use windows::Win32::Foundation::{HANDLE, LPARAM, WAIT_OBJECT_0, WPARAM};
 use windows::Win32::System::Threading::{GetCurrentThreadId, WaitForSingleObject};
 use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_NULL};
@@ -14,7 +14,7 @@ use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_NULL};
 #[derive(Default)]
 pub struct GameSignal {
     /// The folder watch, and whether the signal changed since it was last read.
-    watch: Option<(mypaper_fswatch::Watch, Arc<AtomicBool>)>,
+    watch: Option<(glaze_fswatch::Watch, Arc<AtomicBool>)>,
     /// The signal's publisher (core), while it publishes.
     owner: Option<Owner>,
     active: bool,

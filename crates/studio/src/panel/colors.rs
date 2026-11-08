@@ -5,9 +5,9 @@ use crate::{
     app::App,
     ui::{B, Col},
 };
-use mypaper_ui::color_row::popover::{Hsv, Part};
-use mypaper_ui::controls::{Align, key};
-use mypaper_ui::{Button, Event, Point, Rect, Rgba};
+use glaze_ui::color_row::popover::{Hsv, Part};
+use glaze_ui::controls::{Align, key};
+use glaze_ui::{Button, Event, Point, Rect, Rgba};
 use serde_json::{Value, json};
 
 pub const HIGHLIGHTS: [[u8; 3]; 6] = [
@@ -25,7 +25,7 @@ pub fn swatches(
     _none: bool,
     presets: &[[u8; 3]],
 ) {
-    use mypaper_ui::color_row::Choice;
+    use glaze_ui::color_row::Choice;
     let current = app
         .pending_value
         .as_ref()
@@ -52,7 +52,7 @@ pub fn swatches(
         specimens::wallpaper_color(app)
     };
     let wallpaper_hex = wallpaper.map(|color| {
-        mypaper_config::Color([
+        glaze_config::Color([
             (color.r * 255.0).round() as u8,
             (color.g * 255.0).round() as u8,
             (color.b * 255.0).round() as u8,
@@ -98,7 +98,7 @@ pub fn swatches(
         },
     ];
     choices.extend(presets.iter().map(|rgb| {
-        let hex = mypaper_config::Color(*rgb).hex();
+        let hex = glaze_config::Color(*rgb).hex();
         Choice {
             label: color_name(*rgb).into(),
             color: Some(Rgba::rgb8(*rgb, 1.0)),
@@ -108,11 +108,11 @@ pub fn swatches(
     }));
     choices.push(Choice {
         label: format!("Custom {}", edit.label),
-        color: mypaper_config::Color::parse(current).map(|color| Rgba::rgb8(color.0, 1.0)),
+        color: glaze_config::Color::parse(current).map(|color| Rgba::rgb8(color.0, 1.0)),
         selected: !linked
             && current.starts_with('#')
             && !presets.iter().any(|rgb| {
-                mypaper_config::Color(*rgb)
+                glaze_config::Color(*rgb)
                     .hex()
                     .eq_ignore_ascii_case(current)
             }),
@@ -135,7 +135,7 @@ pub fn swatches(
     c.y += row_height + b.px(6.0);
     if app.is_open(picker_key(edit)) {
         let first_op = b.list.ops.len();
-        let rgb = mypaper_config::Color::parse(current).map_or([139, 158, 183], |color| color.0);
+        let rgb = glaze_config::Color::parse(current).map_or([139, 158, 183], |color| color.0);
         let hsv = color_value(app, edit, current, rgb);
         app.panel
             .as_ref()
@@ -168,12 +168,12 @@ pub fn swatches(
         b.hit(
             key((picker_key(edit), "background")),
             rect,
-            mypaper_ui::Role::Group,
+            glaze_ui::Role::Group,
             "Custom color",
             Action::None,
-            mypaper_ui::controls::Behavior::Click,
+            glaze_ui::controls::Behavior::Click,
         );
-        let well = mypaper_ui::color_row::popover::draw(
+        let well = glaze_ui::color_row::popover::draw(
             b,
             picker_key(edit),
             rect,
@@ -189,7 +189,7 @@ pub fn swatches(
                 b.px(28.0),
                 b.px(28.0),
             ),
-            mypaper_ui::icons::Icon::Close.into(),
+            glaze_ui::icons::Icon::Close.into(),
             "Close custom color",
             true,
             Action::Panel(Command::PickColor(edit.clone())),
@@ -217,7 +217,7 @@ pub fn swatches(
             FieldId::Text(edit.doc, edit.path.clone()),
             None,
             "#RRGGBB",
-            &mypaper_config::Color(hsv.rgb()).hex(),
+            &glaze_config::Color(hsv.rgb()).hex(),
             &format!("{} hex", edit.label),
         );
         b.stroke(field, b.px(radius::SMALL), b.px(1.0), b.p.control);
@@ -260,10 +260,10 @@ fn color_name(rgb: [u8; 3]) -> &'static str {
 /// Grouped radio targets preserve AccessKit state and the app's arrow-key navigation.
 fn draw_swatches(
     b: &mut B,
-    id: mypaper_ui::controls::Key,
+    id: glaze_ui::controls::Key,
     rect: Rect,
-    choices: &[mypaper_ui::color_row::Choice<Action>],
-    wallpaper: Option<&std::sync::Arc<mypaper_ui::Image>>,
+    choices: &[glaze_ui::color_row::Choice<Action>],
+    wallpaper: Option<&std::sync::Arc<glaze_ui::Image>>,
     label: &str,
 ) {
     let step = ((rect.width() - b.px(8.0)) / choices.len().max(1) as f32).min(b.px(38.0));
@@ -298,21 +298,21 @@ fn draw_swatches(
                     let start = b.list.ops.len();
                     crate::stage::image_cover(b, dot, image, 1.0);
                     let ops = b.list.ops.split_off(start);
-                    b.list.ops.push(mypaper_ui::Op::RoundedClipped {
+                    b.list.ops.push(glaze_ui::Op::RoundedClipped {
                         rect: dot,
                         radius,
                         ops: ops.into(),
                     });
                 }
             } else if i == choices.len() - 1 {
-                let ink = if mypaper_ui::theme::luminance(mypaper_ui::theme::over(color, b.p.panel))
+                let ink = if glaze_ui::theme::luminance(glaze_ui::theme::over(color, b.p.panel))
                     > 0.45
                 {
                     Rgba::rgb8([25, 25, 25], 1.0)
                 } else {
                     Rgba::rgb8([245, 245, 245], 1.0)
                 };
-                b.icon(dot, mypaper_ui::icons::Icon::Palette, 14.0, ink);
+                b.icon(dot, glaze_ui::icons::Icon::Palette, 14.0, ink);
             }
             if choice.selected {
                 // 1.5 DIP ring separated from the swatch by a genuine transparent gap.
@@ -331,11 +331,11 @@ fn draw_swatches(
             b.hit_checked(
                 k,
                 hit,
-                mypaper_ui::Role::RadioButton,
+                glaze_ui::Role::RadioButton,
                 &format!("{label}: {}", choice.label),
                 Some(choice.selected),
                 choice.action.clone(),
-                mypaper_ui::controls::Behavior::Click,
+                glaze_ui::controls::Behavior::Click,
             );
             b.focus_ring(k, dot.inflate(b.px(5.5)), radius + b.px(5.5));
         }
@@ -368,7 +368,7 @@ pub fn finish(app: &App, b: &mut B) {
     );
 }
 
-fn picker_key(edit: &Edit) -> mypaper_ui::controls::Key {
+fn picker_key(edit: &Edit) -> glaze_ui::controls::Key {
     key(("panel-color-picker", edit.doc, edit.path.as_ref()))
 }
 
@@ -399,7 +399,7 @@ fn current_color(app: &App, edit: &Edit) -> Hsv {
         .get(edit.doc, &edit.path)
         .and_then(Value::as_str)
         .unwrap_or("");
-    let rgb = mypaper_config::Color::parse(current).map_or([139, 158, 183], |color| color.0);
+    let rgb = glaze_config::Color::parse(current).map_or([139, 158, 183], |color| color.0);
     color_value(app, edit, current, rgb)
 }
 
@@ -417,11 +417,11 @@ pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
         .color_values
         .borrow()
         .get(&picker_key(&edit))
-        .map(|(_, hsv)| mypaper_config::Color(hsv.rgb()).hex())
+        .map(|(_, hsv)| glaze_config::Color(hsv.rgb()).hex())
 }
 
 fn remember_color(app: &App, edit: &Edit, hsv: Hsv) -> Value {
-    let hex = mypaper_config::Color(hsv.rgb()).hex();
+    let hex = glaze_config::Color(hsv.rgb()).hex();
     let mut cache = app.panel.as_ref().unwrap().color_values.borrow_mut();
     if cache.len() > 32 {
         cache.clear();
@@ -507,7 +507,7 @@ pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
     if !first_tint(app, edit)
         || value
             .as_str()
-            .and_then(mypaper_config::Color::parse)
+            .and_then(glaze_config::Color::parse)
             .is_none()
     {
         return false;
@@ -660,10 +660,10 @@ pub fn on_key(app: &mut App, vk: u16, ctrl: bool, shift: bool, alt: bool) -> boo
 
 pub fn accessibility(
     app: &mut App,
-    target: &mypaper_ui::controls::Target<Action>,
-    action: &mypaper_ui::AccessibilityAction,
+    target: &glaze_ui::controls::Target<Action>,
+    action: &glaze_ui::AccessibilityAction,
 ) -> bool {
-    use mypaper_ui::AccessibilityAction as A;
+    use glaze_ui::AccessibilityAction as A;
     let Action::Panel(Command::ColorDrag(edit, part, _)) = &target.action else {
         return false;
     };
@@ -690,7 +690,7 @@ mod tests {
         docs::DocId,
         panel::{Page, State},
     };
-    use mypaper_ui::{Pointer, Ui};
+    use glaze_ui::{Pointer, Ui};
 
     fn app(ui: &mut Ui) -> App {
         let mut app = crate::goldens::app(true, ui);
@@ -829,7 +829,7 @@ mod tests {
 mod control_tests {
     use super::*;
     use crate::{docs::DocId, panel::Page};
-    use mypaper_ui::Ui;
+    use glaze_ui::Ui;
 
     #[test]
     fn circular_choices_keep_names_selection_and_arrow_navigation() {
@@ -883,9 +883,9 @@ mod control_tests {
     #[test]
     #[ignore = "writes the explicit Studio control review matrix"]
     fn render_controls_review() {
-        use mypaper_ui::{golden, render};
+        use glaze_ui::{golden, render};
         let out =
-            std::path::PathBuf::from(std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS").unwrap());
+            std::path::PathBuf::from(std::env::var_os("GLAZE_STUDIO_WINDOW_SHOTS").unwrap());
         let mut ui = Ui::new().unwrap();
         for dark in [true, false] {
             for scale in [1.0, 1.25, 1.5, 2.0] {
@@ -960,7 +960,7 @@ mod control_tests {
                         b.list
                             .hits
                             .iter()
-                            .filter(|hit| hit.role == mypaper_ui::Role::Slider)
+                            .filter(|hit| hit.role == glaze_ui::Role::Slider)
                             .count(),
                         3
                     );

@@ -1,13 +1,13 @@
-# Brief: game-quiet (mypaper costs nothing while a game runs)
+# Brief: game-quiet (Glaze costs nothing while a game runs)
 
 Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/system.md` (the game-activity signal:
 `classify`, `GameWatcher`, `read`, `watch`, `Owner::handle()`), `docs/research/explorer-and-files.md` §8
-("What zero overhead requires from mypaper"), `docs/plugins.md` (helper lifecycle, timers, budgets),
+("What zero overhead requires from Glaze"), `docs/plugins.md` (helper lifecycle, timers, budgets),
 `docs/performance.md` ("Hidden = free" for the engine).
 
 ## Goal
 
-While a game (or any fullscreen/exclusive app the signal classifies as a game) runs, mypaper adds
+While a game (or any fullscreen/exclusive app the signal classifies as a game) runs, Glaze adds
 nothing measurable. The engine already releases after 10 s fully covered and the bars hide on
 fullscreen. What's left:
 
@@ -23,7 +23,7 @@ fullscreen. What's left:
    (clock alignment, stats sampler, provider subscriptions on hidden bars). The bars-parity-2 agent is
    in `crates/shell` look code right now: make only small, separate, additive edits there.
 5. Measure with a real fullscreen app you start yourself (a borderless fullscreen window or a D3D
-   fullscreen test app you build; never the user's apps or games): every mypaper process's CPU, wakes,
+   fullscreen test app you build; never the user's apps or games): every Glaze process's CPU, wakes,
    and private memory over 60 s, before and during. Target: 0.0x % total, no wakes from timers.
 
 ## You own

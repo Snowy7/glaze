@@ -7,7 +7,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use mypaper_theme::Fit;
+use glaze_theme::Fit;
 use windows::Win32::Foundation::{GENERIC_READ, RPC_E_CHANGED_MODE};
 use windows::Win32::Graphics::Imaging::{
     CLSID_WICImagingFactory, GUID_WICPixelFormat32bppBGRA, IWICBitmapDecoder,
@@ -111,7 +111,7 @@ fn scale_to_height((w, h): (u64, u64), height: u64) -> (u64, u64) {
 /// The bounding box of all monitors' sizes: an image that covers it covers
 /// every monitor.
 fn largest_screen() -> (u32, u32) {
-    let (w, h) = mypaper_desktop::monitors()
+    let (w, h) = glaze_desktop::monitors()
         .iter()
         .fold((0, 0), |(w, h), m| {
             (
@@ -582,7 +582,7 @@ mod tests {
 
     impl TempFile {
         fn new(name: &str) -> Self {
-            let dir = std::env::temp_dir().join(format!("mypaper-wic-{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!("glaze-wic-{}", std::process::id()));
             std::fs::create_dir_all(&dir).unwrap();
             Self(dir.join(name))
         }

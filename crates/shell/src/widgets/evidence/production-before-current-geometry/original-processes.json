@@ -1,20 +1,20 @@
 [
     {
-        "Name":  "mypaper-core.exe",
+        "Name":  "glaze-core.exe",
         "ProcessId":  42908,
-        "ExecutablePath":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\mypaper-core.exe",
-        "CommandLine":  "\"C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\mypaper-core.exe\" "
+        "ExecutablePath":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\glaze-core.exe",
+        "CommandLine":  "\"C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\glaze-core.exe\" "
     },
     {
-        "Name":  "mypaper-shell.exe",
+        "Name":  "glaze-shell.exe",
         "ProcessId":  19640,
-        "ExecutablePath":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\mypaper-shell.exe",
-        "CommandLine":  "\"C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\mypaper-shell.exe\""
+        "ExecutablePath":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\glaze-shell.exe",
+        "CommandLine":  "\"C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\glaze-shell.exe\""
     },
     {
-        "Name":  "mypaper-wallpaper.exe",
+        "Name":  "glaze-wallpaper.exe",
         "ProcessId":  68188,
-        "ExecutablePath":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\mypaper-wallpaper.exe",
-        "CommandLine":  "\"C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\mypaper-wallpaper.exe\""
+        "ExecutablePath":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\glaze-wallpaper.exe",
+        "CommandLine":  "\"C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-d88477f6\\target\\release\\glaze-wallpaper.exe\""
     }
 ]

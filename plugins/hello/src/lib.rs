@@ -5,8 +5,8 @@
 //! test the host's budget and trap isolation.
 use std::collections::BTreeMap;
 
-use mypaper_plugin_sdk::guest::{self, Event, Plugin, events, notify, style, timers, ui};
-use mypaper_plugin_sdk::{Role, Tone, View};
+use glaze_plugin_sdk::guest::{self, Event, Plugin, events, notify, style, timers, ui};
+use glaze_plugin_sdk::{Role, Tone, View};
 
 #[derive(Default)]
 struct Hello {
@@ -53,7 +53,7 @@ impl Hello {
 
     /// The canvas sample: a track, a dot that moves with the seconds, a wave path and a label.
     fn canvas(&self) -> View {
-        use mypaper_plugin_sdk::{Draw, Paint};
+        use glaze_plugin_sdk::{Draw, Paint};
         let x = 12.0 + (self.ticks % 10) as f32 * 18.0;
         View::Canvas {
             height: 44.0,
@@ -147,7 +147,7 @@ impl Plugin for Hello {
                 self.redraw();
             }
             Event::Command(id) if id == "say-hi" => self.say_hi(),
-            Event::Window(window) if matches!(window.kind, guest::bindings::exports::mypaper::plugin::lifecycle::WindowChange::Focused) => {
+            Event::Window(window) if matches!(window.kind, guest::bindings::exports::glaze::plugin::lifecycle::WindowChange::Focused) => {
                 guest::log(&format!("focused {}", window.process));
                 self.focused = Some(window.process);
                 self.redraw();
@@ -206,4 +206,4 @@ impl Plugin for Hello {
     }
 }
 
-mypaper_plugin_sdk::export!(Hello);
+glaze_plugin_sdk::export!(Hello);

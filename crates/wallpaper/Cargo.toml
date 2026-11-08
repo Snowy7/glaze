@@ -1,21 +1,21 @@
 [package]
-name = "mypaper-wallpaper"
+name = "glaze-wallpaper"
 description = "The wallpaper engine: renders a theme's wallpaper behind the desktop icons."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [features]
-# Rust hot-patching: `dx serve --hotpatch -p mypaper-wallpaper --features hotpatch`.
+# Rust hot-patching: `dx serve --hotpatch -p glaze-wallpaper --features hotpatch`.
 hotpatch = ["dep:subsecond", "dep:dioxus-devtools"]
 
 [dependencies]
-mypaper-glass-ipc.workspace = true
-mypaper-config.workspace = true
-mypaper-desktop.workspace = true
-mypaper-fswatch.workspace = true
-mypaper-theme = { workspace = true, features = ["check"] }
-mypaper-tweaks.workspace = true
+glaze-glass-ipc.workspace = true
+glaze-config.workspace = true
+glaze-desktop.workspace = true
+glaze-fswatch.workspace = true
+glaze-theme = { workspace = true, features = ["check"] }
+glaze-tweaks.workspace = true
 # All Liquid Glass (plates and overlays): a vendored copy of al1h3n/liquid-rust.
 liquid-rust = { path = "../liquid-rust" }
 

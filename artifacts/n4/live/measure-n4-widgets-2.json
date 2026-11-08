@@ -2,7 +2,7 @@
     "label":  "n4-widgets-2",
     "at":  "2026-11-05T00:29:15",
     "rows":  {
-                 "part":  "mypaper-widget-fixture",
+                 "part":  "glaze-widget-fixture",
                  "pid":  53568,
                  "cpu_core_pct":  0.21,
                  "gpu3d_pct":  0.01,

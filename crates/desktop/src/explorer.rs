@@ -21,7 +21,7 @@ use windows::core::{PCWSTR, w};
 
 use crate::DesktopHost;
 
-const CLASS: PCWSTR = w!("mypaper.desktop.events");
+const CLASS: PCWSTR = w!("glaze.desktop.events");
 static TASKBAR_CREATED: OnceLock<u32> = OnceLock::new();
 
 thread_local! {
@@ -99,7 +99,7 @@ impl DesktopEvents {
             let window = CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
                 CLASS,
-                w!("mypaper desktop events"),
+                w!("Glaze desktop events"),
                 WS_POPUP,
                 0,
                 0,

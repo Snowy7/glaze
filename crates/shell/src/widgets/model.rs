@@ -1,8 +1,8 @@
 //! Per-instance native state. Persisted values retain the HTML widgets' keys and JSON shapes.
 use super::time::{self, Stamp};
-use mypaper_ui::calendar::Date;
-use mypaper_ui::{Image, TextField};
-use mypaper_widgets::{layout::Placed, stats::SystemStats, storage::Storage};
+use glaze_ui::calendar::Date;
+use glaze_ui::{Image, TextField};
+use glaze_widgets::{layout::Placed, stats::SystemStats, storage::Storage};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::cell::Cell;
@@ -194,12 +194,12 @@ pub struct Model {
     pub scroll: f32,
     pub scroll_max: Cell<f32>,
     pub scroll_page: Cell<f32>,
-    pub focus: Option<mypaper_ui::HitId>,
-    pub hover: Option<mypaper_ui::HitId>,
+    pub focus: Option<glaze_ui::HitId>,
+    pub hover: Option<glaze_ui::HitId>,
     pub notice: Option<String>,
-    pub pressed: Option<mypaper_ui::HitId>,
+    pub pressed: Option<glaze_ui::HitId>,
     pub action_at: Option<Instant>,
-    pub action_hit: Option<mypaper_ui::HitId>,
+    pub action_hit: Option<glaze_ui::HitId>,
     pub flip_at: Option<Instant>,
     pub last_clock: Option<Stamp>,
     pub previous_clock: Option<Stamp>,
@@ -224,7 +224,7 @@ pub struct Model {
     pub icons: HashMap<usize, Arc<Image>>,
     pub artwork: Option<Arc<Image>>,
     pub artwork_backdrop: Option<Arc<Image>>,
-    pub artwork_tint: Option<mypaper_ui::Rgba>,
+    pub artwork_tint: Option<glaze_ui::Rgba>,
     pub spectrum: Vec<f32>,
     pub field: Option<TextField>,
     pub field_keyboard: bool,
@@ -506,7 +506,7 @@ impl Model {
                 // panes ask for frames only while gliding or fading.
                 Widget::Plugin => {
                     let spring = super::views::plugin::animated::moving()
-                        .then(|| instant + mypaper_ui::display_frame());
+                        .then(|| instant + glaze_ui::display_frame());
                     let scroll = super::views::plugin::scroll::next(&self.placed.instance, instant);
                     spring.into_iter().chain(scroll).min()
                 }
@@ -569,7 +569,7 @@ pub fn plugin_face(placed: &Placed) -> Option<PluginFace> {
         Some((plugin, face)) => (plugin, Some(face)),
         None => (placed.widget.as_str(), None),
     };
-    let (manifest, _) = mypaper_widgets::registry::find_plugin(plugin)?;
+    let (manifest, _) = glaze_widgets::registry::find_plugin(plugin)?;
     let face = match named {
         Some(named) => manifest.faces.iter().find(|f| f.id == named)?,
         None => {

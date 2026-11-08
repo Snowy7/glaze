@@ -2,7 +2,7 @@
 //! concrete values: what to set on windows, and what to write to the
 //! registry. Pure, so `"auto"` resolution is tested.
 
-use mypaper_theme::{Backdrop, Color, Corners, Paint, WindowsStyle};
+use glaze_theme::{Backdrop, Color, Corners, Paint, WindowsStyle};
 
 use crate::color::{accent_abgr, accent_palette, colorization_argb};
 use crate::palette::Palette;
@@ -318,7 +318,7 @@ mod tests {
     fn five_style_transitions_and_palette_updates_restore_the_first_registry_originals() {
         use crate::undo::tests::{Memory, Scratch};
         use crate::undo::{Store, Undo};
-        use mypaper_config::look::{Scheme, Style};
+        use glaze_config::look::{Scheme, Style};
         use std::time::Duration;
 
         let scratch = Scratch::new("style-sync-roundtrip");
@@ -335,12 +335,12 @@ mod tests {
         let mut touched = Vec::new();
         for style in Style::ALL {
             for appearance in [Scheme::Dark, Scheme::Light] {
-                let look = mypaper_config::Look {
+                let look = glaze_config::Look {
                     style: Some(style),
                     appearance: Some(appearance),
                     ..Default::default()
                 };
-                let raw = mypaper_theme::windows::resolve(&look, None, Some(palette()), false)
+                let raw = glaze_theme::windows::resolve(&look, None, Some(palette()), false)
                     .windows
                     .unwrap();
                 let writes = system_writes(&raw, Some(&palette()));

@@ -3,11 +3,11 @@
 //! to render with its own harness, which compiled with a different DX12 compiler than the
 //! engine's FXC, so a black `crt` looked right there; these tests leave no second renderer.
 //!
-//! `cargo test -p mypaper-wallpaper --bins effects_real -- --test-threads=1 --nocapture`
+//! `cargo test -p glaze-wallpaper --bins effects_real -- --test-threads=1 --nocapture`
 //!
-//! - `MYPAPER_EFFECTS_REAL=<dir>` also writes `<dir>/<w>x<h>/<id>.jpg`, `before.jpg` and
-//!   `report.json` (for `effects/tools/contact_sheet.py`); `MYPAPER_EFFECTS_ONLY=id,id` limits it.
-//! - `MYPAPER_GALLERY=<dir>` with the ignored `gallery_renders` renders the jobs that
+//! - `GLAZE_EFFECTS_REAL=<dir>` also writes `<dir>/<w>x<h>/<id>.jpg`, `before.jpg` and
+//!   `report.json` (for `effects/tools/contact_sheet.py`); `GLAZE_EFFECTS_ONLY=id,id` limits it.
+//! - `GLAZE_GALLERY=<dir>` with the ignored `gallery_renders` renders the jobs that
 //!   `effects/tools/render_gallery.py` prepared (the effects' `preview.jpg` cards).
 
 use std::sync::atomic::Ordering;
@@ -31,7 +31,7 @@ fn stack_over(gpu: &Gpu, photo: &str, layers: &str) -> StackSource {
         "base": { "kind": "image", "source": photo },
         "layers": serde_json::from_str::<Value>(&format!("[{layers}]")).unwrap() } });
     let theme = LoadedTheme::parse(repo().join(THEME), &json.to_string()).unwrap();
-    let mypaper_theme::Wallpaper::Stack(config) = &theme.theme.wallpaper else {
+    let glaze_theme::Wallpaper::Stack(config) = &theme.theme.wallpaper else {
         unreachable!()
     };
     let source = StackSource::new_in(gpu, &theme, config, &[repo().join("effects")]).unwrap();
@@ -57,9 +57,9 @@ fn layer(id: &str, params: Value) -> String {
     serde_json::json!({ "kind": "effect", "effect": id, "params": params }).to_string()
 }
 
-/// Every bundled effect id, sorted (only `MYPAPER_EFFECTS_ONLY`'s when set).
+/// Every bundled effect id, sorted (only `GLAZE_EFFECTS_ONLY`'s when set).
 fn effect_ids() -> Vec<String> {
-    let only = std::env::var("MYPAPER_EFFECTS_ONLY").unwrap_or_default();
+    let only = std::env::var("GLAZE_EFFECTS_ONLY").unwrap_or_default();
     let mut ids: Vec<String> = std::fs::read_dir(repo().join("effects"))
         .unwrap()
         .flatten()
@@ -190,7 +190,7 @@ fn problems(id: &str, s: &Stats, base: &Stats) -> Vec<String> {
 fn every_effect_keeps_the_photo_through_the_engine_at_1080p_and_1440p() {
     com();
     let gpu = Gpu::headless().expect("a DX12 GPU");
-    let dump = std::env::var_os("MYPAPER_EFFECTS_REAL").map(PathBuf::from);
+    let dump = std::env::var_os("GLAZE_EFFECTS_REAL").map(PathBuf::from);
     let ids = effect_ids();
     let mut failures = Vec::new();
     let mut report = serde_json::Map::new();
@@ -253,7 +253,7 @@ fn float_gpu() -> Gpu {
 /// Defaults, every float at its minimum, at its maximum, both bools, black and white colors,
 /// and every enum option.
 fn param_cases(manifest: &stack::EffectManifest) -> Vec<Value> {
-    use mypaper_theme::stack::ParamKind;
+    use glaze_theme::stack::ParamKind;
     let mut cases = vec![serde_json::json!({}), serde_json::json!({}), serde_json::json!({})];
     for p in &manifest.params {
         let (low, high) = match &p.kind {
@@ -354,7 +354,7 @@ fn params_as_studio_writes_them_change_the_render() {
 }
 
 /// Renders the gallery jobs `effects/tools/render_gallery.py` prepared: each folder of
-/// `MYPAPER_GALLERY` with a `job.json` ({ effect, params, time, mouse [x, y] in 0..1,
+/// `GLAZE_GALLERY` with a `job.json` ({ effect, params, time, mouse [x, y] in 0..1,
 /// clock_hours, second: { time, mouse }? } over its `input.jpg`) gets `<effect>.jpg` at
 /// 1920x1080, and `<effect>-second.jpg` for a second frame.
 #[test]
@@ -363,7 +363,7 @@ fn gallery_renders() {
     com();
     let gpu = Gpu::headless().expect("a DX12 GPU");
     let size = (1920, 1080);
-    let root = PathBuf::from(std::env::var_os("MYPAPER_GALLERY").expect("MYPAPER_GALLERY"));
+    let root = PathBuf::from(std::env::var_os("GLAZE_GALLERY").expect("GLAZE_GALLERY"));
     for entry in std::fs::read_dir(&root).unwrap().flatten() {
         let Ok(text) = std::fs::read_to_string(entry.path().join("job.json")) else {
             continue;

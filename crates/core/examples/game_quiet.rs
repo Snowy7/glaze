@@ -78,7 +78,7 @@ fn phase(
     let start = Instant::now();
     loop {
         pump(50);
-        let current = mypaper_tweaks::game_activity::read().map(|(snapshot, _)| snapshot);
+        let current = glaze_tweaks::game_activity::read().map(|(snapshot, _)| snapshot);
         ensure!(
             current.is_some_and(|s| s.publisher_pid == publisher),
             "publisher restarted during {name}: {current:?}"
@@ -116,18 +116,18 @@ unsafe fn lifecycle(
     mut full: Vec<HWND>,
     output: PathBuf,
 ) -> Result<()> {
-    let publisher = mypaper_tweaks::game_activity::read()
+    let publisher = glaze_tweaks::game_activity::read()
         .context("core is not publishing activity")?
         .0
         .publisher_pid;
-    let r = mypaper_desktop::monitor_infos()[0].rect;
+    let r = glaze_desktop::monitor_infos()[0].rect;
     let mut results = Vec::new();
     // SAFETY: creates/moves/minimizes/destroys only owned fixture windows.
     unsafe {
         let normal = CreateWindowExW(
             WS_EX_TOPMOST,
             class,
-            w!("mypaper normal-window resume fixture"),
+            w!("Glaze normal-window resume fixture"),
             WS_OVERLAPPEDWINDOW,
             r.x + 100,
             r.y + 100,
@@ -183,11 +183,11 @@ unsafe fn lifecycle(
 
 fn main() -> Result<()> {
     ensure!(
-        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock")
+        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock")
             .is_dir(),
         "take the desktop lock before starting the fixture"
     );
-    mypaper_desktop::enable_dpi_awareness();
+    glaze_desktop::enable_dpi_awareness();
     let seconds = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "100".into())
@@ -200,19 +200,19 @@ fn main() -> Result<()> {
         let class = WNDCLASSW {
             lpfnWndProc: Some(proc),
             hInstance: instance.into(),
-            lpszClassName: w!("mypaper.game-quiet.fixture"),
+            lpszClassName: w!("glaze.game-quiet.fixture"),
             hbrBackground: windows::Win32::Graphics::Gdi::HBRUSH(
                 (windows::Win32::Graphics::Gdi::COLOR_WINDOW.0 + 1) as _,
             ),
             ..Default::default()
         };
         RegisterClassW(&class);
-        for monitor in mypaper_desktop::monitor_infos() {
+        for monitor in glaze_desktop::monitor_infos() {
             let r = monitor.rect;
             let window = CreateWindowExW(
                 WS_EX_TOPMOST,
                 class.lpszClassName,
-                w!("mypaper fullscreen quiescence fixture"),
+                w!("Glaze fullscreen quiescence fixture"),
                 WS_POPUP,
                 r.x,
                 r.y,
@@ -252,7 +252,7 @@ fn main() -> Result<()> {
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
-            let activity = mypaper_tweaks::game_activity::read().map(|(s, _)| s.activity);
+            let activity = glaze_tweaks::game_activity::read().map(|(s, _)| s.activity);
             if activity != last {
                 println!("activity={}", serde_json::to_string(&activity)?);
                 last = activity;

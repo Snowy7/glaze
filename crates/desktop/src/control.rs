@@ -48,7 +48,7 @@ impl ControlWindow {
             CreateWindowExW(
                 Default::default(),
                 class,
-                w!("mypaper control"),
+                w!("Glaze control"),
                 Default::default(),
                 0,
                 0,

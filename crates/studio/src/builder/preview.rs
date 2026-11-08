@@ -20,7 +20,7 @@ impl Preview {
             match child.try_wait() {
                 Ok(Some(status)) => {
                     self.error = Some(format!(
-                        "Engine preview stopped ({status}). Update mypaper to preview this draft."
+                        "Engine preview stopped ({status}). Update Glaze to preview this draft."
                     ));
                     self.child = None;
                 }
@@ -32,7 +32,7 @@ impl Preview {
             }
         }
         let Some(exe) = engine_exe() else {
-            self.error = Some("Start the latest mypaper engine to preview this draft.".into());
+            self.error = Some("Start the latest Glaze engine to preview this draft.".into());
             return;
         };
         let stamp = std::fs::metadata(&exe).ok().and_then(|m| m.modified().ok());
@@ -59,7 +59,7 @@ impl Drop for Preview {
 }
 
 fn engine_exe() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("MYPAPER_PREVIEW_ENGINE")
+    if let Some(path) = std::env::var_os("GLAZE_PREVIEW_ENGINE")
         .map(PathBuf::from)
         .filter(|p| p.is_file())
     {
@@ -68,15 +68,15 @@ fn engine_exe() -> Option<PathBuf> {
     let mut paths = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
         for parent in exe.ancestors().skip(1) {
-            paths.push(parent.join("mypaper-wallpaper.exe"));
+            paths.push(parent.join("glaze-wallpaper.exe"));
         }
     }
     paths.push(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../target/release/mypaper-wallpaper.exe"),
+            .join("../../target/release/glaze-wallpaper.exe"),
     );
     paths.push(PathBuf::from(
-        r"C:\mypaper-targets\main\release\mypaper-wallpaper.exe",
+        r"C:\glaze-targets\main\release\glaze-wallpaper.exe",
     ));
     paths.into_iter().find(|p| p.is_file())
 }
@@ -85,7 +85,7 @@ fn spawn(exe: &Path, dir: &Path) -> Result<Child> {
     let log = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .context("LOCALAPPDATA is unavailable")?
-        .join("mypaper/preview");
+        .join("glaze/preview");
     std::fs::create_dir_all(&log)?;
     let name = dir.file_name().context("draft has no folder name")?;
     let stderr = std::fs::File::create(log.join(name).with_extension("log"))?;

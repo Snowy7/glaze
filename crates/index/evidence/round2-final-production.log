@@ -1,105 +1,105 @@
-﻿[2026-11-06T05:20:18Z INFO  mypaper_shell] stopping
-[2026-11-06T05:20:18Z INFO  mypaper_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
-[2026-11-06T05:20:18Z INFO  mypaper_shell::widgets] native widgets stopped: presents=416 clock_presents=367
-[2026-11-06T05:20:18Z INFO  mypaper_bars::flyouts::winkey] launcher: Windows key hook removed
-[2026-11-06T05:20:18Z INFO  mypaper_shell] stopped (bars 839 ms, menu 2 ms, widgets 19 ms, flyouts 5 ms, integrations 0 ms, window events 5 ms)
-[2026-11-06T05:20:19Z INFO  mypaper_tweaks::dwm] restored 2 window(s)
-[2026-11-06T05:20:19Z WARN  mypaper_core::tray] could not add the tray icon (is Explorer running?)
-[2026-11-06T05:20:21Z INFO  mypaper_core] desktop restored
-[2026-11-06T05:20:24Z INFO  mypaper_desktop::startup] READY component=core main_ms=230.9 epoch_us=1793942424986778
-[2026-11-06T05:20:24Z INFO  mypaper_desktop::startup] READY component=core shell_spawn_begin_ms=231.2 epoch_us=1793942424987059
-[2026-11-06T05:20:25Z INFO  mypaper_desktop::startup] READY component=core shell_spawn_ms=684.2 epoch_us=1793942425440081
-[2026-11-06T05:20:25Z INFO  mypaper_desktop::startup] READY component=shell main_ms=122.2 epoch_us=1793942425514977
-[2026-11-06T05:20:25Z WARN  mypaper_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and bevel/scoop/notch corners
-[2026-11-06T05:20:25Z INFO  mypaper_desktop::startup] READY component=shell config_ms=143.9 epoch_us=1793942425536668
-[2026-11-06T05:20:25Z INFO  mypaper_desktop::startup] READY component=shell prepared_ms=143.9 epoch_us=1793942425536679
-[2026-11-06T05:20:25Z INFO  mypaper_desktop::startup] READY component=shell factories_ms=148.2 epoch_us=1793942425541049
-[2026-11-06T05:20:25Z INFO  mypaper_desktop::startup] READY component=shell services_ms=148.3 epoch_us=1793942425541130
-[2026-11-06T05:20:25Z INFO  mypaper_desktop::startup] READY component=shell theme_ms=150.2 epoch_us=1793942425542971
-[2026-11-06T05:20:25Z INFO  mypaper_desktop::startup] READY component=shell monitors_ms=150.9 epoch_us=1793942425543659
-[2026-11-06T05:20:25Z INFO  mypaper_desktop::startup] READY component=shell first_paint_ms=296.2 epoch_us=1793942425688988
-[2026-11-06T05:20:25Z INFO  mypaper_desktop::startup] READY component=core spawn_ms=951.2 epoch_us=1793942425707078
-[2026-11-06T05:20:25Z INFO  mypaper_core] running; panic hotkey: Ctrl+Alt+Shift+Backspace
-[2026-11-06T05:20:25Z INFO  mypaper_wallpaper] theme: Rainy Hong Kong (non-commercial) (D:\Coding\projects\desktop\wallpaper\themes\rain-city)
-[2026-11-06T05:20:25Z INFO  mypaper_wallpaper] desktop host: Layered { progman: HWND(0x30d07ee), defview: HWND(0x610402) }
-[2026-11-06T05:20:25Z INFO  mypaper_desktop::startup] READY component=shell surfaces_ms=459.8 epoch_us=1793942425852558
-[2026-11-06T05:20:25Z INFO  mypaper_desktop::startup] READY component=shell bars_painted_ms=460.0 epoch_us=1793942425852760
-[2026-11-06T05:20:25Z INFO  mypaper_core] theme: rain-city
-[2026-11-06T05:20:26Z INFO  mypaper_desktop::startup] READY component=wallpaper windows_ms=501.0 epoch_us=1793942426148930
-[2026-11-06T05:20:26Z INFO  mypaper_desktop::startup] READY component=shell replayed_ms=782.0 epoch_us=1793942426174836
-[2026-11-06T05:20:26Z INFO  mypaper_wallpaper::gpu] GPU: NVIDIA GeForce RTX 4070 SUPER (Dx12), preference=Auto
-[2026-11-06T05:20:26Z INFO  mypaper_desktop::startup] READY component=wallpaper device_ms=1200.5 epoch_us=1793942426848402
-[2026-11-06T05:20:26Z INFO  mypaper_wallpaper::engine] pausing 2560x1440 screen
-[2026-11-06T05:20:27Z INFO  mypaper_wallpaper::engine] Rainy Hong Kong (non-commercial) ready in 283.5ms
-[2026-11-06T05:20:27Z INFO  mypaper_desktop::startup] READY component=wallpaper source_ms=1487.2 epoch_us=1793942427135089
-[2026-11-06T05:20:27Z INFO  mypaper_desktop::startup] READY component=wallpaper loop_ms=1629.8 epoch_us=1793942427277751
-[2026-11-06T05:20:27Z INFO  mypaper_wallpaper::overlay::capture] glass overlays: borderless capture allowed
-[2026-11-06T05:20:27Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
-[2026-11-06T05:20:27Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
-[2026-11-06T05:20:27Z INFO  mypaper_bars::flyouts::winkey] launcher: the Windows key opens the launcher
-[2026-11-06T05:20:28Z INFO  mypaper_shell] desktop right-click menu on
-[2026-11-06T05:20:28Z INFO  mypaper_desktop::startup] READY component=shell ready_ms=3108.0 epoch_us=1793942428500814
-[2026-11-06T05:20:28Z INFO  mypaper_shell] running
-[2026-11-06T05:20:28Z INFO  mypaper_desktop::startup] READY component=shell widgets_init_ms=3214.2 epoch_us=1793942428606965
-[2026-11-06T05:20:28Z INFO  mypaper_desktop::startup] READY component=wallpaper first_frame_ms=3123.7 epoch_us=1793942428771596
-[2026-11-06T05:20:28Z INFO  mypaper_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
-[2026-11-06T05:20:28Z INFO  mypaper_wallpaper::snapshot] snapshot: 0 of 2 screens drawn in 823.6Âµs on the main thread
-[2026-11-06T05:20:28Z INFO  mypaper_wallpaper::snapshot] snapshot (worker thread): GPU wait 0.0ns, encode 0.0ns, set 0.0ns
-[2026-11-06T05:20:29Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 271.2 ms (not waited on), copy 0.07 ms on the frame, write 1.91 ms off it
-[2026-11-06T05:20:29Z INFO  mypaper_widgets::plugins] plugin runtime started
-[2026-11-06T05:20:29Z INFO  mypaper_widgets::plugins] [plugins] [2026-11-06T05:20:29Z INFO  mypaper_plugins::host] plugin t3 loaded
-[2026-11-06T05:20:29Z INFO  mypaper_widgets::plugins] [plugins] [2026-11-06T05:20:29Z INFO  mypaper_plugins::host] plugin weather loaded
-[2026-11-06T05:20:29Z INFO  mypaper_desktop::startup] READY component=shell widgets_ready_ms=3801.0 epoch_us=1793942429193810
+﻿[2026-11-06T05:20:18Z INFO  glaze_shell] stopping
+[2026-11-06T05:20:18Z INFO  glaze_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
+[2026-11-06T05:20:18Z INFO  glaze_shell::widgets] native widgets stopped: presents=416 clock_presents=367
+[2026-11-06T05:20:18Z INFO  glaze_bars::flyouts::winkey] launcher: Windows key hook removed
+[2026-11-06T05:20:18Z INFO  glaze_shell] stopped (bars 839 ms, menu 2 ms, widgets 19 ms, flyouts 5 ms, integrations 0 ms, window events 5 ms)
+[2026-11-06T05:20:19Z INFO  glaze_tweaks::dwm] restored 2 window(s)
+[2026-11-06T05:20:19Z WARN  glaze_core::tray] could not add the tray icon (is Explorer running?)
+[2026-11-06T05:20:21Z INFO  glaze_core] desktop restored
+[2026-11-06T05:20:24Z INFO  glaze_desktop::startup] READY component=core main_ms=230.9 epoch_us=1793942424986778
+[2026-11-06T05:20:24Z INFO  glaze_desktop::startup] READY component=core shell_spawn_begin_ms=231.2 epoch_us=1793942424987059
+[2026-11-06T05:20:25Z INFO  glaze_desktop::startup] READY component=core shell_spawn_ms=684.2 epoch_us=1793942425440081
+[2026-11-06T05:20:25Z INFO  glaze_desktop::startup] READY component=shell main_ms=122.2 epoch_us=1793942425514977
+[2026-11-06T05:20:25Z WARN  glaze_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and bevel/scoop/notch corners
+[2026-11-06T05:20:25Z INFO  glaze_desktop::startup] READY component=shell config_ms=143.9 epoch_us=1793942425536668
+[2026-11-06T05:20:25Z INFO  glaze_desktop::startup] READY component=shell prepared_ms=143.9 epoch_us=1793942425536679
+[2026-11-06T05:20:25Z INFO  glaze_desktop::startup] READY component=shell factories_ms=148.2 epoch_us=1793942425541049
+[2026-11-06T05:20:25Z INFO  glaze_desktop::startup] READY component=shell services_ms=148.3 epoch_us=1793942425541130
+[2026-11-06T05:20:25Z INFO  glaze_desktop::startup] READY component=shell theme_ms=150.2 epoch_us=1793942425542971
+[2026-11-06T05:20:25Z INFO  glaze_desktop::startup] READY component=shell monitors_ms=150.9 epoch_us=1793942425543659
+[2026-11-06T05:20:25Z INFO  glaze_desktop::startup] READY component=shell first_paint_ms=296.2 epoch_us=1793942425688988
+[2026-11-06T05:20:25Z INFO  glaze_desktop::startup] READY component=core spawn_ms=951.2 epoch_us=1793942425707078
+[2026-11-06T05:20:25Z INFO  glaze_core] running; panic hotkey: Ctrl+Alt+Shift+Backspace
+[2026-11-06T05:20:25Z INFO  glaze_wallpaper] theme: Rainy Hong Kong (non-commercial) (D:\Coding\projects\desktop\wallpaper\themes\rain-city)
+[2026-11-06T05:20:25Z INFO  glaze_wallpaper] desktop host: Layered { progman: HWND(0x30d07ee), defview: HWND(0x610402) }
+[2026-11-06T05:20:25Z INFO  glaze_desktop::startup] READY component=shell surfaces_ms=459.8 epoch_us=1793942425852558
+[2026-11-06T05:20:25Z INFO  glaze_desktop::startup] READY component=shell bars_painted_ms=460.0 epoch_us=1793942425852760
+[2026-11-06T05:20:25Z INFO  glaze_core] theme: rain-city
+[2026-11-06T05:20:26Z INFO  glaze_desktop::startup] READY component=wallpaper windows_ms=501.0 epoch_us=1793942426148930
+[2026-11-06T05:20:26Z INFO  glaze_desktop::startup] READY component=shell replayed_ms=782.0 epoch_us=1793942426174836
+[2026-11-06T05:20:26Z INFO  glaze_wallpaper::gpu] GPU: NVIDIA GeForce RTX 4070 SUPER (Dx12), preference=Auto
+[2026-11-06T05:20:26Z INFO  glaze_desktop::startup] READY component=wallpaper device_ms=1200.5 epoch_us=1793942426848402
+[2026-11-06T05:20:26Z INFO  glaze_wallpaper::engine] pausing 2560x1440 screen
+[2026-11-06T05:20:27Z INFO  glaze_wallpaper::engine] Rainy Hong Kong (non-commercial) ready in 283.5ms
+[2026-11-06T05:20:27Z INFO  glaze_desktop::startup] READY component=wallpaper source_ms=1487.2 epoch_us=1793942427135089
+[2026-11-06T05:20:27Z INFO  glaze_desktop::startup] READY component=wallpaper loop_ms=1629.8 epoch_us=1793942427277751
+[2026-11-06T05:20:27Z INFO  glaze_wallpaper::overlay::capture] glass overlays: borderless capture allowed
+[2026-11-06T05:20:27Z INFO  glaze_bars::network] no Wi-Fi notifications (5)
+[2026-11-06T05:20:27Z INFO  glaze_bars::tray_host] tray: hosting the notification area
+[2026-11-06T05:20:27Z INFO  glaze_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-06T05:20:28Z INFO  glaze_shell] desktop right-click menu on
+[2026-11-06T05:20:28Z INFO  glaze_desktop::startup] READY component=shell ready_ms=3108.0 epoch_us=1793942428500814
+[2026-11-06T05:20:28Z INFO  glaze_shell] running
+[2026-11-06T05:20:28Z INFO  glaze_desktop::startup] READY component=shell widgets_init_ms=3214.2 epoch_us=1793942428606965
+[2026-11-06T05:20:28Z INFO  glaze_desktop::startup] READY component=wallpaper first_frame_ms=3123.7 epoch_us=1793942428771596
+[2026-11-06T05:20:28Z INFO  glaze_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-06T05:20:28Z INFO  glaze_wallpaper::snapshot] snapshot: 0 of 2 screens drawn in 823.6Âµs on the main thread
+[2026-11-06T05:20:28Z INFO  glaze_wallpaper::snapshot] snapshot (worker thread): GPU wait 0.0ns, encode 0.0ns, set 0.0ns
+[2026-11-06T05:20:29Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 271.2 ms (not waited on), copy 0.07 ms on the frame, write 1.91 ms off it
+[2026-11-06T05:20:29Z INFO  glaze_widgets::plugins] plugin runtime started
+[2026-11-06T05:20:29Z INFO  glaze_widgets::plugins] [plugins] [2026-11-06T05:20:29Z INFO  glaze_plugins::host] plugin t3 loaded
+[2026-11-06T05:20:29Z INFO  glaze_widgets::plugins] [plugins] [2026-11-06T05:20:29Z INFO  glaze_plugins::host] plugin weather loaded
+[2026-11-06T05:20:29Z INFO  glaze_desktop::startup] READY component=shell widgets_ready_ms=3801.0 epoch_us=1793942429193810
 weather: Windows location unavailable: Your App does not have permission to access location data. Make sure you have defined ID_CAP_LOCATION in the application manifest and that on your phone, you have turned on location by checking Settings > Location. (0x80070005); trying IP (city level)
-[2026-11-06T05:20:29Z INFO  mypaper_wallpaper::trim] trimmed the working set
-[2026-11-06T05:20:30Z INFO  mypaper_tweaks::dwm] styled 2 window(s)
-[2026-11-06T05:20:30Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
-[2026-11-06T05:20:31Z INFO  mypaper_styler::helper::attach] attached to 73468 (system XAML, VisualDiagConnection1)
-[2026-11-06T05:20:31Z INFO  mypaper_styler::helper::run] styling settings (73468, system XAML)
-[2026-11-06T05:20:31Z INFO  mypaper_styler::helper::attach] attached to 76024 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T05:20:31Z INFO  mypaper_styler::helper::run] styling explorer (76024, WinUI 3)
-[2026-11-06T05:20:31Z INFO  mypaper_styler::helper::run] app styler running
+[2026-11-06T05:20:29Z INFO  glaze_wallpaper::trim] trimmed the working set
+[2026-11-06T05:20:30Z INFO  glaze_tweaks::dwm] styled 2 window(s)
+[2026-11-06T05:20:30Z INFO  glaze_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-06T05:20:31Z INFO  glaze_styler::helper::attach] attached to 73468 (system XAML, VisualDiagConnection1)
+[2026-11-06T05:20:31Z INFO  glaze_styler::helper::run] styling settings (73468, system XAML)
+[2026-11-06T05:20:31Z INFO  glaze_styler::helper::attach] attached to 76024 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T05:20:31Z INFO  glaze_styler::helper::run] styling explorer (76024, WinUI 3)
+[2026-11-06T05:20:31Z INFO  glaze_styler::helper::run] app styler running
 loaded 5996739 entries in 5327.546ms
-[2026-11-06T05:20:36Z INFO  mypaper_bars::flyouts::index] launcher: 249 apps indexed in 1.2269327s
-[2026-11-06T05:20:37Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 25.1 ms (not waited on), copy 0.16 ms on the frame, write 1.81 ms off it
-[2026-11-06T05:20:47Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 21.2 ms (not waited on), copy 0.12 ms on the frame, write 2.19 ms off it
-[2026-11-06T05:20:57Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.0 ms (not waited on), copy 0.06 ms on the frame, write 1.73 ms off it
-[2026-11-06T05:21:07Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.8 ms (not waited on), copy 0.02 ms on the frame, write 1.63 ms off it
-[2026-11-06T05:21:17Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 36.6 ms (not waited on), copy 0.02 ms on the frame, write 13.41 ms off it
-[2026-11-06T05:21:27Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 28.8 ms (not waited on), copy 0.02 ms on the frame, write 1.82 ms off it
-[2026-11-06T05:21:37Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.1 ms (not waited on), copy 0.10 ms on the frame, write 1.93 ms off it
-[2026-11-06T05:21:47Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.5 ms (not waited on), copy 0.02 ms on the frame, write 1.93 ms off it
-[2026-11-06T05:21:57Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.5 ms (not waited on), copy 0.01 ms on the frame, write 1.51 ms off it
-[2026-11-06T05:22:08Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.0 ms (not waited on), copy 0.01 ms on the frame, write 690.92 ms off it
+[2026-11-06T05:20:36Z INFO  glaze_bars::flyouts::index] launcher: 249 apps indexed in 1.2269327s
+[2026-11-06T05:20:37Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 25.1 ms (not waited on), copy 0.16 ms on the frame, write 1.81 ms off it
+[2026-11-06T05:20:47Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 21.2 ms (not waited on), copy 0.12 ms on the frame, write 2.19 ms off it
+[2026-11-06T05:20:57Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.0 ms (not waited on), copy 0.06 ms on the frame, write 1.73 ms off it
+[2026-11-06T05:21:07Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.8 ms (not waited on), copy 0.02 ms on the frame, write 1.63 ms off it
+[2026-11-06T05:21:17Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 36.6 ms (not waited on), copy 0.02 ms on the frame, write 13.41 ms off it
+[2026-11-06T05:21:27Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 28.8 ms (not waited on), copy 0.02 ms on the frame, write 1.82 ms off it
+[2026-11-06T05:21:37Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.1 ms (not waited on), copy 0.10 ms on the frame, write 1.93 ms off it
+[2026-11-06T05:21:47Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.5 ms (not waited on), copy 0.02 ms on the frame, write 1.93 ms off it
+[2026-11-06T05:21:57Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.5 ms (not waited on), copy 0.01 ms on the frame, write 1.51 ms off it
+[2026-11-06T05:22:08Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.0 ms (not waited on), copy 0.01 ms on the frame, write 690.92 ms off it
 scan C:\: 2529097 entries, 100.509s, 566 inaccessible directories
-[2026-11-06T05:22:17Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.2 ms (not waited on), copy 0.01 ms on the frame, write 1.57 ms off it
-[2026-11-06T05:22:27Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.8 ms (not waited on), copy 0.01 ms on the frame, write 1.34 ms off it
-[2026-11-06T05:22:37Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.7 ms (not waited on), copy 0.03 ms on the frame, write 1.82 ms off it
-[2026-11-06T05:22:47Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.5 ms (not waited on), copy 0.02 ms on the frame, write 1.66 ms off it
-[2026-11-06T05:22:57Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 27.8 ms (not waited on), copy 0.01 ms on the frame, write 1.49 ms off it
-[2026-11-06T05:23:07Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.1 ms (not waited on), copy 0.01 ms on the frame, write 1.83 ms off it
-[2026-11-06T05:23:17Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.0 ms (not waited on), copy 0.01 ms on the frame, write 1.50 ms off it
-[2026-11-06T05:23:27Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.0 ms (not waited on), copy 0.01 ms on the frame, write 3.59 ms off it
-[2026-11-06T05:23:37Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.3 ms (not waited on), copy 0.02 ms on the frame, write 1.80 ms off it
-[2026-11-06T05:23:47Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.5 ms (not waited on), copy 0.02 ms on the frame, write 1.65 ms off it
-[2026-11-06T05:23:57Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.3 ms (not waited on), copy 0.02 ms on the frame, write 1.79 ms off it
-[2026-11-06T05:24:07Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.5 ms (not waited on), copy 0.01 ms on the frame, write 1.59 ms off it
-[2026-11-06T05:24:17Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 29.6 ms (not waited on), copy 0.01 ms on the frame, write 1.33 ms off it
-[2026-11-06T05:24:27Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 28.9 ms (not waited on), copy 0.02 ms on the frame, write 1.53 ms off it
-[2026-11-06T05:24:37Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 32.2 ms (not waited on), copy 0.02 ms on the frame, write 2.03 ms off it
-[2026-11-06T05:24:47Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 3.5 ms (not waited on), copy 0.02 ms on the frame, write 1.69 ms off it
-[2026-11-06T05:24:57Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.2 ms (not waited on), copy 0.02 ms on the frame, write 1.59 ms off it
-[2026-11-06T05:25:07Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.9 ms (not waited on), copy 0.02 ms on the frame, write 1.72 ms off it
-[2026-11-06T05:25:17Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.8 ms (not waited on), copy 0.03 ms on the frame, write 1.78 ms off it
+[2026-11-06T05:22:17Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.2 ms (not waited on), copy 0.01 ms on the frame, write 1.57 ms off it
+[2026-11-06T05:22:27Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.8 ms (not waited on), copy 0.01 ms on the frame, write 1.34 ms off it
+[2026-11-06T05:22:37Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.7 ms (not waited on), copy 0.03 ms on the frame, write 1.82 ms off it
+[2026-11-06T05:22:47Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.5 ms (not waited on), copy 0.02 ms on the frame, write 1.66 ms off it
+[2026-11-06T05:22:57Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 27.8 ms (not waited on), copy 0.01 ms on the frame, write 1.49 ms off it
+[2026-11-06T05:23:07Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.1 ms (not waited on), copy 0.01 ms on the frame, write 1.83 ms off it
+[2026-11-06T05:23:17Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.0 ms (not waited on), copy 0.01 ms on the frame, write 1.50 ms off it
+[2026-11-06T05:23:27Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.0 ms (not waited on), copy 0.01 ms on the frame, write 3.59 ms off it
+[2026-11-06T05:23:37Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.3 ms (not waited on), copy 0.02 ms on the frame, write 1.80 ms off it
+[2026-11-06T05:23:47Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.5 ms (not waited on), copy 0.02 ms on the frame, write 1.65 ms off it
+[2026-11-06T05:23:57Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.3 ms (not waited on), copy 0.02 ms on the frame, write 1.79 ms off it
+[2026-11-06T05:24:07Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.5 ms (not waited on), copy 0.01 ms on the frame, write 1.59 ms off it
+[2026-11-06T05:24:17Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 29.6 ms (not waited on), copy 0.01 ms on the frame, write 1.33 ms off it
+[2026-11-06T05:24:27Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 28.9 ms (not waited on), copy 0.02 ms on the frame, write 1.53 ms off it
+[2026-11-06T05:24:37Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 32.2 ms (not waited on), copy 0.02 ms on the frame, write 2.03 ms off it
+[2026-11-06T05:24:47Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 3.5 ms (not waited on), copy 0.02 ms on the frame, write 1.69 ms off it
+[2026-11-06T05:24:57Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.2 ms (not waited on), copy 0.02 ms on the frame, write 1.59 ms off it
+[2026-11-06T05:25:07Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.9 ms (not waited on), copy 0.02 ms on the frame, write 1.72 ms off it
+[2026-11-06T05:25:17Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.8 ms (not waited on), copy 0.03 ms on the frame, write 1.78 ms off it
 scan D:\: 3089298 entries, 174.205s, 2 inaccessible directories
-[2026-11-06T05:25:27Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 18.0 ms (not waited on), copy 0.02 ms on the frame, write 18.05 ms off it
-[2026-11-06T05:25:37Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.3 ms (not waited on), copy 0.02 ms on the frame, write 1.68 ms off it
-[2026-11-06T05:25:47Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.7 ms (not waited on), copy 0.01 ms on the frame, write 1.68 ms off it
+[2026-11-06T05:25:27Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 18.0 ms (not waited on), copy 0.02 ms on the frame, write 18.05 ms off it
+[2026-11-06T05:25:37Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.3 ms (not waited on), copy 0.02 ms on the frame, write 1.68 ms off it
+[2026-11-06T05:25:47Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.7 ms (not waited on), copy 0.01 ms on the frame, write 1.68 ms off it
 scan E:\: 384844 entries, 8.018s, 0 inaccessible directories
-[2026-11-06T05:25:57Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 17.8 ms (not waited on), copy 0.02 ms on the frame, write 30.18 ms off it
+[2026-11-06T05:25:57Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 17.8 ms (not waited on), copy 0.02 ms on the frame, write 30.18 ms off it
 initial reconciliation and notification replay complete
-[2026-11-06T05:26:07Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 28.8 ms (not waited on), copy 0.02 ms on the frame, write 1.93 ms off it
-[2026-11-06T05:26:17Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 2.0 ms (not waited on), copy 0.02 ms on the frame, write 1.71 ms off it
-[2026-11-06T05:26:28Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.6 ms (not waited on), copy 0.01 ms on the frame, write 1.64 ms off it
-[2026-11-06T05:26:38Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.0 ms (not waited on), copy 0.02 ms on the frame, write 1.54 ms off it
-[2026-11-06T05:26:48Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 28.2 ms (not waited on), copy 0.02 ms on the frame, write 1.55 ms off it
+[2026-11-06T05:26:07Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 28.8 ms (not waited on), copy 0.02 ms on the frame, write 1.93 ms off it
+[2026-11-06T05:26:17Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 2.0 ms (not waited on), copy 0.02 ms on the frame, write 1.71 ms off it
+[2026-11-06T05:26:28Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 31.6 ms (not waited on), copy 0.01 ms on the frame, write 1.64 ms off it
+[2026-11-06T05:26:38Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 30.0 ms (not waited on), copy 0.02 ms on the frame, write 1.54 ms off it
+[2026-11-06T05:26:48Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 28.2 ms (not waited on), copy 0.02 ms on the frame, write 1.55 ms off it

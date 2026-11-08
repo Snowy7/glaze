@@ -1,0 +1,3 @@
+// Keep resource 101 in sync with main.rs::set_window_icons.
+// Files has its own folder mark (assets/logo/files*.svg, rendered by scripts/render-logo.ps1).
+101 ICON "../../assets/logo/glaze-files.ico"

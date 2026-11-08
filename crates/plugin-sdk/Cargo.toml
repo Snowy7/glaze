@@ -1,6 +1,6 @@
 [package]
-name = "mypaper-plugin-sdk"
-description = "The one crate a mypaper plugin needs: manifest types, declarative kit views, and a typed JSON-RPC event loop (docs/plugins.md)."
+name = "glaze-plugin-sdk"
+description = "The one crate a Glaze plugin needs: manifest types, declarative kit views, and a typed JSON-RPC event loop (docs/plugins.md)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

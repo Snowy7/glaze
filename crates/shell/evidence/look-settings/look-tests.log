@@ -1,6 +1,6 @@
-cargo :    Compiling mypaper-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
+cargo :    Compiling glaze-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
 At line:2 char:50
-+ ... gets\main'; cargo test -p mypaper-shell --lib look::settings -- --tes ...
++ ... gets\main'; cargo test -p glaze-shell --lib look::settings -- --tes ...
 +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (   Compiling my...r\crates\shell):String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
@@ -49,10 +49,10 @@ warning: function `icon_action` is never used
 144 | pub(super) fn icon_action(
     |               ^^^^^^^^^^^
 
-warning: `mypaper-shell` (lib test) generated 7 warnings
+warning: `glaze-shell` (lib test) generated 7 warnings
     Finished `test` profile [unoptimized + debuginfo] target(s) in 3.78s
      Running unittests src\lib.rs 
-(C:\mypaper-targets\main\debug\build\mypaper-shell/55f7fec482424c16\out\mypaper_shell-55f7fec482424c16.exe)
+(C:\glaze-targets\main\debug\build\glaze-shell/55f7fec482424c16\out\glaze_shell-55f7fec482424c16.exe)
 
 running 11 tests
 test look::settings::tests::bars_family_style_beats_the_global_style_and_explicit_bar_style_beats_both ... ok

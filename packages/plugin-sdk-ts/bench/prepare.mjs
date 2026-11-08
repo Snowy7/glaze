@@ -25,5 +25,5 @@ await writeChanged(new URL('.source/revision.txt', import.meta.url), revision + 
 for (const name of ['plugin-sdk', 'plugin-api']) {
   const dest = new URL(`.source/${name}/`, import.meta.url);
   await mkdir(dest, { recursive: true });
-  await writeChanged(new URL('Cargo.toml', dest), `[package]\nname = "mypaper-${name}"\nversion = "0.1.0"\nedition = "2024"\n[dependencies]\nserde = { version = "1", features = ["derive"] }\nserde_json = "1"\n${name === 'plugin-api' ? 'postcard = { version = "1", default-features = false, features = ["use-std"] }\nmypaper-plugin-sdk = { path = "../plugin-sdk" }\n' : '[target.\'cfg(target_arch = "wasm32")\'.dependencies]\nwit-bindgen = { version = "0.57", default-features = false, features = ["macros", "realloc"] }\n'}`);
+  await writeChanged(new URL('Cargo.toml', dest), `[package]\nname = "glaze-${name}"\nversion = "0.1.0"\nedition = "2024"\n[dependencies]\nserde = { version = "1", features = ["derive"] }\nserde_json = "1"\n${name === 'plugin-api' ? 'postcard = { version = "1", default-features = false, features = ["use-std"] }\nglaze-plugin-sdk = { path = "../plugin-sdk" }\n' : '[target.\'cfg(target_arch = "wasm32")\'.dependencies]\nwit-bindgen = { version = "0.57", default-features = false, features = ["macros", "realloc"] }\n'}`);
 }

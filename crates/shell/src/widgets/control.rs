@@ -13,7 +13,7 @@ use windows::core::w;
 static MESSAGES: OnceLock<(u32, u32)> = OnceLock::new();
 pub struct Control {
     hwnd: HWND,
-    _power: mypaper_desktop::ControlWindow,
+    _power: glaze_desktop::ControlWindow,
 }
 impl Control {
     pub fn new() -> Result<Self> {
@@ -22,21 +22,21 @@ impl Control {
         unsafe {
             MESSAGES.get_or_init(|| {
                 (
-                    RegisterWindowMessageW(w!("mypaper.widgets.edit")),
-                    RegisterWindowMessageW(w!("mypaper.widgets.overlay")),
+                    RegisterWindowMessageW(w!("glaze.widgets.edit")),
+                    RegisterWindowMessageW(w!("glaze.widgets.overlay")),
                 )
             });
             let class = WNDCLASSEXW {
                 cbSize: size_of::<WNDCLASSEXW>() as u32,
                 lpfnWndProc: Some(proc),
                 hInstance: GetModuleHandleW(None)?.into(),
-                lpszClassName: w!("mypaper.widgets.host"),
+                lpszClassName: w!("glaze.widgets.host"),
                 ..Default::default()
             };
             RegisterClassExW(&class);
             let hwnd = CreateWindowExW(
                 Default::default(),
-                w!("mypaper.widgets.host"),
+                w!("glaze.widgets.host"),
                 w!("Native widgets"),
                 Default::default(),
                 0,
@@ -61,7 +61,7 @@ impl Control {
             }
             Ok(Self {
                 hwnd,
-                _power: mypaper_desktop::ControlWindow::new(w!("mypaper.widgets.power"))?,
+                _power: glaze_desktop::ControlWindow::new(w!("glaze.widgets.power"))?,
             })
         }
     }
@@ -85,10 +85,10 @@ unsafe extern "system" fn proc(
     if message == WM_COPYDATA && lparam.0 != 0 {
         // SAFETY: WM_COPYDATA's buffer is valid only during this call; receive copies it.
         let data = unsafe { &*(lparam.0 as *const windows::Win32::System::DataExchange::COPYDATASTRUCT) };
-        if data.dwData == mypaper_widgets::plugin_manager::COPY_TAG && data.cbData <= 64 << 10 && !data.lpData.is_null() {
+        if data.dwData == glaze_widgets::plugin_manager::COPY_TAG && data.cbData <= 64 << 10 && !data.lpData.is_null() {
             // SAFETY: bounded synchronous WM_COPYDATA payload, copied before returning.
             let bytes = unsafe { std::slice::from_raw_parts(data.lpData.cast::<u8>(), data.cbData as usize) };
-            return LRESULT(isize::from(mypaper_widgets::plugin_manager::receive(bytes)));
+            return LRESULT(isize::from(glaze_widgets::plugin_manager::receive(bytes)));
         }
     }
     let (edit, overlay) = *MESSAGES.get().expect("registered before window");

@@ -1,7 +1,7 @@
 use super::*;
 use crate::integrations::custom::{EDIT, REFRESH};
-use mypaper_ui::{Op, layout::SizeClass};
-use mypaper_widgets::custom::Template;
+use glaze_ui::{Op, layout::SizeClass};
+use glaze_widgets::custom::Template;
 
 fn value(value: &serde_json::Value) -> String {
     match value {

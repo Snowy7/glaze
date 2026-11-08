@@ -1,9 +1,9 @@
 # Liquid Glass
 
-All of mypaper's glass (bar islands, widgets, flyouts, menus, Studio's previews) is drawn by the
+All of Glaze's glass (bar islands, widgets, flyouts, menus, Studio's previews) is drawn by the
 engine with **liquid-rust** (<https://github.com/al1h3n/liquid-rust>, by al1h3n, MIT OR
 Apache-2.0), vendored in `crates/liquid-rust` (see its `VENDORED.md` for the commit and the few
-marked `mypaper:` changes). Its look is calibrated against Apple's iOS 26/27 Figma kit, and we
+marked `Glaze:` changes). Its look is calibrated against Apple's iOS 26/27 Figma kit, and we
 keep its shaders, pipeline and parameter values as they are.
 
 ## The model (Apple's Liquid Glass, as liquid-rust draws it)
@@ -11,7 +11,7 @@ keep its shaders, pipeline and parameter values as they are.
 1. **Lensing, not blur, carries the look.** The backdrop is refracted through a squircle bevel
    (Snell's law, η 1.5). Content bends strongly at the rim and lies flat in the middle. The bevel
    is `depth` deep (30 pt, more for large glass), with a small per-channel dispersion. Thin glass
-   gets a shallow lens (mypaper, below): at most a fifth of its smaller side.
+   gets a shallow lens (Glaze, below): at most a fifth of its smaller side.
 2. **Frost is light.** One blur pyramid (13-tap downsample, B-spline reads at a continuous level)
    serves every radius. The kit's regular glass uses 10 pt, its clear glass 6 pt.
 3. **Clear vs tinted** is iOS 27's slider: clear fades every fill and thins the frost; tinted
@@ -55,7 +55,7 @@ default); a material or style change restyles bars in place, never new windows o
 ### Finer knobs on the wire (6 November 2026)
 
 Beyond the five controls, each glass takes a style, neutral by default (draws exactly as before).
-Plates: `mypaper_glass_ipc::Style`, sent with `Writer::publish_styled(&plates, &styles)` (one per
+Plates: `glaze_glass_ipc::Style`, sent with `Writer::publish_styled(&plates, &styles)` (one per
 plate, or empty for all defaults). Overlays: `request::Style` in `Request::Style { client, style }`,
 sent after each `Open` (a new overlay starts at `Style::DEFAULT`).
 
@@ -102,7 +102,7 @@ liquid-rust's springs materialize glass in and out and fade material changes.
 
 ## Cost (5 November 2026, 2560 x 1440, rain-city, `src/lab.rs` fixture of 8 plates)
 
-GPU per screen for the glass pass, median of 150 frames. `MYPAPER_LAB_GPU=high` runs the lab on
+GPU per screen for the glass pass, median of 150 frames. `GLAZE_LAB_GPU=high` runs the lab on
 the discrete GPU; the lab prints every pyramid level and glass layer (`liquid_rust::Profiler`).
 
 | | old glass | liquid-rust as vendored | now, AMD iGPU | now, RTX 4070 SUPER |
@@ -131,7 +131,7 @@ The GPU (`engine.gpu`: auto, integrated or high-performance) and frame rate (`en
 
 **`auto` is the default, and it renders on the adapter that drives the most desktop screens**
 (the primary screen's on a tie), read from DXGI outputs without creating a device
-(`mypaper_desktop::display_gpu`, used by the engine's `gpu.rs` and by Studio). Here that is the
+(`glaze_desktop::display_gpu`, used by the engine's `gpu.rs` and by Studio). Here that is the
 RTX 4070 SUPER, which drives both monitors; on a laptop whose panel hangs off the iGPU it is the
 iGPU, so a laptop keeps rendering where it presents and the dGPU stays asleep. `integrated` and
 `high-performance` still pick by power class, and an explicit choice in `config.json` is kept.
@@ -153,7 +153,7 @@ live in dedicated VRAM, and there is no cross-adapter swapchain overhead (docs/e
 Memory: +63 and +40 MiB for two swapchains presented across adapters); both screens visible on
 the RTX was not measured today. Engine CPU read higher on the RTX (3.15 and 4.32% against
 2.25%); these runs could not separate that from the desktop's activity (other agents restarted
-mypaper and built during them, and the user's GPU load changed), so it is not a finding yet.
+Glaze and built during them, and the user's GPU load changed), so it is not a finding yet.
 
 Power: no clean whole-system number. The RTX board read 56 W during the iGPU run and 182 W
 during the second RTX run, because the user's own GPU work changed (video decode 159 ms/s, other
@@ -178,7 +178,7 @@ narrow by the same factor. The cap applies from about 166 pt for regular glass (
 clear), where the factor is exactly 1, so large glass draws exactly as before. A 24 pt bar
 gets a 4.8 pt lens and rims at 0.16 of the kit's.
 
-Proof (frame lab, iGPU, rain-city at 3 s and 12 s, `MYPAPER_LAB_PLATES` with the 2560 x 24
+Proof (frame lab, iGPU, rain-city at 3 s and 12 s, `GLAZE_LAB_PLATES` with the 2560 x 24
 strip, small pills and buttons, the seven live widget plates and two large panels; each plate's
 pixels plus an 8 px ring, other plates' pixels left out):
 
@@ -204,11 +204,11 @@ bound. The circular/default path is unchanged. A visible restyle commits its new
 matching shader frame, avoiding an intermediate mismatched contour.
 
 The bars' legacy `look.glass.depth` now maps, times glass intensity, to
-`mypaper_glass_ipc::Style::inner_shadow` and overlay `request::Style::inner_shadow`.
+`glaze_glass_ipc::Style::inner_shadow` and overlay `request::Style::inner_shadow`.
 This is a bottom-facing inset shade, independent of the engine's existing top-rim `depth`.
 Unset is zero. It resolves with the plate/overlay material, and at zero the shader skips its
 distance/blur calculation entirely. It occupies an unused GPU material slot; GPU buffers keep
-their existing sizes. `mypaper_ui::glass::GlassStyle` carries the same field through
+their existing sizes. `glaze_ui::glass::GlassStyle` carries the same field through
 `Tokens::glass_style`, menus, flyouts and bars.
 
 Glass takes the same resolved show/open duration and curve as the content, including the full
@@ -220,7 +220,7 @@ no engine animation frames or curve-sampling timer were added. The default wire 
 the original cubic polynomial exactly. Disabled/reduced motion sends zero milliseconds and
 settles opacity immediately. Glass slides remain a stationary fade to avoid capture flashes.
 
-Offline verification (`CARGO_TARGET_DIR=C:\mypaper-targets\engine-perf`):
+Offline verification (`CARGO_TARGET_DIR=C:\glaze-targets\engine-perf`):
 
 - `lab::lab`, rain-city, RTX 4070 SUPER, 2560x1440, eight plates, captures at 3 and 12 seconds:
   default final and kept frames are **100% bit-identical**, largest difference **0/255**.
@@ -240,18 +240,18 @@ Offline verification (`CARGO_TARGET_DIR=C:\mypaper-targets\engine-perf`):
   mismatched/missing extension stamps and a real message-only legacy receiver that rejects
   104 bytes then accepts the 80-byte fallback with its original optics and 2,000 ms cap.
 
-Raw lab frames/timestamps are `C:\mypaper-targets\engine-parity\{before,after,after-final}`;
+Raw lab frames/timestamps are `C:\glaze-targets\engine-parity\{before,after,after-final}`;
 the inspected overlay images and metrics are in its `overlay` directory. Reproduce the overlay
-fixture with `MYPAPER_PARITY_OUT=<directory>` and
-`cargo test -p mypaper-wallpaper lab::glass_parity -- --ignored --exact --nocapture`.
-The main lab additionally accepts `MYPAPER_LAB_STYLE=brightness,saturation,smoothing,sheen,depth,inner_shadow`
+fixture with `GLAZE_PARITY_OUT=<directory>` and
+`cargo test -p glaze-wallpaper lab::glass_parity -- --ignored --exact --nocapture`.
+The main lab additionally accepts `GLAZE_LAB_STYLE=brightness,saturation,smoothing,sheen,depth,inner_shadow`
 (negative sheen/depth means unset), applied to captures and timed frames.
 
 The maximum new-shadow/squircle fixture (strength 1 on all eight plates) took **0.096 ms** median
 glass-only GPU time on the RTX, within the 2 ms gate. The inspected contact sheets are
-`C:\mypaper-targets\engine-parity\rain-verification.png` and `overlay\verification.png`.
+`C:\glaze-targets\engine-parity\rain-verification.png` and `overlay\verification.png`.
 
-Live verification used guarded input on mypaper's own dock, with DPI-aware 2560x1440 screenshots.
+Live verification used guarded input on Glaze's own dock, with DPI-aware 2560x1440 screenshots.
 The inspected continuous menu faded for five seconds: a screenshot fit of its content opacity was
 0.14 at 0.75 s, 0.30 at 1.52 s, 0.60 at 3.00 s, and 1.00 at 5.31 s. This fit is supporting
 image evidence, not a compositor API reading. Plate/style/inner-shadow sections shared stamp 70:
@@ -260,7 +260,7 @@ and inner shadow 0. The first live menu's glass arrived in 42 ms (warm capture),
 fade duration.
 
 The final full shared-checkout release workspace build passed and was deployed through
-`scripts/deploy-local.ps1 -From C:\mypaper-targets\main\release` at 07:38. A later attempt to
+`scripts/deploy-local.ps1 -From C:\glaze-targets\main\release` at 07:38. A later attempt to
 capture custom Bézier/reduced-motion/shadow variants stopped before input when the foreground
 safety guard refused activation; those extra live variants remain unverified. Their resolver,
 wire and GPU/curve behavior are covered by the offline checks above. No user app was clicked.
@@ -273,7 +273,7 @@ At 07:43, deployed engine/shell hashes matched the shared `main` build:
 The running PIDs were core 59688, engine 85520, shell 28576. At handback, the 07:43–07:53
 measurement hold remained in force; no further desktop-lock use or restarts are needed for this task.
 
-Live artifacts are `%TEMP%\mypaper-tools\engine-parity`: `menu-linear-*.png`,
+Live artifacts are `%TEMP%\glaze-tools\engine-parity`: `menu-linear-*.png`,
 `linear-verification.png`, `linear-opacity-fit.json`, `linear-plates.json`, `bezier-plates.json`
 and `deploy-shared.log`. Crate checks/tests and Clippy passed (pre-existing warnings retained):
 renderer 61 tests, IPC 4, UI 62, shell 146 plus the targeted engine/wire/curve tests (103 engine
@@ -292,7 +292,7 @@ takes the route its source needs.
   is on that screen. A web page's held still is not native (the swapchain shows it), so a screen
   next to a fullscreen game gets plates drawn over its still as before.
 - **Which window.** A plate's id carries its surface's window in its low 32 bits (widgets use their
-  HWND; bars their island's, plus the shape index above bit 32; `mypaper_glass_ipc::Plate::id`).
+  HWND; bars their island's, plus the shape index above bit 32; `glaze_glass_ipc::Plate::id`).
   The overlay goes directly under that window, if it is a live window of the plates' publisher:
   in the desktop band for a widget (`Layer::Desktop`, which the kit keeps together with its
   widget, `Surface::keep_above_desktop`), topmost under a bar (`Layer::Popup`). These overlays are
@@ -334,7 +334,7 @@ captured frame for every plate it touches: here about 0.28 ms of engine CPU per 
 +37 MB for the capture device, DirectComposition and each overlay's crops. Lower the page's own
 rate, or the theme's `engine.fps`, to lower both.
 
-Captures (DPI-aware, 2560x1440 of DISPLAY2) are in `C:\mypaper-targets\engine-perf\webglass`:
+Captures (DPI-aware, 2560x1440 of DISPLAY2) are in `C:\glaze-targets\engine-perf\webglass`:
 `webglass-web-before-1.png` (no glass under the widgets or the dock), `webglass-web-after-2.png`,
 `webglass-still-after.png`, and crops `widgets-{before-1,after-2}.png`, `dock-{before-1,after-2}.png`.
 
@@ -351,4 +351,4 @@ engine first.
 - Lab render over rain-city at the kit's defaults: `media/native/glass-lab-rain.png`
 - Top bar (24 pt) before/after the thin-glass lens, the bar's ends at 3x, glass alone and with
   its content: `media/native/glass-topbar-bevel.png`
-- Apple references: `C:\mypaper-targets\refs\liquid-glass` (macOS Tahoe Control Center, iOS 26).
+- Apple references: `C:\glaze-targets\refs\liquid-glass` (macOS Tahoe Control Center, iOS 26).

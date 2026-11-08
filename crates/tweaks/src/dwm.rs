@@ -4,7 +4,7 @@
 //!
 //! A visible app frame gets full styling; floating surfaces get dark mode only.
 //! Overlays and transparent indicators are untouched. A window must pass the
-//! process injection allowlist (`mypaper_inject::evaluate`, with
+//! process injection allowlist (`glaze_inject::evaluate`, with
 //! the signature check). Existing windows are styled when the [`Styler`]
 //! starts; WinEvents follow new windows and frame changes. A slow timer checks
 //! only tracked windows for style changes that emit no WinEvent. Dropping the
@@ -20,9 +20,9 @@ use std::os::windows::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
-use mypaper_inject::signature::microsoft_signed;
-use mypaper_inject::{Target, Verdict, evaluate};
-use mypaper_theme::{Backdrop, Corners, WindowsStyle};
+use glaze_inject::signature::microsoft_signed;
+use glaze_inject::{Target, Verdict, evaluate};
+use glaze_theme::{Backdrop, Corners, WindowsStyle};
 use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, HWND, LPARAM, RECT};
 use windows::Win32::Graphics::Dwm::{
     DWM_SYSTEMBACKDROP_TYPE, DWM_WINDOW_CORNER_PREFERENCE, DWMSBT_AUTO, DWMSBT_MAINWINDOW,
@@ -218,9 +218,9 @@ pub fn reset_all(dark: Option<bool>) {
         return;
     };
     let everything = WindowsStyle {
-        border: Some(mypaper_theme::Paint::Auto),
-        caption: Some(mypaper_theme::Color([0; 3])),
-        caption_text: Some(mypaper_theme::Color([0; 3])),
+        border: Some(glaze_theme::Paint::Auto),
+        caption: Some(glaze_theme::Color([0; 3])),
+        caption_text: Some(glaze_theme::Color([0; 3])),
         corners: Some(Corners::Default),
         backdrop: Some(Backdrop::Auto),
         dark_mode: dark,
@@ -749,9 +749,9 @@ mod tests {
             let class = classify_window(style, ex, owned, false, false);
             assert_eq!(class, WindowClass::Floating);
             let requested = WindowStyle {
-                border: Some(mypaper_theme::Color([2; 3])),
-                caption: Some(mypaper_theme::Color([3; 3])),
-                caption_text: Some(mypaper_theme::Color([4; 3])),
+                border: Some(glaze_theme::Color([2; 3])),
+                caption: Some(glaze_theme::Color([3; 3])),
+                caption_text: Some(glaze_theme::Color([4; 3])),
                 corners: Some(Corners::Round),
                 backdrop: Some(Backdrop::Mica),
                 dark_mode: Some(true),

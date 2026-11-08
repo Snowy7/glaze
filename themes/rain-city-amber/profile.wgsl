@@ -1,4 +1,4 @@
-// Heartfelt row/profile cache, mypaper adaptation of Rocksdanister / BigWings.
+// Heartfelt row/profile cache, Glaze adaptation of Rocksdanister / BigWings.
 // CC BY-NC-SA 3.0: https://creativecommons.org/licenses/by-nc-sa/3.0/
 // Float32 data, generated once on the same GPU as the live shader. No quantization.
 fn Sin(x: f32) -> f32 { return sin(x-floor(x/6.28318530718+0.5)*6.28318530718); }

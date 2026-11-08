@@ -1,7 +1,7 @@
 //! App-bar registration and work-area reservations, independent of visible surface geometry.
 //! A floating bar reserves its complete band; auto-hide reserves nothing.
 
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromRect,
@@ -275,14 +275,14 @@ mod tests {
     #[ignore = "temporarily reserves 3 px of the live desktop; run under the desktop lock"]
     fn repairs_a_registration_removed_without_taskbar_created() {
         let window = crate::events::Broadcast::new().unwrap();
-        let monitor = mypaper_desktop::monitor_infos()
+        let monitor = glaze_desktop::monitor_infos()
             .into_iter()
             .find(|m| m.primary)
             .unwrap();
         let mut bar = AppBar::register(window.hwnd(), Edge::Right, crate::events::APPBAR).unwrap();
         let band = bar.try_reserve(monitor.rect, 3).unwrap();
         let work = || {
-            mypaper_desktop::monitor_infos()
+            glaze_desktop::monitor_infos()
                 .into_iter()
                 .find(|m| m.primary)
                 .unwrap()

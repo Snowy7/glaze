@@ -19,7 +19,7 @@ fn wallpaper<'a>(app: &'a App, id: Option<&str>) -> Option<&'a crate::library::W
     }) {
         return Some(item);
     }
-    let folder = mypaper_theme::locate(Some(id)).ok()?.canonicalize().ok()?;
+    let folder = glaze_theme::locate(Some(id)).ok()?.canonicalize().ok()?;
     app.library
         .items
         .iter()
@@ -212,7 +212,7 @@ pub struct History {
     loaded: bool,
     last_pick: Option<(String, usize)>,
     pub pictures: std::cell::RefCell<
-        std::collections::HashMap<PictureKey, std::sync::Arc<mypaper_ui::Image>>,
+        std::collections::HashMap<PictureKey, std::sync::Arc<glaze_ui::Image>>,
     >,
 }
 
@@ -447,7 +447,7 @@ fn summary(app: &App, before: &Desktop, after: &Desktop) -> String {
             && let Some(monitor) = app.display()
         {
             let resolve = |raw: &Value| {
-                mypaper_bars::BarsConfig::parse(&raw.to_string())
+                glaze_bars::BarsConfig::parse(&raw.to_string())
                     .ok()?
                     .for_monitor(&monitor.device, monitor.primary)
                     .ok()
@@ -530,18 +530,18 @@ fn summary(app: &App, before: &Desktop, after: &Desktop) -> String {
                     if old_values.get(key) == new_values.get(key) {
                         continue;
                     }
-                    if let mypaper_widgets::manifest::Setting::Select { options, .. } = setting {
+                    if let glaze_widgets::manifest::Setting::Select { options, .. } = setting {
                         let label = |value: Option<&Value>| {
                             let value = value.and_then(Value::as_str).unwrap_or("");
                             options
                                 .iter()
                                 .find_map(|o| match o {
-                                    mypaper_widgets::manifest::SelectOption::Plain(v)
+                                    glaze_widgets::manifest::SelectOption::Plain(v)
                                         if v == value =>
                                     {
                                         Some(v.as_str())
                                     }
-                                    mypaper_widgets::manifest::SelectOption::Detailed(v)
+                                    glaze_widgets::manifest::SelectOption::Detailed(v)
                                         if v.value == value =>
                                     {
                                         Some(v.label.as_deref().unwrap_or(&v.value))
@@ -576,7 +576,7 @@ fn summary(app: &App, before: &Desktop, after: &Desktop) -> String {
 }
 
 pub fn time_label(at: u64) -> String {
-    let stamp = mypaper_shell::preview::widgets::Stamp::at((at.min(253402300799) * 1000) as i64);
+    let stamp = glaze_shell::preview::widgets::Stamp::at((at.min(253402300799) * 1000) as i64);
     format!("{:02}:{:02}", stamp.hour, stamp.minute)
 }
 
@@ -684,7 +684,7 @@ pub fn select(app: &App, index: usize) {
     preview_selected(app);
     super::choosers::track_preview(
         app,
-        mypaper_ui::controls::key(("panel-history", index)),
+        glaze_ui::controls::key(("panel-history", index)),
         crate::actions::Action::Panel(super::Command::History(index)),
     );
 }
@@ -820,7 +820,7 @@ pub fn picture(
     desktop: &Desktop,
     size: (u32, u32),
     at: u64,
-) -> Option<std::sync::Arc<mypaper_ui::Image>> {
+) -> Option<std::sync::Arc<glaze_ui::Image>> {
     picture_region(app, desktop, size, at, app.nav.display)
 }
 
@@ -829,14 +829,14 @@ pub fn thumbnail(
     app: &App,
     entry: &Entry,
     size: (u32, u32),
-) -> Option<std::sync::Arc<mypaper_ui::Image>> {
+) -> Option<std::sync::Arc<glaze_ui::Image>> {
     let count = app.monitors.len().max(1) as u32;
     let gap = if count > 1 { 2 } else { 0 };
     let slot = size.0.saturating_sub(gap * (count - 1)) / count;
     if slot == 0 || size.1 == 0 {
         return None;
     }
-    let mut result = mypaper_ui::Image {
+    let mut result = glaze_ui::Image {
         width: size.0,
         height: size.1,
         pixels: [0x24, 0x24, 0x24, 0xff].repeat((size.0 * size.1) as usize),
@@ -864,9 +864,9 @@ fn picture_region(
     size: (u32, u32),
     at: u64,
     display_index: usize,
-) -> Option<std::sync::Arc<mypaper_ui::Image>> {
-    use mypaper_shell::preview::{bars as bars_view, widgets as widgets_view};
-    use mypaper_ui::{DisplayList, Op, Rect, Rgba, Ui};
+) -> Option<std::sync::Arc<glaze_ui::Image>> {
+    use glaze_shell::preview::{bars as bars_view, widgets as widgets_view};
+    use glaze_ui::{DisplayList, Op, Rect, Rgba, Ui};
     let display = app.monitors.get(display_index)?;
     let dip_width = display.rect.width as f32 / (display.dpi as f32 / 96.0);
     let view_size = size;
@@ -913,8 +913,8 @@ fn picture_region(
             != Some("light")
     });
     let scale = view_size.0 as f32 / dip_width;
-    let theme = serde_json::from_value::<mypaper_theme::Theme>(desktop.theme.clone()).ok();
-    if let Ok(mut config) = mypaper_bars::BarsConfig::parse(&desktop.bars.to_string())
+    let theme = serde_json::from_value::<glaze_theme::Theme>(desktop.theme.clone()).ok();
+    if let Ok(mut config) = glaze_bars::BarsConfig::parse(&desktop.bars.to_string())
         .and_then(|config| config.for_monitor(&display.device, display.primary))
     {
         config.resolve(Vec::new);
@@ -925,12 +925,12 @@ fn picture_region(
         {
             config.appearance = config.appearance.over(base);
         }
-        let system = mypaper_bars::accent::System {
+        let system = glaze_bars::accent::System {
             accent: std::array::from_fn(|_| "#5b8def".to_owned()),
             scheme: if light {
-                mypaper_bars::accent::Scheme::Light
+                glaze_bars::accent::Scheme::Light
             } else {
-                mypaper_bars::accent::Scheme::Dark
+                glaze_bars::accent::Scheme::Dark
             },
             animations: false,
         };
@@ -980,11 +980,11 @@ fn picture_region(
                 .clone()
                 .unwrap_or_default()
                 .into_iter()
-                .map(|pin| mypaper_bars::apps::Item {
-                    key: mypaper_bars::apps::pin_key(&pin.path),
+                .map(|pin| glaze_bars::apps::Item {
+                    key: glaze_bars::apps::pin_key(&pin.path),
                     name: pin
                         .name
-                        .unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path)),
+                        .unwrap_or_else(|| glaze_bars::apps::file_stem(&pin.path)),
                     path: pin.path,
                     icon: None,
                     pinned: true,
@@ -1012,7 +1012,7 @@ fn picture_region(
         }
     }
     if let Ok(layout) =
-        serde_json::from_value::<mypaper_widgets::layout::Layout>(desktop.widgets.clone())
+        serde_json::from_value::<glaze_widgets::layout::Layout>(desktop.widgets.clone())
     {
         let grid = crate::stage::grid_for(&layout, display);
         let mut base = theme
@@ -1020,13 +1020,13 @@ fn picture_region(
             .and_then(|t| t.widgets.as_ref())
             .and_then(|skin| skin.appearance.clone())
             .unwrap_or_default()
-            .over(&mypaper_widgets::look::defaults());
+            .over(&glaze_widgets::look::defaults());
         if light && layout.appearance.text.is_none() {
-            base.text = Some(mypaper_theme::TextTone::Dark);
+            base.text = Some(glaze_theme::TextTone::Dark);
         }
         let now = widgets_view::Stamp::at((at.min(253402300799) * 1000) as i64);
-        let mut storage = mypaper_widgets::storage::Storage::new(
-            std::env::temp_dir().join("mypaper-panel-snapshot"),
+        let mut storage = glaze_widgets::storage::Storage::new(
+            std::env::temp_dir().join("glaze-panel-snapshot"),
         );
         let devices: Vec<_> = app
             .monitors
@@ -1039,20 +1039,20 @@ fn picture_region(
             .position(|monitor| monitor.primary)
             .unwrap_or(0);
         for instance in layout.instances.iter().filter(|instance| {
-            mypaper_widgets::layout::show_on(&instance.monitor, &devices, primary)
+            glaze_widgets::layout::show_on(&instance.monitor, &devices, primary)
                 == Some(display.device.as_str())
         }) {
             let Some(widget) = app.registry.get(&instance.widget) else {
                 continue;
             };
-            let appearance = mypaper_widgets::look::resolve(
+            let appearance = glaze_widgets::look::resolve(
                 &instance.appearance,
                 &layout.appearance,
                 &base,
-                mypaper_widgets::look::DEFAULT_TINT,
+                glaze_widgets::look::DEFAULT_TINT,
             );
             let placed =
-                mypaper_widgets::layout::place(&instance, &widget.manifest, &grid, &appearance);
+                glaze_widgets::layout::place(&instance, &widget.manifest, &grid, &appearance);
             let position = grid.rect(placed.cell, placed.size);
             let frame = Rect::new(
                 position.x as f32 * scale,
@@ -1064,20 +1064,20 @@ fn picture_region(
                 continue;
             };
             model.photo.current = backdrop.clone();
-            if appearance.surface != Some(mypaper_theme::Surface::None) {
+            if appearance.surface != Some(glaze_theme::Surface::None) {
                 list.ops.push(Op::Fill {
                     rect: frame,
                     radius: appearance.radius.unwrap_or(22.0) * scale,
                     color: Rgba::rgb8(
                         appearance
                             .tint
-                            .unwrap_or(mypaper_widgets::look::DEFAULT_TINT)
+                            .unwrap_or(glaze_widgets::look::DEFAULT_TINT)
                             .0,
                         appearance.opacity.unwrap_or(0.46),
                     ),
                 });
             }
-            let appearance = mypaper_widgets::look::json_of(&appearance);
+            let appearance = glaze_widgets::look::json_of(&appearance);
             let widget_list = widgets_view::view(
                 &model,
                 &widgets_view::tokens(&appearance),
@@ -1101,7 +1101,7 @@ fn picture_region(
         }
     }
     ui.text.clear_cache();
-    let picture = mypaper_ui::render(&mut ui, &list, size.0, size.1)
+    let picture = glaze_ui::render(&mut ui, &list, size.0, size.1)
         .ok()
         .map(std::sync::Arc::new);
     drop(ui);
@@ -1116,7 +1116,7 @@ mod tests {
 
     #[test]
     fn undo_and_redo_end_snapshot_preview_and_keep_now_current() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         observe(&app);
@@ -1137,7 +1137,7 @@ mod tests {
 
     #[test]
     fn snapshots_resolve_wallpaper_folder_paths_as_well_as_library_ids() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         let desktop = Desktop::read(&app);
@@ -1163,7 +1163,7 @@ mod tests {
 
     #[test]
     fn selecting_and_cancelling_history_is_read_only_and_leaving_clears_selection() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         observe(&app);
@@ -1195,7 +1195,7 @@ mod tests {
 
     #[test]
     fn a_theme_edit_is_a_history_change_and_older_snapshots_can_still_restore() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         let before = Desktop::read(&app);
@@ -1214,7 +1214,7 @@ mod tests {
 
     #[test]
     fn history_rows_show_every_display_independently_of_the_inspected_display() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         for wallpaper in &mut app.library.items {
@@ -1238,7 +1238,7 @@ mod tests {
 
     #[test]
     fn restore_finishes_when_the_snapshot_has_a_different_windows_scheme() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         observe(&app);
@@ -1266,7 +1266,7 @@ mod tests {
     }
     #[test]
     fn rebuilds_do_not_record_or_compare_changed_documents() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         observe(&app);
@@ -1294,7 +1294,7 @@ mod tests {
 
     #[test]
     fn a_snapshot_picture_is_independent_of_todays_look_and_wallpaper() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         // No external image files are needed to check appearance ownership.
@@ -1305,7 +1305,7 @@ mod tests {
         let desktop = Desktop::read(&app);
         let before = picture(&app, &desktop, (216, 122), 1793958138).unwrap();
         app.run(crate::actions::Action::SetStyle(Some(
-            mypaper_config::look::Style::Solid,
+            glaze_config::look::Style::Solid,
         )));
         for wallpaper in &mut app.library.items {
             wallpaper.active = false;
@@ -1322,7 +1322,7 @@ mod tests {
     }
     #[test]
     fn history_retains_pictures_only_for_visible_rows_and_releases_them_on_leave() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(super::super::State::default());
         app.size = (480, 360);
@@ -1331,7 +1331,7 @@ mod tests {
             wallpaper.video = None;
         }
         observe(&app);
-        app.run(crate::actions::Action::SetStyle(Some(mypaper_config::look::Style::Solid)));
+        app.run(crate::actions::Action::SetStyle(Some(glaze_config::look::Style::Solid)));
         let entry = app.panel.as_ref().unwrap().history.borrow().entries.last().unwrap().clone();
         app.panel.as_ref().unwrap().history.borrow_mut().entries = vec![entry; 30];
         app.panel.as_mut().unwrap().page = super::super::Page::History;

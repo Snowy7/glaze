@@ -1,5 +1,5 @@
 //! Processes: listing them, the tree under one, their CPU times, memory, image and command line,
-//! and asking a mypaper-core to quit the way the lock protocol says (`WM_QUIT` to every thread).
+//! and asking a glaze-core to quit the way the lock protocol says (`WM_QUIT` to every thread).
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -324,10 +324,10 @@ mod tests {
 
     #[test]
     fn finds_the_app_user_data_folder_in_webview2_command_lines() {
-        let quoted = r#""msedgewebview2.exe" --type=browser --user-data-dir="C:\Users\x\AppData\Local\mypaper\webview2-bars\EBWebView" --x"#;
+        let quoted = r#""msedgewebview2.exe" --type=browser --user-data-dir="C:\Users\x\AppData\Local\glaze\webview2-bars\EBWebView" --x"#;
         assert_eq!(
             user_data_dir(quoted).as_deref(),
-            Some(r"C:\Users\x\AppData\Local\mypaper\webview2-bars")
+            Some(r"C:\Users\x\AppData\Local\glaze\webview2-bars")
         );
         let bare = r"msedgewebview2.exe --user-data-dir=C:\tmp\webview2-shell --type=renderer";
         assert_eq!(

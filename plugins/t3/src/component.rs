@@ -4,8 +4,8 @@
 //! approvals, new threads) multiplexed on it by request id.
 use std::collections::BTreeMap;
 
-use mypaper_plugin_sdk::SizeClass;
-use mypaper_plugin_sdk::guest::{self, Event, FaceOpen, Plugin, files, http, launch, timers, ui, websocket};
+use glaze_plugin_sdk::SizeClass;
+use glaze_plugin_sdk::guest::{self, Event, FaceOpen, Plugin, files, http, launch, timers, ui, websocket};
 use serde_json::{Value, json};
 
 use crate::auth::{Auth, Outcome};
@@ -308,7 +308,7 @@ impl T3 {
 
     fn command_id(&mut self) -> String {
         self.next += 1;
-        format!("mypaper-{}-{}", now_ms(), self.next)
+        format!("glaze-{}-{}", now_ms(), self.next)
     }
 
     /// A `process.run` result for `auth`, or the session check.
@@ -343,7 +343,7 @@ impl T3 {
             websocket::close(socket);
         }
         if std::mem::replace(&mut self.reissued, true) {
-            return self.fail("T3 Code no longer accepts mypaper's access".into());
+            return self.fail("T3 Code no longer accepts Glaze's access".into());
         }
         self.start(true);
     }
@@ -389,4 +389,4 @@ impl Plugin for T3 {
     }
 }
 
-mypaper_plugin_sdk::export!(T3);
+glaze_plugin_sdk::export!(T3);

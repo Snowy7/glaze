@@ -1,8 +1,8 @@
 # Verify the real watch -> store -> pipe path using files owned by this fixture only.
-param([string]$Exe = 'C:\mypaper-targets\index\release\mypaper-index.exe', [int]$Files = 2000)
+param([string]$Exe = 'C:\glaze-targets\index\release\glaze-index.exe', [int]$Files = 2000)
 $ErrorActionPreference = 'Stop'
-$scratchBase = Join-Path $env:USERPROFILE 'mypaper-index-fixtures'
-$tag = 'mypaper-index-live-' + [Guid]::NewGuid().ToString('N').Substring(0,12)
+$scratchBase = Join-Path $env:USERPROFILE 'glaze-index-fixtures'
+$tag = 'glaze-index-live-' + [Guid]::NewGuid().ToString('N').Substring(0,12)
 $scratch = [IO.Path]::GetFullPath((Join-Path $scratchBase $tag))
 if (-not $scratch.StartsWith($scratchBase + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid fixture path' }
 function Request-Index([string]$Command, [string]$Value) {
@@ -20,7 +20,7 @@ function Await-Size([string]$Path, [long]$Bytes, [int]$Count) {
   throw "Sizes did not converge for $Path (expected $Bytes bytes, $Count files)"
 }
 if ((Request-Index '--status' '').scanning) { throw 'Wait for initial scan before running the live change fixture' }
-$indexProcess = Get-Process mypaper-index -ErrorAction Stop | Select-Object -First 1
+$indexProcess = Get-Process glaze-index -ErrorAction Stop | Select-Object -First 1
 $cpuBefore = $indexProcess.TotalProcessorTime.TotalMilliseconds
 $clock = [Diagnostics.Stopwatch]::StartNew()
 try {

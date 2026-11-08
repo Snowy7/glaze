@@ -1,7 +1,7 @@
 //! Lazy, bounded preview work. Read at most 64 KiB; shell images are limited to 768 pixels.
 //! The worker sleeps on its channel and is released when neither preview surface is open.
 use crate::shell;
-use mypaper_ui::Image;
+use glaze_ui::Image;
 use std::{
     io::Read,
     sync::{
@@ -286,7 +286,7 @@ mod tests {
         assert_eq!(decode(&[0xff, 0xfe, b'A', 0]).as_deref(), Some("A"));
         assert_eq!(decode(&[0xfe, 0xff, 0, b'A']).as_deref(), Some("A"));
         assert!(decode(b"binary\0data").is_none());
-        let root = std::path::Path::new(r"C:\mypaper-targets\files\scratch");
+        let root = std::path::Path::new(r"C:\glaze-targets\files\scratch");
         std::fs::create_dir_all(root).unwrap();
         let path = root.join(format!("preview-limit-{}.txt", std::process::id()));
         std::fs::write(&path, vec![b'x'; TEXT_LIMIT + 500]).unwrap();

@@ -1,9 +1,9 @@
 //! Bar presets, module editing and pinned app actions shared by Studio pages.
 
-use mypaper_bars::{BarsConfig, ModuleRef};
-use mypaper_ui::Point;
-use mypaper_ui::controls::Glyph;
-use mypaper_ui::controls::key;
+use glaze_bars::{BarsConfig, ModuleRef};
+use glaze_ui::Point;
+use glaze_ui::controls::Glyph;
+use glaze_ui::controls::key;
 use serde_json::{Value, json};
 
 use crate::actions::{Action, Bar, Page, Pins, Slot};
@@ -84,8 +84,8 @@ fn module_key(m: &ModuleRef) -> String {
 static PLUGIN_MODULES: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
 
 fn refresh_plugin_modules() {
-    use mypaper_widgets::manifest::PluginManifest;
-    let mut found: Vec<(String, String)> = mypaper_widgets::registry::plugin_roots()
+    use glaze_widgets::manifest::PluginManifest;
+    let mut found: Vec<(String, String)> = glaze_widgets::registry::plugin_roots()
         .iter()
         .filter_map(|root| std::fs::read_dir(root).ok())
         .flatten()
@@ -295,15 +295,15 @@ pub fn run(app: &mut App, action: Action) {
             );
             app.toast_undo("Back to its design");
         }
-        Action::StartBars => app.run(Action::StartMypaper),
+        Action::StartBars => app.run(Action::StartGlaze),
         Action::PinsOwn(which) => {
             let Some(config) = config(app) else { return };
             let start = match which {
-                Pins::Dock => mypaper_shell::preview::bars::default_pins(),
+                Pins::Dock => glaze_shell::preview::bars::default_pins(),
                 Pins::Start => config
                     .dock
                     .pinned
-                    .unwrap_or_else(mypaper_shell::preview::bars::default_pins),
+                    .unwrap_or_else(glaze_shell::preview::bars::default_pins),
             };
             set_pins(
                 app,
@@ -350,7 +350,7 @@ pub fn run(app: &mut App, action: Action) {
 }
 
 /// A list's own pins (empty while it follows another list).
-fn own_pins(config: &BarsConfig, which: Pins) -> Vec<mypaper_bars::config::Pinned> {
+fn own_pins(config: &BarsConfig, which: Pins) -> Vec<glaze_bars::config::Pinned> {
     match which {
         Pins::Dock => config.dock.pinned.clone(),
         Pins::Start => config.launcher.pinned.clone(),

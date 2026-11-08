@@ -1,5 +1,5 @@
-use mypaper_config::look::Style;
-use mypaper_ui::controls::Align;
+use glaze_config::look::Style;
+use glaze_ui::controls::Align;
 use serde_json::{Value, json};
 
 use super::*;
@@ -446,7 +446,7 @@ fn windows_looks() -> [(&'static str, Value); 4] {
             json!({"accent":null,"border":null,"caption":null,"caption_text":null,"corners":null,"backdrop":null,"apps":"as-is","cursors":null}),
         ),
         (
-            "Match mypaper",
+            "Match Glaze",
             json!({"accent":"auto","border":"auto","corners":"round","backdrop":"mica","apps":"match"}),
         ),
         (
@@ -540,8 +540,8 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
         let current = layer.get("cursors").and_then(Value::as_str);
         for (id, name) in [
             (None, "As is"),
-            (Some("mypaper-dark"), "Dark"),
-            (Some("mypaper-light"), "Light"),
+            (Some("glaze-dark"), "Dark"),
+            (Some("glaze-light"), "Light"),
         ] {
             let action = match id {
                 Some(id) => Action::Set(
@@ -596,7 +596,7 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
     notice(
         b,
         c,
-        "Windows' own styling comes back when mypaper stops or you restore the Windows desktop.",
+        "Windows' own styling comes back when Glaze stops or you restore the Windows desktop.",
     );
 }
 
@@ -631,7 +631,7 @@ mod tests {
     use super::*;
     #[test]
     fn header_reset_returns_to_the_wallpaper_and_preserves_windows_styling() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(crate::panel::State {
             page: Page::Look,

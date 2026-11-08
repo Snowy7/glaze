@@ -1,10 +1,10 @@
 //! Widget layout transactions and reusable manifest field controls.
 
-use mypaper_ui::controls::Glyph;
-use mypaper_ui::controls::{Align, ButtonKind, Font, key};
-use mypaper_ui::{Point, Rect};
-use mypaper_widgets::layout::{Instance, Layout};
-use mypaper_widgets::manifest::{SelectOption, Setting as WidgetSetting, WidgetManifest};
+use glaze_ui::controls::Glyph;
+use glaze_ui::controls::{Align, ButtonKind, Font, key};
+use glaze_ui::{Point, Rect};
+use glaze_widgets::layout::{Instance, Layout};
+use glaze_widgets::manifest::{SelectOption, Setting as WidgetSetting, WidgetManifest};
 use serde_json::{Map, Value, json};
 
 use crate::actions::{Action, Choices, Edit, FieldId, Page};
@@ -32,7 +32,7 @@ pub(crate) fn here(app: &App, layout: &Layout) -> Vec<Instance> {
         .instances
         .iter()
         .filter(|i| {
-            mypaper_widgets::layout::show_on(&i.monitor, &devices, primary) == Some(device.as_str())
+            glaze_widgets::layout::show_on(&i.monitor, &devices, primary) == Some(device.as_str())
         })
         .cloned()
         .collect()
@@ -68,7 +68,7 @@ pub fn glyph_of(id: &str) -> Glyph {
 pub fn new_custom(app: &mut App) {
     let result = (|| -> anyhow::Result<std::path::PathBuf> {
         use std::io::Write;
-        let folder = mypaper_widgets::custom::install_examples()?;
+        let folder = glaze_widgets::custom::install_examples()?;
         for index in 1..=10000 {
             let path = folder.join(format!("widget-{index}.json"));
             match std::fs::OpenOptions::new()
@@ -78,7 +78,7 @@ pub fn new_custom(app: &mut App) {
             {
                 Ok(mut file) => {
                     let mut definition: Value =
-                        serde_json::from_str(mypaper_widgets::custom::EXAMPLES[0].1)?;
+                        serde_json::from_str(glaze_widgets::custom::EXAMPLES[0].1)?;
                     definition["title"] = json!(format!("Custom widget {index}"));
                     file.write_all(&serde_json::to_vec_pretty(&definition)?)?;
                     return Ok(path);
@@ -91,7 +91,7 @@ pub fn new_custom(app: &mut App) {
     })();
     match result {
         Ok(path) => {
-            app.registry = mypaper_widgets::registry::builtins();
+            app.registry = glaze_widgets::registry::builtins();
             crate::system::open(&path.to_string_lossy());
             app.toast(
                 "Custom widget created. Edit its JSON, then add it from the catalog.",
@@ -653,27 +653,27 @@ fn variant_tile(
     b.fill(
         pic,
         b.px(8.0),
-        mypaper_ui::Rgba::rgb8([0x2a, 0x30, 0x4a], 1.0),
+        glaze_ui::Rgba::rgb8([0x2a, 0x30, 0x4a], 1.0),
     );
     let mut settings = instance.settings.clone();
     settings.insert(setting.to_owned(), json!(value));
-    let placed = mypaper_widgets::layout::Placed {
+    let placed = glaze_widgets::layout::Placed {
         instance: format!("{}-tile", instance.instance),
         widget: instance.widget.clone(),
         cell: [0, 0],
         size: instance.size,
         settings: manifest.resolve_settings(&settings),
-        appearance: mypaper_widgets::look::json_of(&mypaper_widgets::look::defaults()),
+        appearance: glaze_widgets::look::json_of(&glaze_widgets::look::defaults()),
         own: Map::new(),
     };
     let mut storage =
-        mypaper_widgets::storage::Storage::new(std::env::temp_dir().join("mypaper-studio-tiles"));
-    let now = mypaper_shell::preview::widgets::Stamp::now();
-    let Ok(model) = mypaper_shell::preview::widgets::Model::new(placed.clone(), &mut storage, now)
+        glaze_widgets::storage::Storage::new(std::env::temp_dir().join("glaze-studio-tiles"));
+    let now = glaze_shell::preview::widgets::Stamp::now();
+    let Ok(model) = glaze_shell::preview::widgets::Model::new(placed.clone(), &mut storage, now)
     else {
         return;
     };
-    let tokens = mypaper_shell::preview::widgets::tokens(&placed.appearance);
+    let tokens = glaze_shell::preview::widgets::tokens(&placed.appearance);
     let inner = pic.inflate(-b.px(6.0));
     let aspect = instance.size[0] as f32 / instance.size[1].max(1) as f32;
     let (w, h) = if inner.width() / inner.height() > aspect {
@@ -682,10 +682,10 @@ fn variant_tile(
         (inner.width(), inner.width() / aspect)
     };
     let scale = w / (instance.size[0] as f32 * 100.0);
-    let list = mypaper_shell::preview::widgets::view(
+    let list = glaze_shell::preview::widgets::view(
         &model,
         &tokens,
-        mypaper_shell::preview::widgets::Frame {
+        glaze_shell::preview::widgets::Frame {
             size: (w.max(1.0) as u32, h.max(1.0) as u32),
             scale,
             now,
@@ -701,7 +701,7 @@ fn variant_tile(
     b.fill(
         Rect::new(x, y, w, h),
         22.0 * scale,
-        mypaper_ui::Rgba::rgb8([0x34, 0x3a, 0x42], 0.6),
+        glaze_ui::Rgba::rgb8([0x34, 0x3a, 0x42], 0.6),
     );
     b.list
         .ops
@@ -755,7 +755,7 @@ pub fn run(app: &mut App, action: Action) {
             app.nav.widget = id;
         }
         Action::AddWidgetSheet => {
-            app.registry = mypaper_widgets::registry::builtins();
+            app.registry = glaze_widgets::registry::builtins();
             app.go(Page::Widgets);
             app.texts.remove(&FieldId::WidgetSearch);
             app.overlay = Some(Overlay::AddWidget);
@@ -779,7 +779,7 @@ pub fn run(app: &mut App, action: Action) {
             match first_free(app, &l, i.size) {
                 Some(cell) => {
                     let duplicated = (|| -> anyhow::Result<String> {
-                        let root = mypaper_widgets::files::user("widget-data")?;
+                        let root = glaze_widgets::files::user("widget-data")?;
                         duplicate(&mut app.docs, l, &id, cell, &root)
                     })();
                     match duplicated {
@@ -979,9 +979,9 @@ fn duplicate(
         !root.join(&new_id).exists(),
         "duplicate files already exist"
     );
-    let mut storage = mypaper_widgets::storage::Storage::new(root.to_owned());
+    let mut storage = glaze_widgets::storage::Storage::new(root.to_owned());
     storage.duplicate(id, &new_id)?;
-    let copied = mypaper_widgets::pick::copy_instance_checked(root, id, &new_id).and_then(|()| {
+    let copied = glaze_widgets::pick::copy_instance_checked(root, id, &new_id).and_then(|()| {
         docs.edit(
             "Duplicate widget",
             &[Op {
@@ -992,7 +992,7 @@ fn duplicate(
         )
     });
     if let Err(error) = copied {
-        mypaper_widgets::pick::remove_instance(root, &new_id);
+        glaze_widgets::pick::remove_instance(root, &new_id);
         let _ = storage.remove(&new_id);
         return Err(error);
     }
@@ -1004,12 +1004,12 @@ mod duplication_tests {
     use super::*;
     #[test]
     fn studio_duplicates_owned_photos_and_rolls_back_when_the_layout_is_invalid() {
-        let root = std::env::temp_dir().join(format!("mypaper-studio-copy-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("glaze-studio-copy-{}", std::process::id()));
         std::fs::create_dir_all(root.join("photo-1/files")).unwrap();
         std::fs::write(root.join("photo-1/files/picture.png"), b"picked picture").unwrap();
-        let url = mypaper_widgets::pick::data_url("photo", "photo-1", "picture.png");
+        let url = glaze_widgets::pick::data_url("photo", "photo-1", "picture.png");
         let raw = json!({"instances":[{"instance":"photo-1","widget":"photo","monitor":"primary","cell":[0,0],"size":[2,2],"settings":{"images":[url]}}]}).to_string();
-        let mut storage = mypaper_widgets::storage::Storage::new(root.clone());
+        let mut storage = glaze_widgets::storage::Storage::new(root.clone());
         storage.set("photo-1", "current", Some(json!(url))).unwrap();
         let mut docs = crate::docs::Docs::fixture(["{}", "{\"version\":1}", &raw, "{}"]);
         let copied = duplicate(
@@ -1020,13 +1020,13 @@ mod duplication_tests {
             &root,
         )
         .unwrap();
-        let owned_url = mypaper_widgets::pick::data_url("photo", &copied, "picture.png");
+        let owned_url = glaze_widgets::pick::data_url("photo", &copied, "picture.png");
         assert_eq!(
             docs.doc(DocId::Widgets).raw["instances"][1]["settings"]["images"][0],
             owned_url
         );
         assert_eq!(storage.get(&copied, "current").unwrap(), json!(owned_url));
-        mypaper_widgets::pick::remove_instance(&root, "photo-1");
+        glaze_widgets::pick::remove_instance(&root, "photo-1");
         assert_eq!(
             std::fs::read(root.join(&copied).join("files/picture.png")).unwrap(),
             b"picked picture"
@@ -1042,14 +1042,14 @@ mod duplication_tests {
 }
 
 /// A list column's key and label (the manifest keeps them per variant).
-fn list_key(f: &mypaper_widgets::manifest::ListField) -> String {
+fn list_key(f: &glaze_widgets::manifest::ListField) -> String {
     serde_json::to_value(f)
         .ok()
         .and_then(|v| v.get("key")?.as_str().map(str::to_owned))
         .unwrap_or_default()
 }
 
-fn list_label(f: &mypaper_widgets::manifest::ListField) -> String {
+fn list_label(f: &glaze_widgets::manifest::ListField) -> String {
     serde_json::to_value(f)
         .ok()
         .and_then(|v| v.get("label")?.as_str().map(str::to_owned))
@@ -1275,7 +1275,7 @@ fn transfer(app: &mut App, instance: &str, display: usize, pointer: Point) {
     let devices: Vec<_> = app.monitors.iter().map(|m| m.device.clone()).collect();
     let primary = app.monitors.iter().position(|m| m.primary).unwrap_or(0);
     let occupied: Vec<_> = layout.instances.iter().filter(|other| other.instance != instance
-        && mypaper_widgets::layout::show_on(&other.monitor, &devices, primary) == Some(monitor.device.as_str())).collect();
+        && glaze_widgets::layout::show_on(&other.monitor, &devices, primary) == Some(monitor.device.as_str())).collect();
     if !manifest.instances.allows(layout.instances.iter().filter(|other| other.widget == current.widget && other.instance != instance).count(), occupied.iter().filter(|other| other.widget == current.widget).count()) {
         app.alert("This widget has reached its limit on that display");
         return;
@@ -1325,11 +1325,11 @@ fn arrange() {
     use windows::core::{PCWSTR, w};
     // SAFETY: lookups and a post; a missing host does nothing.
     unsafe {
-        let message = RegisterWindowMessageW(w!("mypaper.widgets.edit"));
+        let message = RegisterWindowMessageW(w!("glaze.widgets.edit"));
         if let Ok(host) = FindWindowExW(
             Some(HWND_MESSAGE),
             None::<HWND>,
-            w!("mypaper.widgets.host"),
+            w!("glaze.widgets.host"),
             PCWSTR::null(),
         ) && message != 0
         {

@@ -1,5 +1,5 @@
 #![cfg(windows)]
-use mypaper_native_host::{HostConfig, Isolation, PluginSpec, Supervisor};
+use glaze_native_host::{HostConfig, Isolation, PluginSpec, Supervisor};
 use std::{
     fs,
     path::PathBuf,
@@ -15,7 +15,7 @@ fn example() -> &'static PathBuf {
     static DLL: OnceLock<PathBuf> = OnceLock::new();
     DLL.get_or_init(|| {
         let folder =
-            std::env::temp_dir().join(format!("mypaper-native-fixture-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-native-fixture-{}", std::process::id()));
         fs::create_dir_all(&folder).unwrap();
         let dll = folder.join("native_echo.dll");
         let status = Command::new("rustc")
@@ -41,7 +41,7 @@ fn example() -> &'static PathBuf {
 fn spec(id: &str, isolation: Isolation) -> PluginSpec {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let folder = std::env::temp_dir().join(format!(
-        "mypaper-native-test-{}-{}-{id}",
+        "glaze-native-test-{}-{}-{id}",
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
@@ -57,7 +57,7 @@ fn spec(id: &str, isolation: Isolation) -> PluginSpec {
 }
 fn supervisor(timeout: Duration) -> Supervisor {
     Supervisor::new(
-        PathBuf::from(env!("CARGO_BIN_EXE_mypaper-native-host")),
+        PathBuf::from(env!("CARGO_BIN_EXE_glaze-native-host")),
         HostConfig {
             call_timeout: timeout,
             initial_backoff: Duration::from_millis(80),

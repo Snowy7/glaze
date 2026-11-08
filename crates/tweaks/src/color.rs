@@ -1,7 +1,7 @@
 //! Color math and the encodings Windows uses for them. All of these are
 //! pure, so the byte orders (which are easy to get backwards) are tested.
 
-use mypaper_theme::Color;
+use glaze_theme::Color;
 
 /// `COLORREF` as `DwmSetWindowAttribute` wants it: `0x00BBGGRR`.
 pub fn colorref(Color([r, g, b]): Color) -> u32 {

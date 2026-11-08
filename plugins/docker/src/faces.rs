@@ -1,7 +1,7 @@
 //! One Docker face, responsive to the host's three size classes.
 use crate::{Availability, Data, Snapshot, docker};
-use mypaper_plugin_sdk::SizeClass;
-use mypaper_plugin_sdk::{Face, Role, Tone, View};
+use glaze_plugin_sdk::SizeClass;
+use glaze_plugin_sdk::{Face, Role, Tone, View};
 
 fn metric(value: String, label: &str, color: Option<Tone>, width: Option<f32>) -> View {
     View::Metric {

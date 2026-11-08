@@ -472,7 +472,7 @@ mod tests {
     #[test]
     fn conditional_build_trees_includes_and_unknown_sizes() {
         let root =
-            std::env::temp_dir().join(format!("mypaper-index-excludes-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-index-excludes-{}", std::process::id()));
         for dir in [
             "rust/target/keep",
             "ordinary/target",
@@ -487,7 +487,7 @@ mod tests {
         std::fs::write(root.join("rust/target/CACHEDIR.TAG"), b"").unwrap();
         std::fs::write(root.join("dotnet/app.csproj"), b"").unwrap();
         let rules = Rules::new(
-            &mypaper_config::IndexConfig {
+            &glaze_config::IndexConfig {
                 include: vec![format!(
                     "{}/rust/target/keep/**",
                     root.to_string_lossy().replace('\\', "/")

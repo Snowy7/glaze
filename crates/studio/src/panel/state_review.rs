@@ -5,7 +5,7 @@ use crate::{
     app::App,
     docs::{DocId, Op},
 };
-use mypaper_ui::{Rgba, Ui, golden, render};
+use glaze_ui::{Rgba, Ui, golden, render};
 use serde_json::json;
 
 fn fixture(ui: &Ui, dark: bool, page: Page) -> App {
@@ -58,7 +58,7 @@ fn first_run_choices_are_independent_of_the_previous_choice() {
         let built = super::build(&app, &mut ui.text);
         assert_eq!(
             built.list.ops.iter().any(
-                |op| matches!(op, mypaper_ui::Op::Text {text,..} if text.as_ref() == "If something goes wrong")
+                |op| matches!(op, glaze_ui::Op::Text {text,..} if text.as_ref() == "If something goes wrong")
             ),
             step == super::first_run::DONE
         );
@@ -98,7 +98,7 @@ fn release_state_routes_and_shared_units_are_exposed() {
         built
             .targets
             .iter()
-            .any(|target| target.action == Action::StartMypaper)
+            .any(|target| target.action == Action::StartGlaze)
     );
     assert_eq!(super::controls::unit(12.0, "px"), "12 px");
     assert_eq!(super::controls::unit(55.0, "%"), "55%");
@@ -106,9 +106,9 @@ fn release_state_routes_and_shared_units_are_exposed() {
 
 #[test]
 fn render_panel_states() {
-    let out = std::env::var_os("MYPAPER_STUDIO_PANEL_SHOTS")
+    let out = std::env::var_os("GLAZE_STUDIO_PANEL_SHOTS")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| r"C:\mypaper-targets\studio-panel\shots".into())
+        .unwrap_or_else(|| r"C:\glaze-targets\studio-panel\shots".into())
         .join("states");
     std::fs::create_dir_all(&out).unwrap();
     let mut ui = Ui::new().unwrap();
@@ -203,9 +203,9 @@ fn render_panel_states() {
                         Edit::new(DocId::Widgets, "/appearance/surface", "Widget background"),
                         json!("none"),
                     ));
-                    app.nav.more.insert(mypaper_ui::controls::key((
+                    app.nav.more.insert(glaze_ui::controls::key((
                         "panel-more",
-                        mypaper_ui::controls::key(("studio-panel", Page::Look)),
+                        glaze_ui::controls::key(("studio-panel", Page::Look)),
                     )));
                 }
                 "high-contrast" => {
@@ -215,7 +215,7 @@ fn render_panel_states() {
                     } else {
                         ([255, 255, 255], [0, 0, 0])
                     };
-                    app.theme.palette = mypaper_ui::controls::Palette::contrast(
+                    app.theme.palette = glaze_ui::controls::Palette::contrast(
                         Rgba::rgb8(window, 1.0),
                         Rgba::rgb8(ink, 1.0),
                         Rgba::rgb8(if dark { [26, 235, 255] } else { [0, 0, 128] }, 1.0),

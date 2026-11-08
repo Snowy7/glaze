@@ -1,7 +1,7 @@
 # Discord, calendars and personal widgets
 
 Implemented on `native`, 2026-11-05. Settings remain in
-`%APPDATA%\mypaper\integrations.json`; secrets remain in Windows Credential Manager.
+`%APPDATA%\glaze\integrations.json`; secrets remain in Windows Credential Manager.
 
 ## What connects without a developer account
 
@@ -17,7 +17,7 @@ Implemented on `native`, 2026-11-05. Settings remain in
   These are Windows-retained notifications, not all messages, history, or unread counts. Quiet,
   disabled or dismissed notifications cannot be reconstructed.
 - **Studio → Widgets → New custom widget** creates a new JSON definition and installs four
-  editable examples in `%APPDATA%\mypaper\widgets`. Edit the new file, then open the widget
+  editable examples in `%APPDATA%\glaze\widgets`. Edit the new file, then open the widget
   catalog. Every valid JSON file is a separate Custom entry, with multiple instances allowed.
   Reopening either picker reloads the catalog. Refresh reloads a definition and its data.
 
@@ -29,14 +29,14 @@ Implemented on `native`, 2026-11-05. Settings remain in
 3. In Calendar, choose **Calendars → Google Calendar → Connect**. On first setup, put the desktop
    client ID in the Windows dialog's User name field and its optional client secret in Password.
    The ID is saved as `calendar.googleClientId`; the secret, if supplied, is saved as
-   `mypaper/integrations/calendar/google/client-secret` in Credential Manager.
+   `glaze/integrations/calendar/google/client-secret` in Credential Manager.
 4. Sign in and approve read-only calendar access in your browser. Subsequent Connect clicks use
    the registered ID directly. Distribution beyond personal testing may need Google's verification.
 
 The implementation uses an ephemeral `127.0.0.1` loopback listener, PKCE S256, random state,
 `calendar.readonly`, offline access and refresh tokens. No embedded browser or hard-coded secret.
 Desktop client IDs may instead be supplied in integrations.json or at build time through
-`MYPAPER_GOOGLE_CLIENT_ID`. No developer registration was available for live Google sign-in here.
+`GLAZE_GOOGLE_CLIENT_ID`. No developer registration was available for live Google sign-in here.
 
 ## Microsoft / Outlook Calendar
 
@@ -50,7 +50,7 @@ Desktop client IDs may instead be supplied in integrations.json or at build time
 3. In Calendar, choose **Calendars → Microsoft / Outlook → Connect**. On first setup, put the
    Application (client) ID in User name and leave Password empty. Sign in in your browser.
 
-The ID is `calendar.microsoftClientId` (or build-time `MYPAPER_MICROSOFT_CLIENT_ID`). Sign-in uses
+The ID is `calendar.microsoftClientId` (or build-time `GLAZE_MICROSOFT_CLIENT_ID`). Sign-in uses
 the common authority, PKCE S256, state, `offline_access` and Graph `Calendars.Read`.
 No Microsoft registration was available for live sign-in here.
 
@@ -112,7 +112,7 @@ No messages were sent in verification. Bot tokens cannot be obtained through a d
 installation; the application's owner must create and supply the bot token once. A provider-hosted
 bot would need a separately operated backend, which this local implementation does not invent.
 
-Credential targets are under `mypaper/integrations/`: `discord/bot`, `discord/client-secret`,
+Credential targets are under `glaze/integrations/`: `discord/bot`, `discord/client-secret`,
 `discord/rpc-access`, `discord/rpc-refresh`, `discord/rpc-expiry`. Calendar OAuth tokens use separate
 Credential Manager parts so large Graph tokens fit Windows' 2560-byte per-credential limit.
 Never put tokens, passwords or secrets in integrations.json. The private-file `credential` example

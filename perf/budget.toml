@@ -1,4 +1,4 @@
-# The performance promise, checked by `mypaper-perf` (docs/performance.md).
+# The performance promise, checked by `glaze-perf` (docs/performance.md).
 #
 # Keys are `<component>.<measure>`; a limit binds a scenario only when that component runs in
 # it. Startup times are milliseconds from core's process creation (`.cold`: first start on a

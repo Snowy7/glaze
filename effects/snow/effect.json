@@ -1,6 +1,6 @@
 {
   "animated": true,
-  "author": "mypaper",
+  "author": "Glaze",
   "category": "weather",
   "cost": 0.728,
   "cost_estimated": false,
@@ -65,5 +65,5 @@
       "source": "composite.wgsl"
     }
   ],
-  "url": "https://github.com/Snowy7/mypaper"
+  "url": "https://github.com/Snowy7/glaze"
 }

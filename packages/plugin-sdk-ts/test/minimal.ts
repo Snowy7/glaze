@@ -1,4 +1,4 @@
-import { setView } from 'mypaper:plugin/ui@0.1.0';
+import { setView } from 'glaze:plugin/ui@0.1.0';
 import type { lifecycle as Lifecycle } from '../src/generated/plugin.js';
 let clicks = 0;
 let instance = 'hello-1';

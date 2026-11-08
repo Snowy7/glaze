@@ -1,5 +1,5 @@
-import type { Align as WitAlign, TextRole, Tone as WitTone } from './generated/interfaces/mypaper-plugin-types.js';
-import type { Face as WitFace, Node, NodeKind } from './generated/interfaces/mypaper-plugin-view.js';
+import type { Align as WitAlign, TextRole, Tone as WitTone } from './generated/interfaces/glaze-plugin-types.js';
+import type { Face as WitFace, Node, NodeKind } from './generated/interfaces/glaze-plugin-view.js';
 
 export type Role = TextRole;
 export const Role = {

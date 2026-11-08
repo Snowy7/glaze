@@ -1,6 +1,6 @@
 use super::*;
-use mypaper_bars::BarsConfig;
-use mypaper_ui::{Op, Ui, icons::IconSet};
+use glaze_bars::BarsConfig;
+use glaze_ui::{Op, Ui, icons::IconSet};
 use serde_json::json;
 
 fn settings(value: serde_json::Value) -> Look {
@@ -15,8 +15,8 @@ fn automatic_menu_and_widget_glass_share_the_neutral_tint() {
         let tint = |family| appearance(&look, family, &Appearance::default(), false, &system).tint;
         assert_eq!(tint(Family::Menus), tint(Family::Widgets));
         assert_eq!(tint(Family::Menus), Some(match look.material.tint.unwrap() {
-            mypaper_theme::Paint::Auto => mypaper_widgets::look::DEFAULT_TINT,
-            mypaper_theme::Paint::Color(color) => color,
+            glaze_theme::Paint::Auto => glaze_widgets::look::DEFAULT_TINT,
+            glaze_theme::Paint::Color(color) => color,
         }));
     }
 }
@@ -66,9 +66,9 @@ fn selected_tints_give_the_macos_bar_live_glass_and_readable_ink() {
             tokens.adapt_ink(&bars.top.look, None);
             let under = crate::glass::tone::backdrop(None, tokens.theme.dark());
             let face = crate::glass::tone::face(&material, under, 40.0);
-            let ink = mypaper_ui::theme::over(tokens.theme.color.label, face);
+            let ink = glaze_ui::theme::over(tokens.theme.color.label, face);
             assert!(
-                mypaper_ui::theme::contrast(ink, face) >= 4.498,
+                glaze_ui::theme::contrast(ink, face) >= 4.498,
                 "{key}: {color}"
             );
         }
@@ -165,7 +165,7 @@ fn strip_bar_drawing_and_published_shapes_share_the_explicit_radius() {
         assert!(!frame.shapes.is_empty());
         for (rect, published) in &frame.shapes {
             assert_eq!(*published, radius * tokens.scale);
-            assert!(frame.list.ops.iter().any(|op| matches!(op, Op::Fill {rect:r,radius:drawn,color} if r==rect && drawn==published && *color==mypaper_ui::Rgba::HIT)));
+            assert!(frame.list.ops.iter().any(|op| matches!(op, Op::Fill {rect:r,radius:drawn,color} if r==rect && drawn==published && *color==glaze_ui::Rgba::HIT)));
         }
     }
 }
@@ -190,8 +190,8 @@ fn edge_switch_reaches_glass_surface_styles_and_specific_border_wins() {
 #[test]
 fn font_family_is_installed_or_falls_back_and_explicit_bar_family_wins() {
     assert_eq!(
-        font("Missing face", |f| f == mypaper_ui::VARIABLE),
-        mypaper_ui::VARIABLE
+        font("Missing face", |f| f == glaze_ui::VARIABLE),
+        glaze_ui::VARIABLE
     );
     assert_eq!(font("", |_| false), "Segoe UI");
     let ui = Ui::new().unwrap();
@@ -206,7 +206,7 @@ fn font_family_is_installed_or_falls_back_and_explicit_bar_family_wins() {
         resolve(&user, &bars, "top", &ui.text).font.family.as_ref(),
         "Arial"
     );
-    let user = settings(json!({"text":{"font":"__mypaper_missing_face__"}}));
+    let user = settings(json!({"text":{"font":"__glaze_missing_face__"}}));
     let tokens = resolve(&user, &BarsConfig::parse("{}").unwrap(), "top", &ui.text);
     assert!(ui.text.has_family(&tokens.font.family));
     let panel = crate::flyouts::look::Look::resolve_settings(
@@ -302,17 +302,17 @@ fn icons_select_lucide_or_fluent_independently_of_native_style() {
             vector
         );
         let items = vec![
-            mypaper_ui::Entry::action("Settings", ())
-                .with_icon(mypaper_ui::MenuIcon::Glyph('\u{E713}')),
+            glaze_ui::Entry::action("Settings", ())
+                .with_icon(glaze_ui::MenuIcon::Glyph('\u{E713}')),
         ];
         let tokens = panel.menu_tokens();
-        let layout = mypaper_ui::menu::layout(&items, &tokens, 1.0, &mut ui.text);
-        let list = mypaper_ui::menu::view(&items, &layout, None, &tokens);
+        let layout = glaze_ui::menu::layout(&items, &tokens, 1.0, &mut ui.text);
+        let list = glaze_ui::menu::view(&items, &layout, None, &tokens);
         assert_eq!(
             list.ops.iter().any(|op| matches!(
                 op,
                 Op::Icon {
-                    icon: mypaper_ui::icons::Icon::Settings,
+                    icon: glaze_ui::icons::Icon::Settings,
                     ..
                 }
             )),
@@ -328,7 +328,7 @@ fn bars_family_style_beats_the_global_style_and_explicit_bar_style_beats_both() 
     let bars = BarsConfig::parse("{}").unwrap();
     assert_eq!(
         resolve(&user, &bars, "top", &ui.text).theme.style,
-        mypaper_ui::Style::Solid
+        glaze_ui::Style::Solid
     );
     let solid = resolve(&user, &bars, "top", &ui.text);
     assert_eq!(solid.fill.unwrap_or(solid.theme.color.surface).a, 1.0);
@@ -337,7 +337,7 @@ fn bars_family_style_beats_the_global_style_and_explicit_bar_style_beats_both() 
     let bars = BarsConfig::parse(r#"{"top":{"look":{"style":"fluent"}}}"#).unwrap();
     assert_eq!(
         resolve(&user, &bars, "top", &ui.text).theme.style,
-        mypaper_ui::Style::Fluent
+        glaze_ui::Style::Fluent
     );
 }
 
@@ -349,15 +349,15 @@ fn menus_family_style_is_independent_of_bars_and_resets_to_the_global_style() {
     for (user, expected) in [
         (
             settings(json!({"style":"liquid", "bars":{"style":"solid"}, "menus":{"style":"mono"}})),
-            mypaper_ui::Style::Mono,
+            glaze_ui::Style::Mono,
         ),
         (
             settings(json!({"style":"liquid", "bars":{"style":"solid"}})),
-            mypaper_ui::Style::Liquid,
+            glaze_ui::Style::Liquid,
         ),
         (
             settings(json!({"style":"liquid", "menus":{"style":"solid"}})),
-            mypaper_ui::Style::Solid,
+            glaze_ui::Style::Solid,
         ),
     ] {
         let mut own = bars.top.look.clone();
@@ -374,7 +374,7 @@ fn menus_family_style_is_independent_of_bars_and_resets_to_the_global_style() {
         );
         let panel = crate::flyouts::look::Look::resolve(&own, &a, &system);
         assert_eq!(panel.style, expected);
-        if expected == mypaper_ui::Style::Solid { assert_eq!(panel.fill.a, 1.0); }
+        if expected == glaze_ui::Style::Solid { assert_eq!(panel.fill.a, 1.0); }
     }
 }
 
@@ -402,10 +402,10 @@ fn menus_share_explicit_radius_and_edge_with_their_glass_shape() {
     assert_eq!(panel.menu_tokens().radius, 0.0);
     assert!(panel.menu_tokens().border);
     assert!(panel.glass.is_none());
-    let items = vec![mypaper_ui::Entry::action("Settings", ())];
+    let items = vec![glaze_ui::Entry::action("Settings", ())];
     let tokens = panel.menu_tokens();
-    let layout = mypaper_ui::menu::layout(&items, &tokens, 1.0, &mut ui.text);
-    let list = mypaper_ui::menu::view(&items, &layout, None, &tokens);
+    let layout = glaze_ui::menu::layout(&items, &tokens, 1.0, &mut ui.text);
+    let list = glaze_ui::menu::view(&items, &layout, None, &tokens);
     assert!(
         list.ops
             .iter()

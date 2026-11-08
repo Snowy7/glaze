@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 
 use anyhow::{Context, Result};
-use mypaper_desktop::{DesktopEvents as Observer, DesktopHost};
+use glaze_desktop::{DesktopEvents as Observer, DesktopHost};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::System::Threading::{GetCurrentThreadId, INFINITE};
 use windows::Win32::UI::WindowsAndMessaging::{

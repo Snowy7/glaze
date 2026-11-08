@@ -1,8 +1,8 @@
 //! Coalescing keys for background input retained during games. Completion IDs and connection
 //! lifecycle events stay distinct, so a reply cannot replace another outstanding request.
 use crate::host::Input;
-use crate::runtime::mypaper::plugin::{pipes::PipeEvent, websocket::SocketEvent};
-use mypaper_plugin_api::wire::{HostMsg, SystemEvent};
+use crate::runtime::glaze::plugin::{pipes::PipeEvent, websocket::SocketEvent};
+use glaze_plugin_api::wire::{HostMsg, SystemEvent};
 
 #[derive(PartialEq, Eq)]
 pub(crate) struct Key(String, &'static str, String);

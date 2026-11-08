@@ -1,4 +1,4 @@
-//! mypaper-shell as a library. The `mypaper-shell` binary (`main.rs`) runs the shell from these
+//! glaze-shell as a library. The `glaze-shell` binary (`main.rs`) runs the shell from these
 //! modules; Studio links the same code to draw its previews with the shell's own views
 //! ([`preview`], plans/native/studio-redesign.md D3), so a preview can never drift from the
 //! desktop.

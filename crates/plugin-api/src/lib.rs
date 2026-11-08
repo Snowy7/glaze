@@ -1,10 +1,10 @@
 //! The plugin platform's contract (docs/plugins.md): the WIT world in `wit/`, the binary frames
-//! the shell and the `mypaper-plugins` helper exchange, and view diffing.
+//! the shell and the `glaze-plugins` helper exchange, and view diffing.
 
-pub use mypaper_plugin_sdk::{Face, SizeClass, View};
+pub use glaze_plugin_sdk::{Face, SizeClass, View};
 
 /// The WIT package this host implements (`wit/plugin.wit`).
-pub const WIT_PACKAGE: &str = "mypaper:plugin@0.1.0";
+pub const WIT_PACKAGE: &str = "glaze:plugin@0.1.0";
 /// The `api` major.minor a manifest must name.
 pub const API_MAJOR: u32 = 0;
 pub const API_MINOR: u32 = 1;
@@ -183,7 +183,7 @@ pub fn diff(old: &View, new: &View) -> Vec<Vec<u16>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mypaper_plugin_sdk::Role;
+    use glaze_plugin_sdk::Role;
 
     fn face(label: &str) -> View {
         View::stack([View::text("Title", Role::Headline), View::row([View::text(label, Role::Body), View::button("Go", "go")])])

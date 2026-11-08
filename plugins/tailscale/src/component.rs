@@ -1,7 +1,7 @@
 //! Async request bookkeeping: old status replies cannot overwrite a completed action.
 use std::{collections::BTreeMap, time::{SystemTime, UNIX_EPOCH}};
 
-use mypaper_plugin_sdk::guest::{self, Event, Plugin, SizeClass, http, pipes, timers, ui};
+use glaze_plugin_sdk::guest::{self, Event, Plugin, SizeClass, http, pipes, timers, ui};
 use crate::{Action, State, allowed_exit, faces, tailscale};
 
 const PIPE: &str = r"ProtectedPrefix\Administrators\Tailscale\tailscaled";
@@ -47,9 +47,9 @@ impl Tailscale {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as i64;
         for (instance, (face, size)) in &self.faces {
             let size = match size {
-                SizeClass::Small => mypaper_plugin_sdk::SizeClass::Small,
-                SizeClass::Medium => mypaper_plugin_sdk::SizeClass::Medium,
-                SizeClass::Large => mypaper_plugin_sdk::SizeClass::Large,
+                SizeClass::Small => glaze_plugin_sdk::SizeClass::Small,
+                SizeClass::Medium => glaze_plugin_sdk::SizeClass::Medium,
+                SizeClass::Large => glaze_plugin_sdk::SizeClass::Large,
             };
             ui::set_view(instance, faces::face(face, size, &self.state, now));
         }
@@ -130,4 +130,4 @@ impl Plugin for Tailscale {
     }
 }
 
-mypaper_plugin_sdk::export!(Tailscale);
+glaze_plugin_sdk::export!(Tailscale);

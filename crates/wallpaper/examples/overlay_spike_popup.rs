@@ -22,7 +22,7 @@ use std::io::BufRead;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM};
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::Performance::QueryPerformanceCounter;
@@ -43,7 +43,7 @@ const WM_COMMAND_LINE: u32 = WM_APP + 1;
 static COMMANDS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 fn main() -> Result<()> {
-    mypaper_desktop::enable_dpi_awareness();
+    glaze_desktop::enable_dpi_awareness();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let num = |i: usize| -> Result<i32> {
         args.get(i)
@@ -349,7 +349,7 @@ impl Surface {
     /// Draws the surface: alpha 1/255 over its rounded shape, white text, a magenta marker.
     fn paint(&self) {
         let (w, h) = (self.rect.width, self.rect.height);
-        let text = format!("mypaper glass  {}", self.tick);
+        let text = format!("Glaze glass  {}", self.tick);
         let r = self.radius;
         let hover = self.hover;
         let at = Some(POINT {
@@ -486,7 +486,7 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
 
 /// An ordinary opaque window (not layered, not topmost) painted with colourful stripes in
 /// `WM_PAINT`, like an app window behind a popup, until stdin closes. With `cover` it is a plain
-/// app window (not a tool window), so a monitor it covers counts as covered and mypaper's
+/// app window (not a tool window), so a monitor it covers counts as covered and Glaze's
 /// wallpaper pauses there, as under a maximized app.
 fn still(rect: Rect, cover: bool) -> Result<()> {
     extern "system" fn paint(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {

@@ -1,4 +1,4 @@
-//! Injection policy. The hard rule: mypaper only ever injects into **Windows
+//! Injection policy. The hard rule: Glaze only ever injects into **Windows
 //! itself and built-in Windows apps**. Never games, never third-party apps.
 //!
 //! This is a strict allowlist (anything not listed is denied) and the module

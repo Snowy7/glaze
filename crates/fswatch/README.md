@@ -1,12 +1,12 @@
 # Native file watching
 
-`mypaper-fswatch` watches Windows directories without periodic wakeups. Each watch owns one
+`glaze-fswatch` watches Windows directories without periodic wakeups. Each watch owns one
 256 KiB-stack thread, a 64 KiB notification buffer, an overlapped completion event, and a stop
 event. It waits indefinitely while idle. Dropping it signals stop, cancels and drains pending
 I/O, and joins the thread before releasing its callback or handles.
 
 ```rust,no_run
-let watch = mypaper_fswatch::Watch::files(&config_dir, &["config.json"], move || {
+let watch = glaze_fswatch::Watch::files(&config_dir, &["config.json"], move || {
     // Post to the caller's existing event loop.
     reload.send(()).ok();
 })?;
@@ -34,11 +34,11 @@ Consumers: shared desktop config (core, engine, styler), engine theme, tweaks pa
 shell theme/bars/Start Menu updates, and index config. The index's bulk root watcher retains its
 own implementation. Studio is the only remaining `notify` consumer.
 
-Run `cargo test -p mypaper-fswatch` for record parsing, filtering, bounded debouncing, real
+Run `cargo test -p glaze-fswatch` for record parsing, filtering, bounded debouncing, real
 kernel overflow/recovery, create/modify/rename/delete, atomic replacement, recursive watching,
 and stop/join tests. `evidence/measure-wakes.ps1` samples per-thread raw context-switch counters
 and records Windows thread descriptions; pair it with the shared `measure.ps1` CPU sampler.
-`cargo run -p mypaper-fswatch --example mypaper-fswatch-idle` provides a 90-second isolated
+`cargo run -p glaze-fswatch --example glaze-fswatch-idle` provides a 90-second isolated
 watch with no file changes, then drops it and removes its empty temporary directory.
 
 Live results and limitations from the initial migration are in `evidence/report.md`.

@@ -1,13 +1,13 @@
-//! `mypaper-plugins --bench <plugin dir>...`: the budget table (docs/plugins.md, "Budgets"),
+//! `glaze-plugins --bench <plugin dir>...`: the budget table (docs/plugins.md, "Budgets"),
 //! measured in this process with throwaway cache and data dirs.
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use mypaper_plugin_api::SizeClass;
-use mypaper_plugin_api::wire::{self, HelperMsg, HostMsg};
-use mypaper_plugin_sdk::view::Face;
+use glaze_plugin_api::SizeClass;
+use glaze_plugin_api::wire::{self, HelperMsg, HostMsg};
+use glaze_plugin_sdk::view::Face;
 use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX};
 use windows::Win32::System::Threading::GetCurrentProcess;
 
@@ -28,7 +28,7 @@ fn ms(d: Duration) -> f64 {
 }
 
 pub fn run(dirs: &[PathBuf]) -> Result<()> {
-    let scratch = std::env::temp_dir().join(format!("mypaper-plugins-bench-{}", std::process::id()));
+    let scratch = std::env::temp_dir().join(format!("glaze-plugins-bench-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
     let before = memory();
     let started = Instant::now();

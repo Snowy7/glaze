@@ -1,6 +1,6 @@
 {
   "animated": true,
-  "author": "mypaper",
+  "author": "Glaze",
   "category": "camera",
   "cost": 0.734,
   "cost_estimated": false,
@@ -49,5 +49,5 @@
       "source": "light-leaks.wgsl"
     }
   ],
-  "url": "https://github.com/Snowy7/mypaper"
+  "url": "https://github.com/Snowy7/glaze"
 }

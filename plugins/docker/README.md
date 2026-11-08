@@ -1,6 +1,6 @@
 # Docker component
 
-One `containers` face (`docker--containers`), rendered by mypaper's kit. The
+One `containers` face (`docker--containers`), rendered by Glaze's kit. The
 component uses only `pipe:docker_engine`, through `pipes.http-request`; it does
 not start Docker Desktop or WSL and needs no native module or plugin process.
 

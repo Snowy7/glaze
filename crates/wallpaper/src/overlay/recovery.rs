@@ -1,7 +1,7 @@
 //! CPU-only overlay requests survive a capture/device rebuild, including changes during retry.
 
 use super::request::{Layer, Material, Request, Style};
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 use windows::Win32::Foundation::HWND;
 
 #[derive(Clone, Copy, Debug, PartialEq)]

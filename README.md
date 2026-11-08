@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo/mark.svg" width="104" alt="mypaper logo">
+  <img src="assets/logo/mark.svg" width="104" alt="Glaze logo">
 </p>
 
-<h1 align="center">mypaper</h1>
+<h1 align="center">Glaze</h1>
 
 <p align="center">
   <b>A native Windows desktop, rebuilt in Rust: live wallpapers, Liquid Glass, a top bar and dock, and widgets, in a few MB.</b>
@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/media/readme/hero-desktop.jpg" alt="The rain-city wallpaper with mypaper's top bar, dock and widgets (clock, weather, system, calendar, now playing) on Liquid Glass" width="100%">
+  <img src="docs/media/readme/hero-desktop.jpg" alt="The rain-city wallpaper with Glaze's top bar, dock and widgets (clock, weather, system, calendar, now playing) on Liquid Glass" width="100%">
 </p>
 
 - **Every wallpaper kind** on one wgpu engine: shaders, images, slideshows, hardware-decoded video,
@@ -29,13 +29,13 @@
   frame styling are journaled and undone on quit, on the panic hotkey and
   after a crash.
 
-> Looking for the old WebView2 prototype? It's tagged [`v0.0.1`](https://github.com/Snowy7/mypaper/releases/tag/v0.0.1).
+> Looking for the old WebView2 prototype? It's tagged [`v0.0.1`](https://github.com/Snowy7/glaze/releases/tag/v0.0.1).
 
 ## What's inside
 
 ### Wallpapers
 
-One engine process (`mypaper-wallpaper`) draws every screen behind the desktop icons.
+One engine process (`glaze-wallpaper`) draws every screen behind the desktop icons.
 
 | Kind | What it is |
 |---|---|
@@ -116,7 +116,7 @@ the launcher and Files. Enable `experimental.file_index`; `index.exclude` and `i
 refine its built-in build/cache exclusions. Incomplete sizes are labelled. See
 [docs/index.md](docs/index.md).
 
-**mypaper Files** is an on-demand native browser: tabs, previews, indexed search and queued file
+**Glaze Files** is an on-demand native browser: tabs, previews, indexed search and queued file
 operations. Launch it directly, or opt into folder routing with `experimental.files_default`;
 Win+E routing uses the shell's existing Windows-key hook. See [docs/files.md](docs/files.md).
 
@@ -156,7 +156,7 @@ Settings for each live in Studio. See [docs/widgets.md](docs/widgets.md) and
 ### Studio
 
 <p align="center">
-  <img src="docs/media/readme/studio-home.jpg" alt="mypaper Studio: Home" width="85%">
+  <img src="docs/media/readme/studio-home.jpg" alt="Glaze Studio: Home" width="85%">
 </p>
 
 Studio is the native settings app, on the same UI kit as the shell. It opens in about 250 ms, uses
@@ -189,7 +189,7 @@ private bytes.
 | Steady processes · WebView2 processes | **3 · 0** | 3 · 0 |
 | Studio, open · closed | 13–25 MB · no process | |
 
-**How it's measured.** `tools/perf` (`mypaper-perf --native`) takes the desktop lock, launches the
+**How it's measured.** `tools/perf` (`glaze-perf --native`) takes the desktop lock, launches the
 engine with a fixed plate fixture in isolated settings, and samples private bytes and process CPU
 time: median of 3×60 s runs. `--timestamps` adds wgpu GPU timestamp queries per pass. The shell gates
 use `measure.ps1 -Seconds 60` on the live desktop. Budgets live in
@@ -214,14 +214,14 @@ use a different fixture from the 5 November table above.
 ## Architecture
 
 ```text
-mypaper-core         supervisor · tray · panic hotkey · Windows styling + undo journal
- ├─ mypaper-wallpaper  the engine (wgpu): wallpapers, glass plates, glass overlays. The only GPU device.
- ├─ mypaper-shell      software Direct2D: top bar, dock, flyouts, menus, launcher, widgets, tray host
- │    └─ mypaper-plugins  on demand: WebAssembly integrations
- ├─ mypaper-index      experimental, off by default: file names and folder sizes
- └─ mypaper-styler     experimental, off by default: app interiors
-mypaper-files        native file browser; runs only while open
-mypaper-studio       the settings app (software Direct2D); runs only while open
+glaze-core         supervisor · tray · panic hotkey · Windows styling + undo journal
+ ├─ glaze-wallpaper  the engine (wgpu): wallpapers, glass plates, glass overlays. The only GPU device.
+ ├─ glaze-shell      software Direct2D: top bar, dock, flyouts, menus, launcher, widgets, tray host
+ │    └─ glaze-plugins  on demand: WebAssembly integrations
+ ├─ glaze-index      experimental, off by default: file names and folder sizes
+ └─ glaze-styler     experimental, off by default: app interiors
+glaze-files        native file browser; runs only while open
+glaze-studio       the settings app (software Direct2D); runs only while open
 ```
 
 | Rule | What it means |
@@ -239,7 +239,7 @@ mypaper-studio       the settings app (software Direct2D); runs only while open
 | `crates/ui` | The UI kit: surfaces, display lists, text, icons, components, themes |
 | `crates/shell` | Bars, dock, flyouts, desktop menu, widget views, integrations views |
 | `crates/widgets` · `crates/bars` · `crates/integrations` | Services: catalog, layout, storage, plugins; app bars and tray; integration providers |
-| `crates/studio` | mypaper Studio |
+| `crates/studio` | Glaze Studio |
 | `crates/files` · `crates/index` | On-demand file browser; optional native name index and folder sizes |
 | `crates/app-styler` | Experimental helper and XAML styling DLL for app interiors |
 | `crates/fswatch` | Shared native directory notifications, with no idle polling |
@@ -255,15 +255,15 @@ itself.
 
 ```powershell
 cargo build --release --workspace
-target\release\mypaper-core.exe      # engine + shell + tray icon
-target\release\mypaper-studio.exe    # Studio (also: tray › Open Studio, or the desktop menu)
+target\release\glaze-core.exe      # engine + shell + tray icon
+target\release\glaze-studio.exe    # Studio (also: tray › Open Studio, or the desktop menu)
 ```
 
-To swap a fresh build into a running desktop (build elsewhere, then deploy; mypaper is down only
+To swap a fresh build into a running desktop (build elsewhere, then deploy; Glaze is down only
 for the copy):
 
 ```powershell
-$env:CARGO_TARGET_DIR = "C:\mypaper-targets\main"; cargo build --release --workspace
+$env:CARGO_TARGET_DIR = "C:\glaze-targets\main"; cargo build --release --workspace
 powershell -NoProfile -File scripts/deploy-local.ps1
 ```
 
@@ -273,13 +273,22 @@ powershell -NoProfile -File scripts/deploy-local.ps1
 | **Ctrl+Alt+Shift+W** | Widget edit mode |
 | **Win** | The launcher (optional) |
 
-Settings live in `%APPDATA%\mypaper\` (`config.json`, `widgets.json`, `bars.json`,
+Settings live in `%APPDATA%\glaze\` (`config.json`, `widgets.json`, `bars.json`,
 `integrations.json`). Every process watches them and applies changes live. Logs go to
-`%LOCALAPPDATA%\mypaper\mypaper.log`.
+`%LOCALAPPDATA%\glaze\glaze.log`.
+
+Upgrading a local installation from the old `mypaper` name: stop its desktop and Studio,
+then run `powershell -NoProfile -File scripts/migrate-local.ps1` before deploying Glaze.
+The script backs up both AppData profiles under `%LOCALAPPDATA%\glaze-migration-backups`,
+moves settings, themes and caches, updates saved app paths, and copies integration credentials
+inside Windows Credential Manager. It refuses to overwrite an existing Glaze profile.
+If startup was enabled, disable it with the old core's `--autostart off` and re-enable it with
+`target\release\glaze-core.exe --autostart on` after deployment. Rebuild bundled components
+with `scripts/build-plugins.ps1` when upgrading the plugin contract.
 
 ## Make your own
 
-- **A custom widget** is one JSON file in `%APPDATA%\mypaper\widgets\`. It shows up in the **+**
+- **A custom widget** is one JSON file in `%APPDATA%\glaze\widgets\`. It shows up in the **+**
   picker and in Studio as a native widget, with a `stat`, `list`, `text`, `image` or `gauge`
   layout, fed by a static value, an HTTPS URL (with a JSON path), a file or a command. Its work runs
   only while it's visible:
@@ -325,7 +334,7 @@ Settings live in `%APPDATA%\mypaper\` (`config.json`, `widgets.json`, `bars.json
   ([licence](crates/ui/icons/LICENSE-lucide)), and Windows' Segoe Fluent Icons for the Fluent style.
 - Rust crates are listed in [Cargo.lock](Cargo.lock), each under its own licence.
 
-mypaper itself has no public licence yet.
+Glaze itself has no public licence yet.
 
 ## Documentation
 

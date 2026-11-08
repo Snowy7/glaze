@@ -1,4 +1,4 @@
-import { definePlugin, Role, ui, View } from '@mypaper/plugin-sdk';
+import { definePlugin, Role, ui, View } from '@glaze/plugin-sdk';
 
 let clicks = 0;
 const instances = new Set<string>();

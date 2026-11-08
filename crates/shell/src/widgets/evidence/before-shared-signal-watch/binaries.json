@@ -1,14 +1,14 @@
 [
     {
-        "Path":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-dcf0a0a7\\target\\release\\mypaper-shell.exe",
+        "Path":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-dcf0a0a7\\target\\release\\glaze-shell.exe",
         "Hash":  "9E838B9723669BAF668D96CB5629030A0D18A626159EE0BF1786722A3C4AC5AE"
     },
     {
-        "Path":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-dcf0a0a7\\target\\release\\mypaper-wallpaper.exe",
+        "Path":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-dcf0a0a7\\target\\release\\glaze-wallpaper.exe",
         "Hash":  "AFBA5FE949377C7D3C714BD8C695ABBB9D3E46E5BBAFA954856C351AB1559CF9"
     },
     {
-        "Path":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-dcf0a0a7\\target\\release\\examples\\mypaper-widget-fixture.exe",
+        "Path":  "C:\\Users\\you\\.t3\\worktrees\\wallpaper\\t3-dcf0a0a7\\target\\release\\examples\\glaze-widget-fixture.exe",
         "Hash":  "965861D5449C8B4D68DA51B72717FE31DFEC1BC8688B7DF1434E9A1034252C34"
     }
 ]

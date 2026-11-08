@@ -1,8 +1,8 @@
 //! One no-activate Undo button. Repeated picks repaint the same HWND; hover pauses its fade.
 use anyhow::Result;
-use mypaper_bars::config::BarsConfig;
-use mypaper_desktop::Monitor;
-use mypaper_ui::{
+use glaze_bars::config::BarsConfig;
+use glaze_desktop::Monitor;
+use glaze_ui::{
     Button, DisplayList, Event, Hit, Kind, Op, Rect, Rgba, Role, Surface, SurfaceId, TextStyle, Ui,
 };
 use std::time::{Duration, Instant};

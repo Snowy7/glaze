@@ -1,5 +1,5 @@
 {
-  "name": "@mypaper/plugin-sdk",
+  "name": "@glaze/plugin-sdk",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
     "./generated/*": "./src/generated/*",
     "./tsconfig.json": "./tsconfig.json"
   },
-  "bin": { "mypaper-plugin-build": "./scripts/build.mjs" },
+  "bin": { "glaze-plugin-build": "./scripts/build.mjs" },
   "scripts": {
     "generate": "node scripts/generate.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json",

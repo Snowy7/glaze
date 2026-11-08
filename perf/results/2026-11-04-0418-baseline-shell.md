@@ -1,7 +1,7 @@
-# mypaper performance: 2026-11-04 04:18 (baseline-shell)
+# Glaze performance: 2026-11-04 04:18 (baseline-shell)
 
 - Machine: 16 logical CPUs, screens 2560x1440 + 2560x1440
-- Build: `C:\mypaper-targets\perf\baseline`
+- Build: `C:\glaze-targets\perf\baseline`
 - 4 starts per scenario (1 cold, then warm), CPU windows of 10 s after 5 s settling
 
 ## Budget

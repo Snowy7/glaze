@@ -1,6 +1,6 @@
 //! Studio's transient desktop client. Both hosts call `connect` while building and
 //! `on_key` for the semantic IPC wake; no native keyboard input is synthesized.
-use mypaper_shell::studio_pick::wire::{self, Kind, Message, Selection};
+use glaze_shell::studio_pick::wire::{self, Kind, Message, Selection};
 use std::cell::RefCell;
 use windows::Win32::Foundation::HWND;
 
@@ -423,7 +423,7 @@ impl ColorDrag {
 }
 
 fn color_hex(color: u32) -> String {
-    mypaper_config::Color([color as u8, (color >> 8) as u8, (color >> 16) as u8]).hex()
+    glaze_config::Color([color as u8, (color >> 8) as u8, (color >> 16) as u8]).hex()
 }
 
 fn publish_color(color: u32) {
@@ -698,7 +698,7 @@ pub(crate) fn snapshot_wallpaper_available(theme: &Value, dir: Option<&std::path
     .loaded()
     .ok()
     .flatten()
-    .and_then(|theme| mypaper_shell::studio_pick::wallpaper::still_path(&theme))
+    .and_then(|theme| glaze_shell::studio_pick::wallpaper::still_path(&theme))
     .is_some()
 }
 
@@ -755,7 +755,7 @@ fn choice_documents(app: &App, action: &Action) -> Option<Vec<wire::PreviewDocum
             ops
         }
         Action::Set(edit, value) if edit.doc == DocId::Studio && edit.path.as_ref() == "/panel/bar-preset" => {
-            let base = mypaper_bars::BarsConfig::parse(&json!({"preset":value}).to_string()).ok()?;
+            let base = glaze_bars::BarsConfig::parse(&json!({"preset":value}).to_string()).ok()?;
             let base = serde_json::to_value(base).ok()?;
             let mut ops = vec![op(DocId::Bars, crate::panel::editors::bar_path(app, "/preset"), Some(value.clone()))];
             for bar in ["top", "dock"] {
@@ -941,7 +941,7 @@ fn page_selection(app: &App) -> Option<Selection> {
 }
 
 /// Resolve the actual row rectangle: accessibility and pointer hover need not share a key.
-fn hovered_widget(app: &App, point: Option<mypaper_ui::Point>) -> Option<String> {
+fn hovered_widget(app: &App, point: Option<glaze_ui::Point>) -> Option<String> {
     let point = point?;
     app.frame
         .targets
@@ -955,7 +955,7 @@ fn hovered_widget(app: &App, point: Option<mypaper_ui::Point>) -> Option<String>
         })
 }
 
-pub(crate) fn panel_pointer(app: &App) -> Option<mypaper_ui::Point> {
+pub(crate) fn panel_pointer(app: &App) -> Option<glaze_ui::Point> {
     use windows::Win32::{
         Foundation::POINT,
         Graphics::Gdi::ScreenToClient,
@@ -972,7 +972,7 @@ pub(crate) fn panel_pointer(app: &App) -> Option<mypaper_ui::Point> {
             return None;
         }
     }
-    Some(mypaper_ui::Point::new(point.x as f32, point.y as f32))
+    Some(glaze_ui::Point::new(point.x as f32, point.y as f32))
 }
 
 /// Called only after a successful pick has entered Studio's undo history.
@@ -1226,10 +1226,10 @@ pub fn on_key(app: &mut App, key: u16) -> bool {
 fn move_module(
     app: &mut App,
     selection: Selection,
-    destination: mypaper_shell::studio_pick::module_drag::Slot,
+    destination: glaze_shell::studio_pick::module_drag::Slot,
     base_revision: u64,
 ) -> Option<u64> {
-    use mypaper_shell::studio_pick::module_drag::{Slot, move_ops};
+    use glaze_shell::studio_pick::module_drag::{Slot, move_ops};
     if selection.kind != Kind::Module
         || wire::revision(&app.docs.doc(DocId::Bars).raw) != base_revision
     {
@@ -1356,7 +1356,7 @@ fn resize_widget(
 fn selected(app: &mut App, selection: Selection) {
     let mut display = display_index(&app.monitors, &selection.display);
     if display.is_none() && !app.fixture {
-        app.monitors = mypaper_desktop::monitor_infos();
+        app.monitors = glaze_desktop::monitor_infos();
         display = display_index(&app.monitors, &selection.display);
     }
     if let Some(display) = display {
@@ -1415,7 +1415,7 @@ fn selected(app: &mut App, selection: Selection) {
     log::info!("Studio desktop selection opened {page:?}");
 }
 
-fn display_index(monitors: &[mypaper_desktop::Monitor], device: &str) -> Option<usize> {
+fn display_index(monitors: &[glaze_desktop::Monitor], device: &str) -> Option<usize> {
     monitors
         .iter()
         .position(|m| m.device.eq_ignore_ascii_case(device))
@@ -1460,12 +1460,12 @@ mod tests {
     #[test]
     fn standalone_previews_use_an_on_demand_session_and_cancel_without_saves_or_activation() {
         use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, IsWindowVisible};
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::window_app(true, &ui, (1280, 800));
-        let surface = mypaper_ui::Surface::new_deferred_accessibility(
-            mypaper_ui::Kind::App { min: (960, 640) },
+        let surface = glaze_ui::Surface::new_deferred_accessibility(
+            glaze_ui::Kind::App { min: (960, 640) },
             "Studio hidden preview fixture",
-            mypaper_ui::Role::Window,
+            glaze_ui::Role::Window,
         ).unwrap();
         // This fake peer has the client class, so runtime discovery cannot find it.
         let peer = wire::Endpoint::new(false).unwrap();
@@ -1489,10 +1489,10 @@ mod tests {
         on_key(&mut app, wire::PICK_EVENT);
         assert_eq!(position(), original_position, "panel avoidance cannot move the standalone window");
         for (action, event) in [
-            (Action::SetStyle(Some(mypaper_config::look::Style::Solid)), mypaper_ui::Event::Leave),
-            (Action::SetStyle(Some(mypaper_config::look::Style::Mono)), mypaper_ui::Event::Deactivated),
-            (Action::Preset("islands"), mypaper_ui::Event::Cancelled),
-            (Action::Preset("floating"), mypaper_ui::Event::Close),
+            (Action::SetStyle(Some(glaze_config::look::Style::Solid)), glaze_ui::Event::Leave),
+            (Action::SetStyle(Some(glaze_config::look::Style::Mono)), glaze_ui::Event::Deactivated),
+            (Action::Preset("islands"), glaze_ui::Event::Cancelled),
+            (Action::Preset("floating"), glaze_ui::Event::Close),
         ] {
             let expected = choice_documents(&app, &action).unwrap();
             assert!(preview_action_with(&app, &action, || Some(peer.hwnd())));
@@ -1500,7 +1500,7 @@ mod tests {
             assert!(matches!(peer.next(), Some((_, Message::Preview { documents, .. })) if documents == expected));
             assert!(preview_action_with(&app, &action, || Some(peer.hwnd())));
             assert!(peer.next().is_none(), "stationary hover is cached");
-            super::super::choosers::track_preview(&app, mypaper_ui::controls::key("fixture-choice"), action);
+            super::super::choosers::track_preview(&app, glaze_ui::controls::key("fixture-choice"), action);
             app.event(event);
             assert!(matches!(peer.next(), Some((_, Message::PreviewCancel { .. }))));
             assert!(matches!(peer.next(), Some((_, Message::End))));
@@ -1538,7 +1538,7 @@ mod tests {
             display,
         };
         let destination =
-            mypaper_shell::studio_pick::module_drag::Slot::parse("dock/left/0").unwrap();
+            glaze_shell::studio_pick::module_drag::Slot::parse("dock/left/0").unwrap();
         assert!(
             move_module(
                 &mut app,
@@ -1560,12 +1560,12 @@ mod tests {
 
     #[test]
     fn chooser_previews_include_whole_styles_without_touching_documents_or_undo() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let app = crate::goldens::app(true, &ui);
         let before = snapshot(&app);
         let undo = app.docs.undo_count();
         let version = app.docs.version;
-        for style in mypaper_config::look::Style::ALL {
+        for style in glaze_config::look::Style::ALL {
             let documents = choice_documents(&app, &Action::SetStyle(Some(style))).unwrap();
             assert!(documents.iter().all(|d| d.ops.iter().all(|op| op.valid(d.document))));
             for document in documents {
@@ -1588,7 +1588,7 @@ mod tests {
 
     #[test]
     fn bar_choices_preview_each_display_without_changing_its_neighbors() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         if let Some(first) = app.monitors.first().cloned() {
             let mut second = first;
@@ -1604,15 +1604,15 @@ mod tests {
         let raw = &app.docs.doc(DocId::Bars).raw;
         let changed = wire::patched(raw, &bars.ops).unwrap();
         assert_eq!(changed.get("dock"), raw.get("dock"));
-        let parsed = mypaper_bars::BarsConfig::parse(&changed.to_string()).unwrap();
+        let parsed = glaze_bars::BarsConfig::parse(&changed.to_string()).unwrap();
         let second = parsed.for_monitor(r"\\.\DISPLAY2", false).unwrap();
         assert!(!second.top.enabled);
-        assert_eq!(second.dock.design, mypaper_bars::config::DockDesign::Windows11);
+        assert_eq!(second.dock.design, glaze_bars::config::DockDesign::Windows11);
     }
 
     #[test]
     fn starter_preview_uses_the_declared_bar_pair_and_taskbar_step_without_a_save() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         let before = snapshot(&app);
         for index in 0..crate::editing::first_run::panel_starters().len() {
@@ -1627,12 +1627,12 @@ mod tests {
         let docs = choice_documents(&app, &Action::FirstRunPick(2)).unwrap();
         let bars = docs.iter().find(|doc| doc.document == wire::Document::Bars).unwrap();
         let raw = wire::patched(&app.docs.doc(DocId::Bars).raw, &bars.ops).unwrap();
-        let bars = mypaper_bars::BarsConfig::parse(&raw.to_string()).unwrap();
+        let bars = glaze_bars::BarsConfig::parse(&raw.to_string()).unwrap();
         assert!(!bars.top.enabled && !bars.dock.enabled);
         assert_eq!(snapshot(&app), before);
         assert!(choice_documents(&app, &Action::FirstRunPick(usize::MAX)).is_none());
     }
-    use mypaper_ui::Ui;
+    use glaze_ui::Ui;
 
     #[test]
     fn consecutive_picks_update_one_undo_chip_and_new_lists_reset_it() {
@@ -1736,8 +1736,8 @@ mod tests {
     fn avoidance_frames_move_only_the_owned_panel_without_activation_or_resize() {
         use windows::Win32::{Foundation::POINT, Graphics::Gdi::ClientToScreen,
             UI::WindowsAndMessaging::GetForegroundWindow};
-        let surface = mypaper_ui::Surface::new(mypaper_ui::Kind::App { min: (360, 160) },
-            "Studio avoidance placement test", mypaper_ui::Role::Window).unwrap();
+        let surface = glaze_ui::Surface::new(glaze_ui::Kind::App { min: (360, 160) },
+            "Studio avoidance placement test", glaze_ui::Role::Window).unwrap();
         surface.place((100, 100, 480, 600));
         let size = surface.client_size();
         let foreground = unsafe { GetForegroundWindow() };
@@ -1760,10 +1760,10 @@ mod tests {
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(crate::panel::State::default());
         app.nav.display = 1;
-        let surface = mypaper_ui::Surface::new(
-            mypaper_ui::Kind::App { min: (360, 160) },
+        let surface = glaze_ui::Surface::new(
+            glaze_ui::Kind::App { min: (360, 160) },
             "Studio pick placement test",
-            mypaper_ui::Role::Window,
+            glaze_ui::Role::Window,
         )
         .unwrap();
         // Only an owned, hidden test HWND is moved. No real panel or other window is used.
@@ -1800,7 +1800,7 @@ mod tests {
         let second=app.monitors[1].device.clone();
         app.apply("Test display sides",vec![Op {doc:DocId::Studio,path:"/panel_side".into(),value:Some(serde_json::json!("right"))},
             Op {doc:DocId::Studio,path:"/panel_sides".into(),value:Some(serde_json::json!({first.clone():"left",second.clone():"right"}))}]);
-        let surface=mypaper_ui::Surface::new(mypaper_ui::Kind::App{min:(360,160)},"Studio per-display pick test",mypaper_ui::Role::Window).unwrap();
+        let surface=glaze_ui::Surface::new(glaze_ui::Kind::App{min:(360,160)},"Studio per-display pick test",glaze_ui::Role::Window).unwrap();
         surface.place((100,100,480,600));
         app.window=Some(surface.hwnd());
         let foreground=unsafe {GetForegroundWindow()};
@@ -1880,7 +1880,7 @@ mod tests {
         let edit = crate::actions::Edit::new(DocId::Bars, "/dock/size", "Icon size");
         app.drag = Some(crate::app::Drag::Slider {
             edit,
-            track: mypaper_ui::Rect::new(0.0, 0.0, 100.0, 20.0),
+            track: glaze_ui::Rect::new(0.0, 0.0, 100.0, 20.0),
             min: 24.0,
             max: 96.0,
             step: 1.0,
@@ -2229,7 +2229,7 @@ mod tests {
             .find(|t| matches!(&t.action, Action::SelectWidget(Some(id)) if id == "clock-1"))
             .unwrap();
         let rect = row.visible.unwrap();
-        let pointer = mypaper_ui::Point::new(rect.left + 4.0, rect.top + 4.0);
+        let pointer = glaze_ui::Point::new(rect.left + 4.0, rect.top + 4.0);
         assert!(app.input.hover.is_none());
         assert_eq!(
             hovered_widget(&app, Some(pointer)).as_deref(),

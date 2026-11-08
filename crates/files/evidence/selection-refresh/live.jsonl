@@ -1,7 +1,7 @@
-{"step":"open","utc":"2026-11-06T07:46:33.3516591Z","pid":49348,"title":"rows — mypaper Files","exe":"target/release/mypaper-files.exe","fixture":"C:\\mypaper-targets\\files\\scratch\\selection-review"}
-{"step":"activate","utc":"2026-11-06T07:48:31.2308656Z","pid":49348,"title":"rows — mypaper Files","exe":"target/release/mypaper-files.exe","fixture":"C:\\mypaper-targets\\files\\scratch\\selection-review"}
-{"step":"select","utc":"2026-11-06T07:51:05.0661994Z","pid":49348,"title":"rows — mypaper Files","exe":"target/release/mypaper-files.exe","fixture":"C:\\mypaper-targets\\files\\scratch\\selection-review"}
-{"step":"watcher-insertion","utc":"2026-11-06T07:51:12.5077046Z","path":"C:\\mypaper-targets\\files\\scratch\\selection-review\\rows\\0setup.msi","kind":"directory","note":"All executable-looking names in this live fixture are harmless scratch directories"}
-{"step":"refreshed","utc":"2026-11-06T07:51:42.9449958Z","pid":49348,"title":"rows — mypaper Files","exe":"target/release/mypaper-files.exe","fixture":"C:\\mypaper-targets\\files\\scratch\\selection-review"}
-{"step":"enter","utc":"2026-11-06T07:52:27.7092562Z","pid":49348,"title":"c.txt — mypaper Files","exe":"target/release/mypaper-files.exe","fixture":"C:\\mypaper-targets\\files\\scratch\\selection-review"}
-{"step":"close","utc":"2026-11-06T07:53:55.8489070Z","pid":49348,"title":"","exe":"target/release/mypaper-files.exe","fixture":"C:\\mypaper-targets\\files\\scratch\\selection-review"}
+{"step":"open","utc":"2026-11-06T07:46:33.3516591Z","pid":49348,"title":"rows — Glaze Files","exe":"target/release/glaze-files.exe","fixture":"C:\\glaze-targets\\files\\scratch\\selection-review"}
+{"step":"activate","utc":"2026-11-06T07:48:31.2308656Z","pid":49348,"title":"rows — Glaze Files","exe":"target/release/glaze-files.exe","fixture":"C:\\glaze-targets\\files\\scratch\\selection-review"}
+{"step":"select","utc":"2026-11-06T07:51:05.0661994Z","pid":49348,"title":"rows — Glaze Files","exe":"target/release/glaze-files.exe","fixture":"C:\\glaze-targets\\files\\scratch\\selection-review"}
+{"step":"watcher-insertion","utc":"2026-11-06T07:51:12.5077046Z","path":"C:\\glaze-targets\\files\\scratch\\selection-review\\rows\\0setup.msi","kind":"directory","note":"All executable-looking names in this live fixture are harmless scratch directories"}
+{"step":"refreshed","utc":"2026-11-06T07:51:42.9449958Z","pid":49348,"title":"rows — Glaze Files","exe":"target/release/glaze-files.exe","fixture":"C:\\glaze-targets\\files\\scratch\\selection-review"}
+{"step":"enter","utc":"2026-11-06T07:52:27.7092562Z","pid":49348,"title":"c.txt — Glaze Files","exe":"target/release/glaze-files.exe","fixture":"C:\\glaze-targets\\files\\scratch\\selection-review"}
+{"step":"close","utc":"2026-11-06T07:53:55.8489070Z","pid":49348,"title":"","exe":"target/release/glaze-files.exe","fixture":"C:\\glaze-targets\\files\\scratch\\selection-review"}

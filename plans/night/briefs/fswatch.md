@@ -32,6 +32,6 @@ A tiny native watcher and no `notify` in any always-running process:
 
 ## Rules
 
-Deploy only from `C:\mypaper-targets\main`. Check the night plan for active no-deploy windows (the index
-agent holds one until 09:45 local). `CARGO_TARGET_DIR=C:\mypaper-targets\fswatch`. Stop when done, or after
+Deploy only from `C:\glaze-targets\main`. Check the night plan for active no-deploy windows (the index
+agent holds one until 09:45 local). `CARGO_TARGET_DIR=C:\glaze-targets\fswatch`. Stop when done, or after
 2 hours. Report: callers migrated, before/after wakes and CPU, commits.

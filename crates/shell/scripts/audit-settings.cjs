@@ -46,7 +46,7 @@ function runtime(p, context = '') {
   if (p === '/classic_context_menu') return ref('crates/core/src/desktop_extras.rs', 'extras.apply_classic(');
   if (p === '/experimental/file_index') return ref('crates/core/src/main.rs', 'if config.experimental.file_index &&');
   if (p === '/experimental/app_styler') return ref('crates/core/src/main.rs', 'if config.experimental.app_styler &&');
-  if (p === '/experimental/files_default') return ref('crates/core/src/desktop_extras.rs', 'apply_folder_routing(config.experimental.files_default)') + '; ' + ref('crates/shell/src/flyouts/mod.rs', 'mypaper_config::Config::load().is_ok_and(|c| c.experimental.files_default)');
+  if (p === '/experimental/files_default') return ref('crates/core/src/desktop_extras.rs', 'apply_folder_routing(config.experimental.files_default)') + '; ' + ref('crates/shell/src/flyouts/mod.rs', 'glaze_config::Config::load().is_ok_and(|c| c.experimental.files_default)');
   if (p.startsWith('/desktop_menu')) return refs.menu() + '; ' + ref('crates/shell/src/desktop_menu/items.rs', 'pub fn build(');
   if (p === '/taskbar/mode' || p === '/taskbar/alignment') return ref('crates/shell/src/bars/mod.rs', 'fn apply_taskbar(');
   if (p === '/performance' || p.startsWith('/animation/')) return refs.motion() + '; ' + refs.bars();
@@ -120,15 +120,15 @@ out.push('', '## Studio follow-ups', '',
   '- `/look/text/tone` and `/look/text/shadow` mean bare wallpaper text. Projection currently writes global `appearance/text` and `appearance/shadow`, which also change panel appearance or surface shadow. Keep those separate in Studio previews and resets.',
   '- Custom virtual paths (`/windows_null/*`, `/@both/*`, `/theme:*`, draft form values, plugin actions) are intentionally not runtime JSON pointers. Their expansion/forwarding is recorded above. No Studio files were edited by this task.', '',
   '## Validation and live evidence', '',
-  '`cargo test -p mypaper-shell --lib -- --test-threads=1 --nocapture`: **203 passed, 10 intentionally ignored**. `cargo test -p mypaper-ui --lib`: **71 passed**. Eleven focused Look tests cover the nine controls plus strip/glass shape agreement; the widget shape test also covers media-pill and edit-pill overrides. The native RichEdit test verifies font/size changes without losing text or selection, and that repeating a style schedules no repaint. `cargo check -p mypaper-shell -p mypaper-ui --examples` and Clippy correctness checks passed. Existing unrelated dead-code/style warnings remain. The release workspace and fixture built in `C:\\mypaper-targets\\main`; deployment used only `scripts/deploy-local.ps1`.', '',
+  '`cargo test -p glaze-shell --lib -- --test-threads=1 --nocapture`: **203 passed, 10 intentionally ignored**. `cargo test -p glaze-ui --lib`: **71 passed**. Eleven focused Look tests cover the nine controls plus strip/glass shape agreement; the widget shape test also covers media-pill and edit-pill overrides. The native RichEdit test verifies font/size changes without losing text or selection, and that repeating a style schedules no repaint. `cargo check -p glaze-shell -p glaze-ui --examples` and Clippy correctness checks passed. Existing unrelated dead-code/style warnings remain. The release workspace and fixture built in `C:\\glaze-targets\\main`; deployment used only `scripts/deploy-local.ps1`.', '',
   'Additive kit APIs: `Theme::with_surface_radius(self, radius: f32) -> Self`; `Tokens::icon_set: Option<IconSet>` (default `None` preserves legacy glyph rendering); `TextField::set_style(&self, style: &TextStyle, color: Rgba)` (opt-in, cached, preserves input state); `TextField::prepare(&self) -> Result<()>` prepares inactive specimens while blocking focus/capture requests. Existing `WM_CONFIG` notifications drive the new resolution; there is no new config schema or IPC message.', '',
 );
 const evidence = 'crates/shell/evidence/look-settings';
 if (fs.existsSync(evidence + '/verification.json') && fs.existsSync(evidence + '/idle.json')) {
   const v = JSON.parse(read(evidence + '/verification.json').replace(/^\uFEFF/, ''));
   const idle = JSON.parse(read(evidence + '/idle.json').replace(/^\uFEFF/, ''));
-  const fixture = idle.rows.find(r => r.part === 'mypaper-look-fixture');
-  const shell = idle.rows.find(r => r.part === 'mypaper-shell');
+  const fixture = idle.rows.find(r => r.part === 'glaze-look-fixture');
+  const shell = idle.rows.find(r => r.part === 'glaze-shell');
   if (fixture?.pid !== v.fixture_pid || !v.config_unchanged || !v.same_windows_all_revisions || Object.values(v.visual_changes).some(changed => !changed))
     throw new Error('Live evidence must pass and the measured fixture must match the captured process');
   out.push(`Live fixture: **${v.observations.length} config revisions**, one process, native no-activate windows over an opaque fixture-owned backdrop. Only its config.json changes; APPDATA and LOCALAPPDATA are isolated. The fixture uses production resolvers, bar/dock/widget/menu display lists, config watcher, and the deployed engine's real glass overlays. It does not reserve app bars, change the taskbar, publish the production plate snapshot, or send synthetic input. Screenshots are cropped only to fixture HWNDs, checked against their owning process.`, '',

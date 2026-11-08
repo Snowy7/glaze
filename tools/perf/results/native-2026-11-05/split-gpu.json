@@ -7,7 +7,7 @@
     "cpu_core_pct": 2.7328967215054027,
     "cpu_machine_pct": 0.17080604509408767,
     "visible_screens": 2,
-    "timing_file": "C:\\mypaper-targets\\hillclimb\\results\\split-gpu.run0.jsonl",
+    "timing_file": "C:\\glaze-targets\\hillclimb\\results\\split-gpu.run0.jsonl",
     "sample_started_qpc": 3649689747225,
     "sample_ended_qpc": 3649889855412
   }

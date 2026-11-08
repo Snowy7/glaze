@@ -1,6 +1,6 @@
 # Brief: index (instant file search and folder sizes)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/plugins.md` (how `mypaper-plugins` is
+Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/plugins.md` (how `glaze-plugins` is
 started only when needed; copy that lifecycle), and the launcher (`crates/shell/src/flyouts`, parity
 rows L01-L05, `launcher.files`).
 
@@ -9,7 +9,7 @@ rows L01-L05, `launcher.files`).
 An Everything-class file index that makes the Start launcher's file search instant, plus folder sizes,
 at almost no cost:
 
-- **New crate `crates/index`**: a library plus the binary `mypaper-index`, its own process, started by
+- **New crate `crates/index`**: a library plus the binary `glaze-index`, its own process, started by
   core **only** when `experimental.file_index` is true in `config.json` (add that field, default
   `false`, committed on its own) and stopped when it turns false. Off = no process.
 - **Scan without admin**: fixed NTFS/ReFS volumes, parallel enumeration with the fastest non-admin API
@@ -20,11 +20,11 @@ at almost no cost:
 - **Live updates**: `ReadDirectoryChangesExW` per volume root (recursive, large buffer); on overflow,
   rescan only the affected subtree. Idle = 0 % CPU: no polling timers.
 - **Compact storage**: one name blob plus fixed-size records, case-folded names for search, written to
-  `%LOCALAPPDATA%\mypaper\index\` so a restart loads in well under a second instead of rescanning.
+  `%LOCALAPPDATA%\glaze\index\` so a restart loads in well under a second instead of rescanning.
   Budget: <= 40 MB private per million entries, and say what you measured.
-- **Queries** over a named pipe (`\\.\pipe\mypaper-index`, current user only): substring and
+- **Queries** over a named pipe (`\\.\pipe\glaze-index`, current user only): substring and
   word-prefix match on names, `ext:` / `path:` / `folder:` / `file:` filters, ranked (exact, prefix,
-  recently modified), first results in <= 10 ms on a million entries; a `mypaper-index --query <q>`
+  recently modified), first results in <= 10 ms on a million entries; a `glaze-index --query <q>`
   CLI for testing.
 - **Folder sizes**: every directory carries its subtree's logical size and file count, kept current
   incrementally; a pipe request returns them for a path and its children (biggest first).
@@ -43,9 +43,9 @@ process, one small commit), the launcher's file-search source in `crates/shell/s
 - Tests for the pure parts: the record store, case folding, the query parser and ranking, size
   roll-up, change application.
 - Measure on this machine: full scan time per volume, entries, private MB, query latency (p50/p95),
-  idle CPU over 60 s with `measure.ps1` (add `mypaper-index` to it if its `mypaper-*` match misses it),
+  idle CPU over 60 s with `measure.ps1` (add `glaze-index` to it if its `glaze-*` match misses it),
   and the cost of a burst of file changes (e.g. a `cargo build`).
-- Use `CARGO_TARGET_DIR=C:\mypaper-targets\index` for check/test; `C:\mypaper-targets\main` only for
+- Use `CARGO_TARGET_DIR=C:\glaze-targets\index` for check/test; `C:\glaze-targets\main` only for
   the deploy build. Turn the flag on in the user's `config.json` only once it's stable and measured,
   and say so in the report (they can switch it off).
 

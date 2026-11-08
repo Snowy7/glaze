@@ -1,6 +1,6 @@
 // Squaring explicitly also accepts negative coordinates without pow domain errors.
 fn fx_square(x: f32) -> f32 { return x * x; }
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let base = sample_src(uv);
     let p = uv * vec2f(paper.resolution.x / max(paper.resolution.y, 1.0), 1.0) * 14.0 / clamp(params.size, 0.3, 3.0);

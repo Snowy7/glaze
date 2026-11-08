@@ -43,7 +43,7 @@ pub unsafe extern "C" fn mp_native_init(host: *const Host) -> i32 {
 }
 
 /// # Safety
-/// All pointers follow `mypaper_native.h`; output pointers are writable.
+/// All pointers follow `glaze_native.h`; output pointers are writable.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn mp_native_call(
     method: *const c_char,

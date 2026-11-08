@@ -1,12 +1,12 @@
 # Studio: the experience
 
-How mypaper Studio is organized and why. Read this before adding a page or a setting. The rules at
+How Glaze Studio is organized and why. Read this before adding a page or a setting. The rules at
 the end ("Rules for new settings") are the short version. The design spec, with every feature's
 place and the mockups, is [plans/native/studio-redesign.md](../plans/native/studio-redesign.md);
 the screens below are the golden images in [media/studio](media/studio).
 
-Studio is a native app (`crates/studio`, `mypaper-studio.exe`) on `crates/ui`: one window,
-software Direct2D, no WebView and no GPU device. It edits the same files the rest of mypaper
+Studio is a native app (`crates/studio`, `glaze-studio.exe`) on `crates/ui`: one window,
+software Direct2D, no WebView and no GPU device. It edits the same files the rest of Glaze
 watches (`config.json`, `bars.json`, `widgets.json`, `integrations.json`, and your own wallpaper
 folders), so every change shows on the desktop at once. Closing it ends the process: nothing of
 Studio keeps running.
@@ -23,7 +23,7 @@ Studio keeps running.
 | **Widgets** | Ctrl 4 | "What's on my desktop?" | The canvas, Add widget, a widget's options, size and own look, Always on top |
 | **Bars** | Ctrl 5 | "My top bar and dock." | The stage, presets, a bar, a module, panels, the Windows taskbar |
 | **Integrations** | Ctrl 6 | "What does it connect to?" | Connected, Built in, Available; the selected one's details |
-| **Settings** | Ctrl , | "How does mypaper behave?" | General, Performance and power, Desktop, Keyboard, Troubleshoot, About |
+| **Settings** | Ctrl , | "How does Glaze behave?" | General, Performance and power, Desktop, Keyboard, Troubleshoot, About |
 
 The UI says **wallpaper**, never "theme" (D1): a wallpaper is a folder that can also bring a look.
 
@@ -31,22 +31,22 @@ The UI says **wallpaper**, never "theme" (D1): a wallpaper is a folder that can 
 its own One UI, dark: a near-black page, large rounded cards, pill buttons. Every display fades to
 black (`onboarding.rs`: plain layered "curtain" windows) and the welcome builds itself on the main
 one: the mark, the words, three feature tiles wiping in, then Get started. The steps follow, words
-on the left and choices on the right like Windows' own setup: **Your taskbar** (mypaper's bars,
+on the left and choices on the right like Windows' own setup: **Your taskbar** (Glaze's bars,
 keep Windows', or just the wallpaper), then optional **Pick a look**, **Your top bar** and **Your
-dock** (designs, or off), **Choose a wallpaper** and **Extras** (file index, mypaper Files, the
+dock** (designs, or off), **Choose a wallpaper** and **Extras** (file index, Glaze Files, the
 desktop menu, full Explorer menus, file extensions, hidden files, Game Mode), and **You're all
 set**. Steps that don't apply to the taskbar choice are skipped. Only the taskbar applies on
 Continue; nothing else changes unless picked, and starters never change the wallpaper. Picks apply
 at once and undo; Back never edits; **Skip setup** and Esc keep what's set. At the end the main
 display fades out, Studio becomes its normal window and the displays fade back in. Only the intro
-animates, so onboarding costs nothing while you read. `mypaper-studio --onboarding` shows it
+animates, so onboarding costs nothing while you read. `glaze-studio --onboarding` shows it
 again on a set-up PC. The docked panel shows the same steps with its own footer. Code:
 `panel/first_run.rs`, `onboarding.rs`.
 
 ## 2. Navigation
 
 - **Sidebar:** the mark, a search field that opens the palette, the six places, then Settings, then
-  the **status block** (what's playing, Pause). It turns into a warning row when a part of mypaper
+  the **status block** (what's playing, Pause). It turns into a warning row when a part of Glaze
   has stopped ("Shell stopped · Restart").
 - **Page bar:** the title, one line of context, the save state, Undo and Redo, **Peek**, the
   page's main action, and the caption buttons. Studio draws its own title area; Windows' snap
@@ -94,7 +94,7 @@ Every change is written as you make it, through one document store (`docs.rs`):
   file changes outside it.
 - A file that can't be read is **never written**. Its pages show a banner with the reason and
   **Start over**, which keeps a backup first.
-- A change is validated by the parser that owns the file (`mypaper_config`, `mypaper_bars`, the
+- A change is validated by the parser that owns the file (`glaze_config`, `glaze_bars`, the
   widget host's, the integrations') before it is written; an invalid one is refused, not saved.
 - Undo and redo are app-wide steps. A slider drag or a widget move is one step however long it
   lasts. Applying a wallpaper toasts "Using Aurora · Undo".
@@ -102,18 +102,18 @@ Every change is written as you make it, through one document store (`docs.rs`):
   go straight to its `theme.json`, validated the same way. They are not undo steps. Built-in
   wallpapers are read-only: **Duplicate** makes an editable copy in place.
 - Studio's own state (window placement, last page, recent wallpapers, first run, its light or
-  dark) is `%APPDATA%\mypaper\studio.json`, outside the undo history.
+  dark) is `%APPDATA%\glaze\studio.json`, outside the undo history.
 
 ## 5. Previews (D3)
 
 - **Bars and widgets** are drawn by the shell's own views, linked as a library
-  (`mypaper_shell::preview`), from the files being edited. A preview can't drift from the desktop
+  (`glaze_shell::preview`), from the files being edited. A preview can't drift from the desktop
   because it is the same code. The stage runs it at the monitor's real geometry; where bars would be
   too small to read, the Bars page draws a narrower screen at the real bar size instead.
 - **Glass** is drawn by the running engine over the real wallpaper, through a small shared-memory
   protocol (`crates/wallpaper/src/preview.rs`; `glass.rs` on Studio's side). The engine serves it
   only while Studio is asking, so it costs nothing when Studio is closed. Without an engine that
-  answers, previews draw a flat stand-in tint and say "Glass shows when mypaper is running".
+  answers, previews draw a flat stand-in tint and say "Glass shows when Glaze is running".
 - **Wallpapers** show their preview picture (video: the shell's thumbnail), decoded off the UI
   thread into a 20 MB cache (`images.rs`).
 - **Peek (Ctrl D)** hides Studio until the next key or click, to check the real desktop.
@@ -129,7 +129,7 @@ each field is absent (follow the wallpaper), `null` ("As is": leave Windows' own
 value. Core applies the result (`crates/core/src/styling.rs`). Styling Windows no longer needs a
 copy of a built-in wallpaper. When Studio starts and your look has no Windows layer yet, it moves
 the `windows` section of your own active wallpaper into your look
-(`mypaper_theme::migrate_windows`), so nothing on screen changes.
+(`glaze_theme::migrate_windows`), so nothing on screen changes.
 
 ## 7. Keyboard and accessibility
 
@@ -186,13 +186,13 @@ are cached for the few hundred labels on screen (`Text::set_capacity`).
 | `look.rs` | Projecting your look onto the bars' and widgets' files |
 | `library.rs` | Wallpapers: scanning, credits, editing your own, Add wallpaper, duplicate, recycle |
 | `stage.rs`, `glass.rs`, `images.rs` | Previews (section 5) |
-| `system.rs` | The parts of mypaper: status, start/stop/restart, autostart, diagnostics |
+| `system.rs` | The parts of Glaze: status, start/stop/restart, autostart, diagnostics |
 | `theme.rs` | Studio's own palette and type, from Windows' settings |
 | `peek.rs`, `menu.rs`, `dialogs.rs` | Peek, native popup menus, the file picker |
 | `goldens.rs` | Golden images of every main screen, light and dark |
 
-Golden images: `cargo test -p mypaper-studio` compares every main screen with
-`crates/studio/tests/golden`; `MYPAPER_BLESS=1` writes them anew, and the copies in
+Golden images: `cargo test -p glaze-studio` compares every main screen with
+`crates/studio/tests/golden`; `GLAZE_BLESS=1` writes them anew, and the copies in
 `docs/media/studio`.
 
 ## Rules for new settings

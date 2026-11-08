@@ -1,6 +1,6 @@
 # Native app integrations
 
-`mypaper-integrations` is the shared provider library. Native views live in
+`glaze-integrations` is the shared provider library. Native views live in
 `crates/shell/src/integrations`. There are no browser, Node, Docker CLI, or VPN helper processes.
 One lease represents one visible consumer. A bar, widget and panel share the provider's single
 subscription. Closing the last consumer cancels its IO, unregisters callbacks, and joins its lane.
@@ -10,7 +10,7 @@ client heartbeat, or automatic launch of a vendor application.
 
 ## Studio configuration contract
 
-Store settings in `%APPDATA%\mypaper\integrations.json`. Write atomically; the shell watches the
+Store settings in `%APPDATA%\glaze\integrations.json`. Write atomically; the shell watches the
 directory and retains the last valid configuration after invalid edits. Keys use camelCase;
 unknown fields (including `token`, `password`, and `key`) are rejected. File limit: 256 KiB.
 
@@ -76,13 +76,13 @@ automatic Frequent for hosts that want it. Shell destinations preserve their arg
 Studio should link the library directly and call:
 
 ```rust
-mypaper_integrations::credentials::write("t3", bearer_token)?;
-mypaper_integrations::credentials::write("obs", obs_password)?;
-mypaper_integrations::credentials::write("grok/daily-brief", webhook_key)?;
+glaze_integrations::credentials::write("t3", bearer_token)?;
+glaze_integrations::credentials::write("obs", obs_password)?;
+glaze_integrations::credentials::write("grok/daily-brief", webhook_key)?;
 // remove(key) disconnects the credential; never echo read(key).text().
 ```
 
-Credential targets are `mypaper/integrations/<key>` under the current Windows user's Credential
+Credential targets are `glaze/integrations/<key>` under the current Windows user's Credential
 Manager. Values are UTF-8, at most 2560 bytes. They are never serialized in settings. The
 `credential` example accepts a **private secret-prompt file**, not a token argument. Credential
 rotation requires Refresh/reconnect or closing/reopening the consumer. Removing a stored
@@ -91,7 +91,7 @@ credential does not revoke an already authenticated vendor session; use the vend
 For notification consent, the shell calls `notifications::request_access_once(completed)` on its
 **UI thread** when Studio enables notifications, or on the enabled integration's first run.
 Completion wakes the shell and reacquires consumers. Windows retains Allowed/Denied; a per-family
-marker under `%LOCALAPPDATA%\mypaper\notification-consent` remembers a dismissed first-run prompt.
+marker under `%LOCALAPPDATA%\glaze\notification-consent` remembers a dismissed first-run prompt.
 Denied access leaves a visible unavailable state; enable access in Windows Settings > Privacy &
 security > Notifications. `notifications::request_access()` remains available for an explicit
 UI-thread Grant access action; await its returned WinRT operation. Consent belongs to the identity
@@ -99,7 +99,7 @@ of the calling process: enabling in Studio requests it from the packaged shell.
 
 T3 must be a separately authorized client with `orchestration:read`. Its MCP audience and injected
 agent tokens are not accepted substitutes. The documented command is
-`t3 auth session issue --scope orchestration:read --label mypaper --token-only`; transfer its result
+`t3 auth session issue --scope orchestration:read --label Glaze --token-only`; transfer its result
 through the private secret prompt into Credential Manager. Do not print it or paste it in JSON.
 Native WebSocket Authorization headers are supported by the researched server, so bearer tokens
 never appear in URLs. No T3 config, database or existing credential store is modified/read for auth.
@@ -110,8 +110,8 @@ needs-input notices come through Grok's Windows toasts, when enabled in that app
 
 ## Notifications: package identity and live delivery
 
-Live delivery uses a sparse MSIX named `mypaper.Desktop`, with external location pointing at the
-directory containing `mypaper-shell.exe` and `mypaper-core.exe`. Both exes embed matching `<msix>`
+Live delivery uses a sparse MSIX named `glaze.Desktop`, with external location pointing at the
+directory containing `glaze-shell.exe` and `glaze-core.exe`. Both exes embed matching `<msix>`
 identity metadata. The package declares `uap3:userNotificationListener`, `runFullTrust`, and
 `unvirtualizedResources`; it keeps ordinary Win32 behavior and existing settings paths. The engine
 still uses its existing unpackaged borderless-capture permission. Local sockets, named pipes and

@@ -1,5 +1,5 @@
 [package]
-name = "mypaper-native-host"
+name = "glaze-native-host"
 description = "Supervised out-of-process host for plugin native modules."
 version.workspace = true
 edition.workspace = true

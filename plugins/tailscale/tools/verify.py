@@ -80,7 +80,7 @@ def main():
     args = parser.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
     plugin = Path(__file__).resolve().parents[1]
-    scratch = Path(tempfile.mkdtemp(prefix="mypaper-tailscale-probe-"))
+    scratch = Path(tempfile.mkdtemp(prefix="glaze-tailscale-probe-"))
     env = dict(os.environ, APPDATA=str(scratch / "roaming"), LOCALAPPDATA=str(scratch / "local"))
     messages = queue.Queue()
     stderr = (args.out_dir / "helper.log").open("w", encoding="utf-8")

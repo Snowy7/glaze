@@ -1,13 +1,13 @@
 # Round 5, Explorer (SeparateProcess on): bursts of two folder windows opened, each navigated 6
 # times (folders, Home, Gallery), then closed. Each burst waits for the folder process to exit and
 # samples the folder process (while open) and the shell's Explorer (after). With the helper
-# running, also notes which pids it styled and refused (mypaper.log).
+# running, also notes which pids it styled and refused (glaze.log).
 #   explorer-bursts.ps1 -Log file [-Bursts 5] [-Tag name]
 param([Parameter(Mandatory)][string]$Log, [int]$Bursts = 5, [string]$Tag = '')
 . "$PSScriptRoot\lib.ps1"
 $script:Log = $Log
-$helperLog = Join-Path $env:LOCALAPPDATA 'mypaper\mypaper.log'
-function Styler { $s = Get-Process mypaper-styler -ErrorAction SilentlyContinue | Select-Object -First 1; if ($s) { 'styler {0}: {1} MB priv, {2:N2} s cpu' -f $s.Id, (Mb $s), $s.TotalProcessorTime.TotalSeconds } else { 'no styler' } }
+$helperLog = Join-Path $env:LOCALAPPDATA 'glaze\glaze.log'
+function Styler { $s = Get-Process glaze-styler -ErrorAction SilentlyContinue | Select-Object -First 1; if ($s) { 'styler {0}: {1} MB priv, {2:N2} s cpu' -f $s.Id, (Mb $s), $s.TotalProcessorTime.TotalSeconds } else { 'no styler' } }
 $shellPid = Shell-Pid
 Note "explorer bursts start $Tag ($Bursts bursts); shell explorer $shellPid; $(Styler)"
 Sample-Explorers 'start'

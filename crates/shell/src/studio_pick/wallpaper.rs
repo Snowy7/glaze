@@ -1,7 +1,7 @@
 //! History stills occupy the bottom of the desktop band. They never activate or play media.
-use mypaper_desktop::Monitor;
-use mypaper_theme::{Fit, LoadedTheme, Wallpaper};
-use mypaper_ui::{DisplayList, Image, Kind, Op, Rect, Rgba, Role, Surface, Ui};
+use glaze_desktop::Monitor;
+use glaze_theme::{Fit, LoadedTheme, Wallpaper};
+use glaze_ui::{DisplayList, Image, Kind, Op, Rect, Rgba, Role, Surface, Ui};
 use std::{path::PathBuf, sync::Arc};
 
 pub fn still_path(theme: &LoadedTheme) -> Option<PathBuf> {
@@ -123,7 +123,7 @@ pub struct Still {
 #[derive(PartialEq)]
 struct Stamp {
     sequence: u64,
-    monitors: Vec<(String, mypaper_desktop::Rect)>,
+    monitors: Vec<(String, glaze_desktop::Rect)>,
     parent: isize,
 }
 impl Still {
@@ -257,7 +257,7 @@ fn prepare(window: windows::Win32::Foundation::HWND) -> anyhow::Result<()> {
     unsafe {
         SetPropW(
             window,
-            windows::core::w!("mypaper.ui.desktop"),
+            windows::core::w!("glaze.ui.desktop"),
             Some(HANDLE(std::ptr::dangling_mut())),
         )?;
         SetWindowPos(
@@ -365,7 +365,7 @@ mod tests {
     fn large_stills_decode_with_bounded_pixels_and_retain_native_center_size() {
         let _ui = Ui::new().unwrap();
         let path =
-            std::env::temp_dir().join(format!("mypaper-history-still-{}.bmp", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-history-still-{}.bmp", std::process::id()));
         let mut bmp = vec![0u8; 54 + 8192 * 2 * 3];
         bmp[..2].copy_from_slice(b"BM");
         let len = bmp.len() as u32;

@@ -1,5 +1,5 @@
 //! Per-monitor z-order maximization and a trailing visibility debounce.
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 use std::{
     collections::HashSet,
     time::{Duration, Instant},
@@ -137,7 +137,7 @@ impl AppWindow {
             }
             let mut pid = 0;
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
-            let class = mypaper_bars::apps::class_name(hwnd);
+            let class = glaze_bars::apps::class_name(hwnd);
             let mut cloaked = 0u32;
             let _ = DwmGetWindowAttribute(
                 hwnd,
@@ -147,7 +147,7 @@ impl AppWindow {
             );
             let facts = Facts {
                 cloaked: cloaked != 0,
-                ours: pid == std::process::id() || class.starts_with("mypaper."),
+                ours: pid == std::process::id() || class.starts_with("glaze."),
                 system_ui: system_ui(&class),
                 ..facts
             };

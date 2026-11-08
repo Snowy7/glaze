@@ -25,5 +25,5 @@ rows done in `parity.md` with evidence.
 Default values must render pixel-identical (prove with the lab, as round 1 did) and cost no GPU time.
 **No deploy-local.ps1 or core restart between 06:40 and 07:05 local** (index measurement window);
 check the clock right before deploying. Restarting only the engine or shell is fine outside it too.
-`CARGO_TARGET_DIR=C:\mypaper-targets\engine-perf`. Stop when the three rows are closed, or after 2 hours.
+`CARGO_TARGET_DIR=C:\glaze-targets\engine-perf`. Stop when the three rows are closed, or after 2 hours.
 Report: what changed, evidence, commits.

@@ -5,8 +5,8 @@ use crate::{
     docs::DocId,
     panel::{Page, State as PanelState},
 };
-use mypaper_config::look::Style;
-use mypaper_ui::{Point, Ui, golden, render};
+use glaze_config::look::Style;
+use glaze_ui::{Point, Ui, golden, render};
 use serde_json::json;
 
 fn fixture(ui: &Ui, dark: bool, page: Page) -> App {
@@ -35,7 +35,7 @@ fn fixture(ui: &Ui, dark: bool, page: Page) -> App {
 
 fn shot(app: &mut App, ui: &mut Ui, name: &str, hovered: Option<Action>, dark: bool) {
     app.toast = None;
-    let out = std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r11");
+    let out = std::path::PathBuf::from(r"C:\glaze-targets\studio-panel\shots-a-r11");
     let built = crate::panel::build(app, &mut ui.text);
     let scroll = built.scrolls.last().unwrap();
     app.size.1 =
@@ -71,7 +71,7 @@ fn viewport_shot(app: &App, ui: &mut Ui, name: &str, dark: bool) {
     let image = render(ui, &built.list, app.size.0, app.size.1).unwrap();
     golden::write(
         &image,
-        &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r11").join(format!(
+        &std::path::PathBuf::from(r"C:\glaze-targets\studio-panel\shots-a-r11").join(format!(
             "{name}-{}.png",
             if dark { "dark" } else { "light" }
         )),
@@ -304,7 +304,7 @@ fn render_chooser_review() {
         let image = render(&mut ui, &built.list, 360, 620).unwrap();
         golden::write(
             &image,
-            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r11").join(
+            &std::path::PathBuf::from(r"C:\glaze-targets\studio-panel\shots-a-r11").join(
                 format!("color-360-{}.png", if dark { "dark" } else { "light" }),
             ),
         )
@@ -378,7 +378,7 @@ fn render_gallery_countdown_fits_and_taskbar_choices() {
         let app = fixture(&ui, dark, Page::Wallpaper);
         let p = crate::panel::palette_for(&app);
         let mut b =
-            mypaper_ui::controls::Builder::new(&mut ui.text, &p, &app.theme.ty, 1.0, &app.input);
+            glaze_ui::controls::Builder::new(&mut ui.text, &p, &app.theme.ty, 1.0, &app.input);
         b.fill(Rect::new(0.0, 0.0, 480.0, 330.0), 0.0, p.chrome);
         let mut c = crate::ui::Col {
             x: 16.0,
@@ -397,7 +397,7 @@ fn render_gallery_countdown_fits_and_taskbar_choices() {
             );
         }
         c.y += 12.0;
-        let image = std::sync::Arc::new(mypaper_ui::Image {
+        let image = std::sync::Arc::new(glaze_ui::Image {
             width: 120,
             height: 180,
             pixels: (0..120 * 180)
@@ -424,7 +424,7 @@ fn render_gallery_countdown_fits_and_taskbar_choices() {
         let image = render(&mut ui, &list, 480, c.y.ceil() as u32 + 16).unwrap();
         golden::write(
             &image,
-            &std::path::PathBuf::from(r"C:\mypaper-targets\studio-panel\shots-a-r11").join(
+            &std::path::PathBuf::from(r"C:\glaze-targets\studio-panel\shots-a-r11").join(
                 format!("fit-stills-{}.png", if dark { "dark" } else { "light" }),
             ),
         )
@@ -441,12 +441,12 @@ fn render_retained_plugin_face_and_transparent_widget() {
     for dark in [true, false] {
         let mut app = fixture(&ui, dark, Page::AddWidget);
         let id = "t3--running";
-        let manifest = mypaper_widgets::manifest::WidgetManifest::parse(
+        let manifest = glaze_widgets::manifest::WidgetManifest::parse(
             &json!({"id": id,"name":"T3 · Running now","category":"Plugins",
                 "description":"From your connected T3 app","size":{"default":[4,3],"min":[2,2]},"settings":[]}).to_string(), id
         ).unwrap();
         app.registry.widgets.clear();
-        app.registry.widgets.insert(id.into(), mypaper_widgets::registry::Installed { manifest });
+        app.registry.widgets.insert(id.into(), glaze_widgets::registry::Installed { manifest });
         super::begin(&app);
         app.panel.as_ref().unwrap().chooser.borrow_mut().plugin_faces = Some(json!({
             id: {"title":"Running now","icon":"terminal","status":"live","face":trees["running"]["small"]}

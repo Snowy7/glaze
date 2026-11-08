@@ -1,6 +1,6 @@
 //! Real Wasmtime guest tests. Effects are inspected, never executed against the user's engine.
-use crate::runtime::exports::mypaper::plugin::lifecycle::{Action, Event, FaceOpen};
-use crate::runtime::mypaper::plugin::{
+use crate::runtime::exports::glaze::plugin::lifecycle::{Action, Event, FaceOpen};
+use crate::runtime::glaze::plugin::{
     http::{Reply, Response},
     types::{Error, SizeClass},
 };
@@ -43,7 +43,7 @@ fn reply(guest: &mut Instance, id: u64, status: u16, body: &str) -> Vec<Effect> 
 fn docker_component_reads_metrics_controls_and_offline_state_without_engine_side_effects() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/docker");
     let scratch =
-        std::env::temp_dir().join(format!("mypaper-docker-component-{}", std::process::id()));
+        std::env::temp_dir().join(format!("glaze-docker-component-{}", std::process::id()));
     let rt = Runtime::new(scratch.join("cache"), scratch.join("data")).unwrap();
     let manifest = Manifest::load(&dir).unwrap();
     let (component, _) = rt.component(&manifest, &dir).unwrap();

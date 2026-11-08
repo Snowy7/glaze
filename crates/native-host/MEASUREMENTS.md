@@ -53,8 +53,8 @@ the two latency runs illustrate scheduling variation on this shared PC.
 
 ## Validation
 
-`cargo test -p mypaper-native-host`: **7 passed** (2 unit tests, 5 Windows
-integration tests). `cargo clippy -p mypaper-native-host --all-targets -- -D warnings`:
+`cargo test -p glaze-native-host`: **7 passed** (2 unit tests, 5 Windows
+integration tests). `cargo clippy -p glaze-native-host --all-targets -- -D warnings`:
 clean. Release binary and measurement example built successfully.
 
 The tests use real DLLs and disposable child processes. They cover opaque/empty/
@@ -71,8 +71,8 @@ child process handle after dropping the supervisor, proving it exited.
 The existing stopped-agent folders prevent Cargo from loading the working
 workspace (`plugins/discord/Cargo.toml` is missing). Validation therefore used
 `git archive HEAD` plus this slice's files under
-`C:\WINDOWS\TEMP\mypaper-native-host-validation`, with target directory
-`C:\mypaper-targets\native-host`. No leftover file or lockfile was changed to
+`C:\WINDOWS\TEMP\glaze-native-host-validation`, with target directory
+`C:\glaze-targets\native-host`. No leftover file or lockfile was changed to
 make these checks pass. No synthetic input, window manipulation or deployment
 was performed, and every host started by the harness exited.
 
@@ -82,15 +82,15 @@ From a complete checkout (or an archived checkout with the native-host and
 native-echo files overlaid):
 
 ```powershell
-cargo test -p mypaper-native-host
-cargo clippy -p mypaper-native-host --all-targets -- -D warnings
-cargo build --release -p mypaper-native-host --bins --examples
+cargo test -p glaze-native-host
+cargo clippy -p glaze-native-host --all-targets -- -D warnings
+cargo build --release -p glaze-native-host --bins --examples
 rustc '--edition=2024' '--crate-type=cdylib' '-Cpanic=abort' '-Copt-level=2' '-Clinker=rust-lld.exe' examples/native-echo/src/lib.rs '-o' "$env:TEMP/native_echo.dll"
-& "$env:CARGO_TARGET_DIR/release/examples/measure.exe" "$env:CARGO_TARGET_DIR/release/mypaper-native-host.exe" "$env:TEMP/native_echo.dll" 60
+& "$env:CARGO_TARGET_DIR/release/examples/measure.exe" "$env:CARGO_TARGET_DIR/release/glaze-native-host.exe" "$env:TEMP/native_echo.dll" 60
 ```
 
 Set `CARGO_TARGET_DIR` first (the measured run used
-`C:/mypaper-targets/native-host`), or substitute the checkout's `target` directory.
+`C:/glaze-targets/native-host`), or substitute the checkout's `target` directory.
 The last argument is the number of idle seconds for **each of three** samples.
 Private memory comes from `GetProcessMemoryInfo` / `PrivateUsage`, working set
 from `WorkingSetSize`, and CPU from the kernel+user `GetProcessTimes` delta,

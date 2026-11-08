@@ -1,14 +1,14 @@
-//! mypaper-wallpaper: renders a theme's wallpaper behind the desktop icons.
+//! glaze-wallpaper: renders a theme's wallpaper behind the desktop icons.
 //!
 //! ```text
-//! mypaper-wallpaper [--windowed] [--parent PID] [THEME]
+//! glaze-wallpaper [--windowed] [--parent PID] [THEME]
 //! ```
 //!
 //! Core passes `--parent <its pid>`: the engine exits when core does, however core ends.
 //!
 //! The theme and pause settings come from `config.json` and follow it live:
 //! switching the theme or pausing needs no restart. `THEME` (a theme folder or
-//! name, see [`mypaper_theme::locate`]) overrides the config's theme for this
+//! name, see [`glaze_theme::locate`]) overrides the config's theme for this
 //! run, for development; later theme changes in the config still apply.
 //! `--windowed` renders into a normal window instead of the desktop. Theme
 //! files hot-reload on save in both modes.
@@ -44,12 +44,12 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use mypaper_config::Config;
-use mypaper_desktop::{
+use glaze_config::Config;
+use glaze_desktop::{
     ControlWindow, DesktopHost, EXIT_CONFIG, EXIT_RESTART, WindowEvents, hold,
     monitors, startup,
 };
-use mypaper_theme::LoadedTheme;
+use glaze_theme::LoadedTheme;
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage, WM_QUIT,
 };
@@ -61,8 +61,8 @@ use crate::hold::Fact;
 use crate::trim::Trimmer;
 use crate::window::{CONTROL_CLASS, WM_CONFIG, WM_FACT, WM_RELOAD, Waiter, Window};
 
-const USAGE: &str = "usage: mypaper-wallpaper [--windowed] [--parent PID] [THEME]
-       mypaper-wallpaper --preview DIR --out FILE.jpg [--size WxH] [--fps N]";
+const USAGE: &str = "usage: glaze-wallpaper [--windowed] [--parent PID] [THEME]
+       glaze-wallpaper --preview DIR --out FILE.jpg [--size WxH] [--fps N]";
 
 struct Args {
     windowed: bool,
@@ -73,9 +73,9 @@ struct Args {
 }
 
 fn main() -> ExitCode {
-    mypaper_desktop::init_logging();
-    mypaper_desktop::enable_dpi_awareness();
-    mypaper_desktop::quit_on_ctrl_c();
+    glaze_desktop::init_logging();
+    glaze_desktop::enable_dpi_awareness();
+    glaze_desktop::quit_on_ctrl_c();
     #[cfg(feature = "hotpatch")]
     connect_hotpatch();
 
@@ -131,7 +131,7 @@ fn main() -> ExitCode {
 fn load(args: &Args) -> Result<(Config, LoadedTheme)> {
     let config = Config::load()?;
     let name = args.theme.as_deref().unwrap_or(&config.theme);
-    let theme = LoadedTheme::load(mypaper_theme::locate(Some(name))?)?;
+    let theme = LoadedTheme::load(glaze_theme::locate(Some(name))?)?;
     Ok((config, theme))
 }
 
@@ -193,7 +193,7 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
         }
         None => (
             vec![Window::dev(&format!(
-                "mypaper - {} (dev)",
+                "Glaze - {} (dev)",
                 theme.theme.name
             ))?],
             None,
@@ -205,7 +205,7 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
     startup::ready("wallpaper", "windows_ms");
     let mut engine = Engine::new(theme, gpu, windows, monitors, config.engine.clone())?;
     // Facts first, so the initial hold is logged once.
-    engine.set_fact(Fact::OnBattery, mypaper_desktop::on_battery());
+    engine.set_fact(Fact::OnBattery, glaze_desktop::on_battery());
     engine.apply_config(&config);
     engine.set_static_snapshot(config.static_snapshot);
     let mut live = Live::new(config, engine.theme_dir())?;

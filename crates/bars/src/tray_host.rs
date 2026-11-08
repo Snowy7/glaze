@@ -67,7 +67,7 @@ use windows::Win32::System::Threading::{
     PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
 };
 use windows::Win32::UI::Accessibility::HWINEVENTHOOK;
-use mypaper_desktop::win_events::{Event as WindowEvent, Subscription};
+use glaze_desktop::win_events::{Event as WindowEvent, Subscription};
 use windows::Win32::UI::Shell::{
     ABM_SETSTATE, SHAllocShared, SHFreeShared, SHLockShared, SHUnlockShared,
 };
@@ -946,7 +946,7 @@ fn read_explorer_queries(explorer: Explorer) -> Option<ExplorerQueries> {
         FORWARD_TIMEOUT_MS,
     )?
     .0;
-    let monitors = mypaper_desktop::monitors()
+    let monitors = glaze_desktop::monitors()
         .into_iter()
         .map(|r| Some([r.x, r.y, r.x + r.width, r.y + r.height]));
     let queries = std::iter::once(None)

@@ -1,14 +1,14 @@
 //! Built-in presets and rule resolution: preset < theme's `apps` < the user's `look.apps`, with
 //! `$accent` / `$dominant` colour tokens filled in from the user's look or the wallpaper.
 //!
-//! Presets are data (`presets/*.json`), written for mypaper's looks:
+//! Presets are data (`presets/*.json`), written for Glaze's looks:
 //!
 //! - `calm`: quiet and flat; neutral translucent cards, no borders, a grey selection mark.
 //! - `glass`: Explorer's and Settings' backdrop (Mica, or acrylic with `look.windows.backdrop`)
 //!   shows through: transparent bars, frosted cards, round corners, the accent as the mark.
 //! - `compact`: tighter cards, rows and text.
 
-use mypaper_config::{AppRules, AppsStyle};
+use glaze_config::{AppRules, AppsStyle};
 
 /// The preset names `apps.preset` accepts (plus `"none"`).
 pub const NAMES: [&str; 3] = ["calm", "glass", "compact"];
@@ -87,7 +87,7 @@ mod tests {
     fn every_preset_parses_and_every_selector_is_valid() {
         for name in NAMES {
             let preset = get(name).unwrap_or_else(|| panic!("{name} parses"));
-            for app in mypaper_config::apps::APPS {
+            for app in glaze_config::apps::APPS {
                 let rules = preset.app(app).unwrap();
                 assert!(!rules.rules.is_empty(), "{name} styles {app}");
                 for selector in rules.rules.keys() {

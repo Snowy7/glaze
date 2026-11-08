@@ -1,15 +1,15 @@
-# Plugins: the platform (WIT `mypaper:plugin@0.1.0`)
+# Plugins: the platform (WIT `glaze:plugin@0.1.0`)
 
-A mypaper plugin is a **WebAssembly component** (WASI preview 2, the component model). Every
-plugin runs in **one helper process**, `mypaper-plugins.exe`, which hosts **one Wasmtime engine**
+A Glaze plugin is a **WebAssembly component** (WASI preview 2, the component model). Every
+plugin runs in **one helper process**, `glaze-plugins.exe`, which hosts **one Wasmtime engine**
 for all of them. Plugin code never runs inside the shell. It never draws pixels, and it never
 touches the OS except through the capabilities its manifest declares.
 
-- The interfaces are in `crates/plugin-api/wit/` (`mypaper:plugin@0.1.0`). This doc explains
+- The interfaces are in `crates/plugin-api/wit/` (`glaze:plugin@0.1.0`). This doc explains
   them, and the WIT is the source of truth.
-- The Rust guest SDK is `crates/plugin-sdk` (`mypaper_plugin_sdk::guest`, built with
+- The Rust guest SDK is `crates/plugin-sdk` (`glaze_plugin_sdk::guest`, built with
   `--target wasm32-wasip2`).
-- The host is `crates/plugins` (the `mypaper-plugins` binary). The shell bridge is
+- The host is `crates/plugins` (the `glaze-plugins` binary). The shell bridge is
   `crates/widgets/src/plugins.rs` (process and protocol) plus `crates/shell/src/widgets/views/plugin.rs`
   (the kit renderer).
 - The proof plugins are `plugins/hello` and `plugins/weather/component`.
@@ -20,11 +20,11 @@ and `obs` before they're ported) keep working through the same host bridge. See
 
 ## Rules
 
-1. **Plugins describe, mypaper renders.** UI is a declarative tree of kit components. The shell
+1. **Plugins describe, Glaze renders.** UI is a declarative tree of kit components. The shell
    draws it with `crates/ui`, so it gets the same look, themes, glass, DPI and accessibility as
    everything else. The kit handles hover, press, focus and scroll locally, and plugins receive
    only **actions**. The host diffs successive trees and sends and repaints only faces that
-   changed (`mypaper_plugin_api::diff`). Animations are declarative (`animated` nodes use the
+   changed (`glaze_plugin_api::diff`). Animations are declarative (`animated` nodes use the
    kit's springs). `canvas` is the escape hatch: a list of drawing commands (shapes, paths, text,
    images by id) that the shell still rasterizes natively.
 2. **Styling goes through tokens.** A plugin restyles a surface (`top-bar`, `dock`, `panel`,
@@ -67,7 +67,7 @@ and `obs` before they're ported) keep working through the same host bridge. See
 - `styles` lists the surfaces the plugin may patch. Patching any other surface is refused.
 - `limits.memory_mb` may *lower* the host's per-plugin cap, never raise it.
 
-Plugins are installed from `plugins/*` (bundled) and `%APPDATA%\mypaper\plugins\*` (user). A
+Plugins are installed from `plugins/*` (bundled) and `%APPDATA%\glaze\plugins\*` (user). A
 folder's name must be the plugin's id.
 
 ## Lifecycle
@@ -80,7 +80,7 @@ installed ─(face placed / bar module on / command)→ loading → active ─(n
 
 1. **Install.** The host validates the manifest (known permissions and surfaces, `api` major,
    the component inside the folder) and **AOT-compiles** the component to
-   `%LOCALAPPDATA%\mypaper\plugins\cache\<id>-<hash>.cwasm` (`mypaper-plugins --compile <root>`;
+   `%LOCALAPPDATA%\glaze\plugins\cache\<id>-<hash>.cwasm` (`glaze-plugins --compile <root>`;
    `deploy-local.ps1` runs it for the bundled plugins).
    The hash covers the component bytes and the engine's compatibility hash. Boot only
    deserializes this file, so there is no JIT at boot. A changed `.wasm` recompiles once.
@@ -90,7 +90,7 @@ installed ─(face placed / bar module on / command)→ loading → active ─(n
    imports (`ui.set-view`, `timers.after`, `http.fetch`, …).
 4. **Unload.** When nothing of the plugin is visible for 30 s (no face placed, no bar module
    showing, desktop held), the host calls `lifecycle.save() -> list<u8>`, stores the result in
-   `%APPDATA%\mypaper\plugin-data\<id>\state.bin`, and drops the instance. The next load gets it
+   `%APPDATA%\glaze\plugin-data\<id>\state.bin`, and drops the instance. The next load gets it
    back in `init`.
 5. **Runtime.** The helper process starts when the first plugin loads and exits 30 s after the
    last one unloads. With no active plugin, there is no helper process.
@@ -169,8 +169,8 @@ calls (`secrets`, `storage`, `system`) are synchronous.
   [deployed Hello check](../crates/plugins/evidence/ordered-pause/hello-live.json) uses an isolated
   profile and the deployed helper: four timer views before pause, none while paused, successful
   resume and clean shutdown. Its five-second samples are a behavior check, not a performance gate.
-- **Notifications**: `notify.show` raises a Windows toast from mypaper (AppUserModelID
-  `mypaper.Plugins`, display name "mypaper", registered under HKCU on first use) with the
+- **Notifications**: `notify.show` raises a Windows toast from Glaze (AppUserModelID
+  `glaze.Plugins`, display name "Glaze", registered under HKCU on first use) with the
   plugin's title and body and "via <plugin name>" as the attribution line, from a worker thread.
   When the toast has an `action`, clicking it (while the helper runs) delivers `event::action`
   with `instance` `"toast"` and that `action` to the plugin, loading it if it was unloaded. The
@@ -212,7 +212,7 @@ calls (`secrets`, `storage`, `system`) are synchronous.
   read-only by name:
 
   ```text
-  name    Local\mypaper-image-<helper pid>-<id>    (ids are unique within the helper)
+  name    Local\glaze-image-<helper pid>-<id>    (ids are unique within the helper)
   0..4    "MPI1"
   4..8    width  u32 LE
   8..12   height u32 LE
@@ -275,7 +275,7 @@ shell applies DPI. A face describes only its body. The shell adds the integratio
 (icon and title header, footer, and a refresh button when `refresh` is set).
 
 **Diffing.** The host keeps each instance's last face and sends a face to the shell only when
-it changed. `mypaper_plugin_api::diff` returns the changed node ranges (a node whose kind or
+it changed. `glaze_plugin_api::diff` returns the changed node ranges (a node whose kind or
 payload changed replaces its subtree, and unchanged siblings are kept). The shell repaints only
 the widgets whose face changed.
 
@@ -399,8 +399,8 @@ in its footer, which the helper tests use to check live delivery.
 | `pipe:<name>` | `pipes.open` of `\\.\pipe\<name>` |
 | `launch` | `launch.open` |
 | `notifications` | `notify.show` |
-| `secrets` | the plugin's own namespace in Credential Manager: `mypaper/integrations/plugin/<id>/<key>` |
-| `storage` | `storage.*` under `%APPDATA%\mypaper\plugin-data\<id>\kv\` |
+| `secrets` | the plugin's own namespace in Credential Manager: `glaze/integrations/plugin/<id>/<key>` |
+| `storage` | `storage.*` under `%APPDATA%\glaze\plugin-data\<id>\kv\` |
 | `windows` | window events and `system.foreground` (titles are personal) |
 | `native-code` | `native.call` into the plugin's own native modules (see [Native modules](#native-modules)) |
 | `process:<name>` | `process.run` of that executable (see above) |
@@ -424,9 +424,9 @@ clear message.
 | per-event CPU | soft: **50 ms** for an input event (action, command), **250 ms** for anything else (I/O replies, timers, a big first snapshot); hard: **1 s** | the plugin's own time, blocking host imports excluded. Over the soft budget: the first is a warning in the log, 3 in a minute throttle the plugin for 5 s (its timers wait, system events skip it; input and I/O still arrive), 20 in a minute stop it with the reason in Studio. Over the hard ceiling (epoch interruption, 5 ms ticks) the call traps as a runaway: a strike, and the plugin restarts from its saved state; 3 strikes in 5 minutes stop it. A single slow event never stops a plugin |
 | startup | no JIT | AOT `.cwasm` cache, deserialized with `Component::deserialize_file` |
 | IPC | binary frames | `u32` LE length + `postcard` message on the helper's stdio. Images go through named shared memory (`image-id`) |
-| action → repaint | ≪ one frame (16 ms) | measured by `mypaper-plugins --bench` |
+| action → repaint | ≪ one frame (16 ms) | measured by `glaze-plugins --bench` |
 
-Measured 2026-11-05 (release, `mypaper-plugins --bench plugins/hello plugins/weather`, and the
+Measured 2026-11-05 (release, `glaze-plugins --bench plugins/hello plugins/weather`, and the
 live helper with the weather face placed):
 
 | measure | value |
@@ -441,7 +441,7 @@ live helper with the weather face placed):
 | infinite loop stopped (then a 50 ms budget; the hard ceiling is 1 s since 2026-11-06) | 49.5 ms |
 | weather: IP lookup + forecast, two HTTP round trips | < 1 s; each reply handled in 0.3–0.5 ms |
 | component sizes | hello.wasm 107 KB, weather.wasm 196 KB; `.cwasm` 430 / 740 KB |
-| per open websocket / pipe, client side (its threads, buffers and WinHTTP state) | ~230–360 KiB / ~45–85 KiB private, 8 of each, noisy across runs (`cargo test --release -p mypaper-plugins measure -- --ignored --nocapture`) |
+| per open websocket / pipe, client side (its threads, buffers and WinHTTP state) | ~230–360 KiB / ~45–85 KiB private, 8 of each, noisy across runs (`cargo test --release -p glaze-plugins measure -- --ignored --nocapture`) |
 
 ### Memory: peaks are permanent
 
@@ -470,15 +470,15 @@ the thread links need. Re-instantiating a plugin from `save()` to drop a past pe
 off for the current plugins: T3 keeps a websocket whose fresh subscription re-sends the same
 frames (the same peak again), and the others peak at ~1.1–1.3 MiB. Pooling's `linear_memory_keep_resident` and
 memory protection keys only affect slots after an instance is dropped (and MPK isn't on Windows).
-`vmmap.ps1` in `C:\mypaper-targets\memprof` breaks a live helper's private commit down by
+`vmmap.ps1` in `C:\glaze-targets\memprof` breaks a live helper's private commit down by
 allocation (each linear memory is one committed run).
 
 ## Shell ↔ helper protocol
 
-The bridge starts `mypaper-plugins.exe` lazily when the first WASM plugin's face opens. It runs
+The bridge starts `glaze-plugins.exe` lazily when the first WASM plugin's face opens. It runs
 inside the shell's kill-on-close Job object with the same restart backoff as other plugins, and
 it stops when the last plugin unloads. Frames are `[u32 len][postcard(HostMsg|HelperMsg)]`
-(`mypaper_plugin_api::wire`):
+(`glaze_plugin_api::wire`):
 
 - shell → helper: `Open { plugin, dir, instance, face, size, settings }` (a repeat `Open` of a
   placed instance is a resize), `Close`, `Action { instance, action, value }`,
@@ -500,28 +500,28 @@ same name: `weather--now` is the component, `weather` the built-in widget (layou
 ## Packaging
 
 - A plugin folder contains `plugin.json`, the component `.wasm`, and any assets.
-- **mypaper ships a DLL only if mypaper itself uses it.** Vendor DLLs (an SDK a native module
+- **Glaze ships a DLL only if Glaze itself uses it.** Vendor DLLs (an SDK a native module
   needs) ship inside the plugin that needs them and are loaded only while that plugin is active.
 - A future `.mpplugin` is just the folder zipped and signed. The install flow shows the
   permissions and compiles the AOT cache.
 
 ## Versioning
 
-The WIT package is semver: `mypaper:plugin@0.1.0`.
+The WIT package is semver: `glaze:plugin@0.1.0`.
 
 - **Minor and patch** (`0.1 → 0.2` once we're at `1.x`, and every bump before then) only *add*
   interfaces, functions, variant cases at the end, or optional record fields as new functions.
   The host keeps linking every older world it has shipped (`wit/v0.1/` stays frozen), so older
   plugins keep working unchanged.
 - A **major** bump is a new world beside the old one. The host links both for at least one
-  major. Older hosts refuse a newer major at install, with "needs a newer mypaper".
+  major. Older hosts refuse a newer major at install, with "needs a newer Glaze".
 - An unknown node kind from a newer guest can't happen (the guest links against the host's
   world), and the shell draws an unknown legacy view kind as nothing.
 
 ## Later: Explorer and app interiors
 
-mypaper's opt-in app styler (`docs/` › "own app styler", after the native shell) will load **the
-same runtime** (`mypaper-plugins` as a library, same WIT world, same budgets) to run style
+Glaze's opt-in app styler (`docs/` › "own app styler", after the native shell) will load **the
+same runtime** (`glaze-plugins` as a library, same WIT world, same budgets) to run style
 plugins against Explorer and Settings surfaces. Only the `surface` enum grows (`explorer-*`).
 Plugins keep describing and never inject code, and the styler applies their token patches
 natively.
@@ -529,8 +529,8 @@ natively.
 ## Writing one (Rust)
 
 ```rust
-use mypaper_plugin_sdk::guest::{self, Event, Plugin};
-use mypaper_plugin_sdk::{Role, View, export};
+use glaze_plugin_sdk::guest::{self, Event, Plugin};
+use glaze_plugin_sdk::{Role, View, export};
 
 #[derive(Default)]
 struct Hello { clicks: u32 }
@@ -558,7 +558,7 @@ export!(Hello);
 The crate is a `cdylib` with its own `[workspace]` (the root `Cargo.toml` excludes guests).
 Build it with `cargo build --release --target wasm32-wasip2` and put the `.wasm` beside
 `plugin.json`. `scripts/build-plugins.ps1` builds the in-repo guests, and `deploy-local.ps1`
-bundles `mypaper-plugins` and AOT-compiles them. A component that also has native modules lists
+bundles `glaze-plugins` and AOT-compiles them. A component that also has native modules lists
 them in `"native": ["x.dll"]` with the `native-code` permission. The host activates them when
 the plugin loads and deactivates them when it unloads or is stopped.
 
@@ -577,7 +577,7 @@ pnpm --dir packages/plugin-sdk-ts typecheck
 pnpm --dir packages/plugin-sdk-ts test
 pnpm --dir plugins/hello-ts install --frozen-lockfile
 pnpm --dir plugins/hello-ts build
-target/release/mypaper-plugins.exe --bench plugins/hello-ts
+target/release/glaze-plugins.exe --bench plugins/hello-ts
 ```
 
 This produces `plugins/hello-ts/hello-ts.wasm` and a `.cost.json` sidecar naming the backend,
@@ -589,7 +589,7 @@ The root Cargo workspace excludes `plugins/hello-ts`: its `plugins/*` glob would
 treat this non-Cargo folder as a Rust crate. Keep TypeScript guest folders excluded.
 
 ```ts
-import { definePlugin, Role, ui, View } from '@mypaper/plugin-sdk';
+import { definePlugin, Role, ui, View } from '@glaze/plugin-sdk';
 
 export const lifecycle = definePlugin({
   onEvent(event) {
@@ -726,7 +726,7 @@ through `crates/widgets/src/plugins.rs`, unchanged: `initialize`, `face.open/res
 built-in weather and RSS widgets use these). They aren't sandboxed. New plugins should be
 components, and T3, OBS, Docker, Tailscale, Grok and Discord will be ported (see the status
 below). The native SDK types (`View`, `Face`, `Manifest`, `protocol`) stay in
-`mypaper_plugin_sdk` for them and for the host.
+`glaze_plugin_sdk` for them and for the host.
 
 ## Built-ins that moved to plugins
 
@@ -744,7 +744,7 @@ Working: the runtime (`crates/plugins`) with budgets, AOT cache, traps, unload a
 WIT world; the guest SDK; faces through the shell bridge and picker; HTTP; timers; secrets;
 storage; launch; system monitors, theme, power and `foreground`; websockets (headers,
 subprotocols), pipes and HTTP over pipes; toasts; system-event routing with move coalescing;
-`ui.put-image` shared memory; native modules through `mypaper-native-host`; the `hello` and
+`ui.put-image` shared memory; native modules through `glaze-native-host`; the `hello` and
 `weather` components.
 
 Shell side (2026-11-05, late): style patches restyle the top bar, dock and menus in place
@@ -789,7 +789,7 @@ none. A `custom:<id>` with a `command` in `modules` stays a script module.
   known kit names, else the app glyph). Choosing an item sends `event::command(id)`.
 - **Shortcuts** (`shortcuts`). Each `commands[].shortcut` (`Ctrl`, `Alt`, `Shift`, `Win` and a
   letter, digit or `F1`–`F24`; it needs `Ctrl`, `Alt` or `Win`) is registered as a global hotkey
-  on the shell thread when the shell starts. One another program or mypaper already holds is
+  on the shell thread when the shell starts. One another program or Glaze already holds is
   refused with a log line (`shortcut … refused: another hotkey already uses it`). Pressing it
   sends `event::command(id)`.
 - Either loads the plugin if nothing of it is open (and starts the helper if needed); with
@@ -811,11 +811,11 @@ kit's `Tween`; while a spring moves the widget asks for frames, and at rest noth
 A component that needs a vendor DLL ships a thin C wrapper and its vendor DLLs in
 its own plugin folder. Its manifest adds `"native": ["module.dll"]` and the
 `native-code` permission. The platform passes those declarations to
-`mypaper_native_host::Supervisor`; an undeclared module or missing permission is
+`glaze_native_host::Supervisor`; an undeclared module or missing permission is
 refused. Native code has the user's OS privileges: process separation contains
 crashes and hangs, and is not an OS security sandbox.
 
-Only `mypaper-native-host.exe` loads DLLs. The shell and the WASM helper never do.
+Only `glaze-native-host.exe` loads DLLs. The shell and the WASM helper never do.
 Constructing the supervisor starts no process. `activate` starts a host only for
 a plugin with a nonempty native list. Shared hosting is the default;
 `Isolation::Plugin` puts all of one plugin's modules in a separate process. After
@@ -840,7 +840,7 @@ thread.
 
 ### C ABI 1
 
-The authoritative header is `crates/native-host/include/mypaper_native.h`.
+The authoritative header is `crates/native-host/include/glaze_native.h`.
 Wrappers export exactly these three C functions, using the host's architecture:
 
 ```c
@@ -901,11 +901,11 @@ hide lifecycle changes. Drain the event pump for the supervisor's lifetime.
 
 ### Platform integration
 
-Add `mypaper-native-host = { path = "../native-host" }` to `crates/plugins`.
+Add `glaze-native-host = { path = "../native-host" }` to `crates/plugins`.
 The library uses only Rust std and Win32, with no WASM or vendor dependencies:
 
 ```rust,ignore
-use mypaper_native_host::{Supervisor, HostConfig, PluginSpec, Isolation};
+use glaze_native_host::{Supervisor, HostConfig, PluginSpec, Isolation};
 
 let native = Supervisor::new(sibling_native_host_exe, HostConfig::default());
 native.activate(PluginSpec {
@@ -936,14 +936,14 @@ crash recovery, automatic isolation, and hang deadlines. It never drives the
 user's desktop. Measurements and the reproducible harness live in
 `crates/native-host/MEASUREMENTS.md`.
 
-## Studio packages and installation (`.mypaper-plugin`)
+## Studio packages and installation (`.glaze-plugin`)
 
-The current Studio package format is **`.mypaper-plugin`**, a ZIP archive (the earlier
+The current Studio package format is **`.glaze-plugin`**, a ZIP archive (the earlier
 `.mpplugin` name in Packaging above was a proposal). Put the plugin files directly at the
 archive root, without an enclosing folder:
 
 ```text
-example.mypaper-plugin
+example.glaze-plugin
   plugin.json
   example.wasm
   module.dll          (optional; declare in native)
@@ -963,8 +963,8 @@ must appear in `native` and require `native-code`. Settings use the widget setti
    origins, local pipes, storage/secrets access, native modules and styling permissions.
    **Cancel installs nothing.** No component or native module executes during this review.
 3. Choose **Allow and install**. Only then is the staged copy installed to
-   `%APPDATA%\mypaper\plugins\<id>\`. Studio invokes
-   `mypaper-plugins --compile <installed-plugin-folder>` and checks its exit status.
+   `%APPDATA%\glaze\plugins\<id>\`. Studio invokes
+   `glaze-plugins --compile <installed-plugin-folder>` and checks its exit status.
    Compilation validates imports without executing plugin code. A failed compilation removes
    the installed copy and reports the error. An existing user installation must be uninstalled
    before replacing it, so new permissions are always reviewed again.
@@ -983,11 +983,11 @@ counters the component runtime does not provide.
 
 **Disable** stops a plugin and preserves its data; **Enable** permits its placed contributions
 to load again. **Uninstall** waits for the runtime and native modules to release the plugin,
-then removes its user installation, `%LOCALAPPDATA%\mypaper\plugins\cache\<id>-*.cwasm`,
-`%APPDATA%\mypaper\plugin-data\<id>\` and the complete Credential Manager namespace
-`mypaper/integrations/plugin/<id>/`. A bundled plugin is hidden and disabled for this user;
+then removes its user installation, `%LOCALAPPDATA%\glaze\plugins\cache\<id>-*.cwasm`,
+`%APPDATA%\glaze\plugin-data\<id>\` and the complete Credential Manager namespace
+`glaze/integrations/plugin/<id>/`. A bundled plugin is hidden and disabled for this user;
 its shipped files stay with the application. Plugin preferences live in
-`%APPDATA%\mypaper\plugin-manager.json`; secrets never go into this file.
+`%APPDATA%\glaze\plugin-manager.json`; secrets never go into this file.
 
 ## Discord component
 
@@ -1006,7 +1006,7 @@ is a bot before fetching channel history or sending. Sending uses a native `fiel
 use `select`, and replies disable automatic mentions. No personal account token is accepted.
 
 The four broker keys are `bot`, `client-secret`, `rpc-access` and `rpc-refresh`, under
-`mypaper/integrations/plugin/discord/`. Setup fields write directly to the broker. Migration
+`glaze/integrations/plugin/discord/`. Setup fields write directly to the broker. Migration
 copies the old `discord/*` values, reads them back to verify the copy, then deletes the old
 entries; a different existing plugin credential wins and leaves the old entry for recovery.
 Credentials and message content never enter the component's saved state. Token expiry and
@@ -1040,6 +1040,6 @@ hide them. This bridge adds no polling and does not wire the other system-event 
 The Social SDK is not bundled or loaded by this component. It requires the user's own Discord
 application registration. A future plugin can ship a wrapper DLL and the vendor SDK as a
 declared `native` module with `native-code` permission, loaded on demand by
-`mypaper-native-host`. The WASM component would call that wrapper through `native.call` and
+`glaze-native-host`. The WASM component would call that wrapper through `native.call` and
 receive callbacks as `native-event`; app configuration stays in plugin settings and secrets
 stay in the broker. It needs no SDK DLL in core or the shell.

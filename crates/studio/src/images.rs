@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{Sender, channel};
 
-use mypaper_ui::Image;
+use glaze_ui::Image;
 
 /// Decoded pixels kept at most (bytes); the least recently used go first.
 const BUDGET: usize = 20 << 20;
@@ -509,7 +509,7 @@ mod tests {
     fn the_wic_only_decoder_preserves_the_ui_decoders_pixels() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/icon-32.png");
         let bytes = std::fs::read(&path).unwrap();
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         for size in [(16, 16), (48, 48)] {
             let expected = ui.decode_image(&bytes, size).unwrap();
             assert_eq!(

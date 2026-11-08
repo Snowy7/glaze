@@ -2,7 +2,7 @@
 //! that moved to plugins"). The shell applies [`migrate`] after every layout load: an instance
 //! of a moved built-in becomes the face `<plugin>--<face>`, keeping its instance id (and with it
 //! its storage), cell, size, look and settings. It is the same layout version, so an older
-//! mypaper still reads the file; one without the plugin shows the face as missing.
+//! Glaze still reads the file; one without the plugin shows the face as missing.
 use serde_json::{Map, Value};
 
 use crate::layout::Layout;

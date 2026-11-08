@@ -1,12 +1,12 @@
 # Files
 
-`mypaper-files` is an on-demand native file browser built on the mypaper kit. It is its own
+`glaze-files` is an on-demand native file browser built on the Glaze kit. It is its own
 process, launched only when a folder is opened in it. Closing its windows releases the process,
 workers, thumbnails, OLE registrations and glass requests. It installs no background service.
 
 ```powershell
-target\release\mypaper-files.exe "C:\Projects"
-target\release\mypaper-files.exe "shell:Downloads"
+target\release\glaze-files.exe "C:\Projects"
+target\release\glaze-files.exe "shell:Downloads"
 ```
 
 The window follows the active panel style, light/dark scheme, accent, font and material from
@@ -54,7 +54,7 @@ run-only appearance overrides, useful when checking a look without changing the 
   [the watcher refresh](../crates/files/evidence/selection-refresh/refreshed.png), and
   [Enter navigating into c.txt](../crates/files/evidence/selection-refresh/enter.png).
   The [deployment hashes](../crates/files/evidence/selection-refresh/deployed.json) match the
-  approved `C:\mypaper-targets\main` build. The fixture's separate profile leaves the user's
+  approved `C:\glaze-targets\main` build. The fixture's separate profile leaves the user's
   Files session/preferences untouched; desktop actions hold the lock individually.
   A later shared deployment replaced the on-disk executables after the Enter check. The
   [preserved running image](../crates/files/evidence/selection-refresh/shared-deployment.json)
@@ -72,7 +72,7 @@ The kit context menu puts common actions first. **Show more options** opens the 
 `IContextMenu`, with dynamic submenus and owner-drawn extensions. A search selection spanning
 different parent folders uses the first item's shell menu, because there is no shared parent.
 
-Pins, the chosen view, column widths, tabs, active tab and preview preference are stored in `%APPDATA%\mypaper\files.json`:
+Pins, the chosen view, column widths, tabs, active tab and preview preference are stored in `%APPDATA%\glaze\files.json`:
 
 ```json
 {
@@ -88,7 +88,7 @@ Pins, the chosen view, column widths, tabs, active tab and preview preference ar
 ## Search and folder sizes
 
 Files calls only the bounded [index pipe client](index.md), from a background worker:
-`mypaper_index::pipe::request(&Request::Search { query, limit: 2000 }, 250)` and
+`glaze_index::pipe::request(&Request::Search { query, limit: 2000 }, 250)` and
 `Request::Sizes { path, limit: 4096 }`. A running index searches its indexed files; otherwise
 search filters the current directory. The status bar says **Indexed files** or **This folder**.
 Folder sizes are the index's cached logical sizes, not a recursive scan performed by Files.
@@ -111,7 +111,7 @@ only excluded folders reads **—**. No recursive work is started to fill these 
 The internal value is `model::Size::{Exact(u64), LowerBound(u64), Excluded}`; missing index
 results remain `None`. Focused pure tests cover flag conversion, labels, exact-only bar inputs,
 both sorting directions, metadata precedence and mixed selection totals. The manual
-`mypaper-files-size-proof` example renders the production view with isolated metadata, independent
+`glaze-files-size-proof` example renders the production view with isolated metadata, independent
 of the live helper's current generation; run it only under the desktop lock. The inspected
 [capture](../crates/files/evidence/size-flags/exact-lower-excluded.png) shows all three states,
 the excluded tooltip, and a lower-bound selection total.
@@ -159,7 +159,7 @@ modifiers held, a fullscreen app, a hung shell, or no installed hook, the chord 
 The folder registry route remains for folder double-clicks.
 
 Core reconciles the flag at startup and on config changes. Enabling
-requires `mypaper-files.exe` beside core. No Explorer restart or elevation is requested.
+requires `glaze-files.exe` beside core. No Explorer restart or elevation is requested.
 
 The experiment writes the default command and `DelegateExecute` under these HKCU locations:
 
@@ -167,15 +167,15 @@ The experiment writes the default command and `DelegateExecute` under these HKCU
 - `Software\Classes\Folder\shell\explore\command`
 - `Software\Classes\CLSID\{52205fd8-5dfb-447d-801a-d0b52f2e83e1}\shell\opennewwindow\command`
 
-`%LOCALAPPDATA%\mypaper\undo-folders.json` records original values, registry types, absent
-values, created keys and mypaper's last written values **before** applying changes. Disabling
+`%LOCALAPPDATA%\glaze\undo-folders.json` records original values, registry types, absent
+values, created keys and Glaze's last written values **before** applying changes. Disabling
 restores a value only if it is still ours; another application's later change is preserved.
 Empty keys created by this experiment are pruned. The journal survives a process restart.
 
 For recovery or before removing an installation:
 
 ```powershell
-target\release\mypaper-files.exe --restore-routing
+target\release\glaze-files.exe --restore-routing
 ```
 
 This disables the config flag and restores the journal. `scripts/package/unregister.ps1` runs
@@ -194,7 +194,7 @@ across alpha rendering and a return to the opaque path.
 Round-one live checks on 6 November 2026 passed create, rename with extension preservation, shell-format
 clipboard copy/cut/paste, recycle, external directory notifications, This PC navigation, indexed
 search and OLE copy/Shift-move between two Files windows. Operations touched only private scratch
-trees under `C:\mypaper-targets\files\scratch`. The original nine Files tests, two folder-routing tests and
+trees under `C:\glaze-targets\files\scratch`. The original nine Files tests, two folder-routing tests and
 the alpha-canvas test pass. Files has no clippy warnings; a separate existing bars hook warning
 remains in the dependency build.
 

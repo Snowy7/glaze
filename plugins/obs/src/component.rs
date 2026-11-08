@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
-use mypaper_plugin_sdk::guest::{self, Event, Plugin, secrets, timers, ui, websocket};
-use mypaper_plugin_sdk::SizeClass;
+use glaze_plugin_sdk::guest::{self, Event, Plugin, secrets, timers, ui, websocket};
+use glaze_plugin_sdk::SizeClass;
 use serde_json::Value;
 use crate::{Availability, Data, Snapshot, faces, obs};
 
@@ -48,9 +48,9 @@ impl Obs {
         for (id, (size, bar)) in &self.faces {
             let mut face = if *bar { faces::bar(&self.snapshot).face() } else { faces::face(*size, &self.snapshot, now()) };
             if self.needs_password && !bar {
-                face.body = mypaper_plugin_sdk::View::stack([
-                    mypaper_plugin_sdk::View::empty("video", "OBS password needed", "Enter the WebSocket password to connect."),
-                    mypaper_plugin_sdk::View::Field { placeholder: "Save OBS password…".into(), action: "password".into() },
+                face.body = glaze_plugin_sdk::View::stack([
+                    glaze_plugin_sdk::View::empty("video", "OBS password needed", "Enter the WebSocket password to connect."),
+                    glaze_plugin_sdk::View::Field { placeholder: "Save OBS password…".into(), action: "password".into() },
                 ]);
             }
             if let Some(note) = &self.connection.notice { face.footer = Some(note.clone()); }
@@ -121,4 +121,4 @@ impl Plugin for Obs {
         self.draw();
     }
 }
-mypaper_plugin_sdk::export!(Obs);
+glaze_plugin_sdk::export!(Obs);

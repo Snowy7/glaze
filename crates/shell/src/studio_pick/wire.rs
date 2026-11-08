@@ -13,11 +13,11 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::{HSTRING, w};
 
-pub const SHELL_CLASS: windows::core::PCWSTR = w!("mypaper.shell.studio-pick.v1");
+pub const SHELL_CLASS: windows::core::PCWSTR = w!("glaze.shell.studio-pick.v1");
 const TAG: usize = 0x4d505331;
 const MAX_BYTES: usize = 16 * 1024;
 const MAX_SNAPSHOT_BYTES: usize = 512 * 1024;
-/// Semantic wake queued directly into mypaper-ui, never sent to the keyboard queue.
+/// Semantic wake queued directly into glaze-ui, never sent to the keyboard queue.
 pub const PICK_EVENT: u16 = 0xffff;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,9 +72,9 @@ impl SnapshotDocument {
         if !self.raw.is_object() { return false; }
         let text = self.raw.to_string();
         match self.document {
-            Document::Config => mypaper_config::Config::parse(&text).is_ok(),
-            Document::Bars => mypaper_bars::BarsConfig::parse(&text).is_ok(),
-            Document::Widgets => mypaper_widgets::layout::Layout::parse(&text).is_ok(),
+            Document::Config => glaze_config::Config::parse(&text).is_ok(),
+            Document::Bars => glaze_bars::BarsConfig::parse(&text).is_ok(),
+            Document::Widgets => glaze_widgets::layout::Layout::parse(&text).is_ok(),
         }
     }
 }
@@ -87,9 +87,9 @@ pub struct SnapshotTheme {
 
 impl SnapshotTheme {
     /// Parse frozen JSON only: later theme-file edits cannot change this preview.
-    pub fn loaded(&self) -> anyhow::Result<Option<mypaper_theme::LoadedTheme>> {
+    pub fn loaded(&self) -> anyhow::Result<Option<glaze_theme::LoadedTheme>> {
         if self.raw.is_null() { return Ok(None); }
-        mypaper_theme::LoadedTheme::parse(
+        glaze_theme::LoadedTheme::parse(
             self.dir.clone().unwrap_or_default(), &self.raw.to_string(),
         ).map(Some)
     }
@@ -117,31 +117,31 @@ impl PreviewOp {
         let optional = |valid| self.value.is_null() || valid;
         match (document, path) {
             (Document::Config, ["look", "style"] | ["look", "bars" | "widgets" | "menus", "style"]) => {
-                return optional(serde_json::from_value::<mypaper_config::look::Style>(self.value.clone()).is_ok());
+                return optional(serde_json::from_value::<glaze_config::look::Style>(self.value.clone()).is_ok());
             }
             (Document::Config, ["look", "shape", "corners"]) => {
                 return optional(self.value.as_f64().is_some_and(|v| (0.0..=48.0).contains(&v)));
             }
             (Document::Bars, ["preset"]) => {
-                return optional(serde_json::from_value::<mypaper_bars::config::Preset>(self.value.clone()).is_ok());
+                return optional(serde_json::from_value::<glaze_bars::config::Preset>(self.value.clone()).is_ok());
             }
             (Document::Bars, ["top", "design"]) => {
-                return optional(serde_json::from_value::<mypaper_bars::config::TopDesign>(self.value.clone()).is_ok());
+                return optional(serde_json::from_value::<glaze_bars::config::TopDesign>(self.value.clone()).is_ok());
             }
             (Document::Bars, ["dock", "design"]) => {
-                return optional(serde_json::from_value::<mypaper_bars::config::DockDesign>(self.value.clone()).is_ok());
+                return optional(serde_json::from_value::<glaze_bars::config::DockDesign>(self.value.clone()).is_ok());
             }
             (Document::Bars, ["top" | "dock", "enabled"]) => return optional(self.value.is_boolean()),
             (Document::Bars, ["look", "style"] | ["top" | "dock", "look", "style"]) => {
-                return optional(serde_json::from_value::<mypaper_bars::style::NativeStyle>(self.value.clone()).is_ok());
+                return optional(serde_json::from_value::<glaze_bars::style::NativeStyle>(self.value.clone()).is_ok());
             }
             (Document::Bars, ["look", "family"]) => {
-                return optional(serde_json::from_value::<mypaper_bars::style::Family>(self.value.clone()).is_ok());
+                return optional(serde_json::from_value::<glaze_bars::style::Family>(self.value.clone()).is_ok());
             }
             (Document::Bars, ["appearance", field] | ["top" | "dock", "appearance", field])
             | (Document::Widgets, ["appearance", field] | ["instances", _, "appearance", field]) => {
                 return matches!(*field, "surface" | "tint" | "opacity" | "blur" | "radius" | "border" | "text" | "accent" | "font" | "scale" | "shadow" | "style")
-                    && optional(serde_json::from_value::<mypaper_theme::Appearance>(
+                    && optional(serde_json::from_value::<glaze_theme::Appearance>(
                         serde_json::json!({*field: self.value.clone()})
                     ).is_ok_and(|a| a.validate().is_ok()));
             }
@@ -180,7 +180,7 @@ impl PreviewOp {
                 return self.value.is_null()
                     || self.value.as_str().is_some_and(|s| {
                         (document == Document::Config && s == "auto")
-                            || mypaper_config::Color::parse(s).is_some()
+                            || glaze_config::Color::parse(s).is_some()
                     });
             }
             "dock_size" => 96.0,
@@ -407,7 +407,7 @@ impl Endpoint {
         let class_name = if shell {
             SHELL_CLASS
         } else {
-            w!("mypaper.studio.pick-client.v1")
+            w!("glaze.studio.pick-client.v1")
         };
         // SAFETY: class and procedure live for the process. The Rc below outlives the window.
         let hwnd = unsafe {
@@ -535,7 +535,7 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, wp: WPARAM, lp: LP
                 let queue = unsafe { &*queue };
                 if queue.enqueue(HWND(wp.0 as _), message) {
                     if let Some(window) = queue.wake.get() {
-                        mypaper_ui::queue_event(window, mypaper_ui::Event::Key(PICK_EVENT));
+                        glaze_ui::queue_event(window, glaze_ui::Event::Key(PICK_EVENT));
                         // SAFETY: wakes the peer's own UI loop; no keyboard input or activation.
                         let _ =
                             unsafe { PostMessageW(Some(window), WM_NULL, WPARAM(0), LPARAM(0)) };

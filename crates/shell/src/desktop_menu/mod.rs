@@ -1,4 +1,4 @@
-//! mypaper's own right-click menu for the bare desktop (on by default, `desktop_menu.enabled`;
+//! Glaze's own right-click menu for the bare desktop (on by default, `desktop_menu.enabled`;
 //! docs/desktop-extras.md).
 //!
 //! **Two threads, both ours; nothing is injected anywhere.**
@@ -7,7 +7,7 @@
 //!   bare desktop, posting each to the shell's [inbox](crate::inbox).
 //! - The shell's **UI thread** does the slow work here: it reads the icon rectangles from the
 //!   desktop's folder view, confirms each swallowed click with UI Automation
-//!   (`ElementFromPoint`: a list *item* is an icon), opens the menu ([`mypaper_ui::Menu`]) and
+//!   (`ElementFromPoint`: a list *item* is an icon), opens the menu ([`glaze_ui::Menu`]) and
 //!   runs the chosen command. If the confirmation says "icon" (the cached rectangles were
 //!   stale), the click is replayed to the native desktop. "Show more options" (only in a
 //!   configured menu) does the same: the right-click is replayed, marked as ours so the hook
@@ -27,12 +27,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result};
-use mypaper_config::DesktopMenu as MenuConfig;
-use mypaper_desktop::desktop_hit::IconMap;
-use mypaper_desktop::desktop_view::{self, DesktopView, SortKey};
-use mypaper_desktop::hold::Fact;
-use mypaper_desktop::{ControlWindow, WM_FACT, fullscreen_app_in_front};
-use mypaper_ui::{Event, Image, Menu, Outcome, SurfaceId, Tokens, Ui, screen_at};
+use glaze_config::DesktopMenu as MenuConfig;
+use glaze_desktop::desktop_hit::IconMap;
+use glaze_desktop::desktop_view::{self, DesktopView, SortKey};
+use glaze_desktop::hold::Fact;
+use glaze_desktop::{ControlWindow, WM_FACT, fullscreen_app_in_front};
+use glaze_ui::{Event, Image, Menu, Outcome, SurfaceId, Tokens, Ui, screen_at};
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
 use windows::Win32::UI::Accessibility::{
@@ -94,7 +94,7 @@ pub struct DesktopMenu {
     menu: Menu<Command>,
     /// The shell's own menu (New, extensions); `None` if its worker could not start.
     shell: Option<ShellMenu>,
-    /// mypaper's mark, for its own items only where no icon font has their glyphs.
+    /// Glaze's mark, for its own items only where no icon font has their glyphs.
     icon: Option<Arc<Image>>,
     uia: Option<IUIAutomation>,
     hook: HookThread,
@@ -119,7 +119,7 @@ impl DesktopMenu {
                 log::warn!("desktop menu: no UI Automation, trusting the icon cache: {e:#}")
             })
             .ok();
-        let control = ControlWindow::new(w!("mypaper.desktopmenu.control"))
+        let control = ControlWindow::new(w!("glaze.desktopmenu.control"))
             .inspect_err(|e| log::warn!("desktop menu: no lock/display notifications: {e:#}"))
             .ok();
         let icon_px = icon_pixels(&settings.tokens, screen_at(0, 0).dpi);
@@ -130,7 +130,7 @@ impl DesktopMenu {
         let mut menu = Self {
             settings,
             themed: None,
-            menu: Menu::new("mypaper desktop menu")?,
+            menu: Menu::new("Glaze desktop menu")?,
             shell,
             icon,
             uia,
@@ -303,12 +303,12 @@ impl DesktopMenu {
         let sources = Sources {
             plugins: &plugins,
             shell: snapshot.as_ref(),
-            // Glyphs first; mypaper's mark only where neither icon font is installed.
-            mypaper: self
+            // Glyphs first; Glaze's mark only where neither icon font is installed.
+            Glaze: self
                 .icon
                 .as_ref()
                 .filter(|_| {
-                    !ui.text.has_family(mypaper_ui::icons::SYSTEM_FAMILY)
+                    !ui.text.has_family(glaze_ui::icons::SYSTEM_FAMILY)
                         && !ui.text.has_family("Segoe MDL2 Assets")
                 }),
         };
@@ -328,7 +328,7 @@ impl DesktopMenu {
             })
             .clone();
         // No outlines on glass: the engine draws its one edge and its shadow.
-        let glass = base.glass.is_some() || mypaper_ui::glass::style().is_some();
+        let glass = base.glass.is_some() || glaze_ui::glass::style().is_some();
         let tokens = Tokens {
             border: base.border && !glass,
             shadow: base.shadow && !glass,
@@ -473,7 +473,7 @@ fn view_state() -> ViewState {
     }
 }
 
-/// mypaper's mark (`assets/logo/mark-small.svg`, drawn for 16-24 px) `px` square, premultiplied
+/// Glaze's mark (`assets/logo/mark-small.svg`, drawn for 16-24 px) `px` square, premultiplied
 /// BGRA.
 fn mark(px: u32) -> Option<Arc<Image>> {
     let svg = include_bytes!("../../../../assets/logo/mark-small.svg");
@@ -499,7 +499,7 @@ fn mark(px: u32) -> Option<Arc<Image>> {
 
 /// The menu's icon size in device pixels on a monitor of `dpi`: 16 px, scaled.
 fn icon_pixels(tokens: &Tokens, dpi: u32) -> i32 {
-    (mypaper_ui::menu::ICON_SIZE * dpi.max(96) as f32 / 96.0 * tokens.scale.clamp(0.5, 2.0)).round()
+    (glaze_ui::menu::ICON_SIZE * dpi.max(96) as f32 / 96.0 * tokens.scale.clamp(0.5, 2.0)).round()
         as i32
 }
 
@@ -511,14 +511,14 @@ fn clipboard_has_files() -> bool {
 }
 
 /// An on-demand Files launch is offered only while the same folder-routing experiment is on.
-fn files_app_item() -> Option<mypaper_ui::Entry<Command>> {
-    if !mypaper_config::Config::load().ok()?.experimental.files_default { return None; }
-    let executable = std::env::current_exe().ok()?.with_file_name("mypaper-files.exe");
+fn files_app_item() -> Option<glaze_ui::Entry<Command>> {
+    if !glaze_config::Config::load().ok()?.experimental.files_default { return None; }
+    let executable = std::env::current_exe().ok()?.with_file_name("glaze-files.exe");
     if !executable.is_file() { return None; }
-    Some(mypaper_ui::Entry::action("Open Desktop in Files", Command::Custom {
+    Some(glaze_ui::Entry::action("Open Desktop in Files", Command::Custom {
         command: executable.to_string_lossy().into_owned(),
         args: vec!["--".into(), "shell:Desktop".into()],
-    }).with_icon(mypaper_ui::MenuIcon::Glyph(items::glyph::FOLDER)))
+    }).with_icon(glaze_ui::MenuIcon::Glyph(items::glyph::FOLDER)))
 }
 
 fn create_uia() -> Result<IUIAutomation> {

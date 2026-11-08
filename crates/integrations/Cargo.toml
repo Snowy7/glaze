@@ -1,5 +1,5 @@
 [package]
-name = "mypaper-integrations"
+name = "glaze-integrations"
 description = "Demand-owned native app subscriptions; no periodic polling or heartbeat tasks."
 version.workspace = true
 edition.workspace = true

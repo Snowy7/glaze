@@ -24,7 +24,7 @@ elif 'snow-forest' in photo:
 else:
     credit = 'Hong Kong Skyline Restitch - Dec 2007 / David Iliff (Diliff) / CC BY 3.0 / cropped, resized and effect-processed'
     source = 'https://commons.wikimedia.org/wiki/File:Hong_Kong_Skyline_Restitch_-_Dec_2007.jpg'
-(args.captures / 'CREDITS.txt').write_text(credit+'\n'+source+'\nOriginal effect code: mypaper, MIT.\n', encoding='utf8')
+(args.captures / 'CREDITS.txt').write_text(credit+'\n'+source+'\nOriginal effect code: Glaze, MIT.\n', encoding='utf8')
 try:
     font = ImageFont.truetype('C:/Windows/Fonts/segoeui.ttf', 16)
     small = ImageFont.truetype('C:/Windows/Fonts/segoeui.ttf', 12)
@@ -36,7 +36,7 @@ def sheet(items, pairs, name):
     height = ((len(items) + pairs - 1) // pairs) * 224 + 90
     image = Image.new('RGB', (width, height), '#10151c')
     draw = ImageDraw.Draw(image)
-    draw.text((16, 12), 'mypaper / ' + name + ' / before → after', font=font, fill='#e6edf5')
+    draw.text((16, 12), 'Glaze / ' + name + ' / before → after', font=font, fill='#e6edf5')
     for i, m in enumerate(items):
         x, y = 16 + (i % pairs) * 648, 46 + (i // pairs) * 224
         draw.text((x, y), f"{m['name']}  ·  {m['id']}", font=font, fill='#e6edf5')

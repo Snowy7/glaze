@@ -1,10 +1,10 @@
-//! The tray icon (the mypaper logo) and its right-click menu: pause, theme
+//! The tray icon (the Glaze logo) and its right-click menu: pause, theme
 //! picker, widget edit mode, the shell bars (`bars.json`), studio, restart
 //! and quit. Everything goes through `config.json` / `bars.json` (the
 //! processes apply them live) or a message to the supervisor loop, so the
 //! tray holds no state of its own.
 
-use mypaper_bars::tray_menu as wire;
+use glaze_bars::tray_menu as wire;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -13,11 +13,11 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
 
 use anyhow::{Context, Result};
-use mypaper_bars::{BarsConfig, TaskbarMode};
-use mypaper_config::Config;
-use mypaper_desktop::desktop_view::IconSize;
-use mypaper_desktop::{ConfigWatcher, watch_config};
-use mypaper_theme::LoadedTheme;
+use glaze_bars::{BarsConfig, TaskbarMode};
+use glaze_config::Config;
+use glaze_desktop::desktop_view::IconSize;
+use glaze_desktop::{ConfigWatcher, watch_config};
+use glaze_theme::LoadedTheme;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
@@ -46,9 +46,9 @@ const WM_CONFIG_CHANGED: u32 = WM_APP + 2;
 /// Posted to the supervisor thread by "Restart wallpaper".
 pub const WM_RESTART_WALLPAPER: u32 = WM_APP + 3;
 
-const CLASS: PCWSTR = w!("mypaper.tray");
+const CLASS: PCWSTR = w!("glaze.tray");
 const ICON_ID: u32 = 1;
-const STUDIO_EXE: &str = "mypaper-studio.exe";
+const STUDIO_EXE: &str = "glaze-studio.exe";
 
 const ID_PAUSE: usize = 1;
 const ID_STUDIO: usize = 2;
@@ -109,7 +109,7 @@ impl Tray {
             CreateWindowExW(
                 WS_EX_TOOLWINDOW,
                 CLASS,
-                w!("mypaper tray"),
+                w!("Glaze tray"),
                 WS_POPUP,
                 0,
                 0,
@@ -242,18 +242,18 @@ fn update_tooltip(hwnd: HWND) {
     let _ = unsafe { Shell_NotifyIconW(NIM_MODIFY, &nid) };
 }
 
-/// "mypaper: <theme name>", falling back to the configured name if the theme is unreadable.
+/// "Glaze: <theme name>", falling back to the configured name if the theme is unreadable.
 fn tooltip() -> String {
     let config = Config::load().unwrap_or_default();
-    let name = mypaper_theme::locate(Some(&config.theme))
+    let name = glaze_theme::locate(Some(&config.theme))
         .and_then(LoadedTheme::load)
         .map_or(config.theme, |loaded| loaded.theme.name);
-    format!("mypaper: {name}")
+    format!("Glaze: {name}")
 }
 
-/// The mypaper logo, every size (16–256 px PNG entries; 16–32 px are a hand-tuned small mark).
+/// The Glaze logo, every size (16–256 px PNG entries; 16–32 px are a hand-tuned small mark).
 /// Rendered from `assets/logo/mark.svg` and `mark-small.svg` by `scripts/render-logo.ps1`.
-const LOGO: &[u8] = include_bytes!("../../../assets/logo/mypaper.ico");
+const LOGO: &[u8] = include_bytes!("../../../assets/logo/glaze.ico");
 
 /// The logo at the tray's small-icon size for the system DPI.
 fn make_icon() -> HICON {
@@ -309,7 +309,7 @@ enum Command {
     /// Show or hide the desktop icons.
     ToggleDesktopIcons,
     SetIconSize(IconSize),
-    /// mypaper's own desktop right-click menu on or off (`desktop_menu.enabled`).
+    /// Glaze's own desktop right-click menu on or off (`desktop_menu.enabled`).
     ToggleDesktopMenu,
     /// The Win11 classic context menu on or off (`classic_context_menu`).
     ToggleClassicMenu,
@@ -347,11 +347,11 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
         log::warn!("{e:#}");
         Config::default()
     });
-    let themes = list_themes(&mypaper_theme::theme_roots());
+    let themes = list_themes(&glaze_theme::theme_roots());
     let studio = std::env::current_exe()
         .ok()
         .and_then(|exe| find_studio(&exe));
-    let bars = mypaper_bars::config::path()
+    let bars = glaze_bars::config::path()
         .and_then(|path| BarsConfig::load(&path))
         .unwrap_or_else(|e| {
             log::warn!("{e:#}");
@@ -417,7 +417,7 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
         append(menu, MF_STRING, ID_EDIT_WIDGETS, "Edit widgets");
         append(menu, MF_STRING, ID_OVERLAY_WIDGETS, "Show overlay widgets");
         append(menu, MF_POPUP, bars_menu.0 as usize, "Bars");
-        // Desktop: what Explorer's own View menu offers, and mypaper's menu switches. The state
+        // Desktop: what Explorer's own View menu offers, and Glaze's menu switches. The state
         // comes from Explorer over COM (with a timeout); without it the marks are left off.
         let desktop = desktop_extras::desktop_state();
         let size_mark = |size| check(desktop.is_some_and(|(current, _)| current == size));
@@ -440,7 +440,7 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
             desktop_menu,
             MF_STRING | check(config.desktop_menu.enabled),
             ID_DESKTOP_MENU,
-            "mypaper right-click menu",
+            "Glaze right-click menu",
         );
         append(
             desktop_menu,
@@ -483,7 +483,7 @@ fn show_menu(hwnd: HWND, x: i32, y: i32) {
 }
 
 fn execute(hwnd: HWND, chosen: usize, themes: &[String]) {
-    let bars = mypaper_bars::config::path()
+    let bars = glaze_bars::config::path()
         .and_then(|p| BarsConfig::load(&p))
         .unwrap_or_default();
     let studio = std::env::current_exe()
@@ -534,16 +534,16 @@ fn execute(hwnd: HWND, chosen: usize, themes: &[String]) {
 }
 
 /// Toggles the widget host's edit mode by posting its registered
-/// `mypaper.widgets.edit` message (wParam 2 = toggle) to its message-only
+/// `glaze.widgets.edit` message (wParam 2 = toggle) to its message-only
 /// window (see docs/widgets.md).
 pub(crate) fn toggle_widget_edit_mode() {
-    post_to_widget_host(w!("mypaper.widgets.edit"), "edit mode");
+    post_to_widget_host(w!("glaze.widgets.edit"), "edit mode");
 }
 
-/// Shows or hides the overlay widgets (the `mypaper.widgets.overlay` message,
+/// Shows or hides the overlay widgets (the `glaze.widgets.overlay` message,
 /// wParam 2 = toggle; docs/widgets.md).
 fn toggle_overlay_widgets() {
-    post_to_widget_host(w!("mypaper.widgets.overlay"), "overlay widgets");
+    post_to_widget_host(w!("glaze.widgets.overlay"), "overlay widgets");
 }
 
 /// Posts a registered "toggle" message (wParam 2) to the widget host's message-only window.
@@ -554,7 +554,7 @@ fn post_to_widget_host(name: PCWSTR, what: &str) {
         match FindWindowExW(
             Some(HWND_MESSAGE),
             None,
-            w!("mypaper.widgets.host"),
+            w!("glaze.widgets.host"),
             PCWSTR::null(),
         ) {
             Ok(host) if message != 0 => {
@@ -568,8 +568,8 @@ fn post_to_widget_host(name: PCWSTR, what: &str) {
 /// Sets one field of `bars.json` (the bars apply it live). Like the config, a file that doesn't
 /// parse is left alone.
 fn edit_bars(section: &str, key: &str, value: impl serde::Serialize) {
-    let result = mypaper_bars::config::path()
-        .and_then(|path| mypaper_bars::config::set_field(&path, section, key, value));
+    let result = glaze_bars::config::path()
+        .and_then(|path| glaze_bars::config::set_field(&path, section, key, value));
     if let Err(e) = result {
         log::error!("could not update bars.json: {e:#}");
     }
@@ -601,14 +601,14 @@ fn is_active(config_theme: &str, name: &str) -> bool {
 }
 
 /// Theme folder names across `roots`, sorted. A name in several roots is
-/// listed once, matching `mypaper_theme::locate`, which picks the first.
+/// listed once, matching `glaze_theme::locate`, which picks the first.
 fn list_themes(roots: &[PathBuf]) -> Vec<String> {
     roots
         .iter()
         .filter_map(|root| std::fs::read_dir(root).ok())
         .flatten()
         .flatten()
-        .filter(|entry| entry.path().join(mypaper_theme::MANIFEST).is_file())
+        .filter(|entry| entry.path().join(glaze_theme::MANIFEST).is_file())
         .filter_map(|entry| entry.file_name().into_string().ok())
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -760,8 +760,8 @@ mod tests {
     #[test]
     #[ignore = "takes over the tray; launch only under IMPLEMENTING.md's desktop lock"]
     fn live_tray_fixture() {
-        mypaper_desktop::init_logging();
-        mypaper_desktop::enable_dpi_awareness();
+        glaze_desktop::init_logging();
+        glaze_desktop::enable_dpi_awareness();
         let _tray = Tray::new().unwrap();
         let mut msg = windows::Win32::UI::WindowsAndMessaging::MSG::default();
         // SAFETY: the fixture's window and ordinary message loop live on this thread.
@@ -806,7 +806,7 @@ mod tests {
 
     impl Scratch {
         fn new(name: &str) -> Self {
-            let dir = std::env::temp_dir().join(format!("mypaper-{name}-{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!("glaze-{name}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).unwrap();
             Self(dir)
@@ -921,16 +921,16 @@ mod tests {
     #[test]
     fn finds_studio_beside_exe() {
         let root = Scratch::new("studio");
-        let exe = root.0.join("target/debug/mypaper-core.exe");
+        let exe = root.0.join("target/debug/glaze-core.exe");
         assert_eq!(find_studio(&exe), None);
 
-        root.touch("target/release/mypaper-studio.exe");
+        root.touch("target/release/glaze-studio.exe");
         assert_eq!(find_studio(&exe), None);
 
-        root.touch("target/debug/mypaper-studio.exe");
+        root.touch("target/debug/glaze-studio.exe");
         assert_eq!(
             find_studio(&exe),
-            Some(root.0.join("target/debug/mypaper-studio.exe"))
+            Some(root.0.join("target/debug/glaze-studio.exe"))
         );
     }
 }

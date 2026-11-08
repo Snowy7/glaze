@@ -1,9 +1,9 @@
-//! A live harness for the desktop right-click menu: drives a running `mypaper-shell` (started by
+//! A live harness for the desktop right-click menu: drives a running `glaze-shell` (started by
 //! core, or by hand) with injected input from this separate process, as hardware input would,
 //! and reports what it measured.
 //!
 //! ```text
-//! cargo run --release -p mypaper-shell --example menu_live -- [--x X --y Y] [--cycles N] [--hold MS] [--hover] [--shot PATH]
+//! cargo run --release -p glaze-shell --example menu_live -- [--x X --y Y] [--cycles N] [--hold MS] [--hover] [--shot PATH]
 //! ```
 //!
 //! - opens the menu with right-clicks at (X, Y) (a point on the bare desktop; the default is the
@@ -15,7 +15,7 @@
 //!   opens) and takes a screenshot with `--shot`.
 //!
 //! It moves the real cursor and restores it afterwards. Run it only with the desktop in front,
-//! under the desktop lock, with no other mypaper menu running.
+//! under the desktop lock, with no other Glaze menu running.
 
 use std::time::{Duration, Instant};
 
@@ -30,7 +30,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::w;
 
-const SHOT_SCRIPT: &str = r"C:\Users\you\AppData\Local\Temp\mypaper-tools\shot.ps1";
+const SHOT_SCRIPT: &str = r"C:\Users\you\AppData\Local\Temp\glaze-tools\shot.ps1";
 
 struct Args {
     x: Option<i32>,
@@ -83,7 +83,7 @@ fn send(inputs: &[INPUT]) {
     unsafe { SendInput(inputs, size_of::<INPUT>() as i32) };
 }
 
-/// The menu's visible panels (`mypaper-ui` surfaces named "mypaper desktop menu"), with their
+/// The menu's visible panels (`glaze-ui` surfaces named "Glaze desktop menu"), with their
 /// window rectangles.
 fn visible_panels() -> Vec<(HWND, (i32, i32, i32, i32))> {
     let mut panels = Vec::new();
@@ -91,7 +91,7 @@ fn visible_panels() -> Vec<(HWND, (i32, i32, i32, i32))> {
     // SAFETY: plain window lookups.
     unsafe {
         while let Ok(hwnd) =
-            FindWindowExW(None, after, w!("mypaper.ui"), w!("mypaper desktop menu"))
+            FindWindowExW(None, after, w!("glaze.ui"), w!("Glaze desktop menu"))
         {
             if IsWindowVisible(hwnd).as_bool() {
                 let mut r = Default::default();
@@ -174,9 +174,9 @@ fn report(name: &str, mut samples: Vec<Duration>) {
 }
 
 fn main() -> Result<()> {
-    mypaper_desktop::enable_dpi_awareness();
+    glaze_desktop::enable_dpi_awareness();
     let args = args()?;
-    let monitors = mypaper_desktop::monitors();
+    let monitors = glaze_desktop::monitors();
     let leftmost = monitors.iter().min_by_key(|m| m.x).context("no monitors")?;
     let at = (
         args.x.unwrap_or(leftmost.x + leftmost.width / 2),

@@ -2,5 +2,5 @@
 //! Core starts the service with CREATE_NO_WINDOW (no idle console allocation).
 
 fn main() -> anyhow::Result<()> {
-    mypaper_index::service::cli(std::env::args().skip(1).collect())
+    glaze_index::service::cli(std::env::args().skip(1).collect())
 }

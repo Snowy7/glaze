@@ -1,6 +1,6 @@
 {
   "animated": false,
-  "author": "mypaper",
+  "author": "Glaze",
   "category": "color",
   "cost": 0.447,
   "cost_estimated": false,
@@ -40,5 +40,5 @@
       "source": "looks.wgsl"
     }
   ],
-  "url": "https://github.com/Snowy7/mypaper"
+  "url": "https://github.com/Snowy7/glaze"
 }

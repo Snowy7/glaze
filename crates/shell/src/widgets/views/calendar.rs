@@ -7,9 +7,9 @@ use super::{
 };
 use crate::widgets::model::Model;
 use crate::widgets::time;
-use mypaper_ui::calendar::{Date, MONTHS, MonthGrid, WEEKDAYS};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Align, ButtonKind, Rect, Rgba, Role, TextRole};
+use glaze_ui::calendar::{Date, MONTHS, MonthGrid, WEEKDAYS};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Align, ButtonKind, Rect, Rgba, Role, TextRole};
 use serde_json::Value;
 
 pub fn event_color(index: usize) -> Rgba {
@@ -302,7 +302,7 @@ fn event_row(c: &mut Ctx, row: Rect, index: usize, event: &Value, date: Option<&
     let hovered = matches!(c.m.hover, Some(h) if h == edit || h == delete);
     let (del, main) = if read_only{(Rect::default(),row)}else{row.take_right(row.height(), 0.0)};
     if !read_only{c.control(edit, main, radius, Role::Button, "Edit event", None);}
-    let inner = main.inset(mypaper_ui::Insets::xy(c.px(6.0), 0.0));
+    let inner = main.inset(glaze_ui::Insets::xy(c.px(6.0), 0.0));
     let (dot, rest) = inner.take_left(c.px(7.0), c.px(8.0));
     let tint = source_color(event);
     let d = c.px(7.0);
@@ -415,7 +415,7 @@ fn tile(c: &mut Ctx, r: Rect) {
     .min(r.height() / s * 0.78)
     .max(20.0);
     let number = c.display(size, 500);
-    let number = mypaper_ui::TextStyle {
+    let number = glaze_ui::TextStyle {
         tracking: -0.04 * number.size,
         ..number
     };

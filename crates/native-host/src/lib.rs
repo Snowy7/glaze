@@ -1,4 +1,4 @@
-//! Native DLLs live only in `mypaper-native-host.exe`, never in this client library.
+//! Native DLLs live only in `glaze-native-host.exe`, never in this client library.
 //! Use the blocking supervisor from the platform's worker lane, not a UI thread.
 pub mod protocol;
 #[cfg(windows)]

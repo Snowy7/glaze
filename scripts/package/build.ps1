@@ -30,19 +30,23 @@ try {
     }
     if ($Version) { $manifest.Package.Identity.Version = $Version.ToString(4) }
     $manifest.Save((Join-Path $staging 'AppxManifest.xml'))
-    # Tiny, local identity assets; the application binaries stay at ExternalLocation.
+    # Use the app mark for Windows identity; Files embeds its separate folder mark.
     Add-Type -AssemblyName System.Drawing
+    $logoRoot = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'assets\logo\png'
     foreach ($asset in @(@('StoreLogo', 50), @('Square44x44Logo', 44), @('Square150x150Logo', 150))) {
         $bitmap = New-Object Drawing.Bitmap ([int]$asset[1]), ([int]$asset[1])
         $graphics = [Drawing.Graphics]::FromImage($bitmap)
+        $size = [int]$asset[1]
+        $sourceSize = if ($size -le 32) { 32 } elseif ($size -le 64) { 64 } else { 256 }
+        $source = [Drawing.Image]::FromFile((Join-Path $logoRoot "mark-$sourceSize.png"))
         try {
-            $graphics.Clear([Drawing.Color]::FromArgb(255, 36, 58, 77))
-            $margin = [int]$asset[1] / 4
-            $graphics.FillRectangle([Drawing.Brushes]::White, $margin, $margin, $margin * 2, $margin * 2)
+            $graphics.Clear([Drawing.Color]::Transparent)
+            $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $graphics.DrawImage($source, 0, 0, $size, $size)
             $bitmap.Save((Join-Path $staging "Assets\$($asset[0]).png"), [Drawing.Imaging.ImageFormat]::Png)
-        } finally { $graphics.Dispose(); $bitmap.Dispose() }
+        } finally { $source.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
     }
-    $package = Join-Path $OutputDirectory 'mypaper.Desktop.msix'
+    $package = Join-Path $OutputDirectory 'glaze.Desktop.msix'
     Invoke-PackageTool (Get-SdkTool 'makeappx.exe') @('pack', '/o', '/nv', '/d', $staging, '/p', $package)
     & "$PSScriptRoot\sign.ps1" -PackagePath $package -CertificateThumbprint $CertificateThumbprint -TimestampUrl $TimestampUrl
     $package

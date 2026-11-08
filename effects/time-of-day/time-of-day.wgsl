@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 // Requires the engine's real local clock in the prelude; elapsed animation time is unsuitable.
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let base = sample_src(uv);

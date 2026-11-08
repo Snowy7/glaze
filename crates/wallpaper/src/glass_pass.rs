@@ -14,8 +14,8 @@ use std::time::Instant;
 
 use anyhow::Result;
 use liquid_rust as lr;
-use mypaper_desktop::{Rect, monitor_infos};
-use mypaper_glass_ipc::{Plate, Reader, Style};
+use glaze_desktop::{Rect, monitor_infos};
+use glaze_glass_ipc::{Plate, Reader, Style};
 use windows::Win32::Foundation::HANDLE;
 
 use crate::gpu::{Gpu, KeptFrame};
@@ -353,7 +353,7 @@ mod tests {
             id: 7,
             rect: [-2544.25, 77.0, 309.0, 307.0],
             radius: 22.0,
-            material: mypaper_glass_ipc::Material::default(),
+            material: glaze_glass_ipc::Material::default(),
         };
         pass.set_plates(vec![p]);
         assert!(pass.take_dirty(0));

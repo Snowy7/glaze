@@ -2,7 +2,7 @@
   "when": "2026-11-04 04:24",
   "label": "baseline-widgets",
   "machine": "16 logical CPUs, screens 2560x1440 + 2560x1440",
-  "build": "C:\\mypaper-targets\\perf\\baseline",
+  "build": "C:\\glaze-targets\\perf\\baseline",
   "plan": "4 starts per scenario (1 cold, then warm), CPU windows of 10 s after 5 s settling",
   "scenarios": [
     {
@@ -178,21 +178,21 @@
       "processes": [
         {
           "pid": 62176,
-          "name": "mypaper-core.exe",
+          "name": "glaze-core.exe",
           "group": "core",
           "private_mb": 1.98046875,
           "working_set_mb": 11.90234375
         },
         {
           "pid": 55004,
-          "name": "mypaper-wallpaper.exe",
+          "name": "glaze-wallpaper.exe",
           "group": "wallpaper",
           "private_mb": 301.765625,
           "working_set_mb": 15.95703125
         },
         {
           "pid": 63672,
-          "name": "mypaper-widgets.exe",
+          "name": "glaze-widgets.exe",
           "group": "widgets",
           "private_mb": 9.64453125,
           "working_set_mb": 34.13671875
@@ -456,28 +456,28 @@
       "processes": [
         {
           "pid": 56632,
-          "name": "mypaper-core.exe",
+          "name": "glaze-core.exe",
           "group": "core",
           "private_mb": 1.984375,
           "working_set_mb": 11.9140625
         },
         {
           "pid": 46240,
-          "name": "mypaper-wallpaper.exe",
+          "name": "glaze-wallpaper.exe",
           "group": "wallpaper",
           "private_mb": 289.36328125,
           "working_set_mb": 18.8828125
         },
         {
           "pid": 50724,
-          "name": "mypaper-widgets.exe",
+          "name": "glaze-widgets.exe",
           "group": "widgets",
           "private_mb": 10.16796875,
           "working_set_mb": 34.265625
         },
         {
           "pid": 12120,
-          "name": "mypaper-bars.exe",
+          "name": "glaze-bars.exe",
           "group": "bars",
           "private_mb": 7.21875,
           "working_set_mb": 39.0625

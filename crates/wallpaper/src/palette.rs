@@ -1,7 +1,7 @@
 //! Wallpaper palette: once per newly loaded theme, the engine shrinks the
 //! first screen's first kept frame (the wallpaper as drawn) to a thumbnail on
 //! the GPU, reads that back once, and writes a dominant and an accent color to
-//! `%LOCALAPPDATA%\mypaper\palette.json` for core's `"auto"` colors. Never per
+//! `%LOCALAPPDATA%\glaze\palette.json` for core's `"auto"` colors. Never per
 //! frame: a theme load costs one thumbnail blit and a 9 KB readback, and no
 //! screen-sized texture (on the integrated GPU a freed heap stays committed).
 
@@ -9,9 +9,9 @@ use std::path::Path;
 use std::sync::mpsc;
 
 use anyhow::{Context, Result, bail};
-use mypaper_theme::{Color, Fit};
-use mypaper_tweaks::color::Hsl;
-use mypaper_tweaks::palette::{Palette, Snapshot};
+use glaze_theme::{Color, Fit};
+use glaze_tweaks::color::Hsl;
+use glaze_tweaks::palette::{Palette, Snapshot};
 
 use crate::gpu::{Gpu, KeptFrame};
 use crate::sources;
@@ -36,14 +36,14 @@ const ACCENT_LIGHTNESS: (f32, f32) = (0.45, 0.62);
 pub fn publish(gpu: &Gpu, kept: &KeptFrame, theme: &Path) {
     let result = capture(gpu, kept).and_then(|pixels| {
         let palette = extract(&pixels).context("the first frame has no usable color")?;
-        mypaper_tweaks::palette::write(&Snapshot {
+        glaze_tweaks::palette::write(&Snapshot {
             theme: theme.to_owned(),
             palette,
         })?;
         log::info!(
             "palette: dominant {}, accent {}",
-            mypaper_tweaks::color::hex(palette.dominant),
-            mypaper_tweaks::color::hex(palette.accent)
+            glaze_tweaks::color::hex(palette.dominant),
+            glaze_tweaks::color::hex(palette.accent)
         );
         Ok(())
     });

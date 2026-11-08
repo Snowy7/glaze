@@ -18,7 +18,7 @@ lock, leave the desktop restored, kill headless browsers) still applies.
 - Keep every saved state compiling. Change shared APIs additively first, migrate callers, then
   remove the old API in the same commit series. If `cargo check` fails in files you don't own,
   wait a minute and retry; don't fix them.
-- Deploy only with `scripts/deploy-local.ps1` from `C:\mypaper-targets\main` built from the shared
+- Deploy only with `scripts/deploy-local.ps1` from `C:\glaze-targets\main` built from the shared
   checkout. Never copy exes from a snapshot or private target into `target\release`: it puts other
   agents' work back to an older build (2026-11-06 07:18).
 - A multi-step refactor that can't compile midway happens in a copy (`git archive` snapshot), not
@@ -30,19 +30,19 @@ lock, leave the desktop restored, kill headless browsers) still applies.
 ## Seeing it live
 
 - The user's desktop runs `target\release\*` from this repo. To put your work live:
-  `$env:CARGO_TARGET_DIR = "C:\mypaper-targets\main"; cargo build --release --workspace`, then
+  `$env:CARGO_TARGET_DIR = "C:\glaze-targets\main"; cargo build --release --workspace`, then
   `powershell -NoProfile -File scripts/deploy-local.ps1` (takes the desktop lock, restarts
-  mypaper, re-registers identity). Other agents' committed and uncommitted work ships too; that's
+  Glaze, re-registers identity). Other agents' committed and uncommitted work ships too; that's
   fine.
-- Use the desktop lock (`C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock`) for any
-  synthetic input or screenshots, hold it briefly, and leave mypaper running the latest build when
+- Use the desktop lock (`C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock`) for any
+  synthetic input or screenshots, hold it briefly, and leave Glaze running the latest build when
   you release it. The lock is a **directory**: take it with `New-Item -ItemType Directory` (fails if
   it exists), release it with `Remove-Item -Recurse`. Never create it as a file: a file blocks every
   other agent's deploy (2026-11-06 03:19).
 - Hold the lock for one action at a time (at most ~2 minutes), then release it and wait at least
   30 s before taking it again, so others get a turn. A long soak or sampling run doesn't hold the
   lock between its steps.
-- Never run an exe from `C:\mypaper-targets\main\release`: a running exe is locked and breaks every
+- Never run an exe from `C:\glaze-targets\main\release`: a running exe is locked and breaks every
   other agent's workspace build there. Run test instances from your own target dir or the deployed
   `target\release`.
 - Verify visually with DPI-aware screenshots (PNG) of the live desktop. Look at them yourself
@@ -58,7 +58,7 @@ existing component looks; if you think one is wrong, say so in your report inste
 ## The user is at the desktop
 
 The user works on this machine while we test. Before any synthetic click or key, check that the
-target point is a mypaper window (`WindowFromPoint` → process is `mypaper-*`) and that the
+target point is a Glaze window (`WindowFromPoint` → process is `glaze-*`) and that the
 foreground isn't one of their apps you'd type into; otherwise skip that step. Never minimize or
 move their windows.
 

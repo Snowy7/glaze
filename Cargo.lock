@@ -1518,6 +1518,355 @@ dependencies = [
 ]
 
 [[package]]
+name = "glaze-app-styler"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-inject",
+ "glaze-theme",
+ "glaze-tweaks",
+ "log",
+ "serde",
+ "serde_json",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
+name = "glaze-bars"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-theme",
+ "log",
+ "serde",
+ "serde_json",
+ "windows",
+ "windows-core",
+ "windows-numerics",
+]
+
+[[package]]
+name = "glaze-config"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "glaze-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-bars",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-theme",
+ "glaze-tweaks",
+ "log",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "glaze-desktop"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "env_logger",
+ "glaze-config",
+ "glaze-fswatch",
+ "log",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "glaze-files"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "env_logger",
+ "glaze-bars",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-index",
+ "glaze-theme",
+ "glaze-tweaks",
+ "log",
+ "serde",
+ "serde_json",
+ "stillkit",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
+name = "glaze-fswatch"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "windows",
+]
+
+[[package]]
+name = "glaze-glass-ipc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "windows",
+]
+
+[[package]]
+name = "glaze-index"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "glaze-config",
+ "glaze-fswatch",
+ "glaze-tweaks",
+ "globset",
+ "memchr",
+ "memmap2",
+ "rayon",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "glaze-inject"
+version = "0.1.0"
+dependencies = [
+ "windows",
+]
+
+[[package]]
+name = "glaze-integrations"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "chrono",
+ "hyper",
+ "log",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "windows",
+ "windows-future",
+]
+
+[[package]]
+name = "glaze-native-host"
+version = "0.1.0"
+
+[[package]]
+name = "glaze-perf"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-bars",
+ "glaze-desktop",
+ "serde",
+ "serde_json",
+ "toml",
+ "windows",
+]
+
+[[package]]
+name = "glaze-plugin-api"
+version = "0.1.0"
+dependencies = [
+ "glaze-plugin-sdk",
+ "postcard",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "glaze-plugin-rss"
+version = "0.1.0"
+dependencies = [
+ "quick-xml 0.42.0",
+ "serde",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
+name = "glaze-plugin-sdk"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "glaze-plugin-weather"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "glaze-plugins"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "env_logger",
+ "glaze-native-host",
+ "glaze-plugin-api",
+ "glaze-plugin-sdk",
+ "log",
+ "serde",
+ "serde_json",
+ "url",
+ "wasmtime",
+ "wasmtime-wasi",
+ "windows",
+]
+
+[[package]]
+name = "glaze-shell"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "bytemuck",
+ "glaze-bars",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-fswatch",
+ "glaze-glass-ipc",
+ "glaze-index",
+ "glaze-integrations",
+ "glaze-plugin-api",
+ "glaze-plugin-sdk",
+ "glaze-plugin-weather",
+ "glaze-theme",
+ "glaze-tweaks",
+ "glaze-widgets",
+ "log",
+ "resvg",
+ "serde",
+ "serde_json",
+ "stillkit",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
+name = "glaze-studio"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-bars",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-integrations",
+ "glaze-plugin-weather",
+ "glaze-shell",
+ "glaze-theme",
+ "glaze-widgets",
+ "log",
+ "notify",
+ "serde",
+ "serde_json",
+ "stillkit",
+ "windows",
+]
+
+[[package]]
+name = "glaze-theme"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-config",
+ "naga",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "glaze-tweaks"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-config",
+ "glaze-fswatch",
+ "glaze-inject",
+ "glaze-theme",
+ "log",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "glaze-wallpaper"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "dioxus-devtools",
+ "glam",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-fswatch",
+ "glaze-glass-ipc",
+ "glaze-theme",
+ "glaze-tweaks",
+ "gltf",
+ "liquid-rust",
+ "log",
+ "pollster",
+ "raw-window-handle",
+ "serde_json",
+ "subsecond",
+ "webview2-com",
+ "wgpu",
+ "windows",
+ "windows-collections",
+ "windows-core",
+ "windows-future",
+]
+
+[[package]]
+name = "glaze-widgets"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-config",
+ "glaze-integrations",
+ "glaze-plugin-api",
+ "glaze-plugin-sdk",
+ "glaze-theme",
+ "log",
+ "png 0.18.1",
+ "quick-xml 0.42.0",
+ "serde",
+ "serde_json",
+ "windows",
+ "zip",
+]
+
+[[package]]
 name = "glifo"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2212,355 +2561,6 @@ name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
-
-[[package]]
-name = "mypaper-app-styler"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-inject",
- "mypaper-theme",
- "mypaper-tweaks",
- "serde",
- "serde_json",
- "windows",
- "windows-core",
-]
-
-[[package]]
-name = "mypaper-bars"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-theme",
- "serde",
- "serde_json",
- "windows",
- "windows-core",
- "windows-numerics",
-]
-
-[[package]]
-name = "mypaper-config"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mypaper-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "mypaper-bars",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-theme",
- "mypaper-tweaks",
- "serde",
- "serde_json",
- "windows",
-]
-
-[[package]]
-name = "mypaper-desktop"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "env_logger",
- "log",
- "mypaper-config",
- "mypaper-fswatch",
- "serde",
- "serde_json",
- "windows",
-]
-
-[[package]]
-name = "mypaper-files"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "env_logger",
- "log",
- "mypaper-bars",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-index",
- "mypaper-theme",
- "mypaper-tweaks",
- "serde",
- "serde_json",
- "stillkit",
- "windows",
- "windows-core",
-]
-
-[[package]]
-name = "mypaper-fswatch"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "windows",
-]
-
-[[package]]
-name = "mypaper-glass-ipc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "windows",
-]
-
-[[package]]
-name = "mypaper-index"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "globset",
- "memchr",
- "memmap2",
- "mypaper-config",
- "mypaper-fswatch",
- "mypaper-tweaks",
- "rayon",
- "serde",
- "serde_json",
- "windows",
-]
-
-[[package]]
-name = "mypaper-inject"
-version = "0.1.0"
-dependencies = [
- "windows",
-]
-
-[[package]]
-name = "mypaper-integrations"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "chrono",
- "hyper",
- "log",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "windows",
- "windows-future",
-]
-
-[[package]]
-name = "mypaper-native-host"
-version = "0.1.0"
-
-[[package]]
-name = "mypaper-perf"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "mypaper-bars",
- "mypaper-desktop",
- "serde",
- "serde_json",
- "toml",
- "windows",
-]
-
-[[package]]
-name = "mypaper-plugin-api"
-version = "0.1.0"
-dependencies = [
- "mypaper-plugin-sdk",
- "postcard",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mypaper-plugin-rss"
-version = "0.1.0"
-dependencies = [
- "quick-xml 0.42.0",
- "serde",
- "serde_json",
- "ureq",
-]
-
-[[package]]
-name = "mypaper-plugin-sdk"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "wit-bindgen",
-]
-
-[[package]]
-name = "mypaper-plugin-weather"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "windows",
-]
-
-[[package]]
-name = "mypaper-plugins"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "env_logger",
- "log",
- "mypaper-native-host",
- "mypaper-plugin-api",
- "mypaper-plugin-sdk",
- "serde",
- "serde_json",
- "url",
- "wasmtime",
- "wasmtime-wasi",
- "windows",
-]
-
-[[package]]
-name = "mypaper-shell"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "bytemuck",
- "log",
- "mypaper-bars",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-fswatch",
- "mypaper-glass-ipc",
- "mypaper-index",
- "mypaper-integrations",
- "mypaper-plugin-api",
- "mypaper-plugin-sdk",
- "mypaper-plugin-weather",
- "mypaper-theme",
- "mypaper-tweaks",
- "mypaper-widgets",
- "resvg",
- "serde",
- "serde_json",
- "stillkit",
- "windows",
- "windows-core",
-]
-
-[[package]]
-name = "mypaper-studio"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "mypaper-bars",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-integrations",
- "mypaper-plugin-weather",
- "mypaper-shell",
- "mypaper-theme",
- "mypaper-widgets",
- "notify",
- "serde",
- "serde_json",
- "stillkit",
- "windows",
-]
-
-[[package]]
-name = "mypaper-theme"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "mypaper-config",
- "naga",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mypaper-tweaks"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "mypaper-config",
- "mypaper-fswatch",
- "mypaper-inject",
- "mypaper-theme",
- "serde",
- "serde_json",
- "windows",
-]
-
-[[package]]
-name = "mypaper-wallpaper"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "dioxus-devtools",
- "glam",
- "gltf",
- "liquid-rust",
- "log",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-fswatch",
- "mypaper-glass-ipc",
- "mypaper-theme",
- "mypaper-tweaks",
- "pollster",
- "raw-window-handle",
- "serde_json",
- "subsecond",
- "webview2-com",
- "wgpu",
- "windows",
- "windows-collections",
- "windows-core",
- "windows-future",
-]
-
-[[package]]
-name = "mypaper-widgets"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "mypaper-config",
- "mypaper-integrations",
- "mypaper-plugin-api",
- "mypaper-plugin-sdk",
- "mypaper-theme",
- "png 0.18.1",
- "quick-xml 0.42.0",
- "serde",
- "serde_json",
- "windows",
- "zip",
-]
 
 [[package]]
 name = "naga"

@@ -5,10 +5,10 @@ use super::*;
 fn discord_plugin_size_sheet_and_native_action_hits() {
     use views::plugin::{ACTION, Hit, action_at};
     let faces: Value = serde_json::from_str(include_str!("../golden/faces.json")).unwrap();
-    let bot: mypaper_plugin_sdk::Face = serde_json::from_value(faces["bot"]["large"].clone()).unwrap();
+    let bot: glaze_plugin_sdk::Face = serde_json::from_value(faces["bot"]["large"].clone()).unwrap();
     assert!(matches!(action_at(&bot,ACTION+3),Some(Hit::Select {action,..}) if action=="channel"));
     assert_eq!(action_at(&bot,ACTION+4),Some(Hit::Field("send".into())));
-    let readonly: mypaper_plugin_sdk::Face = serde_json::from_value(faces["readonly"]["large"].clone()).unwrap();
+    let readonly: glaze_plugin_sdk::Face = serde_json::from_value(faces["readonly"]["large"].clone()).unwrap();
     let mut ui = Ui::new().unwrap();
     let mut sheet = DisplayList::default();
     sheet.ops.push(Op::Fill { rect:Rect::new(0.0,0.0,1100.0,1120.0),radius:0.0,color:Rgba::rgb8([22,29,40],1.0) });

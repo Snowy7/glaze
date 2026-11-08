@@ -1,14 +1,14 @@
 # One brief desktop action: atomic config replacement and a change in a theme subdirectory.
 # Restores the exact config bytes if nothing else wrote them; otherwise restores only our FPS.
 $ErrorActionPreference = 'Stop'
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 if (-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) { throw 'Desktop is busy' }
-$path = Join-Path $env:APPDATA 'mypaper\config.json'
+$path = Join-Path $env:APPDATA 'glaze\config.json'
 $probe = $null
 $temporary = "$path.watch-merge.tmp"
 $written = $null
 $created = $false
-$out = 'C:\mypaper-targets\watch-merge\evidence\reload'
+$out = 'C:\glaze-targets\watch-merge\evidence\reload'
 function Write-Config([string]$text) {
     [IO.File]::WriteAllText($temporary, $text, [Text.UTF8Encoding]::new($false))
     Move-Item -LiteralPath $temporary -Destination $path -Force
@@ -20,8 +20,8 @@ try {
     $originalBytes = [IO.File]::ReadAllBytes($path)
     New-Item -ItemType Directory -Force -Path $out | Out-Null
     if (Test-Path -LiteralPath $probe) { throw 'Theme proof path already exists' }
-    $before = Get-Process mypaper-wallpaper
-    $log = Join-Path $env:LOCALAPPDATA 'mypaper\mypaper.log'
+    $before = Get-Process glaze-wallpaper
+    $log = Join-Path $env:LOCALAPPDATA 'glaze\glaze.log'
     $offset = (Get-Item -LiteralPath $log).Length
     $config = $original | ConvertFrom-Json
     if ($config.theme -ne 'rain-city') { throw 'Reload proof expects the currently selected rain-city theme' }
@@ -33,7 +33,7 @@ try {
     [IO.File]::WriteAllText($probe, 'Temporary recursive watcher proof. Removed in finally.')
     $created = $true
     Start-Sleep -Seconds 2
-    $after = Get-Process mypaper-wallpaper
+    $after = Get-Process glaze-wallpaper
     if ($before.Id -ne $after.Id) { throw 'Engine restarted during reload proof' }
     $stream = [IO.File]::Open($log, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
     try {

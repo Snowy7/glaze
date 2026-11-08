@@ -1,4 +1,4 @@
-//! `mypaper-wallpaper --preview <theme dir> --out <file.jpg> [--size WxH] [--fps N]`: Studio's
+//! `glaze-wallpaper --preview <theme dir> --out <file.jpg> [--size WxH] [--fps N]`: Studio's
 //! live preview of a draft theme. A headless child that never touches the desktop: it renders
 //! the theme offscreen at `size`, writes `<out>.tmp` and renames it over `out` (so a reader
 //! never sees half a file), and renders again whenever a file in the theme folder or a used
@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use mypaper_theme::LoadedTheme;
+use glaze_theme::LoadedTheme;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::System::Threading::{GetCurrentThreadId, INFINITE};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -68,13 +68,13 @@ pub fn run(args: PreviewArgs) -> Result<()> {
     };
     // The integrated GPU: a preview is small, and the desktop may be using the other one.
     let gpu = Gpu::opened(crate::gpu::Opening::start(
-        mypaper_config::GpuPreference::Integrated,
+        glaze_config::GpuPreference::Integrated,
     ));
     // SAFETY: no preconditions.
     let thread = unsafe { GetCurrentThreadId() };
     // Our own output (and Studio's previews, logs and credits) must not reload the draft.
     let out = std::path::absolute(&args.out)?;
-    let _watch = mypaper_fswatch::Watch::directory(&args.theme, true, move |event| {
+    let _watch = glaze_fswatch::Watch::directory(&args.theme, true, move |event| {
         let ignored = |path: &std::path::Path| {
             let name = path
                 .file_name()
@@ -86,7 +86,7 @@ pub fn run(args: PreviewArgs) -> Result<()> {
                 || name.starts_with("preview.")
                 || name.eq_ignore_ascii_case("CREDITS.md")
         };
-        if let mypaper_fswatch::Event::Paths(paths) = &event
+        if let glaze_fswatch::Event::Paths(paths) = &event
             && paths.iter().all(|p| ignored(p))
         {
             return;

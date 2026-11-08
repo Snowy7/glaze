@@ -1,6 +1,6 @@
 //! Executes the shipped WASM through the host; request effects are inspected, never dispatched.
-use crate::runtime::exports::mypaper::plugin::lifecycle::{Action, Event, FaceOpen};
-use crate::runtime::mypaper::plugin::{
+use crate::runtime::exports::glaze::plugin::lifecycle::{Action, Event, FaceOpen};
+use crate::runtime::glaze::plugin::{
     http::{Reply, Response},
     types::SizeClass,
 };
@@ -15,7 +15,7 @@ use serde_json::json;
 fn grok_wasm_brokers_routines_and_keeps_drafts_explicit() -> anyhow::Result<()> {
     let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins/grok");
     let mut manifest = Manifest::load(&dir)?;
-    let scratch = std::env::temp_dir().join(format!("mypaper-grok-wasm-{}", std::process::id()));
+    let scratch = std::env::temp_dir().join(format!("glaze-grok-wasm-{}", std::process::id()));
     let runtime = Runtime::new(scratch.join("cache"), scratch.join("data"))?;
     let (component, _) = runtime.component(&manifest, &dir)?;
     let id = format!("wasm-test-{}", std::process::id());
@@ -122,7 +122,7 @@ fn grok_wasm_brokers_routines_and_keeps_drafts_explicit() -> anyhow::Result<()> 
                 .file_name()
                 .unwrap()
                 .to_string_lossy()
-                .starts_with("mypaper-grok-wasm-")
+                .starts_with("glaze-grok-wasm-")
     );
     let _ = std::fs::remove_dir_all(&scratch);
     result

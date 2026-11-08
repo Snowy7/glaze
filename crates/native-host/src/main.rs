@@ -10,13 +10,13 @@ fn main() {
         let Some(pipe) = args.next() else {
             std::process::exit(2)
         };
-        if mypaper_native_host::run_host(&pipe).is_err() {
+        if glaze_native_host::run_host(&pipe).is_err() {
             std::process::exit(1);
         }
     }
     #[cfg(not(windows))]
     {
-        eprintln!("mypaper-native-host requires Windows");
+        eprintln!("glaze-native-host requires Windows");
         std::process::exit(2);
     }
 }

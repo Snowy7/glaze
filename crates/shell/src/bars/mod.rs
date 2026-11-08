@@ -1,4 +1,4 @@
-//! Native top bar and dock. Windows services live in `mypaper-bars`; UI and motion live here.
+//! Native top bar and dock. Windows services live in `glaze-bars`; UI and motion live here.
 mod bar;
 pub(crate) mod icons;
 pub(crate) mod look;
@@ -19,7 +19,7 @@ pub(crate) mod view;
 use crate::{flyouts, glass};
 use anyhow::Result;
 use bar::Bar;
-use mypaper_bars::{
+use glaze_bars::{
     self as providers, BarsConfig, Module, ModuleRef, TaskbarMode,
     actions::{BarKind, Button as TrayButton, Direction, MediaAction, PowerAction},
     config::{self, Action, BuiltinAction, Extra, Pinned, Trigger},
@@ -30,10 +30,10 @@ use mypaper_bars::{
     trash::{self, TrashWatch},
     tray_data::Click,
 };
-use mypaper_config::Config;
-use mypaper_desktop::{Monitor, fullscreen_app_monitor, monitor_infos, startup};
-use mypaper_theme::{Appearance, LoadedTheme};
-use mypaper_ui::{
+use glaze_config::Config;
+use glaze_desktop::{Monitor, fullscreen_app_monitor, monitor_infos, startup};
+use glaze_theme::{Appearance, LoadedTheme};
+use glaze_ui::{
     Button, Entry, Event, Menu, Outcome, Point, Rect, SurfaceId, Ticker, Ui, screen_at,
 };
 use services::Services;
@@ -84,7 +84,7 @@ struct Press {
 pub struct Bars {
     studio_active: bool,
     studio_config: Option<BarsConfig>,
-    studio_look: Option<mypaper_config::Look>,
+    studio_look: Option<glaze_config::Look>,
     studio_theme: Option<Option<LoadedTheme>>,
     studio_image_root: Option<std::path::PathBuf>,
     studio_stamp: (Option<u64>, u64, Option<u64>),
@@ -98,17 +98,17 @@ pub struct Bars {
     taskbar: Taskbar<NativeShell>,
     journal: Option<JournalLease>,
     broadcast: Option<Broadcast>,
-    _control: Option<mypaper_desktop::ControlWindow>,
+    _control: Option<glaze_desktop::ControlWindow>,
     trash: Option<TrashWatch>,
     ticker: Ticker,
     images: view::Images,
     menu: Option<Menu<Command>>,
     tray_menu: Option<tray_menu::Host>,
     press: Option<Press>,
-    watches: Vec<mypaper_fswatch::Watch>,
-    theme_watch: Option<mypaper_fswatch::Watch>,
+    watches: Vec<glaze_fswatch::Watch>,
+    theme_watch: Option<glaze_fswatch::Watch>,
     appearance: Appearance,
-    theme_glass: Option<mypaper_theme::Liquid>,
+    theme_glass: Option<glaze_theme::Liquid>,
     system: providers::accent::System,
     published: BTreeMap<String, Vec<glass::Plate>>,
     config_due: Option<Instant>,
@@ -126,7 +126,7 @@ pub struct Bars {
     preview: Option<preview::Preview>,
     preview_due: Option<(Instant, usize, String)>,
     preview_close: Option<Instant>,
-    tooltip: Option<mypaper_ui::Surface>,
+    tooltip: Option<glaze_ui::Surface>,
     tooltip_due: Option<(Instant, usize, u32)>,
     /// When the shown tooltip started fading in.
     tooltip_fade: Option<Instant>,
@@ -172,7 +172,7 @@ impl Bars {
             studio_stamp: (None, 0, None),
             studio_dock_pending: false,
             studio_dock_applied: Instant::now(),
-            studio_frame: mypaper_ui::display_frame(),
+            studio_frame: glaze_ui::display_frame(),
             bars: vec![],
             monitors: vec![],
             services,
@@ -225,10 +225,10 @@ impl Bars {
             .inspect_err(|e| log::warn!("tray menu: {e:#}"))
             .ok();
         bars.menu = Menu::new("Dock commands").ok();
-        bars.tooltip = mypaper_ui::Surface::new_deferred_accessibility(
-            mypaper_ui::Kind::Popup { activate: false },
+        bars.tooltip = glaze_ui::Surface::new_deferred_accessibility(
+            glaze_ui::Kind::Popup { activate: false },
             "Module description",
-            mypaper_ui::Role::Tooltip,
+            glaze_ui::Role::Tooltip,
         )
         .ok();
         if let Some(tip) = &bars.tooltip {
@@ -240,7 +240,7 @@ impl Bars {
         bars.broadcast = Some(Broadcast::new()?);
         bars.services.start();
         bars._control =
-            mypaper_desktop::ControlWindow::new(windows::core::w!("mypaper.bars.control"))
+            glaze_desktop::ControlWindow::new(windows::core::w!("glaze.bars.control"))
                 .inspect_err(|e| log::warn!("bar power/session notifications: {e:#}"))
                 .ok();
         bars.apply_taskbar();
@@ -428,7 +428,7 @@ impl Bars {
     }
 
     pub fn fact(&mut self, wparam: usize, lparam: isize) {
-        use mypaper_desktop::hold::Fact;
+        use glaze_desktop::hold::Fact;
         match Fact::from_wparam(wparam) {
             Some(Fact::DisplayOff) => self.display_off = lparam != 0,
             Some(Fact::SessionLocked) => self.locked = lparam != 0,
@@ -757,10 +757,10 @@ impl Bars {
             {
                 let origin = b.origin();
                 if self.tooltip.is_none() {
-                    self.tooltip = mypaper_ui::Surface::new_deferred_accessibility(
-                        mypaper_ui::Kind::Popup { activate: false },
+                    self.tooltip = glaze_ui::Surface::new_deferred_accessibility(
+                        glaze_ui::Kind::Popup { activate: false },
                         "Module description",
-                        mypaper_ui::Role::Tooltip,
+                        glaze_ui::Role::Tooltip,
                     )
                     .ok();
                     if let Some(tip) = &self.tooltip {
@@ -770,7 +770,7 @@ impl Bars {
                 if let Some(tip) = &self.tooltip {
                     crate::overlay_client::warm(
                         tip.hwnd(),
-                        mypaper_ui::glass::Shape {
+                        glaze_ui::glass::Shape {
                             x: origin.0,
                             y: origin.1,
                             width: 1,
@@ -800,15 +800,15 @@ impl Bars {
                 );
                 // The kit's tooltip, placed in screen px (below the item, or above it when
                 // there is no room), then cut out with its shadow as the popup.
-                let input = mypaper_ui::Interaction::default();
+                let input = glaze_ui::Interaction::default();
                 let mut f =
-                    mypaper_ui::Frame::new(&mut ui.text, &b.tokens.theme, b.scale(), &input);
+                    glaze_ui::Frame::new(&mut ui.text, &b.tokens.theme, b.scale(), &input);
                 let body = f.tooltip(anchor, &label, bounds);
                 let list = f.list;
                 let reach = list
                     .ops
                     .iter()
-                    .map(mypaper_ui::Op::bounds)
+                    .map(glaze_ui::Op::bounds)
                     .fold(body, Rect::union);
                 let (x, y) = (reach.left.floor(), reach.top.floor());
                 let size = (
@@ -817,10 +817,10 @@ impl Bars {
                 );
                 let list = list.translated(-x, -y);
                 if self.tooltip.is_none() {
-                    self.tooltip = mypaper_ui::Surface::new_deferred_accessibility(
-                        mypaper_ui::Kind::Popup { activate: false },
+                    self.tooltip = glaze_ui::Surface::new_deferred_accessibility(
+                        glaze_ui::Kind::Popup { activate: false },
                         "Module description",
-                        mypaper_ui::Role::Tooltip,
+                        glaze_ui::Role::Tooltip,
                     )
                     .ok();
                 }
@@ -885,10 +885,10 @@ impl Bars {
                 let mut tokens = look::Tokens::resolve_settings(&look, &appearance, &self.system, &desktop, &ui.text);
                 let m = &bar.monitor;
                 let h = if bar.kind == BarKind::Dock { 64.0 } else { 40.0 } * m.dpi as f32 / 96.0;
-                tokens.adapt_ink(&look, Some(mypaper_ui::Rect::new(m.rect.x as f32, m.rect.y as f32 + if bar.kind == BarKind::Dock { m.rect.height as f32 - h } else { 0.0 }, m.rect.width as f32, h)));
+                tokens.adapt_ink(&look, Some(glaze_ui::Rect::new(m.rect.x as f32, m.rect.y as f32 + if bar.kind == BarKind::Dock { m.rect.height as f32 - h } else { 0.0 }, m.rect.width as f32, h)));
                 plugin_style::colors(&colors, effective.raw(), &mut tokens.theme.color);
                 tokens.cache_config(&look, &config);
-                if config.performance.active(mypaper_desktop::on_battery()) { tokens.material = None; }
+                if config.performance.active(glaze_desktop::on_battery()) { tokens.material = None; }
                 bar.studio_appearance(config, tokens, self.studio_config.is_some());
             }
             // No reservation or config file changes during preview; only shell-owned pixels.
@@ -1006,7 +1006,7 @@ impl Bars {
             && self.studio_stamp.0.is_none() && self.studio_stamp.2.is_none() {
             return;
         }
-        let desktop_raw = mypaper_config::path().ok().and_then(|p| std::fs::read(p).ok())
+        let desktop_raw = glaze_config::path().ok().and_then(|p| std::fs::read(p).ok())
             .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
         let desktop = desktop_raw.as_ref().and_then(|raw| {
             preview.effective(Document::Config, wire::revision(raw))
@@ -1120,7 +1120,7 @@ impl Bars {
             let horizontal = bar.horizontal();
             let origin = bar.origin();
             let size = bar.surface.client_size();
-            let full = mypaper_ui::Rect::new(
+            let full = glaze_ui::Rect::new(
                 origin.0 as f32,
                 origin.1 as f32,
                 size.0 as f32,
@@ -1133,14 +1133,14 @@ impl Bars {
             };
             for (i, name) in names.iter().enumerate() {
                 let rect = if horizontal {
-                    mypaper_ui::Rect::new(
+                    glaze_ui::Rect::new(
                         full.left + full.width() * i as f32 / names.len() as f32,
                         full.top,
                         full.width() / names.len() as f32,
                         full.height(),
                     )
                 } else {
-                    mypaper_ui::Rect::new(
+                    glaze_ui::Rect::new(
                         full.left,
                         full.top + full.height() * i as f32 / names.len() as f32,
                         full.width(),
@@ -1259,7 +1259,7 @@ impl Bars {
         let Some(index) = self.bars.iter().position(|b| b.owns(id)) else {
             return;
         };
-        let map = |mut p: mypaper_ui::Pointer| {
+        let map = |mut p: glaze_ui::Pointer| {
             p.at = self.bars[index].input_point(id, p.at);
             p
         };
@@ -1292,7 +1292,7 @@ impl Bars {
                     let back = *key == VK_LEFT.0
                         || *key == VK_UP.0
                         || (*key == VK_TAB.0 && unsafe { GetKeyState(VK_SHIFT.0 as i32) } < 0);
-                    b.focus = mypaper_ui::focus::step(
+                    b.focus = glaze_ui::focus::step(
                         &b.frame.list.hits,
                         b.focus,
                         if back { -1 } else { 1 },
@@ -1843,7 +1843,7 @@ impl Bars {
         ui: &mut Ui,
         entries: Vec<Entry<Command>>,
         point: (i32, i32),
-        tokens: &mypaper_ui::Tokens,
+        tokens: &glaze_ui::Tokens,
     ) {
         if self.menu.is_none() {
             self.menu = Menu::new("Dock commands").ok();
@@ -1863,12 +1863,12 @@ impl Bars {
                 true,
                 motion::Leaf::Open,
                 self.system.animations,
-                config.performance.active(mypaper_desktop::on_battery()),
+                config.performance.active(glaze_desktop::on_battery()),
             );
             let popup = dock
                 .and_then(|b| b.tokens.popup.clone())
                 .unwrap_or_else(|| tokens.clone());
-            let performance = config.performance.active(mypaper_desktop::on_battery());
+            let performance = config.performance.active(glaze_desktop::on_battery());
             menu.set_interaction_timings(
                 motion::resolve(
                     animation,
@@ -1887,7 +1887,7 @@ impl Bars {
             );
             menu.set_presentation(
                 popup,
-                mypaper_ui::menu::MenuMotion {
+                glaze_ui::menu::MenuMotion {
                     timing,
                     style: motion::reveal(motion::presentation(
                         animation,
@@ -2031,7 +2031,7 @@ impl Bars {
                 if enabled && includes {
                     let performance = config.performance == config::Performance::On
                         || (config.performance == config::Performance::Auto
-                            && mypaper_desktop::on_battery());
+                            && glaze_desktop::on_battery());
                     let mut look = look.clone();
                     look::appearance_layer(&config, bar_key, &mut look, &appearance);
                     look::glass_layer(&config, bar_key, &mut look, self.theme_glass);
@@ -2045,7 +2045,7 @@ impl Bars {
                     );
                     let mut tokens = look::Tokens::resolve_settings(&look, &appearance, &self.system, &desktop, &ui.text);
                     let h = if kind == BarKind::Dock { 64.0 } else { 40.0 } * monitor.dpi as f32 / 96.0;
-                    tokens.adapt_ink(&look, Some(mypaper_ui::Rect::new(monitor.rect.x as f32, monitor.rect.y as f32 + if kind == BarKind::Dock { monitor.rect.height as f32 - h } else { 0.0 }, monitor.rect.width as f32, h)));
+                    tokens.adapt_ink(&look, Some(glaze_ui::Rect::new(monitor.rect.x as f32, monitor.rect.y as f32 + if kind == BarKind::Dock { monitor.rect.height as f32 - h } else { 0.0 }, monitor.rect.width as f32, h)));
                     tokens.explicit_radius |= look::explicit_look(&config, bar_key, "/radius");
                     plugin_style::colors(&colors, self.config.raw(), &mut tokens.theme.color);
                     tokens.cache_config(&look, &config);
@@ -2285,7 +2285,7 @@ impl Bars {
     fn read_theme(&mut self) {
         let desktop = Config::load().unwrap_or_default().look;
         let loaded = Config::load()
-            .and_then(|c| mypaper_theme::locate(Some(&c.theme)))
+            .and_then(|c| glaze_theme::locate(Some(&c.theme)))
             .and_then(LoadedTheme::load)
             .ok();
         self.images.configure(
@@ -2307,18 +2307,18 @@ impl Bars {
             look::warn_dropped(&value);
         }
         if let Some(theme) = &loaded {
-            self.theme_watch = mypaper_fswatch::Watch::files(&theme.dir, &["theme.json"], || {
+            self.theme_watch = glaze_fswatch::Watch::files(&theme.dir, &["theme.json"], || {
                 crate::inbox::post(crate::inbox::WM_CONFIG, 0);
             })
             .ok();
         }
     }
     fn watch(&mut self) {
-        let Ok(dir) = mypaper_config::dir() else {
+        let Ok(dir) = glaze_config::dir() else {
             return;
         };
         let waker = self.services.waker.clone();
-        if let Ok(watcher) = mypaper_fswatch::Watch::files(&dir, &["bars.json"], move || {
+        if let Ok(watcher) = glaze_fswatch::Watch::files(&dir, &["bars.json"], move || {
             waker.send(providers::wake::Msg::Config);
         })
         {

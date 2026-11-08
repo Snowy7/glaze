@@ -1,5 +1,5 @@
 [package]
-name = "mypaper-theme"
+name = "glaze-theme"
 description = "Theme folder format: theme.json + the assets it references."
 version.workspace = true
 edition.workspace = true
@@ -12,7 +12,7 @@ check = ["dep:naga"]
 
 [dependencies]
 anyhow.workspace = true
-mypaper-config.workspace = true
+glaze-config.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # The same naga the workspace's wgpu 30 builds.

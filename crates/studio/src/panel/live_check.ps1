@@ -1,6 +1,6 @@
 param(
-    [string]$Exe = 'C:\mypaper-targets\studio-panel\target\debug\mypaper-studio.exe',
-    [string]$Shots = 'C:\mypaper-targets\studio-panel\shots',
+    [string]$Exe = 'C:\glaze-targets\studio-panel\target\debug\glaze-studio.exe',
+    [string]$Shots = 'C:\glaze-targets\studio-panel\shots',
     [switch]$FunctionsOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -31,13 +31,13 @@ public static class StudioPanelCheck {
 function SettingsHashes {
     $result = @{}
     foreach ($name in 'config.json','bars.json','widgets.json','studio.json','integrations.json','studio-panel-history.json','plugin-manager.json') {
-        $path = Join-Path (Join-Path $env:APPDATA 'mypaper') $name
+        $path = Join-Path (Join-Path $env:APPDATA 'Glaze') $name
         $result[$name] = if (Test-Path -LiteralPath $path) { (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash } else { $null }
     }
     return $result
 }
 function WithDesktopLock([scriptblock]$Action) {
-    $lockPath = Join-Path $env:TEMP 'mypaper-tools\desktop.lock'
+    $lockPath = Join-Path $env:TEMP 'glaze-tools\desktop.lock'
     [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($lockPath)) | Out-Null
     $lock = $null
     for ($attempt = 0; $attempt -lt 20; $attempt++) {
@@ -140,10 +140,10 @@ function CheckPeek([bool]$Mouse) {
 if ($FunctionsOnly) { return }
 
 $before = SettingsHashes
-$existing = @(Get-Process -Name 'mypaper-studio' -ErrorAction SilentlyContinue | Select-Object Id,Path,MainWindowTitle)
+$existing = @(Get-Process -Name 'glaze-studio' -ErrorAction SilentlyContinue | Select-Object Id,Path,MainWindowTitle)
 if ($existing | Where-Object { $_.MainWindowTitle -like '*Panel*' }) { throw 'Another panel is already running; it has not been touched.' }
-$previousSwitch = $env:MYPAPER_STUDIO_PANEL
-$env:MYPAPER_STUDIO_PANEL = '1'
+$previousSwitch = $env:GLAZE_STUDIO_PANEL
+$env:GLAZE_STUDIO_PANEL = '1'
 $script:process = $null
 $measurements = @()
 $peekChecks = @()
@@ -183,7 +183,7 @@ try {
         [void]$script:process.CloseMainWindow()
         if (!$script:process.WaitForExit(3000)) { Stop-Process -Id $script:process.Id }
     }
-    $env:MYPAPER_STUDIO_PANEL = $previousSwitch
+    $env:GLAZE_STUDIO_PANEL = $previousSwitch
 }
 $after = SettingsHashes
 $changed = @($before.Keys | Where-Object { $before[$_] -ne $after[$_] })

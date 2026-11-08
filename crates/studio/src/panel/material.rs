@@ -5,7 +5,7 @@ use crate::{
     app::App,
     ui::{B, Col},
 };
-use mypaper_ui::{
+use glaze_ui::{
     Rect,
     controls::{Align, key},
 };
@@ -135,8 +135,8 @@ pub fn wallpaper(
     let uses = super::wallpaper_look::selected(theme)
         .map(crate::look::uses)
         .unwrap_or(match sample.style {
-            mypaper_config::look::Style::Liquid => [true; 4],
-            mypaper_config::look::Style::Solid => [false; 4],
+            glaze_config::look::Style::Liquid => [true; 4],
+            glaze_config::look::Style::Solid => [false; 4],
             _ => [true, true, false, false],
         });
     let sliders: Vec<_> = [
@@ -176,7 +176,7 @@ pub fn wallpaper(
 }
 
 /// Unset knobs follow the wallpaper until a style is chosen, then that style's defaults.
-pub fn look_value(app: &App, style: mypaper_config::look::Style, id: &str) -> f64 {
+pub fn look_value(app: &App, style: glaze_config::look::Style, id: &str) -> f64 {
     use crate::docs::DocId;
     if let Some(value) = app
         .pending_value
@@ -210,7 +210,7 @@ pub fn look_value(app: &App, style: mypaper_config::look::Style, id: &str) -> f6
         }
     }
     let theme = super::specimens::style_theme(app, style);
-    let defaults = mypaper_ui::theme::material(theme.style, theme.color.surface);
+    let defaults = glaze_ui::theme::material(theme.style, theme.color.surface);
     (match id {
         "clarity" => defaults.map_or(1.0 - theme.color.surface.a, |m| m.clarity),
         "blur" => defaults.map_or(0.0, |m| m.blur),
@@ -221,7 +221,7 @@ pub fn look_value(app: &App, style: mypaper_config::look::Style, id: &str) -> f6
 }
 
 /// The Windows matching specimen uses the same tint source as the desktop's current material.
-pub fn look_tint(app: &App, style: mypaper_config::look::Style) -> mypaper_ui::Rgba {
+pub fn look_tint(app: &App, style: glaze_config::look::Style) -> glaze_ui::Rgba {
     use crate::docs::DocId;
     let theme = super::specimens::style_theme(app, style);
     let current = app
@@ -236,8 +236,8 @@ pub fn look_tint(app: &App, style: mypaper_config::look::Style) -> mypaper_ui::R
     if current == Some("auto") {
         return super::specimens::wallpaper_color(app).unwrap_or(theme.color.surface);
     }
-    if let Some(color) = current.and_then(mypaper_config::Color::parse) {
-        return mypaper_ui::Rgba::rgb8(color.0, 1.0);
+    if let Some(color) = current.and_then(glaze_config::Color::parse) {
+        return glaze_ui::Rgba::rgb8(color.0, 1.0);
     }
     if app.get(DocId::Config, "/look/style").is_none()
         && let Some(wallpaper) = app
@@ -247,9 +247,9 @@ pub fn look_tint(app: &App, style: mypaper_config::look::Style) -> mypaper_ui::R
         && let Some(color) = super::saving::theme_value(app, wallpaper)
             .pointer("/widgets/appearance/tint")
             .and_then(Value::as_str)
-            .and_then(mypaper_config::Color::parse)
+            .and_then(glaze_config::Color::parse)
     {
-        return mypaper_ui::Rgba::rgb8(color.0, 1.0);
+        return glaze_ui::Rgba::rgb8(color.0, 1.0);
     }
     theme.color.surface
 }

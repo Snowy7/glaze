@@ -6,7 +6,7 @@
 //! the trick is widely used, Microsoft does not document it), and it is a
 //! user-visible global change, so it is strictly opt-in
 //! (`classic_context_menu` in `config.json`). It is journaled in its own file,
-//! `%LOCALAPPDATA%\mypaper\undo-shell.json`, which, unlike the theme's styling
+//! `%LOCALAPPDATA%\glaze\undo-shell.json`, which, unlike the theme's styling
 //! journal, outlives the run: the menu stays classic until the option is turned
 //! off, and turning it off removes exactly what was added (including the keys
 //! we created). Explorer reads the value when it starts, so a change needs an
@@ -62,7 +62,7 @@ impl<S: Store> ClassicMenu<S> {
         }
     }
 
-    /// Did mypaper turn the classic menu on (and not yet off)?
+    /// Did Glaze turn the classic menu on (and not yet off)?
     pub fn is_on(&self) -> bool {
         self.undo.pending()
     }

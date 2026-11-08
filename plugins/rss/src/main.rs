@@ -1,4 +1,4 @@
-//! mypaper RSS plugin: JSON-RPC 2.0 over stdio (docs/widgets.md, "Plugins").
+//! Glaze RSS plugin: JSON-RPC 2.0 over stdio (docs/widgets.md, "Plugins").
 //!
 //! One method, `feeds({ urls, limit? })`: loads up to 12 RSS 2.0 / RSS 1.0 / Atom feeds (in
 //! parallel), merges their entries newest-first and returns

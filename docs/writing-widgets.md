@@ -8,7 +8,7 @@ that schema for settings. Plugins do not supply HTML or UI code.
 ## Manifest and installation
 
 Install a folder beside the executable under `plugins/<id>/` or in
-`%APPDATA%\mypaper\plugins\<id>/`. User plugins take precedence. Its `plugin.json` is:
+`%APPDATA%\glaze\plugins\<id>/`. User plugins take precedence. Its `plugin.json` is:
 
 ```json
 {
@@ -36,7 +36,7 @@ One UTF-8 JSON object per line; flush stdout after each line. Keep diagnostic lo
 JSON-RPC 2.0 request ids are numbers chosen by the host. A first request looks like:
 
 ```json
-{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocol":1,"dataDir":"C:\\Users\\me\\AppData\\Roaming\\mypaper\\plugin-data\\calc"}}
+{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocol":1,"dataDir":"C:\\Users\\me\\AppData\\Roaming\\glaze\\plugin-data\\calc"}}
 ```
 
 Reply within 10 seconds:
@@ -79,7 +79,7 @@ which sleeps on a channel between fetches. Do not put HTTP or recurring polling 
 ## Adding a compiled view
 
 Retain `instance`, settings and storage keys when changing a view. Read data through
-`mypaper-widgets::storage::Storage`; use logical grid cells in `layout.rs`. Paint a full `Rgba::HIT`
+`glaze-widgets::storage::Storage`; use logical grid cells in `layout.rs`. Paint a full `Rgba::HIT`
 body and native display-list ops. Register explicit semantic hits, schedule only displayed digits,
-and stop sampling when hidden. Reuse `mypaper_ui::calendar::MonthGrid` and `TextField` for calendar
+and stop sampling when hidden. Reuse `glaze_ui::calendar::MonthGrid` and `TextField` for calendar
 and text entry. See [ui.md](ui.md) and [widgets.md](widgets.md) for surfaces and host integration.

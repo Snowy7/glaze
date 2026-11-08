@@ -4,7 +4,7 @@
   "notice": "Eight NC selections block commercial distribution of the complete bundle. Preserve ShareAlike and all notices.",
   "new_binary_bytes": 23947981,
   "curated_binary_bytes": 23945606,
-  "curated_bytes": 24706400,
+  "curated_bytes": 24712066,
   "themes": [
     {
       "id": "charge-city",
@@ -44,10 +44,10 @@
         {
           "path": "charge-city/theme.json",
           "title": "Charge — Rainy Rooftops",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest; no external code or media.",
+          "changes": "Glaze manifest; no external code or media.",
           "license_url": "https://opensource.org/license/mit/",
           "bytes": 145,
           "sha256": "57959a96e6cdeed328391c5ec2cb46d3ce535ba7b45f56a9e5f724426574cdf3"
@@ -87,8 +87,8 @@
               ],
               "mean_flow_speed": 0.20883497595787048,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             },
             {
@@ -98,8 +98,8 @@
               ],
               "mean_flow_speed": 0.0786515548825264,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             },
             {
@@ -109,12 +109,12 @@
               ],
               "mean_flow_speed": 0.11933275312185287,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             }
           ],
-          "boundary_registration_error_px_160x90": 0.0,
+          "boundary_registration_error_px_160x90": 0,
           "overlap_motion_samples_160x90": [
             {
               "frame": 42,
@@ -200,10 +200,10 @@
         {
           "path": "cozy-fireplace/theme.json",
           "title": "Charge — Cozy Fireplace",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest; no external code or media.",
+          "changes": "Glaze manifest; no external code or media.",
           "license_url": "https://opensource.org/license/mit/",
           "bytes": 145,
           "sha256": "14df56ec531145ccd7cf5180d6c010ef72ccbedc7d3217699df053e2d363a387"
@@ -218,7 +218,7 @@
         "measured": {
           "id": "cozy-fireplace",
           "frames": 552,
-          "duration": 23.0,
+          "duration": 23,
           "width": 1920,
           "height": 1080,
           "fps": "24/1",
@@ -243,8 +243,8 @@
               ],
               "mean_flow_speed": 0.19515377283096313,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             },
             {
@@ -254,8 +254,8 @@
               ],
               "mean_flow_speed": 0.12245584279298782,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             },
             {
@@ -265,12 +265,12 @@
               ],
               "mean_flow_speed": 0.10707331448793411,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             }
           ],
-          "boundary_registration_error_px_160x90": 0.0,
+          "boundary_registration_error_px_160x90": 0,
           "overlap_motion_samples_160x90": [
             {
               "frame": 504,
@@ -345,7 +345,7 @@
         {
           "path": "fluids/index.html",
           "title": "Fluids",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
           "changes": "Local wallpaper host, canvas and visible credit; no remote dependencies.",
@@ -379,10 +379,10 @@
         {
           "path": "fluids/theme.json",
           "title": "Fluids",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest; no external code or media.",
+          "changes": "Glaze manifest; no external code or media.",
           "license_url": "https://opensource.org/license/mit/",
           "bytes": 113,
           "sha256": "2c8890e38893bc591be55740bb6f5d13e76d78c6779e4d6007905926495bec03"
@@ -428,10 +428,10 @@
         {
           "path": "milky-way/theme.json",
           "title": "Milky Way over Paranal",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest; no external code or media.",
+          "changes": "Glaze manifest; no external code or media.",
           "license_url": "https://opensource.org/license/mit/",
           "bytes": 144,
           "sha256": "f015d84acd06c895c610d4fc0e29b7849a83ca079c51dda8a345c3d33dca9ea3"
@@ -446,7 +446,7 @@
         "measured": {
           "id": "milky-way",
           "frames": 400,
-          "duration": 16.0,
+          "duration": 16,
           "width": 1920,
           "height": 1080,
           "fps": "25/1",
@@ -498,7 +498,7 @@
               ]
             }
           ],
-          "boundary_registration_error_px_160x90": 0.0,
+          "boundary_registration_error_px_160x90": 0,
           "overlap_motion_samples_160x90": [
             {
               "frame": 350,
@@ -596,7 +596,7 @@
         {
           "path": "rain-city/theme.json",
           "title": "Rainy Hong Kong (non-commercial)",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
           "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale; baked still-frame layer at binding 5.",
@@ -612,8 +612,8 @@
           "source": "https://github.com/rocksdanister/rain",
           "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size; layer gradients only where the field's smoothstep slopes.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 7637,
-          "sha256": "a5f288cb2edb34f9e47937bed2ed231c51ec0d3671406349f505eca45d3fadba"
+          "bytes": 7635,
+          "sha256": "a3b963ab1d0cf656d7aad2daa6a1e29fdef5291ae6f72f57012df9eb71651cd7"
         },
         {
           "path": "rain-city/profile.wgsl",
@@ -623,11 +623,11 @@
           "source": "https://github.com/rocksdanister/rain",
           "changes": "Theme-owned float32 Heartfelt row/column cache generated once on the selected GPU; CC BY-NC-SA adaptation.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 829,
-          "sha256": "be3394afcd2994bd206a1303a33023af92588c1c76e46f2bde99128c1004148d"
+          "bytes": 827,
+          "sha256": "475b4ec54cfbd980095db84411841128217a935266b1a1cf107841d911e0689b"
         }
       ],
-      "bytes": 935416
+      "bytes": 939506
     },
     {
       "id": "rain-city-amber",
@@ -679,7 +679,7 @@
         {
           "path": "rain-city-amber/theme.json",
           "title": "Amber Downpour (non-commercial)",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
           "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale; baked still-frame layer at binding 5.",
@@ -695,8 +695,8 @@
           "source": "https://github.com/rocksdanister/rain",
           "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size; layer gradients only where the field's smoothstep slopes.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 7643,
-          "sha256": "d748f11f26a07eb525129ec4189e3ac6fdd49772a12f0fa457495b8b5085d437"
+          "bytes": 7641,
+          "sha256": "fe3413a56f399f180a1c853669e5c5848342c8eba3c300a92f269785ef39ea44"
         },
         {
           "path": "rain-city-amber/profile.wgsl",
@@ -706,11 +706,11 @@
           "source": "https://github.com/rocksdanister/rain",
           "changes": "Theme-owned float32 Heartfelt row/column cache generated once on the selected GPU; CC BY-NC-SA adaptation.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 829,
-          "sha256": "be3394afcd2994bd206a1303a33023af92588c1c76e46f2bde99128c1004148d"
+          "bytes": 827,
+          "sha256": "475b4ec54cfbd980095db84411841128217a935266b1a1cf107841d911e0689b"
         }
       ],
-      "bytes": 940437
+      "bytes": 944527
     },
     {
       "id": "rain-city-midnight",
@@ -762,7 +762,7 @@
         {
           "path": "rain-city-midnight/theme.json",
           "title": "Midnight Drizzle (non-commercial)",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
           "changes": "Native shader manifest: declared photo texture/sampler, 30 fps, 0.65 render scale; baked still-frame layer at binding 5.",
@@ -778,8 +778,8 @@
           "source": "https://github.com/rocksdanister/rain",
           "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size; layer gradients only where the field's smoothstep slopes.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 7643,
-          "sha256": "7379f7f4010ee95724434301278de7fe3a8dca94c0f6abfd142c2bd0863f24b8"
+          "bytes": 7641,
+          "sha256": "f4dfa529563c83e8f6e315637a29a0f464ed80258d4a74dc85e19412bd1bff77"
         },
         {
           "path": "rain-city-midnight/profile.wgsl",
@@ -789,11 +789,11 @@
           "source": "https://github.com/rocksdanister/rain",
           "changes": "Theme-owned float32 Heartfelt row/column cache generated once on the selected GPU; CC BY-NC-SA adaptation.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 829,
-          "sha256": "be3394afcd2994bd206a1303a33023af92588c1c76e46f2bde99128c1004148d"
+          "bytes": 827,
+          "sha256": "475b4ec54cfbd980095db84411841128217a935266b1a1cf107841d911e0689b"
         }
       ],
-      "bytes": 929656
+      "bytes": 933746
     },
     {
       "id": "seascape",
@@ -833,10 +833,10 @@
         {
           "path": "seascape/theme.json",
           "title": "Seascape (non-commercial)",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest; no external code or media.",
+          "changes": "Glaze manifest; no external code or media.",
           "license_url": "https://opensource.org/license/mit/",
           "bytes": 149,
           "sha256": "49efa2a3f5e8538ee433a522c789829ba2e3020e244739bc54d353705d917ee8"
@@ -894,10 +894,10 @@
         {
           "path": "seascape-midnight/theme.json",
           "title": "Seascape — Midnight (non-commercial)",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest; no external code or media.",
+          "changes": "Glaze manifest; no external code or media.",
           "license_url": "https://opensource.org/license/mit/",
           "bytes": 162,
           "sha256": "ac42ab2fadb456ddec6443d547d17eebc918e2e0d45597d938dcbfbffcc35ef7"
@@ -965,7 +965,7 @@
         {
           "path": "snow-city/theme.json",
           "title": "Snow over Hong Kong (non-commercial)",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "license_url": "https://opensource.org/license/mit/",
           "source": "../LICENSE",
@@ -981,11 +981,11 @@
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
           "source": "https://github.com/rocksdanister/snow",
           "changes": "Native WGSL/paper port with image binding, 30 fps and 0.65 scale; original photo, presets and non-commercial ShareAlike terms retained. Preserves the original 50 layers and CSS-resolution crop/density.",
-          "bytes": 2121,
-          "sha256": "12c034f7a6b44196c24a2fcd79ea86113e61be2f3727c03d13b506fc27b38bde"
+          "bytes": 2119,
+          "sha256": "660d5ee5f07b38682cf600a932b3fea29825820e66e74c2bd9c6f92cfa62baf5"
         }
       ],
-      "bytes": 919440
+      "bytes": 919438
     },
     {
       "id": "snow-forest",
@@ -1035,7 +1035,7 @@
         {
           "path": "snow-forest/theme.json",
           "title": "Snow in the Misty Forest (non-commercial)",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "license_url": "https://opensource.org/license/mit/",
           "source": "../LICENSE",
@@ -1051,11 +1051,11 @@
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
           "source": "https://github.com/rocksdanister/snow",
           "changes": "Native WGSL/paper port with image binding, 30 fps and 0.65 scale; original photo, presets and non-commercial ShareAlike terms retained. Preserves the original 50 layers and CSS-resolution crop/density.",
-          "bytes": 2121,
-          "sha256": "12c034f7a6b44196c24a2fcd79ea86113e61be2f3727c03d13b506fc27b38bde"
+          "bytes": 2119,
+          "sha256": "660d5ee5f07b38682cf600a932b3fea29825820e66e74c2bd9c6f92cfa62baf5"
         }
       ],
-      "bytes": 89822
+      "bytes": 89820
     },
     {
       "id": "snowfall",
@@ -1095,10 +1095,10 @@
         {
           "path": "snowfall/theme.json",
           "title": "Snowfall (non-commercial)",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest; no external code or media.",
+          "changes": "Glaze manifest; no external code or media.",
           "license_url": "https://opensource.org/license/mit/",
           "bytes": 150,
           "sha256": "0dd4c69f83dd431882ca02ffdbf53c58c837b1eb33310efba86f747b846527bc"
@@ -1156,10 +1156,10 @@
         {
           "path": "spring-forest/theme.json",
           "title": "Spring — Misty Forest",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest; no external code or media.",
+          "changes": "Glaze manifest; no external code or media.",
           "license_url": "https://opensource.org/license/mit/",
           "bytes": 143,
           "sha256": "f8e1981d49ee7cfb5d15e4d62be596de901eda1bcf43b29167bdf6fcd0bf66bb"
@@ -1199,8 +1199,8 @@
               ],
               "mean_flow_speed": 0.06522379070520401,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             },
             {
@@ -1210,8 +1210,8 @@
               ],
               "mean_flow_speed": 0.04298647493124008,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             },
             {
@@ -1221,12 +1221,12 @@
               ],
               "mean_flow_speed": 0.012953896075487137,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             }
           ],
-          "boundary_registration_error_px_160x90": 0.0,
+          "boundary_registration_error_px_160x90": 0,
           "overlap_motion_samples_160x90": [
             {
               "frame": 45,
@@ -1313,10 +1313,10 @@
         {
           "path": "star-nest/theme.json",
           "title": "Star Nest",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest.",
+          "changes": "Glaze manifest.",
           "license_url": "https://opensource.org/license/mit/",
           "bytes": 134,
           "sha256": "86565f7e578ce10ee2d382446eec18d442d1fe112ab78843dd3e0818ddec7cd2"
@@ -1351,7 +1351,7 @@
         {
           "path": "vanta-waves/index.html",
           "title": "Waves",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
           "changes": "Local host; 30 fps pacing; Waves ocean preset / Birds twilight preset. Upstream effect code unchanged.",
@@ -1373,10 +1373,10 @@
         {
           "path": "vanta-waves/theme.json",
           "title": "Waves",
-          "author": "mypaper contributors",
+          "author": "Glaze contributors",
           "license": "MIT",
           "source": "../LICENSE",
-          "changes": "mypaper manifest; no external code or media.",
+          "changes": "Glaze manifest; no external code or media.",
           "license_url": "https://opensource.org/license/mit/",
           "bytes": 112,
           "sha256": "3391e6101dad5d5ecf8d425795a02cf1cf776a9f9cd91e18b8ab901ec585738c"
@@ -1413,51 +1413,51 @@
     {
       "path": "examples/app-example/preview.jpg",
       "title": "app-example",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
       "bytes": 14585,
       "sha256": "aa6542941a57b38046fe9b5257897a0415b6f8f697afe74bfe78e6f2c1de2cdf"
     },
     {
       "path": "examples/app-example/README.md",
       "title": "app-example",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
-      "bytes": 3095,
-      "sha256": "d316adfa460936d7243a74a6831fac56616535a23d88eb206d8d041869931dbb"
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
+      "bytes": 3083,
+      "sha256": "fc3d4b9d83f4f8daf36c10de08737f876d440de93f40db8453f58bebe003af40"
     },
     {
       "path": "examples/aurora/aurora.wgsl",
       "title": "aurora",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
-      "bytes": 2969,
-      "sha256": "cc1c30aecff2b8b52b400e0a5ec2d8bdcb02b2bb730a1649ca0dd0f4f937ad80"
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
+      "bytes": 2967,
+      "sha256": "41d9980c944ef3a5378ae980e20f19d237710b9967b00940c62bb8840a2e25c2"
     },
     {
       "path": "examples/aurora/preview.jpg",
       "title": "aurora",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
       "bytes": 17268,
       "sha256": "32c5afabb0f8d4145175e6e20c94374a9d50566f88034c40e444e8429333e3ee"
     },
     {
       "path": "examples/aurora/theme.json",
       "title": "aurora",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -1490,18 +1490,18 @@
     {
       "path": "examples/earth-orbit/README.md",
       "title": "earth-orbit",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
       "bytes": 789,
       "sha256": "8be5761f0490b26a9e3173a575be73b13aca5f71bdc441739fb4ac85df29af97"
     },
     {
       "path": "examples/earth-orbit/theme.json",
       "title": "earth-orbit",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -1600,7 +1600,7 @@
     {
       "path": "examples/gallery/theme.json",
       "title": "gallery",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -1611,18 +1611,18 @@
     {
       "path": "examples/interactive/index.html",
       "title": "interactive",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
-      "bytes": 3496,
-      "sha256": "e2d35528e5682d43a95aee8f1c5141cde92067d86727694abb7c8bfddc3ce2ce"
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
+      "bytes": 3494,
+      "sha256": "4886ab16da1fe62936cde4c07971348e5944d0cc8ffc6c9a4b9a117483346973"
     },
     {
       "path": "examples/interactive/preview.jpg",
       "title": "interactive",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -1633,7 +1633,7 @@
     {
       "path": "examples/interactive/theme.json",
       "title": "interactive",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -1644,29 +1644,29 @@
     {
       "path": "examples/islands/islands.glb",
       "title": "islands",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
       "bytes": 326712,
       "sha256": "ab40fcf2af83910f9cbffcfb175bccac1ba458b5533e582025599e3d4fc7d273"
     },
     {
       "path": "examples/islands/preview.jpg",
       "title": "islands",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
       "bytes": 17001,
       "sha256": "c836c2b1bd9d5dc6be4bff47e2cfcedb403f6e42aadd5e722a47c41601a2228b"
     },
     {
       "path": "examples/islands/theme.json",
       "title": "islands",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -1677,40 +1677,40 @@
     {
       "path": "examples/midnight/bars.css",
       "title": "midnight",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
       "bytes": 1028,
       "sha256": "9b5cd71732d51d75f13755b4b8a4a374290916092b8392d9bb725a535e20ba93"
     },
     {
       "path": "examples/midnight/midnight.wgsl",
       "title": "midnight",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
       "bytes": 7740,
       "sha256": "74bb98c4fce9a01168c1dfa5c6560a66cb7468367088c4366a7232037aca3a51"
     },
     {
       "path": "examples/midnight/preview.jpg",
       "title": "midnight",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
       "bytes": 17327,
       "sha256": "ae18af4f62e74c8c27f54d530a250b466d4487ee515c4a417cfc4afeb30acb64"
     },
     {
       "path": "examples/midnight/theme.json",
       "title": "midnight",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -1721,11 +1721,11 @@
     {
       "path": "examples/midnight/widgets.css",
       "title": "midnight",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
       "bytes": 1482,
       "sha256": "311dca472175127e115005e4a8455e865ab218c6d15d650a9929f0a768cee631"
     },
@@ -1754,7 +1754,7 @@
     {
       "path": "examples/photo/theme.json",
       "title": "photo",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -1777,7 +1777,7 @@
     {
       "path": "examples/builder-demo/theme.json",
       "title": "builder-demo",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -1788,29 +1788,29 @@
     {
       "path": "examples/webdemo/index.html",
       "title": "webdemo",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
-      "bytes": 3911,
-      "sha256": "ec020a72f5d81ef7f9141ee5fc21c8490585a6a8e73912d1e21c6e4786438e41"
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
+      "bytes": 3909,
+      "sha256": "a6518bf05e7adc40b39897226ee4ca588b202177f231f61f74cbace6c9a2cacc"
     },
     {
       "path": "examples/webdemo/preview.jpg",
       "title": "webdemo",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
-      "changes": "Existing mypaper legacy/example asset preserved; moved under examples/.",
+      "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
       "bytes": 12503,
       "sha256": "16762b67c8bdcfa3ee5605d0e6ee1a8dc3460532bb176878178a52547a797913"
     },
     {
       "path": "examples/webdemo/theme.json",
       "title": "webdemo",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -1821,40 +1821,40 @@
     {
       "path": "examples/ringed-planet/planet.glb",
       "title": "ringed-planet",
-      "author": "mypaper contributors (2026)",
+      "author": "Glaze contributors (2026)",
       "license": "CC0-1.0",
       "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "source": "examples/ringed-planet/generate.py",
       "changes": "Original procedural asset generated by generate.py.",
-      "bytes": 196384,
-      "sha256": "1b8f090b83d774a7ee22fafd6e19d62a9732db1054d0a31004acd3c9c9003495"
+      "bytes": 207668,
+      "sha256": "a914d8efe0c8cdd11f8506698bc08ea8763f37028499bff4ca902237ea752d38"
     },
     {
       "path": "examples/ringed-planet/generate.py",
       "title": "ringed-planet",
-      "author": "mypaper contributors (2026)",
+      "author": "Glaze contributors (2026)",
       "license": "CC0-1.0",
       "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "source": "examples/ringed-planet/README.md",
       "changes": "Original generator for planet.glb.",
-      "bytes": 4848,
-      "sha256": "3828da9a81f349114f583084a8547fce189fd5cd3a6cfaf155675948352f1fb2"
+      "bytes": 5347,
+      "sha256": "325049a6ff472ff9aab276c372e3a2a23d68c8a15b399ff7af8045aa2167895c"
     },
     {
       "path": "examples/ringed-planet/README.md",
       "title": "ringed-planet",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "CC0-1.0",
       "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "source": "../LICENSE",
       "changes": "Original sample notes.",
-      "bytes": 613,
-      "sha256": "14baa7ad1899ba8e3f7cc00343aa9cc4a42afc82bb7a50886378b8b2575bfde0"
+      "bytes": 1069,
+      "sha256": "381cbc629c0cadead1bc3f3cb174a92c50c6ec60e84ced69ea818c71f863c784"
     },
     {
       "path": "examples/ringed-planet/theme.json",
       "title": "ringed-planet",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -1887,7 +1887,7 @@
     {
       "path": "examples/fox-model/README.md",
       "title": "fox-model",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -1964,7 +1964,7 @@
     {
       "path": "examples/simple-skin/README.md",
       "title": "simple-skin",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -2043,7 +2043,7 @@
     {
       "path": ".gitattributes",
       "title": "Stable content hashes",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
@@ -2054,7 +2054,7 @@
     {
       "path": "verify-loops.py",
       "title": "Decoded loop measurements",
-      "author": "mypaper contributors",
+      "author": "Glaze contributors",
       "license": "MIT",
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",

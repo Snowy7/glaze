@@ -3,7 +3,7 @@ fn N21(input: vec2f) -> f32 { var p=fract(input*vec2f(123.34,345.45));p+=dot(p,p
 fn Sin(x: f32) -> f32 { return sin(x-floor(x/6.28318530718+0.5)*6.28318530718); }
 // BigWings (Martijn Steinrucken), Heartfelt; Rocksdanister rain adaptation.
 // CC BY-NC-SA 3.0: https://creativecommons.org/licenses/by-nc-sa/3.0/
-// WGSL port by mypaper contributors. Original GLSL is preserved in shaders/rain.frag.
+// WGSL port by Glaze contributors. Original GLSL is preserved in shaders/rain.frag.
 @group(0) @binding(1) var photo: texture_2d<f32>;
 @group(0) @binding(2) var photo_sampler: sampler;
 @group(0) @binding(3) var profile: texture_2d<f32>;

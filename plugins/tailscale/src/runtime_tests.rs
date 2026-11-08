@@ -1,7 +1,7 @@
 //! The shipped guest in Wasmtime. Preference effects are inspected, never run on the user's VPN.
 use crate::runtime::{Effect, Instance, Manifest, Runtime};
-use crate::runtime::exports::mypaper::plugin::lifecycle::{Action, Event, FaceOpen};
-use crate::runtime::mypaper::plugin::{http::{Reply, Response}, types::{Error, SizeClass}};
+use crate::runtime::exports::glaze::plugin::lifecycle::{Action, Event, FaceOpen};
+use crate::runtime::glaze::plugin::{http::{Reply, Response}, types::{Error, SizeClass}};
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -22,7 +22,7 @@ fn reply(guest: &mut Instance, id: u64, status: u16, body: Value) -> Vec<Effect>
 #[test]
 fn tailscale_component_masks_actions_rejects_stale_replies_and_reports_disconnects() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/tailscale");
-    let scratch = std::env::temp_dir().join(format!("mypaper-tailscale-component-{}", std::process::id()));
+    let scratch = std::env::temp_dir().join(format!("glaze-tailscale-component-{}", std::process::id()));
     let runtime = Runtime::new(scratch.join("cache"), scratch.join("data")).unwrap();
     let manifest = Manifest::load(&dir).unwrap();
     let (component, _) = runtime.component(&manifest, &dir).unwrap();
@@ -90,7 +90,7 @@ fn tailscale_pipe_http_provides_identity_without_impersonation_privileges() {
             unsafe { let _ = CloseHandle(self.0); }
         }
     }
-    let name = format!("mypaper-tailscale-auth-{}", std::process::id());
+    let name = format!("glaze-tailscale-auth-{}", std::process::id());
     // SAFETY: creates an owned local pipe; all buffers below live through synchronous calls.
     let server = Server(unsafe { CreateNamedPipeW(&windows::core::HSTRING::from(format!(r"\\.\pipe\{name}")), PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, 4096, 4096, 0, None) });
     assert!(!server.0.is_invalid());

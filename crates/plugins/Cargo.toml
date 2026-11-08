@@ -1,5 +1,5 @@
 [package]
-name = "mypaper-plugins"
+name = "glaze-plugins"
 description = "The plugin runtime: one Wasmtime engine hosting every WebAssembly component plugin, out of the shell (docs/plugins.md)."
 version.workspace = true
 edition.workspace = true
@@ -9,9 +9,9 @@ license.workspace = true
 anyhow.workspace = true
 env_logger.workspace = true
 log.workspace = true
-mypaper-plugin-api = { path = "../plugin-api" }
-mypaper-plugin-sdk = { path = "../plugin-sdk" }
-mypaper-native-host = { path = "../native-host" }
+glaze-plugin-api = { path = "../plugin-api" }
+glaze-plugin-sdk = { path = "../plugin-sdk" }
+glaze-native-host = { path = "../native-host" }
 serde.workspace = true
 serde_json.workspace = true
 url = "2"

@@ -1,4 +1,4 @@
-"""Review fixture PNGs from `cargo test -p mypaper-studio panel::tests::render_panel_pages`.
+"""Review fixture PNGs from `cargo test -p glaze-studio panel::tests::render_panel_pages`.
 
 Run with `py -3 crates/studio/src/panel/contact_sheet.py`. No app or settings are opened.
 """
@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 import json
 import sys
 
-root = Path(sys.argv[1] if len(sys.argv) > 1 else r"C:\mypaper-targets\studio-panel\shots")
+root = Path(sys.argv[1] if len(sys.argv) > 1 else r"C:\glaze-targets\studio-panel\shots")
 files = sorted(p for p in root.glob("*.png") if p.name.endswith(("-dark.png", "-light.png")))
 font = ImageFont.truetype("C:/Windows/Fonts/segoeui.ttf", 14)
 previews = []

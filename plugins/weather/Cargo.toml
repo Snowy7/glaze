@@ -1,6 +1,6 @@
 [package]
-name = "mypaper-plugin-weather"
-description = "Weather plugin for mypaper widgets: open-meteo, no API key (JSON-RPC over stdio)."
+name = "glaze-plugin-weather"
+description = "Weather plugin for Glaze widgets: open-meteo, no API key (JSON-RPC over stdio)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

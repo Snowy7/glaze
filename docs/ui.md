@@ -1,8 +1,8 @@
-# Native UI: `crates/ui` and `mypaper-shell`
+# Native UI: `crates/ui` and `glaze-shell`
 
 The native rebuild (`plans/council/native-plan.md`) draws every shell surface (menus, the top
-bar, dock, flyouts and widgets) with one small UI layer, `crates/ui` (`mypaper-ui`), hosted by
-one process, `mypaper-shell`. This page is how both work, and what they measured. The flyouts
+bar, dock, flyouts and widgets) with one small UI layer, `crates/ui` (`glaze-ui`), hosted by
+one process, `glaze-shell`. This page is how both work, and what they measured. The flyouts
 themselves are in [bars.md](bars.md#flyouts-n3).
 
 ## Rules it follows
@@ -58,12 +58,12 @@ Surface::present(ui, origin, size, list)
 ## The kit
 
 Every surface (bars, flyouts, menus, widgets, Studio) is being rebuilt on one kit:
-`mypaper_ui::{theme, kit, layout, scroll, icons}`. A view makes a [`Theme`](#theme), builds its
+`glaze_ui::{theme, kit, layout, scroll, icons}`. A view makes a [`Theme`](#theme), builds its
 list with a [`Frame`](#frame-and-components), places things with [layout](#layout), and scrolls
 lists with a [`Scroll`](#scroll-view). The gallery renders every component in every style:
 
 ```text
-cargo run --release -p mypaper-ui --example gallery     # writes docs/media/native/kit-*.png
+cargo run --release -p glaze-ui --example gallery     # writes docs/media/native/kit-*.png
 ```
 
 `kit-<style>-<scheme>.png` (liquid, oneui, solid, fluent, mono × dark, light) shows Control
@@ -254,7 +254,7 @@ in calls are **device px** (`f.px(design)` converts); `f.font(role)`, `f.line(ro
    `Rgba` constants, no `Op::Stroke` around anything, no raw glyph code points.
 6. **Lists** that can outgrow their room go in a `Scroll` (see above); route `wheel`, Page
    Up/Down and `tick` to it.
-7. **Goldens:** re-bless your surface's images (`MYPAPER_BLESS=1`) and look at them.
+7. **Goldens:** re-bless your surface's images (`GLAZE_BLESS=1`) and look at them.
 
 The notification center (`crates/shell/src/flyouts/notifications.rs`) is the reference port: a
 fixed header, the cards in a scroll view, the month below; its test
@@ -315,7 +315,7 @@ be excluded from the desktop glass overlay capture; the engine's order is widget
 See [engine-notes.md](engine-notes.md#glass-overlays).
 
 `Surface::keep_above_desktop() -> Result<bool>` repairs the bottom band when necessary and
-preserves directly underlying `mypaper.wallpaper.glass` overlays. `desktop_order_valid() -> bool`
+preserves directly underlying `glaze.wallpaper.glass` overlays. `desktop_order_valid() -> bool`
 is a read-only harness probe. `raise_in_desktop_band() -> Result<()>` lifts the edit palette above
 other widgets while keeping ordinary apps above it. `WM_WINDOWPOSCHANGING` suppresses automatic
 activation raises; explicit repairs use a guarded move. No periodic z-order timer runs. The host
@@ -369,7 +369,7 @@ filters, as in the launcher); Escape and Enter work as before.
 
 ### Glass under a surface (N3)
 
-`mypaper_ui::glass` puts the engine's Liquid Glass under a surface. The UI layer only says where;
+`glaze_ui::glass` puts the engine's Liquid Glass under a surface. The UI layer only says where;
 the shell installs the thread's `Backdrop` (`crates/shell/src/overlay_client.rs`), which sends
 the engine one request per change (docs/engine-notes.md, "Glass overlays"):
 
@@ -524,7 +524,7 @@ Studio ([studio-ux.md](studio-ux.md)) is the one ordinary app window. What it ad
   `Menu::handle` and applies `Outcome::Chosen` with `App::chose`. The menu's two windows are
   made on first use, so they cost nothing at startup.
 
-## `mypaper-shell`
+## `glaze-shell`
 
 One UI thread, plus the desktop menu's mouse-hook thread (a low-level hook must answer in
 microseconds, whatever the UI is doing). Core starts it as a supervised child (restart policy as
@@ -532,7 +532,7 @@ for the other hosts).
 
 - **The loop** waits on its parent process and the message queue; it dispatches, then drains the
   inbox and the UI events in order.
-- **The inbox** is a message-only window (class `mypaper.shell.inbox`) that only queues: the hook,
+- **The inbox** is a message-only window (class `glaze.shell.inbox`) that only queues: the hook,
   the `config.json` and `palette.json` watchers post to it from their threads. `WM_CLOSE` to it
   quits the shell.
 - **Lifetime:** one shell at a time (a named mutex; a second one exits at once); it exits when the
@@ -543,13 +543,13 @@ for the other hosts).
 
 ## Tests
 
-- `cargo test -p mypaper-ui`: damage, clipping and premultiplied output on the software target,
+- `cargo test -p glaze-ui`: damage, clipping and premultiplied output on the software target,
   springs and the ticker, focus stepping, menu layout and placement (0 gap), the accessibility
   tree, and the GPU-driver check (an integration test: a process of its own).
-- `cargo test -p mypaper-shell`: the desktop menu's items, the theme look, and **golden PNGs** of
+- `cargo test -p glaze-shell`: the desktop menu's items, the theme look, and **golden PNGs** of
   the default menu and its View submenu (`crates/shell/tests/golden/`), rendered headless through
-  the same software target the screen gets. `MYPAPER_BLESS=1` rewrites them; a mismatch saves the
-  actual image to `%TEMP%\mypaper-golden`.
+  the same software target the screen gets. `GLAZE_BLESS=1` rewrites them; a mismatch saves the
+  actual image to `%TEMP%\glaze-golden`.
 
 ## Measured
 
@@ -558,7 +558,7 @@ rain-city. CPU is a percentage of one core; RAM is private MB.
 
 ### N0.1: a 3840×36 bar surface
 
-`cargo run --release -p mypaper-ui --example mypaper-bar-spike -- --x -2560 --y 9` (the bar spans
+`cargo run --release -p glaze-ui --example glaze-bar-spike -- --x -2560 --y 9` (the bar spans
 both monitors), self-measured, with `measure.ps1` alongside for 60 s.
 
 | | Measured | Gate |
@@ -590,9 +590,9 @@ ole32 oleaut32 powrprof psapi rpcrt4 sechost sxs textshaping ucrtbase uiautomati
 uxtheme vcruntime140 win32u windowscodecs. No `nv*umx`, `nvgpucomp64`, `amdxc64` or `atidx*`; the
 shell's own list (with the menu open) has none either.
 
-### N1: `mypaper-shell` with the desktop menu
+### N1: `glaze-shell` with the desktop menu
 
-This branch's core, wallpaper and shell, in place of the user's mypaper (no bars or widgets);
+This branch's core, wallpaper and shell, in place of the user's Glaze (no bars or widgets);
 `crates/shell/examples/menu_live.rs` injecting right-clicks at the left monitor's centre.
 
 | | Measured | Gate |
@@ -631,7 +631,7 @@ This branch's core, wallpaper and shell, in place of the user's mypaper (no bars
   in the bars service library, separate from visible window geometry. Slides use `move_to` only.
 - The shell loop also waits on the bars' disarmed-at-rest `Ticker` and virtual-desktop event. Its
   timeout is the earliest active provider/config/auto-hide deadline; no periodic message pump was
-  introduced. Bar data/actions are Rust calls into `mypaper-bars` rather than a web bridge.
+  introduced. Bar data/actions are Rust calls into `glaze-bars` rather than a web bridge.
 
 See [bars.md](bars.md) for configuration, recovery ownership and the N3 flyout/plate seams.
 

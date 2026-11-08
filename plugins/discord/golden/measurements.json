@@ -7,31 +7,31 @@
     "benchmark":  "| measure | value |\n|---|---|\n| process before the engine (WS / private) | 9.6 / 1.3 MiB |\n| engine + linker + ticker | 0.2 ms, +0.2 MiB WS / +3.2 MiB private |\n| discord: cold load (AOT compile + instantiate + init) | 337.7 ms |\n| discord: warm load (cached .cwasm + instantiate + init) | 0.69 ms |\n| discord: active (linear memory / process private delta) | 1.06 MiB / +0.98 MiB |\n| process at the end (WS / private) | 16.4 / 8.1 MiB |\n",
     "desktop":  [
                     {
-                        "name":  "mypaper-core",
+                        "name":  "glaze-core",
                         "pid":  26792,
                         "workingSetMiB":  16.9,
                         "privateMiB":  2.89
                     },
                     {
-                        "name":  "mypaper-plugins",
+                        "name":  "glaze-plugins",
                         "pid":  53748,
                         "workingSetMiB":  35.61,
                         "privateMiB":  26.05
                     },
                     {
-                        "name":  "mypaper-shell",
+                        "name":  "glaze-shell",
                         "pid":  87340,
                         "workingSetMiB":  96.59,
                         "privateMiB":  34.23
                     },
                     {
-                        "name":  "mypaper-studio",
+                        "name":  "glaze-studio",
                         "pid":  70120,
                         "workingSetMiB":  10.98,
                         "privateMiB":  37.28
                     },
                     {
-                        "name":  "mypaper-wallpaper",
+                        "name":  "glaze-wallpaper",
                         "pid":  74044,
                         "workingSetMiB":  49.86,
                         "privateMiB":  176.05
@@ -49,7 +49,7 @@
                        "read-only DPI-aware live bar capture inspected; no app input sent",
                        "git-archive fc1fb03: cargo check --workspace --tests passed",
                        "180x180 Small and Medium composer and hit bounds verified in the shell renderer",
-                       "final deployed bar capture: C:/mypaper-targets/discord-evidence/final-discord-deploy-004405.png"
+                       "final deployed bar capture: C:/glaze-targets/discord-evidence/final-discord-deploy-004405.png"
                    ],
     "visual":  [
                    "plugins/discord/golden/sizes.png",

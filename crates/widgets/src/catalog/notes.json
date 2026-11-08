@@ -3,7 +3,7 @@
   "name": "Notes",
   "category": "Productivity",
   "version": "1.1.0",
-  "author": "mypaper",
+  "author": "Glaze",
   "description": "A sticky note with light markdown, saved as you type.",
   "size": {
     "default": [4, 4],

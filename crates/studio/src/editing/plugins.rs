@@ -2,10 +2,10 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
-use mypaper_ui::Rect;
-use mypaper_ui::controls::{ButtonKind, Font, key};
-use mypaper_widgets::manifest::PluginManifest;
-use mypaper_widgets::plugin_manager::{self as manager, Package, Preferences, Request, Snapshot};
+use glaze_ui::Rect;
+use glaze_ui::controls::{ButtonKind, Font, key};
+use glaze_widgets::manifest::PluginManifest;
+use glaze_widgets::plugin_manager::{self as manager, Package, Preferences, Request, Snapshot};
 use serde_json::{Value, json};
 
 use crate::actions::{Action, Edit};
@@ -29,7 +29,7 @@ impl State {
         self.preferences = Preferences::load();
         let mut installed = BTreeMap::new();
         // User folders take precedence, just as they do in the shell registry.
-        for root in mypaper_widgets::registry::plugin_roots().into_iter().rev() {
+        for root in glaze_widgets::registry::plugin_roots().into_iter().rev() {
             if let Ok(entries) = std::fs::read_dir(root) {
                 for entry in entries.flatten() {
                     if let Ok(manifest) = PluginManifest::load(&entry.path())
@@ -222,7 +222,7 @@ pub fn intercept(app: &mut App, path: &str, value: Option<Value>) -> bool {
                 app.window,
                 "Install plugin",
                 rest == "folder",
-                &[("mypaper plugins", "*.mypaper-plugin")],
+                &[("Glaze plugins", "*.glaze-plugin")],
             )
                 && let Some(inbox) = app.inbox.clone()
             {
@@ -250,8 +250,8 @@ pub fn intercept(app: &mut App, path: &str, value: Option<Value>) -> bool {
                     let id = package.manifest.id.clone();
                     let result=(||->anyhow::Result<String>{
                         use std::os::windows::process::CommandExt;
-                        let exe=crate::system::find_exe("mypaper-plugins.exe").ok_or_else(||anyhow::anyhow!("mypaper-plugins.exe is missing. Update mypaper before installing plugins."))?;
-                        package.install(true,&mypaper_widgets::files::user("plugins")?,|dir|{
+                        let exe=crate::system::find_exe("glaze-plugins.exe").ok_or_else(||anyhow::anyhow!("glaze-plugins.exe is missing. Update Glaze before installing plugins."))?;
+                        package.install(true,&glaze_widgets::files::user("plugins")?,|dir|{
                             let output=std::process::Command::new(&exe).arg("--compile").arg(dir).creation_flags(0x0800_0000).output()?;
                             anyhow::ensure!(output.status.success(),"Plugin compilation failed: {} {}",String::from_utf8_lossy(&output.stdout),String::from_utf8_lossy(&output.stderr));Ok(())
                         })?;
@@ -334,9 +334,9 @@ pub fn intercept(app: &mut App, path: &str, value: Option<Value>) -> bool {
 pub fn fixture(state: &mut State) {
     let manifests = [
         json!({"id":"t3","name":"T3 Code","version":"0.4.0","author":"T3","component":"t3.wasm","api":"0.1","permissions":["network:ws://127.0.0.1:3773","storage","secrets"],"faces":[{"id":"agents","name":"Running agents","size":{"default":[4,4]}}],"bars":[{"id":"status","name":"Agent status","size":{"default":[2,1]}}],"commands":[{"id":"refresh","label":"Refresh agents"}],"settings":[{"key":"endpoint","type":"string","label":"Server address","default":"ws://127.0.0.1:3773"},{"key":"live","type":"boolean","label":"Live updates","default":true}]}),
-        json!({"id":"weather","name":"Weather","version":"1.2.0","author":"mypaper","component":"weather.wasm","api":"0.1","permissions":["network:https://api.open-meteo.com"]}),
-        json!({"id":"hello","name":"Hello","version":"0.1.0","author":"mypaper","component":"hello.wasm","api":"0.1"}),
-        json!({"id":"docker","name":"Docker","version":"0.2.0","author":"mypaper","component":"docker.wasm","api":"0.1"}),
+        json!({"id":"weather","name":"Weather","version":"1.2.0","author":"Glaze","component":"weather.wasm","api":"0.1","permissions":["network:https://api.open-meteo.com"]}),
+        json!({"id":"hello","name":"Hello","version":"0.1.0","author":"Glaze","component":"hello.wasm","api":"0.1"}),
+        json!({"id":"docker","name":"Docker","version":"0.2.0","author":"Glaze","component":"docker.wasm","api":"0.1"}),
     ];
     state.installed = manifests
         .into_iter()
@@ -368,7 +368,7 @@ pub fn consent_fixture(app: &mut App) {
     app.nav.plugins = true;
     fixture(&mut app.plugins);
     let source =
-        std::env::temp_dir().join(format!("mypaper-studio-consent-{}", std::process::id()));
+        std::env::temp_dir().join(format!("glaze-studio-consent-{}", std::process::id()));
     std::fs::create_dir_all(&source).unwrap();
     std::fs::write(source.join("plugin.json"),r#"{"id":"example","name":"Local companion","version":"1.0.0","author":"Example author","component":"example.wasm","api":"0.1","native":["module.dll"],"permissions":["network:ws://127.0.0.1:3773","storage","secrets","native-code"]}"#).unwrap();
     std::fs::write(source.join("example.wasm"), b"fixture").unwrap();
@@ -383,7 +383,7 @@ mod tests {
     use super::*;
     #[test]
     fn clearing_a_text_setting_keeps_a_valid_empty_string() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         fixture(&mut app.plugins);
         intercept(&mut app, "/plugins/setting/t3/endpoint", None);
@@ -393,7 +393,7 @@ mod tests {
     }
     #[test]
     fn consent_can_be_cancelled_and_cannot_be_bypassed_without_a_package() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         consent_fixture(&mut app);
         assert!(app.plugins.pending.is_some());

@@ -3,19 +3,19 @@
 //! `LOCALAPPDATA` (the undo journals go there) and `APPDATA`:
 //!
 //! ```text
-//! cargo run -p mypaper-tweaks --example live_tweaks -- [mypaper-dark|mypaper-light]
+//! cargo run -p glaze-tweaks --example live_tweaks -- [glaze-dark|glaze-light]
 //! ```
 //!
 //! It never restarts Explorer. A crash between the steps leaves the journals in the scratch
 //! folder, so run the example again with the same folders to undo.
 
 use anyhow::{Result, bail};
-use mypaper_theme::WindowsStyle;
-use mypaper_tweaks::Tweaks;
-use mypaper_tweaks::classic_menu::{self, ClassicMenu};
-use mypaper_tweaks::cursors::{CURSORS_KEY, ROLES};
-use mypaper_tweaks::registry::Registry;
-use mypaper_tweaks::undo::{Store, Value};
+use glaze_theme::WindowsStyle;
+use glaze_tweaks::Tweaks;
+use glaze_tweaks::classic_menu::{self, ClassicMenu};
+use glaze_tweaks::cursors::{CURSORS_KEY, ROLES};
+use glaze_tweaks::registry::Registry;
+use glaze_tweaks::undo::{Store, Value};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, CreateDIBSection, DIB_RGB_COLORS,
     DeleteDC, DeleteObject, SelectObject,
@@ -89,7 +89,7 @@ fn arrow_pixel() -> Result<[u8; 4]> {
 fn main() -> Result<()> {
     let set = std::env::args()
         .nth(1)
-        .unwrap_or_else(|| "mypaper-dark".into());
+        .unwrap_or_else(|| "glaze-dark".into());
     let registry = Registry;
 
     // ---- cursors -------------------------------------------------------------------------

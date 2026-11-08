@@ -1,8 +1,8 @@
 //! Desktop module transfers share one validated operation with Studio's release handler.
 use super::wire::PreviewOp;
-use mypaper_bars::BarsConfig;
-use mypaper_ui::{AnimationFrames, Surface, SurfaceId};
-use mypaper_ui::{Point, Rect};
+use glaze_bars::BarsConfig;
+use glaze_ui::{AnimationFrames, Surface, SurfaceId};
+use glaze_ui::{Point, Rect};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use windows::Win32::Foundation::HWND;
@@ -240,7 +240,7 @@ pub fn move_ops(
         .ok()?
         .for_monitor(display, primary)
         .ok()?;
-    let floating = config.dock.style == mypaper_bars::config::DockStyle::Floating;
+    let floating = config.dock.style == glaze_bars::config::DockStyle::Floating;
     let explicit = ["left", "right"].map(|zone| {
         config
             .raw()

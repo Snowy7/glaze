@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     // Preserve all detail and preceding layers, including when the bloom strength is zero.
     let base = sample_layer_input(uv);

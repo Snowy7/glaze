@@ -1,7 +1,7 @@
 //! Where an overlay's glass reads and draws, in plain rectangles (virtual-screen physical px
 //! unless noted).
 
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 
 use super::request::Material;
 

@@ -4,7 +4,7 @@
 //!
 //! The app is launched non-activating (`SW_SHOWNOACTIVATE`) inside a Job
 //! Object with `KILL_ON_JOB_CLOSE`, so it dies with the source (theme switch)
-//! and never outlives mypaper, even if mypaper is killed. `{hwnd}` in the
+//! and never outlives Glaze, even if Glaze is killed. `{hwnd}` in the
 //! arguments is the screen window, for apps that take a parent handle (Unity's
 //! `-parentHWND`).
 //!
@@ -26,7 +26,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use mypaper_theme::{AppWallpaper, LoadedTheme};
+use glaze_theme::{AppWallpaper, LoadedTheme};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, RECT};
 use windows::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,

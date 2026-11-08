@@ -11,14 +11,14 @@
     "start_menu_hot_reload_launcher":  true,
     "processes_survived_without_restart":  true,
     "processes":  [
-                      "mypaper-core:13056",
-                      "mypaper-index:15672",
-                      "mypaper-shell:70488"
+                      "glaze-core:13056",
+                      "glaze-index:15672",
+                      "glaze-shell:70488"
                   ],
     "restored_byte_for_byte":  {
-                                   "C:\\Users\\you\\AppData\\Local\\mypaper\\palette.json":  true,
-                                   "C:\\Users\\you\\AppData\\Roaming\\mypaper\\bars.json":  true,
-                                   "C:\\Users\\you\\AppData\\Roaming\\mypaper\\config.json":  true,
-                                   "C:\\Users\\you\\AppData\\Local\\mypaper\\game-activity.json":  true
+                                   "C:\\Users\\you\\AppData\\Local\\glaze\\palette.json":  true,
+                                   "C:\\Users\\you\\AppData\\Roaming\\glaze\\bars.json":  true,
+                                   "C:\\Users\\you\\AppData\\Roaming\\glaze\\config.json":  true,
+                                   "C:\\Users\\you\\AppData\\Local\\glaze\\game-activity.json":  true
                                }
 }

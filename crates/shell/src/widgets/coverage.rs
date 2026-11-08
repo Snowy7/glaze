@@ -12,7 +12,7 @@ use windows::Win32::{
     UI::{Accessibility::HWINEVENTHOOK, WindowsAndMessaging::*},
 };
 
-use mypaper_desktop::win_events::{self, Subscription};
+use glaze_desktop::win_events::{self, Subscription};
 
 static CHANGED: AtomicBool = AtomicBool::new(true);
 /// The visible app windows (filled on install, kept by the events on the WinEvent thread).

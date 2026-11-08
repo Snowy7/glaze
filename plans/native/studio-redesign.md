@@ -1,4 +1,4 @@
-# mypaper Studio: the native redesign (N7)
+# Glaze Studio: the native redesign (N7)
 
 Design spec, 2026-11-05. Mockups of every screen, light and dark: `plans/native/studio-redesign.html`.
 It builds on `docs/studio-ux.md` (the web Studio's audit and model, which this keeps where it worked)
@@ -13,7 +13,7 @@ landed while this spec was being written.
 - **Seven places in the sidebar:** Home, Wallpapers, Look, Widgets, Bars, Integrations and, pinned at
   the bottom, Settings. Search (Ctrl K) reaches every setting, wallpaper, widget, integration and
   action from anywhere.
-- **One Look editor** covers everything mypaper draws (top bar, dock, widgets, menus, panels) and,
+- **One Look editor** covers everything Glaze draws (top bar, dock, widgets, menus, panels) and,
   on its Windows tab, Windows' own windows and pointer. It replaces four look editors: Widgets › Look,
   the bar Look panels, the theme editor's skins, and the Windows page. The five styles and five
   material controls live there.
@@ -164,7 +164,7 @@ styles **(plan)**:
 | Bars: corner radius | A bar › More look › Surface | Bars › a bar › More › Look › Corners |
 | Bars: glass intensity, refraction, highlight, tint, blur | A bar › More look › Glass | Look › Material (or per bar) |
 | Bars: glass menus (menus and panels as glass) | A bar › More look › Menus and panels | Look › More › Different for › Menus and panels |
-| Bars: "drawn like" (mypaper, macOS, Windows 11, ChromeOS) | A bar › More look | Bars › a bar › Design (the design sets it), with an override under More › Look › Drawn like |
+| Bars: "drawn like" (Glaze, macOS, Windows 11, ChromeOS) | A bar › More look | Bars › a bar › Design (the design sets it), with an override under More › Look › Drawn like |
 | Bars: icons (Segoe Fluent, SF Symbols style) | A bar › More look | Look › More › Text and icons › Icon style (Lucide, Fluent) **(plan: N6 bundles both)** |
 | Bars: border width and color | A bar › More look › Edges and depth | Look › More › Shape › Edge line; per bar, under its More › Look |
 | Bars: shadow | A bar › More look › Edges and depth | Bars › a bar › More › Look › Shadow (on or off; native `Shadow` op) |
@@ -181,9 +181,9 @@ styles **(plan)**:
 
 | Setting | Old place | New place |
 |---|---|---|
-| Looks: As is, Wallpaper, Dark, Light, Glass, Sharp | Windows › Look tiles | Look › Windows › tiles: **As is, Match mypaper, Glass, Sharp**. Dark and Light are Match mypaper with Appearance Dark or Light. "Wallpaper" is Match mypaper with Accent and Edge From wallpaper. |
-| Accent color: As is / From wallpaper / Pick | Windows | Look › Windows › Accent: Same as mypaper's (default), As is, Pick |
-| Light or dark apps: As is / Dark / Light | Windows | Look › Windows › Apps: Match mypaper, Light, Dark, As is |
+| Looks: As is, Wallpaper, Dark, Light, Glass, Sharp | Windows › Look tiles | Look › Windows › tiles: **As is, Match Glaze, Glass, Sharp**. Dark and Light are Match Glaze with Appearance Dark or Light. "Wallpaper" is Match Glaze with Accent and Edge From wallpaper. |
+| Accent color: As is / From wallpaper / Pick | Windows | Look › Windows › Accent: Same as Glaze's (default), As is, Pick |
+| Light or dark apps: As is / Dark / Light | Windows | Look › Windows › Apps: Match Glaze, Light, Dark, As is |
 | Corners: As is / Round / Small / Square | Windows | Look › Windows › Corners |
 | Material: As is / Mica / Acrylic / Mica tabbed / None / Windows decides | Windows | Look › Windows › Window material |
 | Window edge: As is / From wallpaper / Pick | Windows › More | Look › Windows › More › Window edge |
@@ -192,7 +192,7 @@ styles **(plan)**:
 | Pointer: As is / Dark / Light / Other (sets and a folder) | Windows › Pointer | Look › Windows › Pointer |
 | Reset everything to how Windows has it | Windows header ↺ | Look › Windows header ↺ |
 | "Saved with Aurora" | Windows page bar | The scope switch (D2): your look, or the wallpaper's |
-| Right-click menu: use mypaper's | Windows › Right-click menu | Settings › Desktop › Right-click menu |
+| Right-click menu: use Glaze's | Windows › Right-click menu | Settings › Desktop › Right-click menu |
 | Menu items: reorder, remove, add a built-in, add a separator, reset | Windows › Right-click menu | Settings › Desktop › Right-click menu (with a live menu preview) |
 | Your own menu item (name, program, arguments) | Windows › Right-click menu › More | Settings › Desktop › Right-click menu › Add your own |
 | Full menus in Explorer (the classic Windows 11 menu) | Windows › Right-click menu › More | Settings › Desktop › Explorer's menus |
@@ -282,7 +282,7 @@ picker.
 | Tray: collect the tray icons | Menus and panels | Bars › Panels › Tray (not while the Windows taskbar is hidden) |
 | Icon packs: choose a pack, start your own, single apps' icons | Bars › Icon packs | Look › More › Text and icons › **Icon pack** (it applies to the dock, top bar and launcher) |
 | Theme variables (CSS custom properties) | Bars › Look for both bars | **(plan) Removed** with CSS |
-| (new) Notifications: Win+N and Win+A open mypaper's | n/a | Bars › Panels › Notifications |
+| (new) Notifications: Win+N and Win+A open Glaze's | n/a | Bars › Panels › Notifications |
 | (new) Integration modules (for example T3 Code status) | n/a | Add a module › From integrations |
 
 ### 2.8 Settings
@@ -293,8 +293,8 @@ picker.
 | Show the theme while Windows starts | Settings › Startup | Settings › General › Show the wallpaper while Windows starts |
 | Pause on battery | Settings › Power | Settings › Performance and power |
 | Pause behind fullscreen apps | Settings › Power | Settings › Performance and power |
-| mypaper: running or stopped; Start, Stop | Settings › mypaper | Settings › Troubleshoot › mypaper (and the sidebar status) |
-| Emergency stop hotkey (shown) | Settings › mypaper | Settings › Keyboard, Settings › Troubleshoot, first run |
+| Glaze: running or stopped; Start, Stop | Settings › Glaze | Settings › Troubleshoot › Glaze (and the sidebar status) |
+| Emergency stop hotkey (shown) | Settings › Glaze | Settings › Keyboard, Settings › Troubleshoot, first run |
 | Parts: core, wallpaper, widgets, bars (on, off, not installed) | Settings › Details | Settings › Troubleshoot › Parts: core, engine, shell (**plan**: three processes), each with Restart |
 | How it starts (sign-in task or startup entry) | Settings › Details | Settings › Troubleshoot › Details |
 | Installed at | Settings › Details | Settings › Troubleshoot › Details |
@@ -332,7 +332,7 @@ the native plan's (marked **plan**, all listed in section 11) and the knobs in D
 | **Widgets** (Ctrl 4) | "What's on my desktop?" | Canvas, Add widget, a widget's options and size, Always on top |
 | **Bars** (Ctrl 5) | "My top bar and dock." | Stage, presets, a bar, a module, panels, Windows taskbar |
 | **Integrations** (Ctrl 6) | "What does it connect to?" | Connected, Built in, Available; a selected integration's details |
-| **Settings** (Ctrl ,) | "How does mypaper behave?" | General, Performance and power, Desktop, Keyboard, Troubleshoot, About |
+| **Settings** (Ctrl ,) | "How does Glaze behave?" | General, Performance and power, Desktop, Keyboard, Troubleshoot, About |
 
 There are six places plus Settings, down from seven: the theme editor, the Windows page and New theme
 fold into Look and Wallpapers. Settings sits at the bottom of the sidebar, apart from the six.
@@ -387,10 +387,10 @@ Your choice always wins.
 - **Display chips** under the preview: Display 1 · 2560×1440, Display 2.
 - **Wallpapers strip:** the current wallpaper and five recent ones, then **+**. Clicking one uses it
   (with Undo), and "All wallpapers ›" goes to the library.
-- **Right column:** a status card (Playing or Paused, the wallpaper, the GPU and frame rate, mypaper's
+- **Right column:** a status card (Playing or Paused, the wallpaper, the GPU and frame rate, Glaze's
   CPU and memory, Pause) and **Your desktop**: Look, Widgets, Top bar, Dock, Right-click menu and
   Integrations. Each row shows its current value and is one click from its editor.
-- **Off state:** when core isn't running, Home shows "mypaper is off" with **Start**, and the preview
+- **Off state:** when core isn't running, Home shows "Glaze is off" with **Start**, and the preview
   dims (section 6).
 
 ### 4.2 Wallpapers
@@ -441,11 +441,11 @@ Your choice always wins.
   - **More** › Different for: Bars, Widgets, Menus and panels. Each is "Follows Look" (default) or its
     own style and material.
 - **Windows tab:**
-  - **Windows look** tiles (As is, Match mypaper, Glass, Sharp);
+  - **Windows look** tiles (As is, Match Glaze, Glass, Sharp);
   - Accent, Apps (light or dark), Corners, Window material;
   - **Pointer** tiles;
   - **More:** window edge, title bar, title text;
-  - one quiet line at the end: "Undone when mypaper stops or you press Ctrl Alt Shift Backspace."
+  - one quiet line at the end: "Undone when Glaze stops or you press Ctrl Alt Shift Backspace."
 
 ### 4.4 Widgets
 
@@ -538,7 +538,7 @@ grouped rows on the right, at most 720 px wide.
 - **Keyboard:** emergency stop, widget edit mode, always-on-top widgets, the palette, Peek. All are
   shown; none are rebindable yet.
 - **Troubleshoot:**
-  - mypaper running or stopped (Start, Stop);
+  - Glaze running or stopped (Start, Stop);
   - **Parts** (core, engine, shell: state, memory, Restart);
   - **Restore the Windows desktop** (the emergency stop, as a button);
   - **Start over** (reset the bars, widgets or look, keeping a backup);
@@ -556,7 +556,7 @@ grouped rows on the right, at most 720 px wide.
    and weather), **Familiar** (Fluent, the Windows 11 preset, Spring forest), **Bold** (One UI,
    Islands, Star Nest), **Quiet** (Mono, top bar only, Snowfall). Picking one applies it to the
    real desktop at once, and a Peek hint shows.
-2. **"Your taskbar":** Replace it with mypaper's bars (default for the starter); Keep Windows'
+2. **"Your taskbar":** Replace it with Glaze's bars (default for the starter); Keep Windows'
    taskbar and add widgets only; Hide everything (wallpaper only).
 3. **"You're set":** Start with Windows (on), and the safety line with keycaps: "If anything goes
    wrong, press Ctrl Alt Shift Backspace. Windows comes back as it was." Then **Open Studio**.
@@ -615,8 +615,8 @@ wallpaper's look, or the style's defaults.
 ### 5.8 Troubleshooting and panic
 
 - **Something looks wrong now:** press **Ctrl Alt Shift Backspace** anywhere (core handles it,
-  whether Studio is open or not). Studio, if open, shows "mypaper is stopped. Windows is back as
-  it was." with **Start mypaper**.
+  whether Studio is open or not). Studio, if open, shows "Glaze is stopped. Windows is back as
+  it was." with **Start Glaze**.
 - **A part stopped:** the sidebar status says "Shell stopped" and links to Troubleshoot. There,
   Parts lists each with its state, memory and **Restart**.
 - **Settings broke:** the page that uses the file shows a banner ("Your bar settings can't be read:
@@ -634,8 +634,8 @@ wallpaper's look, or the style's defaults.
 | Where | State | What shows |
 |---|---|---|
 | Any page | Loading | Local reads are fast: content draws when ready. Past 150 ms, static skeleton blocks show (panel fill, no shimmer). Previews draw the wallpaper still first, then surfaces as their views are ready. |
-| Previews | Engine off (no glass) | A flat tinted stand-in, with one line under the stage: "Glass shows when mypaper is running." |
-| Home | mypaper is off | The preview dims to 40%, and a centered card says "mypaper is off" with **Start mypaper** |
+| Previews | Engine off (no glass) | A flat tinted stand-in, with one line under the stage: "Glass shows when Glaze is running." |
+| Home | Glaze is off | The preview dims to 40%, and a centered card says "Glaze is off" with **Start Glaze** |
 | Home | Paused | The status card reads Paused, and the preview badge says "Paused" |
 | Wallpapers | No wallpapers of your own (Yours filter) | "Your own wallpapers show here." **Add wallpaper** |
 | Wallpapers | Search finds nothing | "Nothing called 'xyz'." with **Search everything** (opens the palette with the text) |
@@ -853,7 +853,7 @@ The ticker runs only while something moves (Rule 2), so an idle Studio draws not
 | "Edit on desktop" for widget lists and pictures goes | All widget settings live in Studio (plan); one place to set a widget |
 | Icon packs move from Bars to Look | They change the dock, top bar and launcher, so they're a look, not a bar |
 | Reduce motion and Save power move from Bars to Settings | They apply to every native surface now, not just the bars |
-| The desktop right-click menu moves from Windows to Settings › Desktop | It's mypaper behavior; its look already follows Look. It keeps a live preview. |
+| The desktop right-click menu moves from Windows to Settings › Desktop | It's Glaze behavior; its look already follows Look. It keeps a live preview. |
 | Bar pairings become **Presets**, and first-run starters build on them | One preset concept for bars; starters add the style and wallpaper on top |
 | Settings sections are reorganized: General, Performance and power, Desktop, Keyboard, Troubleshoot, About | The engine and its parts move out of the first screen, under Troubleshoot; GPU and fps get a home |
 | Built-in plugins appear in Integrations | Everything that brings outside data in is in one list |

@@ -263,9 +263,9 @@ fn callback(request: &str, state: &str) -> Result<Option<String>> {
 }
 fn respond(stream: &mut TcpStream, success: bool) {
     let body = if success {
-        "Sign-in received. Return to mypaper to check the connection. You can close this tab."
+        "Sign-in received. Return to Glaze to check the connection. You can close this tab."
     } else {
-        "This sign-in callback was not accepted. Return to mypaper."
+        "This sign-in callback was not accepted. Return to glaze."
     };
     let _ = write!(
         stream,

@@ -1,6 +1,6 @@
 //! Compatibility at the native registries: both existing surfaces lease the SAME SMTC provider.
-use mypaper_integrations::{Action, Data, Lease, Provider, media::Action as Control};
-use mypaper_widgets::bridge::{ErrorCode, MediaAction, Out, Target, WidgetError};
+use glaze_integrations::{Action, Data, Lease, Provider, media::Action as Control};
+use glaze_widgets::bridge::{ErrorCode, MediaAction, Out, Target, WidgetError};
 use serde_json::{Value, json};
 use std::{
     cell::RefCell,
@@ -14,13 +14,13 @@ thread_local! {
 }
 struct BarState {
     lease: Option<Lease>,
-    waker: mypaper_bars::wake::Waker,
+    waker: glaze_bars::wake::Waker,
     revision: u64,
     active: bool,
 }
 pub struct BarMedia(Rc<RefCell<BarState>>);
 impl BarMedia {
-    pub fn new(waker: mypaper_bars::wake::Waker) -> Self {
+    pub fn new(waker: glaze_bars::wake::Waker) -> Self {
         let state = Rc::new(RefCell::new(BarState {
             lease: None,
             waker,
@@ -40,16 +40,16 @@ impl BarMedia {
             }
         } else {
             state.lease = None;
-            state.waker.send(mypaper_bars::wake::Msg::Media(None));
+            state.waker.send(glaze_bars::wake::Msg::Media(None));
         }
         bar_changed(&mut state);
     }
-    pub fn control(&self, action: mypaper_bars::actions::MediaAction) {
+    pub fn control(&self, action: glaze_bars::actions::MediaAction) {
         if let Some(lease) = &self.0.borrow().lease {
             let _ = lease.action(Action::Media(match action {
-                mypaper_bars::actions::MediaAction::Toggle => Control::Toggle,
-                mypaper_bars::actions::MediaAction::Next => Control::Next,
-                mypaper_bars::actions::MediaAction::Previous => Control::Previous,
+                glaze_bars::actions::MediaAction::Toggle => Control::Toggle,
+                glaze_bars::actions::MediaAction::Next => Control::Next,
+                glaze_bars::actions::MediaAction::Previous => Control::Previous,
             }));
         }
     }
@@ -58,7 +58,7 @@ fn bar_changed(state: &mut BarState) {
     let Some(snapshot) = state.lease.as_ref().map(Lease::snapshot) else {
         if state.revision != 0 {
             state.revision = 0;
-            state.waker.send(mypaper_bars::wake::Msg::Media(None));
+            state.waker.send(glaze_bars::wake::Msg::Media(None));
         }
         return;
     };
@@ -68,7 +68,7 @@ fn bar_changed(state: &mut BarState) {
     state.revision = snapshot.revision;
     let media = match snapshot.data {
         Some(Data::Media(s)) if !s.title.is_empty() || !s.artist.is_empty() => {
-            Some(mypaper_bars::media::MediaInfo {
+            Some(glaze_bars::media::MediaInfo {
                 title: s.title,
                 artist: s.artist,
                 app: s.app_id,
@@ -77,19 +77,19 @@ fn bar_changed(state: &mut BarState) {
         }
         _ => None,
     };
-    state.waker.send(mypaper_bars::wake::Msg::Media(media));
+    state.waker.send(glaze_bars::wake::Msg::Media(media));
 }
 
 struct WidgetState {
     lease: Option<Lease>,
-    waker: mypaper_widgets::wake::Waker,
+    waker: glaze_widgets::wake::Waker,
     revision: u64,
     subs: BTreeSet<(String, String)>,
     held: bool,
 }
 pub struct WidgetMedia(Rc<RefCell<WidgetState>>);
 impl WidgetMedia {
-    pub fn new(waker: mypaper_widgets::wake::Waker) -> Self {
+    pub fn new(waker: glaze_widgets::wake::Waker) -> Self {
         let state = Rc::new(RefCell::new(WidgetState {
             lease: None,
             waker,
@@ -117,7 +117,7 @@ impl WidgetMedia {
     }
     pub fn current(&mut self, target: Target) {
         let state = self.0.borrow();
-        state.waker.send(mypaper_widgets::wake::Msg::Answered(
+        state.waker.send(glaze_widgets::wake::Msg::Answered(
             target,
             Ok(widget_value(state.lease.as_ref())),
         ));
@@ -142,7 +142,7 @@ impl WidgetMedia {
             .map_err(|e| WidgetError::new(ErrorCode::Internal, e.to_string()));
         state
             .waker
-            .send(mypaper_widgets::wake::Msg::Answered(target, result));
+            .send(glaze_widgets::wake::Msg::Answered(target, result));
     }
     pub fn on_result(&mut self, _: Option<u64>, result: Result<Value, String>) -> Vec<Out> {
         let state = self.0.borrow();
@@ -172,7 +172,7 @@ fn widget_value(lease: Option<&Lease>) -> Value {
         _ => Value::Null,
     }
 }
-fn widget_data(s: mypaper_integrations::media::Snapshot, now: i64) -> Value {
+fn widget_data(s: glaze_integrations::media::Snapshot, now: i64) -> Value {
     let advance = if s.playing {
         s.position_at_ms
             .map_or(0, |at| now.saturating_sub(at).max(0))
@@ -193,7 +193,7 @@ fn widget_data(s: mypaper_integrations::media::Snapshot, now: i64) -> Value {
 #[cfg(test)]
 #[test]
 fn widget_timeline_interpolates_playback_and_preserves_paused_and_live_states() {
-    let mut snapshot = mypaper_integrations::media::Snapshot {
+    let mut snapshot = glaze_integrations::media::Snapshot {
         position_ms: Some(12_000),
         duration_ms: Some(60_000),
         position_at_ms: Some(100_000),
@@ -226,7 +226,7 @@ fn widget_changed(state: &mut WidgetState) {
     let Some(snapshot) = state.lease.as_ref().map(Lease::snapshot) else {
         if state.revision != 0 {
             state.revision = 0;
-            state.waker.send(mypaper_widgets::wake::Msg::Media {
+            state.waker.send(glaze_widgets::wake::Msg::Media {
                 token: None,
                 result: Ok(Value::Null),
             });
@@ -237,7 +237,7 @@ fn widget_changed(state: &mut WidgetState) {
         return;
     }
     state.revision = snapshot.revision;
-    state.waker.send(mypaper_widgets::wake::Msg::Media {
+    state.waker.send(glaze_widgets::wake::Msg::Media {
         token: None,
         result: Ok(widget_value(state.lease.as_ref())),
     });

@@ -1,7 +1,7 @@
 //! Isolated before/after fixture. Real plans, disk journal and latest-request worker; an
 //! in-memory registry, two modeled windows and two 20 ms settings receivers. No desktop API,
 //! real config, registry or broadcast is touched. Legacy preserves pre-fix activate behavior.
-//! `cargo run -p mypaper-tweaks --example measure_style_transitions -- --legacy`
+//! `cargo run -p glaze-tweaks --example measure_style_transitions -- --legacy`
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -9,12 +9,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use mypaper_config::look::{Scheme, Style};
-use mypaper_theme::{Color, WindowsStyle};
-use mypaper_tweaks::palette::Palette;
-use mypaper_tweaks::plan::{WindowStyle, system_writes};
-use mypaper_tweaks::undo::{Store, Undo, Value};
-use mypaper_tweaks::worker::Worker;
+use glaze_config::look::{Scheme, Style};
+use glaze_theme::{Color, WindowsStyle};
+use glaze_tweaks::palette::Palette;
+use glaze_tweaks::plan::{WindowStyle, system_writes};
+use glaze_tweaks::undo::{Store, Undo, Value};
+use glaze_tweaks::worker::Worker;
 use serde_json::json;
 
 #[derive(Default)]
@@ -81,13 +81,13 @@ fn input(dark: bool, accent: u8) -> Input {
         dominant: Color([4, 5, 6]),
         accent: Color([accent, 90, 180]),
     };
-    let look = mypaper_config::Look {
+    let look = glaze_config::Look {
         style: Some(Style::Liquid),
         appearance: Some(if dark { Scheme::Dark } else { Scheme::Light }),
         ..Default::default()
     };
     Input {
-        style: mypaper_theme::windows::resolve(&look, None, Some(palette), false)
+        style: glaze_theme::windows::resolve(&look, None, Some(palette), false)
             .windows
             .unwrap(),
         palette,
@@ -222,7 +222,7 @@ fn run(
 fn main() -> Result<()> {
     let legacy = std::env::args().any(|a| a == "--legacy");
     let root: PathBuf =
-        std::env::temp_dir().join(format!("mypaper-transition-fixture-{}", std::process::id()));
+        std::env::temp_dir().join(format!("glaze-transition-fixture-{}", std::process::id()));
     std::fs::create_dir_all(&root)?;
     let result = (|| -> Result<_> {
         let mut samples = Vec::new();
@@ -239,7 +239,7 @@ fn main() -> Result<()> {
         Ok(json!({ "version":if legacy {"legacy"} else {"direct"},
             "fixture":"2 modeled windows; 2 x 20ms receivers; real disk journal and 100ms restore settle; actual worker; excludes file-watcher scheduling, signature IO and real app paint", "samples":samples }))
     })();
-    // This is our freshly-created temp directory, never LOCALAPPDATA/mypaper.
+    // This is our freshly-created temp directory, never LOCALAPPDATA/glaze.
     std::fs::remove_dir_all(&root)?;
     println!("{}", serde_json::to_string_pretty(&result?)?);
     Ok(())

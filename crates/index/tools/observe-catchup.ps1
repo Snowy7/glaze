@@ -1,11 +1,11 @@
 # Bounded headless performance observation; no lifecycle changes or test filesystem writes.
 param([int]$Seconds = 1200)
 $ErrorActionPreference = 'Stop'
-$exe = Join-Path (Resolve-Path "$PSScriptRoot/../../..").Path 'target/release/mypaper-index.exe'
-$index = Get-Process mypaper-index -ErrorAction Stop | Where-Object Path -eq $exe | Select-Object -First 1
+$exe = Join-Path (Resolve-Path "$PSScriptRoot/../../..").Path 'target/release/glaze-index.exe'
+$index = Get-Process glaze-index -ErrorAction Stop | Where-Object Path -eq $exe | Select-Object -First 1
 if (-not $index) { throw 'Deployed index not running' }
 $null = $index.Handle
-$logPath = Join-Path $env:LOCALAPPDATA 'mypaper/index/service.log'
+$logPath = Join-Path $env:LOCALAPPDATA 'glaze/index/service.log'
 $rows = [Collections.Generic.List[object]]::new()
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $doneAt = $null

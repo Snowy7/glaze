@@ -1141,7 +1141,7 @@ pub struct PluginManifest {
     /// The executable: in the plugin folder, else on `PATH`. Empty for component-only plugins.
     #[serde(default)]
     pub command: String,
-    /// The WebAssembly component (docs/plugins.md); its faces run in `mypaper-plugins`.
+    /// The WebAssembly component (docs/plugins.md); its faces run in `glaze-plugins`.
     #[serde(default)]
     pub component: Option<String>,
     /// The WIT package `"<major>.<minor>"` a component was built against.
@@ -1157,7 +1157,7 @@ pub struct PluginManifest {
     pub commands: Vec<Value>,
     #[serde(default)]
     pub limits: Option<Value>,
-    /// A component's native module DLLs (`native-code`), run by `mypaper-native-host`.
+    /// A component's native module DLLs (`native-code`), run by `glaze-native-host`.
     #[serde(default)]
     pub native: Vec<String>,
     #[serde(default)]
@@ -1174,11 +1174,11 @@ pub struct PluginManifest {
     pub sdk: Option<String>,
     /// Widgets it draws with declarative views (SDK plugins only).
     #[serde(default)]
-    pub faces: Vec<mypaper_plugin_sdk::FaceSpec>,
+    pub faces: Vec<glaze_plugin_sdk::FaceSpec>,
     #[serde(default)]
-    pub panels: Vec<mypaper_plugin_sdk::FaceSpec>,
+    pub panels: Vec<glaze_plugin_sdk::FaceSpec>,
     #[serde(default)]
-    pub bars: Vec<mypaper_plugin_sdk::FaceSpec>,
+    pub bars: Vec<glaze_plugin_sdk::FaceSpec>,
     #[serde(default)]
     pub settings: Vec<Value>,
 }
@@ -1231,9 +1231,9 @@ impl PluginManifest {
         }
         if let Some(sdk) = &manifest.sdk {
             ensure!(
-                mypaper_plugin_sdk::compatible(sdk, mypaper_plugin_sdk::SDK_MAJOR),
-                "built for plugin SDK {sdk}; this mypaper needs SDK {}.x",
-                mypaper_plugin_sdk::SDK_MAJOR
+                glaze_plugin_sdk::compatible(sdk, glaze_plugin_sdk::SDK_MAJOR),
+                "built for plugin SDK {sdk}; this Glaze needs SDK {}.x",
+                glaze_plugin_sdk::SDK_MAJOR
             );
         }
         ensure!(

@@ -35,6 +35,6 @@ driver thread, prove it and leave it.
 ## Rules
 
 Interleaved measurements, one change per commit with numbers, quality unchanged, deploy only through
-`scripts/deploy-local.ps1` from `C:\mypaper-targets\main`. **No deploy, restart or desktop-lock use before
-07:53 local** (the game-quiet measurement). `CARGO_TARGET_DIR=C:\mypaper-targets\engine-perf`. Stop when
+`scripts/deploy-local.ps1` from `C:\glaze-targets\main`. **No deploy, restart or desktop-lock use before
+07:53 local** (the game-quiet measurement). `CARGO_TARGET_DIR=C:\glaze-targets\engine-perf`. Stop when
 both are done, or after 2.5 hours. Report: what changed, evidence, numbers, commits.

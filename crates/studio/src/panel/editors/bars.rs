@@ -1,7 +1,7 @@
 use crate::panel::tokens::radius;
-use mypaper_bars::config::DockHide;
-use mypaper_ui::Rect;
-use mypaper_ui::controls::Align;
+use glaze_bars::config::DockHide;
+use glaze_ui::Rect;
+use glaze_ui::controls::Align;
 use serde_json::{Value, json};
 
 use super::*;
@@ -66,7 +66,7 @@ fn resolved(app: &App) -> Value {
 
 fn resolved_for(app: &App, index: usize) -> Value {
     let raw = &app.docs.doc(DocId::Bars).raw;
-    mypaper_bars::BarsConfig::parse(&raw.to_string())
+    glaze_bars::BarsConfig::parse(&raw.to_string())
         .ok()
         .and_then(|mut config| {
             config.resolve(Vec::new);
@@ -160,7 +160,7 @@ fn same_pair(app: &App) -> bool {
         .get("preset")
         .and_then(Value::as_str)
         .unwrap_or("monochrome");
-    mypaper_bars::BarsConfig::parse(&json!({"preset":preset}).to_string())
+    glaze_bars::BarsConfig::parse(&json!({"preset":preset}).to_string())
         .ok()
         .and_then(|v| serde_json::to_value(v).ok())
         .is_none_or(|preset| {
@@ -549,7 +549,7 @@ pub fn same_bars(app: &mut App) {
             },
         );
     }
-    let Some(mut base_config) = mypaper_bars::BarsConfig::parse(&baseline.to_string()).ok() else {
+    let Some(mut base_config) = glaze_bars::BarsConfig::parse(&baseline.to_string()).ok() else {
         return;
     };
     base_config.resolve(Vec::new);
@@ -715,7 +715,7 @@ pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
             value: Some(value.clone()),
         }];
         let id = value.as_str().unwrap_or("monochrome");
-        let base = mypaper_bars::BarsConfig::parse(&json!({"preset":id}).to_string())
+        let base = glaze_bars::BarsConfig::parse(&json!({"preset":id}).to_string())
             .ok()
             .and_then(|v| serde_json::to_value(v).ok());
         for bar in ["top", "dock"] {
@@ -1425,7 +1425,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         row(
             b,
             c,
-            Some(mypaper_ui::controls::Glyph::Font(' ')),
+            Some(glaze_ui::controls::Glyph::Font(' ')),
             "Gap",
             "",
             "",
@@ -1446,7 +1446,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         row(
             b,
             c,
-            Some(mypaper_ui::icons::Icon::Terminal.into()),
+            Some(glaze_ui::icons::Icon::Terminal.into()),
             "Your own program",
             "",
             "Shows the program's output",
@@ -1734,7 +1734,7 @@ fn pinned_apps(app: &App, b: &mut B, c: &mut Col, which: Pins) {
             .unwrap_or_default();
         for (i, pin) in pins.iter().enumerate() {
             let title = pin["name"].as_str().map(str::to_owned).unwrap_or_else(|| {
-                mypaper_bars::apps::file_stem(pin["path"].as_str().unwrap_or("App"))
+                glaze_bars::apps::file_stem(pin["path"].as_str().unwrap_or("App"))
             });
             let pic = if own {
                 crate::panel::lists::row(
@@ -1822,7 +1822,7 @@ fn click_label(app: &App, id: &str, bar: Bar) -> String {
         .and_then(|value| value.get("exec"))
         .and_then(Value::as_str)
     {
-        return format!("Run {}", mypaper_bars::apps::file_stem(program));
+        return format!("Run {}", glaze_bars::apps::file_stem(program));
     }
     if let Some(target) = own
         .and_then(|value| value.get("open"))
@@ -1895,7 +1895,7 @@ mod tests {
 
     #[test]
     fn dock_visibility_updates_only_legacy_flags_on_selected_display_and_undoes_together() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(&ui, json!({"dock":{"autohide":true,"hide_when_maximized":true},
             "top":{"height":40}}));
         app.nav.display = 1;
@@ -1912,15 +1912,15 @@ mod tests {
     #[test]
     fn render_dock_visibility_window_goldens() {
         let baseline = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         for dark in [true, false] {
             let mut app = crate::goldens::window_app(dark, &ui, (1280, 800));
             app.run(Action::Panel(Command::Open(Page::Dock)));
             let scheme = if dark { "dark" } else { "light" };
             let image = crate::goldens::shot(&mut app, &mut ui);
             let file = format!("dock-visibility-1280x800-{scheme}.png");
-            if let Some(out) = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS") {
-                mypaper_ui::golden::write(&image, &std::path::PathBuf::from(out).join(&file)).unwrap();
+            if let Some(out) = std::env::var_os("GLAZE_STUDIO_WINDOW_SHOTS") {
+                glaze_ui::golden::write(&image, &std::path::PathBuf::from(out).join(&file)).unwrap();
             }
             crate::goldens::check(&image, &baseline.join(file)).unwrap();
             let choices = app.frame.targets.iter().find_map(|target| match &target.action {
@@ -1929,15 +1929,15 @@ mod tests {
             }).expect("dock visibility selector");
             assert_eq!(choices.options.len(), 3);
             let items: Vec<_> = choices.options.iter().enumerate().map(|(i, (value, label))|
-                mypaper_ui::menu::Entry::check(label, i, choices.current.as_ref() == Some(value))).collect();
+                glaze_ui::menu::Entry::check(label, i, choices.current.as_ref() == Some(value))).collect();
             let p = crate::panel::palette_for(&app);
             let mut tokens = p.theme().tokens();
             tokens.material.tint = p.panel;
             tokens.colors.hover = p.selected;
-            let layout = mypaper_ui::menu::layout(&items, &tokens, 1.0, &mut ui.text);
-            let list = mypaper_ui::menu::view(&items, &layout, None, &tokens);
+            let layout = glaze_ui::menu::layout(&items, &tokens, 1.0, &mut ui.text);
+            let list = glaze_ui::menu::view(&items, &layout, None, &tokens);
             let size = layout.size();
-            let image = mypaper_ui::render(&mut ui, &list, size.0 as u32 + 32, size.1 as u32 + 32).unwrap();
+            let image = glaze_ui::render(&mut ui, &list, size.0 as u32 + 32, size.1 as u32 + 32).unwrap();
             crate::goldens::check(&image, &baseline.join(format!("dock-visibility-choices-{scheme}.png"))).unwrap();
             for (i, mode) in [DockHide::Never, DockHide::WhenFilled, DockHide::Always].into_iter().enumerate() {
                 app.chose(&choices, i);
@@ -1948,7 +1948,7 @@ mod tests {
         }
     }
 
-    fn fixture(ui: &mypaper_ui::Ui, bars: Value) -> App {
+    fn fixture(ui: &glaze_ui::Ui, bars: Value) -> App {
         let mut app = crate::goldens::app(true, ui);
         app.docs = crate::docs::Docs::fixture(["{}", &bars.to_string(), "{}", "{}"]);
         app.panel = Some(crate::panel::State::default());
@@ -1957,7 +1957,7 @@ mod tests {
 
     #[test]
     fn display_edits_are_isolated_and_reset_removes_layers_without_changing_other_displays() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(
             &ui,
             json!({"top":{"height":32},"overrides":{"primary":{"top":{"height":40}},"secondary":{"top":{"height":60}},"DISPLAY2":{"top":{"height":72}}}}),
@@ -1990,7 +1990,7 @@ mod tests {
 
     #[test]
     fn program_gestures_stay_drafts_until_valid_and_save_on_the_selected_display() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(&ui, json!({}));
         app.nav.display = 1;
         let version = app.docs.version;
@@ -2025,7 +2025,7 @@ mod tests {
 
     #[test]
     fn module_creation_uses_the_display_list_and_leaves_the_other_display_intact() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(
             &ui,
             json!({"top":{"left":["start"],"center":[],"right":[]}}),
@@ -2056,7 +2056,7 @@ mod tests {
     fn free_module_names_produce_valid_bounded_ids() {
         assert_eq!(super::module_id(" Weather & CPU! (2) "), "weather-cpu-2");
         for name in ["!!!".to_owned(), "A".repeat(100)] {
-            assert!(mypaper_widgets::manifest::valid_id(&super::module_id(
+            assert!(glaze_widgets::manifest::valid_id(&super::module_id(
                 &name
             )));
         }
@@ -2065,7 +2065,7 @@ mod tests {
 
     #[test]
     fn custom_module_creation_saves_program_and_arguments_in_one_display_edit_and_opens_it() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(&ui, json!({"top":{"left":[],"center":[],"right":[]}}));
         app.nav.bar = Some(Bar::Top);
         app.nav.display = 1;
@@ -2111,14 +2111,14 @@ mod tests {
             ),
             Some(&json!(["--city", "New York"]))
         );
-        mypaper_bars::BarsConfig::parse(&app.docs.doc(DocId::Bars).raw.to_string()).unwrap();
+        glaze_bars::BarsConfig::parse(&app.docs.doc(DocId::Bars).raw.to_string()).unwrap();
         app.run(Action::Undo);
         assert_eq!(app.docs.doc(DocId::Bars).raw, before);
     }
 
     #[test]
     fn full_module_catalog_has_an_explanation_instead_of_empty_groups() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let modules: Vec<_> = MODULES.iter().map(|(id, _)| *id).collect();
         let mut app = fixture(&ui, json!({"top":{"left":modules,"center":[],"right":[]}}));
         app.size = (480, 760);
@@ -2130,7 +2130,7 @@ mod tests {
             .ops
             .iter()
             .filter_map(|op| {
-                if let mypaper_ui::Op::Text { text, .. } = op {
+                if let glaze_ui::Op::Text { text, .. } = op {
                     Some(text.as_ref())
                 } else {
                     None
@@ -2153,12 +2153,12 @@ mod tests {
 
     #[test]
     fn render_complete_module_catalog_and_custom_flow() {
-        let out = std::env::var_os("MYPAPER_STUDIO_PANEL_SHOTS")
+        let out = std::env::var_os("GLAZE_STUDIO_PANEL_SHOTS")
             .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| r"C:\mypaper-targets\studio-panel\shots".into())
+            .unwrap_or_else(|| r"C:\glaze-targets\studio-panel\shots".into())
             .join("states");
         std::fs::create_dir_all(&out).unwrap();
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         for dark in [true, false] {
             for (width, text_scale) in [(480, 1.0), (360, 1.5)] {
                 for custom in [false, true] {
@@ -2175,9 +2175,9 @@ mod tests {
                     );
                     app.theme.ty.text_scale = text_scale;
                     app.theme.palette = if dark {
-                        mypaper_ui::controls::Palette::dark()
+                        glaze_ui::controls::Palette::dark()
                     } else {
-                        mypaper_ui::controls::Palette::light()
+                        glaze_ui::controls::Palette::light()
                     };
                     app.nav.bar = Some(Bar::Top);
                     app.panel.as_mut().unwrap().page = Page::AddModule;
@@ -2199,8 +2199,8 @@ mod tests {
                     }
                     let built = crate::panel::build(&app, &mut ui.text);
                     let image =
-                        mypaper_ui::render(&mut ui, &built.list, width, app.size.1).unwrap();
-                    mypaper_ui::golden::write(
+                        glaze_ui::render(&mut ui, &built.list, width, app.size.1).unwrap();
+                    glaze_ui::golden::write(
                         &image,
                         &out.join(format!(
                             "add-module-{}-{width}-{}.png",

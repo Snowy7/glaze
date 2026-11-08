@@ -9,7 +9,7 @@ use crate::{
     docs::DocId,
     ui::{B, Col},
 };
-use mypaper_ui::controls::key;
+use glaze_ui::controls::key;
 use serde_json::{Value, json};
 
 /// Pick an installed app for a launcher entry; names and resolved targets are one edit.
@@ -106,7 +106,7 @@ pub fn launcher(
             next.push(json!({"label":if label.is_empty() {target} else {label},"target":target}));
             super::controls::button(
                 b,
-                mypaper_ui::Rect::new(c.x, c.y, c.w, b.px(30.0)),
+                glaze_ui::Rect::new(c.x, c.y, c.w, b.px(30.0)),
                 "Add target",
                 None,
                 false,
@@ -148,7 +148,7 @@ pub fn font(_app: &App, b: &mut B, c: &mut Col, edit: Edit, current: &str) {
 /// Installed families are needed only when opening the chooser, never to display its row.
 pub fn open_font(app: &mut App, edit: Edit, current: String) {
     let fonts = app.panel.as_ref().unwrap().fonts.get_or_init(|| {
-        mypaper_ui::Ui::isolated()
+        glaze_ui::Ui::isolated()
             .map(|ui| ui.text.families())
             .unwrap_or_default()
     });
@@ -439,7 +439,7 @@ mod font_tests {
 
     #[test]
     fn font_rows_load_installed_families_only_when_opened_without_saving() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(crate::panel::State {
             page: crate::panel::Page::Look,
@@ -470,13 +470,13 @@ mod font_tests {
 
 /// Icon packs use the same unboxed, adaptive select as every panel setting.
 pub fn icon_pack(app: &App, b: &mut B, c: &mut Col) {
-    use mypaper_bars::icon_pack::IconPack;
-    use mypaper_ui::{Rect, controls::Align};
+    use glaze_bars::icon_pack::IconPack;
+    use glaze_ui::{Rect, controls::Align};
     let current = app
         .get(DocId::Config, "/look/text/icon_pack")
         .cloned()
         .unwrap_or(Value::Null);
-    let folder = mypaper_config::dir().ok().map(|dir| dir.join("icons"));
+    let folder = glaze_config::dir().ok().map(|dir| dir.join("icons"));
     let mut options = vec![(Value::Null, "The style's icons".to_owned())];
     if let Some(folder) = &folder {
         let mut names: Vec<_> = std::fs::read_dir(folder)

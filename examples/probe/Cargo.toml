@@ -11,7 +11,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-mypaper-plugin-sdk = { path = "../../crates/plugin-sdk" }
+glaze-plugin-sdk = { path = "../../crates/plugin-sdk" }
 
 [workspace]
 

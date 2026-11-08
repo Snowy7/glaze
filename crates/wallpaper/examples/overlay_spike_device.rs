@@ -2,7 +2,7 @@
 //! the engine's DX12 (wgpu) glass overlays, and what it costs.
 //!
 //! ```text
-//! cargo run --release -p mypaper-wallpaper --example overlay_spike_device -- <none|11on12|d3d11>
+//! cargo run --release -p glaze-wallpaper --example overlay_spike_device -- <none|11on12|d3d11>
 //! ```
 //!
 //! Each mode is its own process: wgpu opened the way the engine opens it (low-power adapter,

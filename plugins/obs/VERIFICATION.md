@@ -19,7 +19,7 @@ resolve to `custom:obs--status`. Old `integrations.json` OBS fields remain reada
   pause/mic controls, all-scenes selection, stats and explicit offline faces. Compact offline
   detail is omitted to keep the title fully inside the tile.
 
-Release helper measurements (`mypaper-plugins --bench plugins/obs`, one sample on this PC):
+Release helper measurements (`glaze-plugins --bench plugins/obs`, one sample on this PC):
 
 | Measurement | Result |
 |---|---:|
@@ -32,7 +32,7 @@ Release helper measurements (`mypaper-plugins --bench plugins/obs`, one sample o
 The linear-memory result is also confirmed by both runtime tests. Whole-process numbers include
 the runtime, compiler/cache mapping and I/O setup; they are not the plugin's linear-memory size.
 
-`scripts/deploy-local.ps1 -From C:/mypaper-targets/main/release` completed under its desktop lock.
+`scripts/deploy-local.ps1 -From C:/glaze-targets/main/release` completed under its desktop lock.
 The open Studio window was preserved, with the new executable installed for its next launch.
 The deployed shell's [offline widget capture](golden/live-offline.png) was taken at native DPI
 under the same lock, with OBS closed and no synthetic input. It shows the clean offline title,

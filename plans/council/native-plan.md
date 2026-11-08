@@ -1,4 +1,4 @@
-# mypaper native: the final plan, v8
+# Glaze native: the final plan, v8
 
 This plan merges the round-1 native plans (Grok, GPT Sol, Claude Opus) with the user's decisions and
 six rounds of review. Final scores: Sol 9, Opus 9, Grok 9.
@@ -54,13 +54,13 @@ vendor driver stack (`docs/engine-notes.md:27-40`).
 ## Processes
 | Process | Role | Always on |
 |---|---|---|
-| `mypaper-core` | Supervisor, tray icon, panic hotkey, styling journal, restoring the taskbar when the shell dies | yes |
-| `mypaper-wallpaper` (the engine) | wgpu: wallpaper, glass plates, glass overlays | yes |
-| `mypaper-shell` (new) | Top bar, dock, flyouts, notification center, launcher, all menus (the desktop menu moves here from core), widgets, tray host, window list | yes |
+| `glaze-core` | Supervisor, tray icon, panic hotkey, styling journal, restoring the taskbar when the shell dies | yes |
+| `glaze-wallpaper` (the engine) | wgpu: wallpaper, glass plates, glass overlays | yes |
+| `glaze-shell` (new) | Top bar, dock, flyouts, notification center, launcher, all menus (the desktop menu moves here from core), widgets, tray host, window list | yes |
 | JSON-RPC plugins | Third-party data providers | only while used |
 | Studio | Settings app | only while open |
 
-- **`mypaper-bars` and `mypaper-widgets` are deleted.** Their Rust services (app bars, tray host,
+- **`glaze-bars` and `glaze-widgets` are deleted.** Their Rust services (app bars, tray host,
   WinEvent window list, media, audio, network, notifications, stats, icons, journal) become a library
   in the shell, with the duplicates between the two crates merged.
 - **`kind: web` widgets, the HTML widget SDK and `packages/widget-sdk` are cut.** No third-party
@@ -289,7 +289,7 @@ are preserved.
      `docs/performance.md`, Engine hillclimb.
 
   If spike 2 fails, redesign the overlay inside the engine before N3. There is no shell device.
-- **N1 `crates/ui` and `mypaper-shell`, with the desktop menu** (tint, no glass yet). ✅ A golden PNG
+- **N1 `crates/ui` and `glaze-shell`, with the desktop menu** (tint, no glass yet). ✅ A golden PNG
   of the content; opens in ≤25 ms; core loads no D2D. Delete: menu drawing and wiring in core.
 - **N2 Top bar and dock, with plates, plus the rain-city/snow shader port** (image inputs), so the
   default theme gets glass from day one.
@@ -308,7 +308,7 @@ are preserved.
     - the plates' GPU time measured;
     - plate glass ≤1 frame behind a moving dock.
   - Delete: `bars/shell/`, `crates/bars/src/web.rs`, `first_paint.rs`, `capture.rs`, `blur.rs`, the JSON
-    bridge, the `mypaper-bars` binary, the plate scratch, the JSON plate transport and the engine
+    bridge, the `glaze-bars` binary, the plate scratch, the JSON plate transport and the engine
     spring, and the five ported web theme folders' JS.
 - **N3 Overlays, plus flyouts, the notification center, launcher, tray overflow and all menus.**
   Calendar, mixer, quick settings, Wi-Fi, language, power and notifications; Win+N and Win+A open

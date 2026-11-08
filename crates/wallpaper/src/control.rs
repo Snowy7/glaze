@@ -5,9 +5,9 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use mypaper_config::Config;
-use mypaper_desktop::{ConfigWatcher, watch_config};
-use mypaper_fswatch::Watch;
+use glaze_config::Config;
+use glaze_desktop::{ConfigWatcher, watch_config};
+use glaze_fswatch::Watch;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
@@ -120,7 +120,7 @@ impl Live {
     /// Reloads the engine onto another theme and follows its folder. On
     /// failure the current theme keeps running.
     fn switch_theme(&mut self, engine: &mut Engine, name: &str) {
-        let switched = mypaper_theme::locate(Some(name)).and_then(|dir| {
+        let switched = glaze_theme::locate(Some(name)).and_then(|dir| {
             engine.switch_theme(&dir)?;
             Ok(dir)
         });

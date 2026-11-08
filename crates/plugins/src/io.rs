@@ -24,8 +24,8 @@ use windows::Win32::System::Threading::{CreateEventW, INFINITE, ResetEvent, SetE
 use windows::core::{HSTRING, PCWSTR, w};
 
 use crate::host::Input;
-use crate::runtime::mypaper::plugin::pipes::PipeEvent;
-use crate::runtime::mypaper::plugin::websocket::{Message, SocketEvent};
+use crate::runtime::glaze::plugin::pipes::PipeEvent;
+use crate::runtime::glaze::plugin::websocket::{Message, SocketEvent};
 
 /// Open websockets per plugin, and open pipes per plugin (each).
 pub const MAX_CONNECTIONS: usize = 8;
@@ -221,7 +221,7 @@ fn session() -> Result<*mut c_void, String> {
     let mut session = SESSION.lock().expect("winhttp session");
     if *session == 0 {
         // SAFETY: opened once and kept for the process (WinHTTP sessions are thread-safe).
-        let raw = unsafe { WinHttpOpen(w!("mypaper-plugins/0.1"), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, PCWSTR::null(), PCWSTR::null(), 0) };
+        let raw = unsafe { WinHttpOpen(w!("glaze-plugins/0.1"), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, PCWSTR::null(), PCWSTR::null(), 0) };
         if raw.is_null() {
             return Err(windows::core::Error::from_thread().to_string());
         }

@@ -1,10 +1,10 @@
-# Run after the release mypaper-widget-fixture example has been built. No user process is stopped.
+# Run after the release glaze-widget-fixture example has been built. No user process is stopped.
 param([switch]$Interactions)
 $ErrorActionPreference = 'Stop'
 $fixtureWorkspace = (Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
-$fixtureLock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$fixtureLock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 $fixtureRoot = Join-Path $fixtureWorkspace 'artifacts\n4\live'
-$fixtureExe = Join-Path $fixtureWorkspace 'target\release\examples\mypaper-widget-fixture.exe'
+$fixtureExe = Join-Path $fixtureWorkspace 'target\release\examples\glaze-widget-fixture.exe'
 $fixtureOldAppData = $env:APPDATA
 $fixtureOldLocal = $env:LOCALAPPDATA
 $fixtureProcess = $null
@@ -27,14 +27,14 @@ try {
     New-Item -ItemType Directory -Path "$fixtureRoot\appdata", "$fixtureRoot\local" -Force | Out-Null
     $env:APPDATA = "$fixtureRoot\appdata"
     $env:LOCALAPPDATA = "$fixtureRoot\local"
-    $env:MYPAPER_N4_FIXTURE = '1'
-    $env:MYPAPER_N4_DESKTOP_VISIBLE='1'
-    if ($Interactions) { $env:MYPAPER_N4_INTERACTIONS='1' }
-    $env:MYPAPER_WIDGETS_IGNORE_COVERED = '1'
+    $env:GLAZE_N4_FIXTURE = '1'
+    $env:GLAZE_N4_DESKTOP_VISIBLE='1'
+    if ($Interactions) { $env:GLAZE_N4_INTERACTIONS='1' }
+    $env:GLAZE_WIDGETS_IGNORE_COVERED = '1'
     $fixtureProcess = Start-Process -FilePath $fixtureExe -ArgumentList '300' -WindowStyle Hidden -PassThru -RedirectStandardOutput "$fixtureRoot\stdout.log" -RedirectStandardError "$fixtureRoot\stderr.log"
     $env:APPDATA = $fixtureOldAppData
     $env:LOCALAPPDATA = $fixtureOldLocal
-    Remove-Item Env:MYPAPER_N4_FIXTURE, Env:MYPAPER_WIDGETS_IGNORE_COVERED, Env:MYPAPER_N4_INTERACTIONS, Env:MYPAPER_N4_DESKTOP_VISIBLE -ErrorAction SilentlyContinue
+    Remove-Item Env:GLAZE_N4_FIXTURE, Env:GLAZE_WIDGETS_IGNORE_COVERED, Env:GLAZE_N4_INTERACTIONS, Env:GLAZE_N4_DESKTOP_VISIBLE -ErrorAction SilentlyContinue
     $readyDeadline=(Get-Date).AddSeconds(45)
     while (-not $fixtureProcess.HasExited -and (Get-Date) -lt $readyDeadline) {
         if ((Get-Content "$fixtureRoot\stdout.log" -ErrorAction SilentlyContinue) -match 'N4_READY') {break}
@@ -46,10 +46,10 @@ try {
     $fixtureLockOwned = $false
     # measure.ps1 takes the lock itself. The separate process keeps its isolated environment.
     foreach ($run in 1..3) {
-        & 'C:\Users\you\AppData\Local\Temp\mypaper-tools\measure.ps1' -Label "n4-widgets-$run" -Seconds 60
-        Copy-Item -LiteralPath "C:\Users\you\AppData\Local\Temp\mypaper-tools\measure-n4-widgets-$run.json" -Destination $fixtureRoot
+        & 'C:\Users\you\AppData\Local\Temp\glaze-tools\measure.ps1' -Label "n4-widgets-$run" -Seconds 60
+        Copy-Item -LiteralPath "C:\Users\you\AppData\Local\Temp\glaze-tools\measure-n4-widgets-$run.json" -Destination $fixtureRoot
     }
-    $stopEvent = [System.Threading.EventWaitHandle]::OpenExisting("Local\mypaper-n4-fixture-stop-$($fixtureProcess.Id)")
+    $stopEvent = [System.Threading.EventWaitHandle]::OpenExisting("Local\glaze-n4-fixture-stop-$($fixtureProcess.Id)")
     try { $stopEvent.Set() | Out-Null } finally { $stopEvent.Dispose() }
     $fixtureProcess.WaitForExit(30000) | Out-Null
     Get-Content "$fixtureRoot\stdout.log"
@@ -57,7 +57,7 @@ try {
 } finally {
     $env:APPDATA = $fixtureOldAppData
     $env:LOCALAPPDATA = $fixtureOldLocal
-    Remove-Item Env:MYPAPER_N4_FIXTURE, Env:MYPAPER_WIDGETS_IGNORE_COVERED, Env:MYPAPER_N4_INTERACTIONS, Env:MYPAPER_N4_DESKTOP_VISIBLE -ErrorAction SilentlyContinue
+    Remove-Item Env:GLAZE_N4_FIXTURE, Env:GLAZE_WIDGETS_IGNORE_COVERED, Env:GLAZE_N4_INTERACTIONS, Env:GLAZE_N4_DESKTOP_VISIBLE -ErrorAction SilentlyContinue
     if ($fixtureProcess -and -not $fixtureProcess.HasExited) {
         if (-not $fixtureLockOwned) { Enter-FixtureLock; $fixtureLockOwned = $true }
         Stop-Process -Id $fixtureProcess.Id -ErrorAction SilentlyContinue

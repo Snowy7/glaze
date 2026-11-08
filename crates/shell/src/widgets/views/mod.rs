@@ -38,9 +38,9 @@ mod plugin_tailscale_tests;
 
 use super::model::{Model, Widget};
 use super::time::Stamp;
-use mypaper_theme::Paint;
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{
+use glaze_theme::Paint;
+use glaze_ui::icons::Icon;
+use glaze_ui::{
     Align, DisplayList, HitId, Interaction, Op, Palette, Point, Rect, Rgba, Role, Scheme,
     Text, TextRole, TextStyle, Theme, Tokens,
 };
@@ -74,7 +74,7 @@ pub const EVENT_TITLE: HitId = 16;
 pub const EVENT_COLOR: HitId = 20;
 
 /// The widgets' default family: Segoe UI Variable through its axes (the kit's ramp).
-pub const DEFAULT_FAMILY: &str = mypaper_ui::VARIABLE;
+pub const DEFAULT_FAMILY: &str = glaze_ui::VARIABLE;
 
 /// Quick toggles: setting key, label, Segoe Fluent glyph (kept for the setting's wire format)
 /// and the Settings page each opens.
@@ -135,9 +135,9 @@ pub fn plate_radius(model: &Model, rect: Rect, scale: f32) -> f32 {
             .get("radius")
             .and_then(Value::as_f64)
             .unwrap_or(22.0) as f32;
-        let radius = match mypaper_ui::theme::active() {
-            mypaper_ui::Style::Fluent => radius.min(8.0),
-            mypaper_ui::Style::OneUi => radius.max(26.0),
+        let radius = match glaze_ui::theme::active() {
+            glaze_ui::Style::Fluent => radius.min(8.0),
+            glaze_ui::Style::OneUi => radius.max(26.0),
             _ => radius,
         };
         radius * scale
@@ -162,7 +162,7 @@ pub struct Frame {
 pub fn theme(model: &Model, tokens: &Tokens) -> Theme {
     // The notch pill is always the dark island.
     let notch = model.placed.widget == "media-pill" && model.str("variant", "pill") == "notch";
-    let dark = notch || mypaper_ui::theme::luminance(tokens.colors.text) > 0.5;
+    let dark = notch || glaze_ui::theme::luminance(tokens.colors.text) > 0.5;
     let color = |map: &serde_json::Map<String, Value>| {
         map.get("accent")
             .and_then(|v| serde_json::from_value::<Paint>(v.clone()).ok())
@@ -181,9 +181,9 @@ pub fn theme(model: &Model, tokens: &Tokens) -> Theme {
     });
     // The user's style (`config.json` › `look`, set by the widget host).
     let mut theme = Theme::new(
-        mypaper_ui::theme::active(),
+        glaze_ui::theme::active(),
         if dark { Scheme::Dark } else { Scheme::Light },
-        accent.unwrap_or(mypaper_ui::theme::SYSTEM_BLUE),
+        accent.unwrap_or(glaze_ui::theme::SYSTEM_BLUE),
     );
     if accent.is_none() {
         let p = &mut theme.color;
@@ -232,7 +232,7 @@ pub fn view(model: &Model, tokens: &Tokens, frame: Frame, text: &mut Text) -> Di
     };
     let rect = Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32);
     let mut c = Ctx {
-        f: mypaper_ui::Frame::new(text, &theme, scale, &input),
+        f: glaze_ui::Frame::new(text, &theme, scale, &input),
         m: model,
         now,
         instant,
@@ -317,7 +317,7 @@ fn content(c: &mut Ctx, body: Rect) {
 /// An SDK plugin's face from the view the host cached in `m.data` (see `widgets::sync_plugin_faces`).
 fn plugin_face(c: &mut Ctx) {
     let data = &c.m.data;
-    let face = serde_json::from_value::<mypaper_plugin_sdk::Face>(data["face"].clone()).ok();
+    let face = serde_json::from_value::<glaze_plugin_sdk::Face>(data["face"].clone()).ok();
     let status = match data["status"].as_str() {
         Some("live") => plugin::Status::Live,
         Some("restarting") => plugin::Status::Restarting,
@@ -332,7 +332,7 @@ fn plugin_face(c: &mut Ctx) {
 
 /// One widget's list being built: the kit's frame plus the widget's inputs.
 pub struct Ctx<'a> {
-    pub f: mypaper_ui::Frame<'a>,
+    pub f: glaze_ui::Frame<'a>,
     pub m: &'a Model,
     pub now: Stamp,
     pub instant: Instant,

@@ -11,7 +11,7 @@ fn docker_model(face: &Value) -> Model {
 fn docker_plugin_size_sheet_and_action_hits() {
     use views::plugin::{ACTION, Hit, action_at};
     let faces: Value = serde_json::from_str(include_str!("../golden/faces.json")).unwrap();
-    let live: mypaper_plugin_sdk::Face =
+    let live: glaze_plugin_sdk::Face =
         serde_json::from_value(faces["containers"]["large"].clone()).unwrap();
     assert_eq!(
         action_at(&live, ACTION),

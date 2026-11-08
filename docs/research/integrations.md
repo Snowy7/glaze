@@ -1,4 +1,4 @@
-# App integrations for native mypaper
+# App integrations for native Glaze
 
 Researched **2026-11-05**, against branch `native`. This is an integration feasibility study,
 not an implementation or a measurement report. CPU and memory assessments below describe the
@@ -167,7 +167,7 @@ not a documented cross-app push replacement for the consented listener.
 `ITaskbarList3::SetOverlayIcon` is a **setter** used by an application to give its taskbar button
 an icon and accessibility description. Its icon is a bitmap, not a standardized unread number.
 The reviewed documented interface provides no matching cross-app getter or change subscription.
-Replacing/hiding the taskbar does not make mypaper the recipient of this API.
+Replacing/hiding the taskbar does not make Glaze the recipient of this API.
 [Overlay contract][win-overlay].
 
 There may be app/version-specific accessible labels on Explorer's buttons. An optional,
@@ -220,7 +220,7 @@ universal read API for every other application's tasks. Do not parse undocumente
 U, S. Read on context-menu/launcher open, keep a bounded set, and release COM results on close.
 Respect Windows recent-item privacy settings; an empty list is valid. Explicit actions such
 as “open repository,” “launch game” or “run saved routine” can live beside Recent items, but
-are curated mypaper commands, not harvested Jump List tasks.
+are curated Glaze commands, not harvested Jump List tasks.
 
 ### UI Automation and process/window discovery
 
@@ -316,7 +316,7 @@ do not assume every desktop build uses port 3773. [Auth boundaries][t3-auth].
 **Actions/MCP.** T3's app-owned `/mcp` can list/read threads and perform authorized thread
 operations, with a documented outside-agent sign-in flow. This is useful for on-demand reads,
 but repeated `t3_thread_list`/wait calls are not a lightweight event subscription. Start with
-read-only mypaper access and open-thread actions. Use the app's copied/returned hosted thread
+read-only Glaze access and open-thread actions. Use the app's copied/returned hosted thread
 link rather than inventing a route or assuming the internal `t3-thread` syntax is OS-registered.
 [MCP contract][t3-mcp], [outside agents][t3-outside], [link construction][t3-links].
 
@@ -374,7 +374,7 @@ no vendor engineering change needed, but the user must configure the account/rou
 notifications and provide the webhook credential securely. Low risk for these documented
 features under the account's terms. A complete live monitor is X until a supported feed is
 identified. Do not extract Cursor/SSO cookies, attach a debugger to the app, scrape its cloud
-RPC or poll its UI. Optional explicit “report result to mypaper” tools would report only what
+RPC or poll its UI. Optional explicit “report result to Glaze” tools would report only what
 the Bot sends, with extra cloud/connection cost. [Product terms][grok-terms].
 
 ### Spotify
@@ -530,7 +530,7 @@ bar status and small control flyout. Show unavailable entities explicitly. No em
 dashboard, camera feed, all-entity mirror or continuous temperature/energy graph.
 
 **Auth/ToS.** User OAuth/token, or a user-created long-lived access token in an optional
-native provider. Permissions are the HA user's permissions; an entity allowlist in mypaper
+native provider. Permissions are the HA user's permissions; an entity allowlist in Glaze
 does not reduce the authority of the token. Low risk with the authorized first-party API,
 no vendor cooperation needed. [Authentication phase][ha-websocket].
 
@@ -550,7 +550,7 @@ Do not launch HA/Docker for this widget. [Entity filtering][ha-websocket].
 
 **Data/actions.** Workspace name, diagnostic-error count, running tasks and task exit status
 are available through VS Code's public APIs (`onDidChangeDiagnostics`, task start/end events,
-workspace events). An opt-in extension can send small changes to a same-user mypaper pipe.
+workspace events). An opt-in extension can send small changes to a same-user Glaze pipe.
 Use `code --reuse-window`/`--goto` for documented open-file actions.
 [Extension API][vscode-api], [CLI][vscode-cli].
 
@@ -672,7 +672,7 @@ no periodic appointment scan or always-running Outlook helper.
 ### Claude Desktop
 
 **General Chat/Cowork integration.** Claude can consume a user-installed local MCP server,
-including native executables. A tiny mypaper MCP bridge could offer an explicit
+including native executables. A tiny Glaze MCP bridge could offer an explicit
 “show result/attention card” tool, forwarded over a same-user pipe to our existing provider.
 Local custom installation is documented; directory publication is a separate review path.
 This makes Claude a client of our tools, **not a server exposing all its chats**.
@@ -700,7 +700,7 @@ established; do not scrape SQLite or keep UI Automation active to manufacture on
 
 **Current supported surfaces.** Official documentation now describes shared MCP configuration
 for the ChatGPT desktop app, Codex CLI and IDE extension, with local stdio and Streamable HTTP
-servers. An optional native mypaper reporting tool is therefore possible; do not rely on old
+servers. An optional native Glaze reporting tool is therefore possible; do not rely on old
 claims that ChatGPT can only connect to remote MCP. It reports tool invocations, not all
 consumer conversation state. [Official MCP setup][chatgpt-mcp].
 
@@ -748,7 +748,7 @@ just for a badge; the engine's own resource use must remain opt-in.
 **Effort/feasibility.** E/M, feasible today. Prefer direct Rust Engine API streaming for the
 final adapter; a resident Go CLI stream has additional memory even while sleeping. Filter
 events server-side, cache only selected metadata, and resnapshot on a real gap. No `stats`
-stream, log tail, image scans or health-check polling by mypaper.
+stream, log tail, image scans or health-check polling by glaze.
 
 ### Tailscale
 
@@ -776,7 +776,7 @@ local read. Low risk through its own client surface, but **medium maintenance ri
 **Cost/effort/feasibility.** E candidate/M, feasible without vendor changes. The adapter need
 not duplicate the VPN or instantiate a userspace Tailscale node. Subscribe to bounded state,
 not periodic engine/traffic telemetry, and verify idle deliveries under the chosen watch mask.
-Tailscale's service networking remains its existing cost; do not count it as mypaper's adapter
+Tailscale's service networking remains its existing cost; do not count it as Glaze's adapter
 or claim the combined VPN system has zero idle traffic.
 
 ## Recommended first batch: seven scoped features

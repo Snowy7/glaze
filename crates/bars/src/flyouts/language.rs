@@ -252,7 +252,7 @@ impl LanguageWatch {
         // SAFETY: plain registration and a never-shown window of ours, destroyed on drop.
         unsafe {
             let instance = GetModuleHandleW(None).ok()?;
-            let class = w!("mypaper.bars.language");
+            let class = w!("glaze.bars.language");
             let info = WNDCLASSEXW {
                 cbSize: size_of::<WNDCLASSEXW>() as u32,
                 lpfnWndProc: Some(on_shell),

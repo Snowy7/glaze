@@ -2,8 +2,8 @@
 //! largest), a **bar** of round buttons, or a **list** of rows. Each opens its Settings page;
 //! Wi-Fi and battery show their live state.
 use super::{Ctx, ITEM, TOGGLES};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Accessory, Align, Lead, ListRow, Rect, Role, TextRole, Tile};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Accessory, Align, Lead, ListRow, Rect, Role, TextRole, Tile};
 
 struct Toggle {
     id: u32,
@@ -14,7 +14,7 @@ struct Toggle {
 }
 
 fn toggles(c: &Ctx) -> Vec<Toggle> {
-    use mypaper_widgets::stats::LinkKind;
+    use glaze_widgets::stats::LinkKind;
     let stats = c.m.stats.as_ref();
     TOGGLES
         .iter()
@@ -147,7 +147,7 @@ fn tile(c: &mut Ctx, rect: Rect, t: &Toggle) {
         }
         return;
     }
-    let inner = rect.inset(mypaper_ui::Insets::all((side * 0.13).clamp(c.px(8.0), c.px(14.0)).round()));
+    let inner = rect.inset(glaze_ui::Insets::all((side * 0.13).clamp(c.px(8.0), c.px(14.0)).round()));
     let d = (side * 0.4).clamp(c.px(24.0), c.px(40.0)).round();
     let disc = Rect::new(inner.left, inner.top, d, d);
     c.f.fill(disc, d / 2.0, fill);

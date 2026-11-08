@@ -1,9 +1,9 @@
 //! Picking files (docs/widgets.md, "Picking files"): the system file dialog, the copy into the
 //! instance's data folder, and the URLs that name those copies.
 //!
-//! A picked file lives at `%APPDATA%\mypaper\widget-data\<instance>\files\<name>` and is served
+//! A picked file lives at `%APPDATA%\glaze\widget-data\<instance>\files\<name>` and is served
 //! to its widget (and only that widget's origin) as
-//! `https://<widget>.widget.mypaper/__data/<instance>/<name>`. Everything that turns a name into
+//! `https://<widget>.widget.glaze/__data/<instance>/<name>`. Everything that turns a name into
 //! a path is pure and tested here; the dialog runs on a worker thread of its own.
 
 use std::fs::{File, OpenOptions};
@@ -153,7 +153,7 @@ fn decode_segment(text: &str) -> Option<String> {
     String::from_utf8(bytes).ok()
 }
 
-/// `https://<widget>.widget.mypaper/__data/<instance>/<name>`.
+/// `https://<widget>.widget.glaze/__data/<instance>/<name>`.
 pub fn data_url(widget: &str, instance: &str, name: &str) -> String {
     format!(
         "https://{widget}{WIDGET_SUFFIX}/{DATA_SEGMENT}/{instance}/{}",
@@ -215,12 +215,12 @@ pub fn rebase_value(value: &mut serde_json::Value, from: &str, to: &str) {
     }
 }
 
-/// `%APPDATA%\mypaper\widget-data\<instance>\files`.
+/// `%APPDATA%\glaze\widget-data\<instance>\files`.
 fn files_dir(root: &Path, instance: &str) -> PathBuf {
     root.join(instance).join("files")
 }
 
-/// The file behind `https://<widget>.widget.mypaper/__data/<path>`, where `path` is
+/// The file behind `https://<widget>.widget.glaze/__data/<path>`, where `path` is
 /// `<instance>/<name>` (already percent-decoded). `is_instance` says whether the instance
 /// belongs to the widget being served. `None` for anything that isn't exactly that.
 pub fn served_file(root: &Path, is_instance: impl Fn(&str) -> bool, path: &str) -> Option<PathBuf> {
@@ -418,7 +418,7 @@ pub fn spawn(request: Request, waker: Waker) -> io::Result<()> {
 }
 
 /// A zero-size, topmost, hidden-from-the-taskbar owner, so the dialog opens in front of
-/// everything even though mypaper has no visible window of its own to own it.
+/// everything even though Glaze has no visible window of its own to own it.
 struct Owner(HWND);
 
 impl Owner {
@@ -428,7 +428,7 @@ impl Owner {
             CreateWindowExW(
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
                 w!("STATIC"),
-                w!("mypaper"),
+                w!("Glaze"),
                 WS_POPUP,
                 0,
                 0,
@@ -576,7 +576,7 @@ mod tests {
             "a%b#c&d=e.txt",
         ] {
             let url = data_url("viz", "viz-1", name);
-            assert!(url.starts_with("https://viz.widget.mypaper/__data/viz-1/"));
+            assert!(url.starts_with("https://viz.widget.glaze/__data/viz-1/"));
             assert!(!url.contains([' ', '(', '#']), "{url}");
             let sanitized = sanitize_name(name);
             let parsed = parse_data_url(&url);
@@ -592,7 +592,7 @@ mod tests {
         }
         assert_eq!(
             data_url("viz", "viz-1", "My Photo.png"),
-            "https://viz.widget.mypaper/__data/viz-1/My%20Photo.png"
+            "https://viz.widget.glaze/__data/viz-1/My%20Photo.png"
         );
     }
 
@@ -600,22 +600,22 @@ mod tests {
     fn only_data_urls_parse() {
         for bad in [
             "",
-            "https://viz.widget.mypaper/__data/viz-1/",
-            "https://viz.widget.mypaper/__data/viz-1/a.png?x=1",
-            "https://viz.widget.mypaper/__data/viz-1/a.png#x",
-            "https://viz.widget.mypaper/__data/viz-1/a/b.png",
-            "https://viz.widget.mypaper/__data/viz-1/..%2Fa.png",
-            "https://viz.widget.mypaper/__data/viz-1/%2e%2e",
-            "https://viz.widget.mypaper/__data/viz-1/a%5Cb.png",
-            "https://viz.widget.mypaper/__data/../a.png",
-            "https://viz.widget.mypaper/__data/Viz-1/a.png",
-            "https://viz.widget.mypaper/other/viz-1/a.png",
-            "https://viz.widget.mypaper:8443/__data/viz-1/a.png",
-            "http://viz.widget.mypaper/__data/viz-1/a.png",
+            "https://viz.widget.glaze/__data/viz-1/",
+            "https://viz.widget.glaze/__data/viz-1/a.png?x=1",
+            "https://viz.widget.glaze/__data/viz-1/a.png#x",
+            "https://viz.widget.glaze/__data/viz-1/a/b.png",
+            "https://viz.widget.glaze/__data/viz-1/..%2Fa.png",
+            "https://viz.widget.glaze/__data/viz-1/%2e%2e",
+            "https://viz.widget.glaze/__data/viz-1/a%5Cb.png",
+            "https://viz.widget.glaze/__data/../a.png",
+            "https://viz.widget.glaze/__data/Viz-1/a.png",
+            "https://viz.widget.glaze/other/viz-1/a.png",
+            "https://viz.widget.Glaze:8443/__data/viz-1/a.png",
+            "http://viz.widget.glaze/__data/viz-1/a.png",
             "https://evil.com/__data/viz-1/a.png",
-            "https://a.b.widget.mypaper/__data/viz-1/a.png",
-            "https://viz.widget.mypaper/__data/viz-1/%zz",
-            "https://viz.widget.mypaper/__data/viz-1/%FF.png",
+            "https://a.b.widget.glaze/__data/viz-1/a.png",
+            "https://viz.widget.glaze/__data/viz-1/%zz",
+            "https://viz.widget.glaze/__data/viz-1/%FF.png",
         ] {
             assert_eq!(parse_data_url(bad), None, "{bad}");
         }
@@ -666,7 +666,7 @@ mod tests {
         assert_eq!(first.name, "my pic.png");
         assert_eq!(
             first.url,
-            "https://viz.widget.mypaper/__data/viz-1/my%20pic.png"
+            "https://viz.widget.glaze/__data/viz-1/my%20pic.png"
         );
         let second = import(&root, "viz", "viz-1", &source).unwrap();
         assert_eq!(second.name, "my pic-2.png");

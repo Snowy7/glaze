@@ -1,188 +1,188 @@
-[2026-11-06T08:07:39Z WARN  mypaper_styler::helper::run] theme: theme "rain-city" not found; looked in:
-[2026-11-06T08:07:39Z INFO  mypaper_styler::helper::run] explorer (76024) is the shell's Explorer: never styled
-[2026-11-06T08:07:39Z INFO  mypaper_styler::helper::run] app styler running
-[2026-11-06T08:07:53Z INFO  mypaper_styler::helper::attach] attached to 45424 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:07:53Z INFO  mypaper_styler::helper::run] styling settings (45424, system XAML)
-[2026-11-06T08:08:03Z INFO  mypaper_styler::helper::run] settings (45424) exited with 0x1
-[2026-11-06T08:08:19Z INFO  mypaper_styler::helper::attach] attached to 81536 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:08:19Z INFO  mypaper_styler::helper::run] styling settings (81536, system XAML)
-[2026-11-06T08:08:30Z INFO  mypaper_styler::helper::run] settings (81536) exited with 0x1
-[2026-11-06T08:09:25Z INFO  mypaper_styler::helper::attach] attached to 60888 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:09:25Z INFO  mypaper_styler::helper::run] styling settings (60888, system XAML)
-[2026-11-06T08:09:36Z INFO  mypaper_styler::helper::run] settings (60888) exited with 0x1
-[2026-11-06T08:09:51Z INFO  mypaper_styler::helper::attach] attached to 30936 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:09:51Z INFO  mypaper_styler::helper::run] styling settings (30936, system XAML)
-[2026-11-06T08:10:02Z INFO  mypaper_styler::helper::run] settings (30936) exited with 0x1
-[2026-11-06T08:10:18Z INFO  mypaper_styler::helper::attach] attached to 16064 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:10:18Z INFO  mypaper_styler::helper::run] styling settings (16064, system XAML)
-[2026-11-06T08:10:29Z INFO  mypaper_styler::helper::run] settings (16064) exited with 0x1
-[2026-11-06T08:10:46Z INFO  mypaper_styler::helper::attach] attached to 38776 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:10:46Z INFO  mypaper_styler::helper::run] styling settings (38776, system XAML)
-[2026-11-06T08:10:59Z INFO  mypaper_styler::helper::run] settings (38776) exited with 0x1
-[2026-11-06T08:11:15Z INFO  mypaper_styler::helper::attach] attached to 73372 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:11:15Z INFO  mypaper_styler::helper::run] styling settings (73372, system XAML)
-[2026-11-06T08:11:27Z INFO  mypaper_styler::helper::run] settings (73372) exited with 0xc000027b
-[2026-11-06T08:11:27Z WARN  mypaper_styler::helper::run] settings crashed 11.8789256s after we attached (1 of 2)
-[2026-11-06T08:11:43Z INFO  mypaper_styler::helper::attach] attached to 69748 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:11:43Z INFO  mypaper_styler::helper::run] styling settings (69748, system XAML)
-[2026-11-06T08:11:48Z INFO  mypaper_styler::helper::run] settings (69748) exited with 0xc000027b
-[2026-11-06T08:11:48Z WARN  mypaper_styler::helper::run] settings crashed 5.2952363s after we attached (2 of 2)
-[2026-11-06T08:11:48Z ERROR mypaper_styler::helper::run] not styling settings again this session
-[2026-11-06T08:14:16Z INFO  mypaper_styler::helper::attach] attached to 91176 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:14:16Z INFO  mypaper_styler] attached to settings (91176); detaching in 30 s
-[2026-11-06T08:15:37Z INFO  mypaper_styler::helper::attach] attached to 66376 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:15:37Z INFO  mypaper_styler] attached to settings (66376); detaching in 240 s
-[2026-11-06T08:16:56Z INFO  mypaper_styler::helper::attach] attached to 58028 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:16:56Z INFO  mypaper_styler] attached to settings (58028); detaching in 240 s
-[2026-11-06T08:18:30Z INFO  mypaper_styler::helper::attach] attached to 28484 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:18:30Z INFO  mypaper_styler] attached to settings (28484); detaching in 30 s
-[2026-11-06T08:19:07Z INFO  mypaper_styler::helper::attach] attached to 65516 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:19:07Z INFO  mypaper_styler] attached to settings (65516); detaching in 30 s
-[2026-11-06T08:19:45Z INFO  mypaper_styler::helper::attach] attached to 45360 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:19:45Z INFO  mypaper_styler] attached to settings (45360); detaching in 30 s
-[2026-11-06T08:20:22Z INFO  mypaper_styler::helper::attach] attached to 60696 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:20:22Z INFO  mypaper_styler] attached to settings (60696); detaching in 30 s
-[2026-11-06T08:20:59Z INFO  mypaper_styler::helper::attach] attached to 36972 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:20:59Z INFO  mypaper_styler] attached to settings (36972); detaching in 30 s
-[2026-11-06T08:21:37Z INFO  mypaper_styler::helper::attach] attached to 42108 (system XAML, VisualDiagConnection1)
-[2026-11-06T08:21:37Z INFO  mypaper_styler] attached to settings (42108); detaching in 30 s
-[2026-11-06T08:25:29Z WARN  mypaper_styler::helper::run] theme: theme "rain-city" not found; looked in:
-[2026-11-06T08:25:29Z INFO  mypaper_styler::helper::run] not styling settings: off unless look.apps.settings.enabled is true (Settings ends itself on Personalization > Background while it is attached)
-[2026-11-06T08:25:29Z INFO  mypaper_styler::helper::run] explorer (76024) is the shell's Explorer: never styled
-[2026-11-06T08:25:29Z INFO  mypaper_styler::helper::run] app styler running
-[2026-11-06T08:25:33Z DEBUG mypaper_styler::helper::run] explorer (85452): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:25:33Z INFO  mypaper_styler::helper::attach] attached to 85452 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:25:33Z INFO  mypaper_styler::helper::run] styling explorer (85452, WinUI 3)
-[2026-11-06T08:25:34Z DEBUG mypaper_styler::helper::run] explorer (30652): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:25:34Z DEBUG mypaper_styler::helper::run] explorer (30652): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:25:34Z DEBUG mypaper_styler::helper::run] explorer (30652): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:25:34Z INFO  mypaper_styler::helper::attach] attached to 30652 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:25:34Z INFO  mypaper_styler::helper::run] styling explorer (30652, WinUI 3)
-[2026-11-06T08:29:55Z INFO  mypaper_styler::helper::run] explorer (85452) exited with 0xffffffff
-[2026-11-06T08:30:10Z DEBUG mypaper_styler::helper::run] explorer (82256): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:30:11Z INFO  mypaper_styler::helper::attach] attached to 82256 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:30:11Z INFO  mypaper_styler::helper::run] styling explorer (82256, WinUI 3)
-[2026-11-06T08:30:13Z INFO  mypaper_styler::helper::attach] attached to 45600 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:30:13Z INFO  mypaper_styler::helper::run] styling explorer (45600, WinUI 3)
-[2026-11-06T08:33:05Z DEBUG mypaper_styler::helper::run] explorer (37500): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:33:06Z INFO  mypaper_styler::helper::attach] attached to 37500 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:33:06Z INFO  mypaper_styler::helper::run] styling explorer (37500, WinUI 3)
-[2026-11-06T08:33:07Z DEBUG mypaper_styler::helper::run] explorer (57800): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:33:07Z INFO  mypaper_styler::helper::attach] attached to 57800 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:33:07Z INFO  mypaper_styler::helper::run] styling explorer (57800, WinUI 3)
-[2026-11-06T08:37:26Z WARN  mypaper_styler::helper::run] theme: theme "rain-city" not found; looked in:
-[2026-11-06T08:37:26Z INFO  mypaper_styler::helper::run] not styling settings: off unless look.apps.settings.enabled is true (Settings ends itself on Personalization > Background while it is attached)
-[2026-11-06T08:37:26Z INFO  mypaper_styler::helper::run] explorer (76024) is the shell's Explorer: never styled
-[2026-11-06T08:37:26Z INFO  mypaper_styler::helper::run] app styler running
-[2026-11-06T08:37:30Z DEBUG mypaper_styler::helper::run] explorer (11748): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:37:30Z INFO  mypaper_styler::helper::attach] attached to 11748 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:37:30Z INFO  mypaper_styler::helper::run] styling explorer (11748, WinUI 3)
-[2026-11-06T08:37:31Z DEBUG mypaper_styler::helper::run] explorer (53544): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:37:31Z DEBUG mypaper_styler::helper::run] explorer (53544): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:37:31Z DEBUG mypaper_styler::helper::run] explorer (53544): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:37:31Z INFO  mypaper_styler::helper::attach] attached to 53544 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:37:31Z INFO  mypaper_styler::helper::run] styling explorer (53544, WinUI 3)
-[2026-11-06T08:37:39Z INFO  mypaper_styler::helper::run] explorer (53544) has no folder window left: letting go so it can exit
-[2026-11-06T08:38:04Z INFO  mypaper_styler::helper::run] explorer (11748) has no folder window left: letting go so it can exit
-[2026-11-06T08:38:29Z INFO  mypaper_styler::helper::run] explorer (11748) exited after we let go
-[2026-11-06T08:38:29Z INFO  mypaper_styler::helper::run] explorer (11748) exited with 0x1
-[2026-11-06T08:38:31Z INFO  mypaper_styler::helper::run] explorer (53544) exited after we let go
-[2026-11-06T08:38:31Z INFO  mypaper_styler::helper::run] explorer (53544) exited with 0x1
-[2026-11-06T08:38:42Z DEBUG mypaper_styler::helper::run] explorer (27256): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:38:43Z INFO  mypaper_styler::helper::attach] attached to 27256 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:38:43Z INFO  mypaper_styler::helper::run] styling explorer (27256, WinUI 3)
-[2026-11-06T08:38:45Z INFO  mypaper_styler::helper::attach] attached to 76976 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:38:45Z INFO  mypaper_styler::helper::run] styling explorer (76976, WinUI 3)
-[2026-11-06T08:38:52Z INFO  mypaper_styler::helper::run] explorer (27256) has no folder window left: letting go so it can exit
-[2026-11-06T08:39:15Z INFO  mypaper_styler::helper::run] explorer (76976) has no folder window left: letting go so it can exit
-[2026-11-06T08:39:42Z INFO  mypaper_styler::helper::run] explorer (27256) exited after we let go
-[2026-11-06T08:39:42Z INFO  mypaper_styler::helper::run] explorer (27256) exited with 0x1
-[2026-11-06T08:39:44Z INFO  mypaper_styler::helper::run] explorer (76976) exited after we let go
-[2026-11-06T08:39:44Z INFO  mypaper_styler::helper::run] explorer (76976) exited with 0x1
-[2026-11-06T08:39:55Z DEBUG mypaper_styler::helper::run] explorer (76792): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:39:56Z INFO  mypaper_styler::helper::attach] attached to 76792 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:39:56Z INFO  mypaper_styler::helper::run] styling explorer (76792, WinUI 3)
-[2026-11-06T08:39:57Z DEBUG mypaper_styler::helper::run] explorer (91532): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:39:58Z INFO  mypaper_styler::helper::attach] attached to 91532 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:39:58Z INFO  mypaper_styler::helper::run] styling explorer (91532, WinUI 3)
-[2026-11-06T08:40:06Z INFO  mypaper_styler::helper::run] explorer (76792) has no folder window left: letting go so it can exit
-[2026-11-06T08:40:32Z INFO  mypaper_styler::helper::run] explorer (91532) has no folder window left: letting go so it can exit
-[2026-11-06T08:40:55Z INFO  mypaper_styler::helper::run] explorer (76792) exited after we let go
-[2026-11-06T08:40:55Z INFO  mypaper_styler::helper::run] explorer (76792) exited with 0x1
-[2026-11-06T08:40:57Z INFO  mypaper_styler::helper::run] explorer (91532) exited after we let go
-[2026-11-06T08:40:57Z INFO  mypaper_styler::helper::run] explorer (91532) exited with 0x1
-[2026-11-06T08:41:09Z DEBUG mypaper_styler::helper::run] explorer (91232): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:41:09Z INFO  mypaper_styler::helper::attach] attached to 91232 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:41:09Z INFO  mypaper_styler::helper::run] styling explorer (91232, WinUI 3)
-[2026-11-06T08:41:15Z DEBUG mypaper_styler::helper::run] explorer (77068): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:41:16Z INFO  mypaper_styler::helper::attach] attached to 77068 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:41:16Z INFO  mypaper_styler::helper::run] styling explorer (77068, WinUI 3)
-[2026-11-06T08:41:16Z INFO  mypaper_styler::helper::run] explorer (91232) has no folder window left: letting go so it can exit
-[2026-11-06T08:41:17Z DEBUG mypaper_styler::helper::run] explorer (49880): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:41:17Z DEBUG mypaper_styler::helper::run] explorer (49880): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:41:17Z DEBUG mypaper_styler::helper::run] explorer (49880): the process has not loaded WinUI 3 (no Explorer window yet?)
-[2026-11-06T08:41:17Z INFO  mypaper_styler::helper::attach] attached to 49880 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:41:17Z INFO  mypaper_styler::helper::run] styling explorer (49880, WinUI 3)
-[2026-11-06T08:42:09Z INFO  mypaper_styler::helper::run] explorer (91232) exited after we let go
-[2026-11-06T08:42:09Z INFO  mypaper_styler::helper::run] explorer (91232) exited with 0x1
-[2026-11-06T08:42:28Z INFO  mypaper_styler::helper::run] explorer (77068) has no folder window left: letting go so it can exit
-[2026-11-06T08:42:28Z INFO  mypaper_styler::helper::run] explorer (77068) exited after we let go
-[2026-11-06T08:42:28Z INFO  mypaper_styler::helper::run] explorer (77068) exited with 0xffffffff
-[2026-11-06T08:43:04Z WARN  mypaper_styler::helper::run] theme: theme "rain-city" not found; looked in:
-[2026-11-06T08:43:04Z INFO  mypaper_styler::helper::run] not styling settings: off unless look.apps.settings.enabled is true (Settings ends itself on Personalization > Background while it is attached)
-[2026-11-06T08:43:04Z INFO  mypaper_styler::helper::run] explorer (76024) is the shell's Explorer: never styled
-[2026-11-06T08:43:04Z INFO  mypaper_styler::helper::run] app styler running
-[2026-11-06T08:43:08Z INFO  mypaper_styler::helper::attach] attached to 58996 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:43:08Z INFO  mypaper_styler::helper::run] styling explorer (58996, WinUI 3)
-[2026-11-06T08:43:25Z INFO  mypaper_styler::helper::attach] attached to 26816 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:43:25Z INFO  mypaper_styler::helper::run] styling explorer (26816, WinUI 3)
-[2026-11-06T08:43:25Z INFO  mypaper_styler::helper::run] explorer (58996) has no folder window left: letting go so it can exit
-[2026-11-06T08:43:41Z INFO  mypaper_styler::helper::attach] attached to 17436 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:43:41Z INFO  mypaper_styler::helper::run] styling explorer (17436, WinUI 3)
-[2026-11-06T08:43:41Z INFO  mypaper_styler::helper::run] explorer (26816) has no folder window left: letting go so it can exit
-[2026-11-06T08:43:58Z INFO  mypaper_styler::helper::attach] attached to 39160 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:43:58Z INFO  mypaper_styler::helper::run] styling explorer (39160, WinUI 3)
-[2026-11-06T08:43:58Z INFO  mypaper_styler::helper::run] explorer (17436) has no folder window left: letting go so it can exit
-[2026-11-06T08:44:08Z INFO  mypaper_styler::helper::run] explorer (58996) exited after we let go
-[2026-11-06T08:44:08Z INFO  mypaper_styler::helper::run] explorer (58996) exited with 0x1
-[2026-11-06T08:44:14Z INFO  mypaper_styler::helper::attach] attached to 88800 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:44:14Z INFO  mypaper_styler::helper::run] styling explorer (88800, WinUI 3)
-[2026-11-06T08:44:14Z INFO  mypaper_styler::helper::run] explorer (39160) has no folder window left: letting go so it can exit
-[2026-11-06T08:44:25Z INFO  mypaper_styler::helper::run] explorer (26816) exited after we let go
-[2026-11-06T08:44:25Z INFO  mypaper_styler::helper::run] explorer (26816) exited with 0x1
-[2026-11-06T08:44:32Z WARN  mypaper_styler::helper::run] theme: theme "rain-city" not found; looked in:
-[2026-11-06T08:44:32Z INFO  mypaper_styler::helper::run] not styling settings: off unless look.apps.settings.enabled is true (Settings ends itself on Personalization > Background while it is attached)
-[2026-11-06T08:44:32Z INFO  mypaper_styler::helper::run] explorer (76024) is the shell's Explorer: never styled
-[2026-11-06T08:44:32Z INFO  mypaper_styler::helper::run] app styler running
-[2026-11-06T08:44:36Z INFO  mypaper_styler::helper::attach] attached to 37268 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:44:36Z INFO  mypaper_styler::helper::run] styling explorer (37268, WinUI 3)
-[2026-11-06T08:44:45Z INFO  mypaper_styler::helper::attach] attached to 63656 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:44:45Z INFO  mypaper_styler::helper::run] styling explorer (63656, WinUI 3)
-[2026-11-06T08:44:46Z INFO  mypaper_styler::helper::run] explorer (37268) has no folder window left: letting go so it can exit
-[2026-11-06T08:44:52Z WARN  mypaper_styler::helper::run] theme: theme "rain-city" not found; looked in:
-[2026-11-06T08:44:56Z INFO  mypaper_styler::helper::attach] attached to 49432 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:44:56Z INFO  mypaper_styler::helper::run] styling explorer (49432, WinUI 3)
-[2026-11-06T08:45:13Z INFO  mypaper_styler::helper::attach] attached to 89796 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:45:13Z INFO  mypaper_styler::helper::run] styling explorer (89796, WinUI 3)
-[2026-11-06T08:45:13Z INFO  mypaper_styler::helper::run] explorer (49432) has no folder window left: letting go so it can exit
-[2026-11-06T08:45:29Z INFO  mypaper_styler::helper::attach] attached to 10444 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:45:29Z INFO  mypaper_styler::helper::run] styling explorer (10444, WinUI 3)
-[2026-11-06T08:45:29Z INFO  mypaper_styler::helper::run] explorer (89796) has no folder window left: letting go so it can exit
-[2026-11-06T08:45:35Z INFO  mypaper_styler::helper::run] explorer (37268) exited after we let go
-[2026-11-06T08:45:35Z INFO  mypaper_styler::helper::run] explorer (37268) exited with 0x1
-[2026-11-06T08:45:45Z INFO  mypaper_styler::helper::attach] attached to 71144 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:45:45Z INFO  mypaper_styler::helper::run] styling explorer (71144, WinUI 3)
-[2026-11-06T08:45:45Z INFO  mypaper_styler::helper::run] explorer (10444) has no folder window left: letting go so it can exit
-[2026-11-06T08:45:56Z INFO  mypaper_styler::helper::run] explorer (49432) exited after we let go
-[2026-11-06T08:45:56Z INFO  mypaper_styler::helper::run] explorer (49432) exited with 0x1
-[2026-11-06T08:45:56Z INFO  mypaper_styler::helper::run] explorer (71144) has no folder window left: letting go so it can exit
-[2026-11-06T08:47:30Z WARN  mypaper_styler::helper::run] theme: theme "rain-city" not found; looked in:
-[2026-11-06T08:47:30Z INFO  mypaper_styler::helper::run] not styling settings: off unless look.apps.settings.enabled is true (Settings ends itself on Personalization > Background while it is attached)
-[2026-11-06T08:47:30Z INFO  mypaper_styler::helper::attach] attached to 63656 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:47:30Z INFO  mypaper_styler::helper::run] styling explorer (63656, WinUI 3)
-[2026-11-06T08:47:30Z INFO  mypaper_styler::helper::run] app styler running
-[2026-11-06T08:48:02Z INFO  mypaper_styler::helper::attach] attached to 83612 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:48:02Z INFO  mypaper_styler::helper::run] styling explorer (83612, WinUI 3)
-[2026-11-06T08:48:21Z INFO  mypaper_styler::helper::attach] attached to 48304 (WinUI 3, WinUIVisualDiagConnection1)
-[2026-11-06T08:48:21Z INFO  mypaper_styler::helper::run] styling explorer (48304, WinUI 3)
-[2026-11-06T08:48:21Z INFO  mypaper_styler::helper::run] explorer (83612) has no folder window left: letting go so it can exit
+[2026-11-06T08:07:39Z WARN  glaze_styler::helper::run] theme: theme "rain-city" not found; looked in:
+[2026-11-06T08:07:39Z INFO  glaze_styler::helper::run] explorer (76024) is the shell's Explorer: never styled
+[2026-11-06T08:07:39Z INFO  glaze_styler::helper::run] app styler running
+[2026-11-06T08:07:53Z INFO  glaze_styler::helper::attach] attached to 45424 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:07:53Z INFO  glaze_styler::helper::run] styling settings (45424, system XAML)
+[2026-11-06T08:08:03Z INFO  glaze_styler::helper::run] settings (45424) exited with 0x1
+[2026-11-06T08:08:19Z INFO  glaze_styler::helper::attach] attached to 81536 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:08:19Z INFO  glaze_styler::helper::run] styling settings (81536, system XAML)
+[2026-11-06T08:08:30Z INFO  glaze_styler::helper::run] settings (81536) exited with 0x1
+[2026-11-06T08:09:25Z INFO  glaze_styler::helper::attach] attached to 60888 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:09:25Z INFO  glaze_styler::helper::run] styling settings (60888, system XAML)
+[2026-11-06T08:09:36Z INFO  glaze_styler::helper::run] settings (60888) exited with 0x1
+[2026-11-06T08:09:51Z INFO  glaze_styler::helper::attach] attached to 30936 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:09:51Z INFO  glaze_styler::helper::run] styling settings (30936, system XAML)
+[2026-11-06T08:10:02Z INFO  glaze_styler::helper::run] settings (30936) exited with 0x1
+[2026-11-06T08:10:18Z INFO  glaze_styler::helper::attach] attached to 16064 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:10:18Z INFO  glaze_styler::helper::run] styling settings (16064, system XAML)
+[2026-11-06T08:10:29Z INFO  glaze_styler::helper::run] settings (16064) exited with 0x1
+[2026-11-06T08:10:46Z INFO  glaze_styler::helper::attach] attached to 38776 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:10:46Z INFO  glaze_styler::helper::run] styling settings (38776, system XAML)
+[2026-11-06T08:10:59Z INFO  glaze_styler::helper::run] settings (38776) exited with 0x1
+[2026-11-06T08:11:15Z INFO  glaze_styler::helper::attach] attached to 73372 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:11:15Z INFO  glaze_styler::helper::run] styling settings (73372, system XAML)
+[2026-11-06T08:11:27Z INFO  glaze_styler::helper::run] settings (73372) exited with 0xc000027b
+[2026-11-06T08:11:27Z WARN  glaze_styler::helper::run] settings crashed 11.8789256s after we attached (1 of 2)
+[2026-11-06T08:11:43Z INFO  glaze_styler::helper::attach] attached to 69748 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:11:43Z INFO  glaze_styler::helper::run] styling settings (69748, system XAML)
+[2026-11-06T08:11:48Z INFO  glaze_styler::helper::run] settings (69748) exited with 0xc000027b
+[2026-11-06T08:11:48Z WARN  glaze_styler::helper::run] settings crashed 5.2952363s after we attached (2 of 2)
+[2026-11-06T08:11:48Z ERROR glaze_styler::helper::run] not styling settings again this session
+[2026-11-06T08:14:16Z INFO  glaze_styler::helper::attach] attached to 91176 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:14:16Z INFO  glaze_styler] attached to settings (91176); detaching in 30 s
+[2026-11-06T08:15:37Z INFO  glaze_styler::helper::attach] attached to 66376 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:15:37Z INFO  glaze_styler] attached to settings (66376); detaching in 240 s
+[2026-11-06T08:16:56Z INFO  glaze_styler::helper::attach] attached to 58028 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:16:56Z INFO  glaze_styler] attached to settings (58028); detaching in 240 s
+[2026-11-06T08:18:30Z INFO  glaze_styler::helper::attach] attached to 28484 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:18:30Z INFO  glaze_styler] attached to settings (28484); detaching in 30 s
+[2026-11-06T08:19:07Z INFO  glaze_styler::helper::attach] attached to 65516 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:19:07Z INFO  glaze_styler] attached to settings (65516); detaching in 30 s
+[2026-11-06T08:19:45Z INFO  glaze_styler::helper::attach] attached to 45360 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:19:45Z INFO  glaze_styler] attached to settings (45360); detaching in 30 s
+[2026-11-06T08:20:22Z INFO  glaze_styler::helper::attach] attached to 60696 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:20:22Z INFO  glaze_styler] attached to settings (60696); detaching in 30 s
+[2026-11-06T08:20:59Z INFO  glaze_styler::helper::attach] attached to 36972 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:20:59Z INFO  glaze_styler] attached to settings (36972); detaching in 30 s
+[2026-11-06T08:21:37Z INFO  glaze_styler::helper::attach] attached to 42108 (system XAML, VisualDiagConnection1)
+[2026-11-06T08:21:37Z INFO  glaze_styler] attached to settings (42108); detaching in 30 s
+[2026-11-06T08:25:29Z WARN  glaze_styler::helper::run] theme: theme "rain-city" not found; looked in:
+[2026-11-06T08:25:29Z INFO  glaze_styler::helper::run] not styling settings: off unless look.apps.settings.enabled is true (Settings ends itself on Personalization > Background while it is attached)
+[2026-11-06T08:25:29Z INFO  glaze_styler::helper::run] explorer (76024) is the shell's Explorer: never styled
+[2026-11-06T08:25:29Z INFO  glaze_styler::helper::run] app styler running
+[2026-11-06T08:25:33Z DEBUG glaze_styler::helper::run] explorer (85452): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:25:33Z INFO  glaze_styler::helper::attach] attached to 85452 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:25:33Z INFO  glaze_styler::helper::run] styling explorer (85452, WinUI 3)
+[2026-11-06T08:25:34Z DEBUG glaze_styler::helper::run] explorer (30652): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:25:34Z DEBUG glaze_styler::helper::run] explorer (30652): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:25:34Z DEBUG glaze_styler::helper::run] explorer (30652): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:25:34Z INFO  glaze_styler::helper::attach] attached to 30652 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:25:34Z INFO  glaze_styler::helper::run] styling explorer (30652, WinUI 3)
+[2026-11-06T08:29:55Z INFO  glaze_styler::helper::run] explorer (85452) exited with 0xffffffff
+[2026-11-06T08:30:10Z DEBUG glaze_styler::helper::run] explorer (82256): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:30:11Z INFO  glaze_styler::helper::attach] attached to 82256 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:30:11Z INFO  glaze_styler::helper::run] styling explorer (82256, WinUI 3)
+[2026-11-06T08:30:13Z INFO  glaze_styler::helper::attach] attached to 45600 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:30:13Z INFO  glaze_styler::helper::run] styling explorer (45600, WinUI 3)
+[2026-11-06T08:33:05Z DEBUG glaze_styler::helper::run] explorer (37500): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:33:06Z INFO  glaze_styler::helper::attach] attached to 37500 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:33:06Z INFO  glaze_styler::helper::run] styling explorer (37500, WinUI 3)
+[2026-11-06T08:33:07Z DEBUG glaze_styler::helper::run] explorer (57800): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:33:07Z INFO  glaze_styler::helper::attach] attached to 57800 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:33:07Z INFO  glaze_styler::helper::run] styling explorer (57800, WinUI 3)
+[2026-11-06T08:37:26Z WARN  glaze_styler::helper::run] theme: theme "rain-city" not found; looked in:
+[2026-11-06T08:37:26Z INFO  glaze_styler::helper::run] not styling settings: off unless look.apps.settings.enabled is true (Settings ends itself on Personalization > Background while it is attached)
+[2026-11-06T08:37:26Z INFO  glaze_styler::helper::run] explorer (76024) is the shell's Explorer: never styled
+[2026-11-06T08:37:26Z INFO  glaze_styler::helper::run] app styler running
+[2026-11-06T08:37:30Z DEBUG glaze_styler::helper::run] explorer (11748): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:37:30Z INFO  glaze_styler::helper::attach] attached to 11748 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:37:30Z INFO  glaze_styler::helper::run] styling explorer (11748, WinUI 3)
+[2026-11-06T08:37:31Z DEBUG glaze_styler::helper::run] explorer (53544): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:37:31Z DEBUG glaze_styler::helper::run] explorer (53544): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:37:31Z DEBUG glaze_styler::helper::run] explorer (53544): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:37:31Z INFO  glaze_styler::helper::attach] attached to 53544 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:37:31Z INFO  glaze_styler::helper::run] styling explorer (53544, WinUI 3)
+[2026-11-06T08:37:39Z INFO  glaze_styler::helper::run] explorer (53544) has no folder window left: letting go so it can exit
+[2026-11-06T08:38:04Z INFO  glaze_styler::helper::run] explorer (11748) has no folder window left: letting go so it can exit
+[2026-11-06T08:38:29Z INFO  glaze_styler::helper::run] explorer (11748) exited after we let go
+[2026-11-06T08:38:29Z INFO  glaze_styler::helper::run] explorer (11748) exited with 0x1
+[2026-11-06T08:38:31Z INFO  glaze_styler::helper::run] explorer (53544) exited after we let go
+[2026-11-06T08:38:31Z INFO  glaze_styler::helper::run] explorer (53544) exited with 0x1
+[2026-11-06T08:38:42Z DEBUG glaze_styler::helper::run] explorer (27256): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:38:43Z INFO  glaze_styler::helper::attach] attached to 27256 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:38:43Z INFO  glaze_styler::helper::run] styling explorer (27256, WinUI 3)
+[2026-11-06T08:38:45Z INFO  glaze_styler::helper::attach] attached to 76976 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:38:45Z INFO  glaze_styler::helper::run] styling explorer (76976, WinUI 3)
+[2026-11-06T08:38:52Z INFO  glaze_styler::helper::run] explorer (27256) has no folder window left: letting go so it can exit
+[2026-11-06T08:39:15Z INFO  glaze_styler::helper::run] explorer (76976) has no folder window left: letting go so it can exit
+[2026-11-06T08:39:42Z INFO  glaze_styler::helper::run] explorer (27256) exited after we let go
+[2026-11-06T08:39:42Z INFO  glaze_styler::helper::run] explorer (27256) exited with 0x1
+[2026-11-06T08:39:44Z INFO  glaze_styler::helper::run] explorer (76976) exited after we let go
+[2026-11-06T08:39:44Z INFO  glaze_styler::helper::run] explorer (76976) exited with 0x1
+[2026-11-06T08:39:55Z DEBUG glaze_styler::helper::run] explorer (76792): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:39:56Z INFO  glaze_styler::helper::attach] attached to 76792 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:39:56Z INFO  glaze_styler::helper::run] styling explorer (76792, WinUI 3)
+[2026-11-06T08:39:57Z DEBUG glaze_styler::helper::run] explorer (91532): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:39:58Z INFO  glaze_styler::helper::attach] attached to 91532 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:39:58Z INFO  glaze_styler::helper::run] styling explorer (91532, WinUI 3)
+[2026-11-06T08:40:06Z INFO  glaze_styler::helper::run] explorer (76792) has no folder window left: letting go so it can exit
+[2026-11-06T08:40:32Z INFO  glaze_styler::helper::run] explorer (91532) has no folder window left: letting go so it can exit
+[2026-11-06T08:40:55Z INFO  glaze_styler::helper::run] explorer (76792) exited after we let go
+[2026-11-06T08:40:55Z INFO  glaze_styler::helper::run] explorer (76792) exited with 0x1
+[2026-11-06T08:40:57Z INFO  glaze_styler::helper::run] explorer (91532) exited after we let go
+[2026-11-06T08:40:57Z INFO  glaze_styler::helper::run] explorer (91532) exited with 0x1
+[2026-11-06T08:41:09Z DEBUG glaze_styler::helper::run] explorer (91232): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:41:09Z INFO  glaze_styler::helper::attach] attached to 91232 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:41:09Z INFO  glaze_styler::helper::run] styling explorer (91232, WinUI 3)
+[2026-11-06T08:41:15Z DEBUG glaze_styler::helper::run] explorer (77068): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:41:16Z INFO  glaze_styler::helper::attach] attached to 77068 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:41:16Z INFO  glaze_styler::helper::run] styling explorer (77068, WinUI 3)
+[2026-11-06T08:41:16Z INFO  glaze_styler::helper::run] explorer (91232) has no folder window left: letting go so it can exit
+[2026-11-06T08:41:17Z DEBUG glaze_styler::helper::run] explorer (49880): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:41:17Z DEBUG glaze_styler::helper::run] explorer (49880): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:41:17Z DEBUG glaze_styler::helper::run] explorer (49880): the process has not loaded WinUI 3 (no Explorer window yet?)
+[2026-11-06T08:41:17Z INFO  glaze_styler::helper::attach] attached to 49880 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:41:17Z INFO  glaze_styler::helper::run] styling explorer (49880, WinUI 3)
+[2026-11-06T08:42:09Z INFO  glaze_styler::helper::run] explorer (91232) exited after we let go
+[2026-11-06T08:42:09Z INFO  glaze_styler::helper::run] explorer (91232) exited with 0x1
+[2026-11-06T08:42:28Z INFO  glaze_styler::helper::run] explorer (77068) has no folder window left: letting go so it can exit
+[2026-11-06T08:42:28Z INFO  glaze_styler::helper::run] explorer (77068) exited after we let go
+[2026-11-06T08:42:28Z INFO  glaze_styler::helper::run] explorer (77068) exited with 0xffffffff
+[2026-11-06T08:43:04Z WARN  glaze_styler::helper::run] theme: theme "rain-city" not found; looked in:
+[2026-11-06T08:43:04Z INFO  glaze_styler::helper::run] not styling settings: off unless look.apps.settings.enabled is true (Settings ends itself on Personalization > Background while it is attached)
+[2026-11-06T08:43:04Z INFO  glaze_styler::helper::run] explorer (76024) is the shell's Explorer: never styled
+[2026-11-06T08:43:04Z INFO  glaze_styler::helper::run] app styler running
+[2026-11-06T08:43:08Z INFO  glaze_styler::helper::attach] attached to 58996 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:43:08Z INFO  glaze_styler::helper::run] styling explorer (58996, WinUI 3)
+[2026-11-06T08:43:25Z INFO  glaze_styler::helper::attach] attached to 26816 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:43:25Z INFO  glaze_styler::helper::run] styling explorer (26816, WinUI 3)
+[2026-11-06T08:43:25Z INFO  glaze_styler::helper::run] explorer (58996) has no folder window left: letting go so it can exit
+[2026-11-06T08:43:41Z INFO  glaze_styler::helper::attach] attached to 17436 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:43:41Z INFO  glaze_styler::helper::run] styling explorer (17436, WinUI 3)
+[2026-11-06T08:43:41Z INFO  glaze_styler::helper::run] explorer (26816) has no folder window left: letting go so it can exit
+[2026-11-06T08:43:58Z INFO  glaze_styler::helper::attach] attached to 39160 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:43:58Z INFO  glaze_styler::helper::run] styling explorer (39160, WinUI 3)
+[2026-11-06T08:43:58Z INFO  glaze_styler::helper::run] explorer (17436) has no folder window left: letting go so it can exit
+[2026-11-06T08:44:08Z INFO  glaze_styler::helper::run] explorer (58996) exited after we let go
+[2026-11-06T08:44:08Z INFO  glaze_styler::helper::run] explorer (58996) exited with 0x1
+[2026-11-06T08:44:14Z INFO  glaze_styler::helper::attach] attached to 88800 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:44:14Z INFO  glaze_styler::helper::run] styling explorer (88800, WinUI 3)
+[2026-11-06T08:44:14Z INFO  glaze_styler::helper::run] explorer (39160) has no folder window left: letting go so it can exit
+[2026-11-06T08:44:25Z INFO  glaze_styler::helper::run] explorer (26816) exited after we let go
+[2026-11-06T08:44:25Z INFO  glaze_styler::helper::run] explorer (26816) exited with 0x1
+[2026-11-06T08:44:32Z WARN  glaze_styler::helper::run] theme: theme "rain-city" not found; looked in:
+[2026-11-06T08:44:32Z INFO  glaze_styler::helper::run] not styling settings: off unless look.apps.settings.enabled is true (Settings ends itself on Personalization > Background while it is attached)
+[2026-11-06T08:44:32Z INFO  glaze_styler::helper::run] explorer (76024) is the shell's Explorer: never styled
+[2026-11-06T08:44:32Z INFO  glaze_styler::helper::run] app styler running
+[2026-11-06T08:44:36Z INFO  glaze_styler::helper::attach] attached to 37268 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:44:36Z INFO  glaze_styler::helper::run] styling explorer (37268, WinUI 3)
+[2026-11-06T08:44:45Z INFO  glaze_styler::helper::attach] attached to 63656 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:44:45Z INFO  glaze_styler::helper::run] styling explorer (63656, WinUI 3)
+[2026-11-06T08:44:46Z INFO  glaze_styler::helper::run] explorer (37268) has no folder window left: letting go so it can exit
+[2026-11-06T08:44:52Z WARN  glaze_styler::helper::run] theme: theme "rain-city" not found; looked in:
+[2026-11-06T08:44:56Z INFO  glaze_styler::helper::attach] attached to 49432 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:44:56Z INFO  glaze_styler::helper::run] styling explorer (49432, WinUI 3)
+[2026-11-06T08:45:13Z INFO  glaze_styler::helper::attach] attached to 89796 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:45:13Z INFO  glaze_styler::helper::run] styling explorer (89796, WinUI 3)
+[2026-11-06T08:45:13Z INFO  glaze_styler::helper::run] explorer (49432) has no folder window left: letting go so it can exit
+[2026-11-06T08:45:29Z INFO  glaze_styler::helper::attach] attached to 10444 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:45:29Z INFO  glaze_styler::helper::run] styling explorer (10444, WinUI 3)
+[2026-11-06T08:45:29Z INFO  glaze_styler::helper::run] explorer (89796) has no folder window left: letting go so it can exit
+[2026-11-06T08:45:35Z INFO  glaze_styler::helper::run] explorer (37268) exited after we let go
+[2026-11-06T08:45:35Z INFO  glaze_styler::helper::run] explorer (37268) exited with 0x1
+[2026-11-06T08:45:45Z INFO  glaze_styler::helper::attach] attached to 71144 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:45:45Z INFO  glaze_styler::helper::run] styling explorer (71144, WinUI 3)
+[2026-11-06T08:45:45Z INFO  glaze_styler::helper::run] explorer (10444) has no folder window left: letting go so it can exit
+[2026-11-06T08:45:56Z INFO  glaze_styler::helper::run] explorer (49432) exited after we let go
+[2026-11-06T08:45:56Z INFO  glaze_styler::helper::run] explorer (49432) exited with 0x1
+[2026-11-06T08:45:56Z INFO  glaze_styler::helper::run] explorer (71144) has no folder window left: letting go so it can exit
+[2026-11-06T08:47:30Z WARN  glaze_styler::helper::run] theme: theme "rain-city" not found; looked in:
+[2026-11-06T08:47:30Z INFO  glaze_styler::helper::run] not styling settings: off unless look.apps.settings.enabled is true (Settings ends itself on Personalization > Background while it is attached)
+[2026-11-06T08:47:30Z INFO  glaze_styler::helper::attach] attached to 63656 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:47:30Z INFO  glaze_styler::helper::run] styling explorer (63656, WinUI 3)
+[2026-11-06T08:47:30Z INFO  glaze_styler::helper::run] app styler running
+[2026-11-06T08:48:02Z INFO  glaze_styler::helper::attach] attached to 83612 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:48:02Z INFO  glaze_styler::helper::run] styling explorer (83612, WinUI 3)
+[2026-11-06T08:48:21Z INFO  glaze_styler::helper::attach] attached to 48304 (WinUI 3, WinUIVisualDiagConnection1)
+[2026-11-06T08:48:21Z INFO  glaze_styler::helper::run] styling explorer (48304, WinUI 3)
+[2026-11-06T08:48:21Z INFO  glaze_styler::helper::run] explorer (83612) has no folder window left: letting go so it can exit

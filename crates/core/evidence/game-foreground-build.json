@@ -2,19 +2,19 @@
     "binaries":  [
                      {
                          "sha256":  "F55382F5CE5FD6F1EF0C08C9742D41473898788999FE0BED3D70828050E55885",
-                         "name":  "mypaper-core"
+                         "name":  "glaze-core"
                      },
                      {
                          "sha256":  "997D680ECD429BBB81EFDE046C351FB6F920CBFD2A5C1FF22BE4D4FA8D06686F",
-                         "name":  "mypaper-shell"
+                         "name":  "glaze-shell"
                      },
                      {
                          "sha256":  "657CFD3FF93F498C3BD655B84DB02FDC4E4A8315C859061B063FFC7281662B53",
-                         "name":  "mypaper-plugins"
+                         "name":  "glaze-plugins"
                      },
                      {
                          "sha256":  "548261AE9EBE3DB35AA586DB11FAE287A564501BBF4F837992DFA0DA2B30F263",
-                         "name":  "mypaper-index"
+                         "name":  "glaze-index"
                      }
                  ],
     "activity":  {

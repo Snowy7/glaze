@@ -1,7 +1,7 @@
 no usable snapshot: The system cannot find the file specified. (os error 2)
 loaded 0 entries in 14.119ms
-scan C:\mypaper-targets\index\scratch: 1 entries, 0.000s, 0 inaccessible directories
+scan C:\glaze-targets\index\scratch: 1 entries, 0.000s, 0 inaccessible directories
 initial reconciliation and notification replay complete
-scan C:\mypaper-targets\index\scratch\mypaper-index-live-3907b007dfe1: 2 entries, 0.000s, 0 inaccessible directories
-scan C:\mypaper-targets\index\scratch\mypaper-index-live-3907b007dfe1\after: 2002 entries, 0.003s, 0 inaccessible directories
-scan C:\mypaper-targets\index\scratch\Index Search Demo: 2 entries, 0.001s, 0 inaccessible directories
+scan C:\glaze-targets\index\scratch\glaze-index-live-3907b007dfe1: 2 entries, 0.000s, 0 inaccessible directories
+scan C:\glaze-targets\index\scratch\glaze-index-live-3907b007dfe1\after: 2002 entries, 0.003s, 0 inaccessible directories
+scan C:\glaze-targets\index\scratch\Index Search Demo: 2 entries, 0.001s, 0 inaccessible directories

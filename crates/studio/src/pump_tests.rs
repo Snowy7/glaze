@@ -81,7 +81,7 @@ fn queued_shortcut_keeps_modifiers_until_studio_handles_the_key() {
     // SAFETY: no ShowWindow, focus, SendInput, or desktop keyboard-state changes. The reset
     // endpoint belongs to this test thread and closes only the hidden surface above.
     let reset = unsafe {
-        let name = w!("mypaper.studio.queued-shortcut-test");
+        let name = w!("glaze.studio.queued-shortcut-test");
         let class = WNDCLASSEXW {
             cbSize: size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(release_modifiers),

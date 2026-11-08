@@ -1,5 +1,5 @@
 //! Colours and native Windows styling. Themes and the user's look share these types (themes
-//! re-export them from `mypaper_theme`), so a theme's `windows` section and the user's layer
+//! re-export them from `glaze_theme`), so a theme's `windows` section and the user's layer
 //! over it (`look.windows`, D2) read and write the same JSON.
 
 use serde::{Deserialize, Serialize};
@@ -95,8 +95,8 @@ pub struct WindowsStyle {
     /// Show the accent on title bars and borders (`DWM\\ColorPrevalence`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accent_on_title_bars: Option<bool>,
-    /// A mouse cursor set: the name of a built-in or user set (`mypaper-dark`,
-    /// `mypaper-light`, a folder under `%APPDATA%\mypaper\cursors`), or a
+    /// A mouse cursor set: the name of a built-in or user set (`glaze-dark`,
+    /// `glaze-light`, a folder under `%APPDATA%\glaze\cursors`), or a
     /// folder of `.cur`/`.ani` files (absolute, or relative to the theme).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cursors: Option<String>,

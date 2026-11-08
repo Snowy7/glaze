@@ -2,7 +2,7 @@
     "excluded_search_hits":  0,
     "excluded_stub":  {
                           "name":  "node_modules",
-                          "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\node_modules",
+                          "path":  "C:\\Users\\you\\glaze-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\node_modules",
                           "directory":  true,
                           "size":  0,
                           "files":  0,
@@ -12,7 +12,7 @@
                       },
     "known_before":  {
                          "name":  "rules-d50fbb99256c4cd6b6e284ada2dc3bc9",
-                         "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9",
+                         "path":  "C:\\Users\\you\\glaze-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9",
                          "directory":  true,
                          "size":  5,
                          "files":  1,
@@ -22,7 +22,7 @@
                      },
     "unknown_with_exclusion":  {
                                    "name":  "rules-d50fbb99256c4cd6b6e284ada2dc3bc9",
-                                   "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9",
+                                   "path":  "C:\\Users\\you\\glaze-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9",
                                    "directory":  true,
                                    "size":  5,
                                    "files":  1,
@@ -32,7 +32,7 @@
                                },
     "known_after_removal":  {
                                 "name":  "rules-d50fbb99256c4cd6b6e284ada2dc3bc9",
-                                "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9",
+                                "path":  "C:\\Users\\you\\glaze-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9",
                                 "directory":  true,
                                 "size":  5,
                                 "files":  1,
@@ -42,7 +42,7 @@
                             },
     "rust_before":  {
                         "name":  "rust",
-                        "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\rust",
+                        "path":  "C:\\Users\\you\\glaze-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\rust",
                         "directory":  true,
                         "size":  17,
                         "files":  1,
@@ -52,7 +52,7 @@
                     },
     "rust_after_marker":  {
                               "name":  "rust",
-                              "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\rust",
+                              "path":  "C:\\Users\\you\\glaze-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\rust",
                               "directory":  true,
                               "size":  0,
                               "files":  0,
@@ -62,7 +62,7 @@
                           },
     "rust_after_marker_removed":  {
                                       "name":  "rust",
-                                      "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\rust",
+                                      "path":  "C:\\Users\\you\\glaze-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\rust",
                                       "directory":  true,
                                       "size":  17,
                                       "files":  1,
@@ -72,7 +72,7 @@
                                   },
     "dotnet_before":  {
                           "name":  "dotnet",
-                          "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\dotnet",
+                          "path":  "C:\\Users\\you\\glaze-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\dotnet",
                           "directory":  true,
                           "size":  19,
                           "files":  1,
@@ -82,7 +82,7 @@
                       },
     "dotnet_after_project":  {
                                  "name":  "dotnet",
-                                 "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\dotnet",
+                                 "path":  "C:\\Users\\you\\glaze-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\dotnet",
                                  "directory":  true,
                                  "size":  0,
                                  "files":  1,
@@ -92,7 +92,7 @@
                              },
     "dotnet_after_project_removed":  {
                                          "name":  "dotnet",
-                                         "path":  "C:\\Users\\you\\mypaper-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\dotnet",
+                                         "path":  "C:\\Users\\you\\glaze-index-fixtures\\rules-d50fbb99256c4cd6b6e284ada2dc3bc9\\dotnet",
                                          "directory":  true,
                                          "size":  19,
                                          "files":  1,
