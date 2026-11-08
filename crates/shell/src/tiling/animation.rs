@@ -448,7 +448,6 @@ fn run(
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         );
-        let _ = ShowWindow(window, SW_SHOWNOACTIVATE);
     }
     let start = Instant::now();
     let mut costs = Vec::new();
@@ -466,6 +465,7 @@ fn run(
             (rate.uiNumerator > 0)
                 .then(|| 1000.0 * f64::from(rate.uiDenominator) / f64::from(rate.uiNumerator))
         });
+    let mut shown = false;
     loop {
         let elapsed = start.elapsed().as_secs_f64();
         let t = progress(elapsed);
@@ -505,7 +505,15 @@ fn run(
             }
             if SetWindowRgn(window, Some(region), true) == 0 {
                 let _ = DeleteObject(HGDIOBJ(region.0));
+                anyhow::bail!("applying animation overlay clip");
             }
+        }
+        if !shown {
+            // SAFETY: the owned overlay has a valid clip and proxy bounds before it is visible.
+            unsafe {
+                let _ = ShowWindow(window, SW_SHOWNOACTIVATE);
+            }
+            shown = true;
         }
         costs.push(frame.elapsed().as_secs_f64() * 1e6);
         // SAFETY: synchronize our worker to DWM, and dispatch only its own window messages.
