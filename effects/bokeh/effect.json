@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "camera",
-  "cost": 0.918,
+  "cost": 0.92,
   "cost_estimated": false,
   "description": "Sparse translucent lens discs drift through a warm, shallow foreground.",
   "id": "bokeh",
@@ -10,7 +10,7 @@
   "name": "Floating bokeh",
   "params": [
     {
-      "default": 0.35,
+      "default": 0.7,
       "id": "amount",
       "label": "Amount",
       "max": 1,
@@ -19,7 +19,7 @@
       "type": "float"
     },
     {
-      "default": 1,
+      "default": 1.8,
       "id": "size",
       "label": "Orb size",
       "max": 2.5,

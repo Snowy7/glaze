@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "color",
-  "cost": 0.733,
+  "cost": 0.683,
   "cost_estimated": false,
   "description": "A restrained, halo-limited cross-shaped unsharp filter.",
   "id": "sharpen",
@@ -10,7 +10,7 @@
   "name": "Fine detail",
   "params": [
     {
-      "default": 0.45,
+      "default": 0.9,
       "id": "amount",
       "label": "Amount",
       "max": 2,
@@ -19,16 +19,16 @@
       "type": "float"
     },
     {
-      "default": 1,
+      "default": 3,
       "id": "radius",
       "label": "Radius",
-      "max": 3,
+      "max": 12,
       "min": 0.5,
       "step": 0.01,
       "type": "float"
     },
     {
-      "default": 0.08,
+      "default": 0.1,
       "id": "limit",
       "label": "Halo limit",
       "max": 0.3,

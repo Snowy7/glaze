@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "stylize",
-  "cost": 1.041,
+  "cost": 1.034,
   "cost_estimated": false,
   "description": "Rotated ink dots grow with shadow density on warm paper.",
   "id": "halftone",
@@ -10,7 +10,7 @@
   "name": "Print halftone",
   "params": [
     {
-      "default": 6,
+      "default": 18,
       "id": "size",
       "label": "Dot spacing",
       "max": 24,
@@ -28,7 +28,7 @@
       "type": "float"
     },
     {
-      "default": 0.85,
+      "default": 1,
       "id": "strength",
       "label": "Strength",
       "max": 1,
@@ -37,13 +37,13 @@
       "type": "float"
     },
     {
-      "default": "#233144",
+      "default": "#13244b",
       "id": "ink",
       "label": "Ink",
       "type": "color"
     },
     {
-      "default": "#f6e9d0",
+      "default": "#ffd9a3",
       "id": "paper_color",
       "label": "Paper",
       "type": "color"

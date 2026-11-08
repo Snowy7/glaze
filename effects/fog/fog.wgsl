@@ -7,10 +7,9 @@ fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let aspect = paper.resolution.x / max(paper.resolution.y, 1.0);
     let t = paper.time * clamp(params.speed, 0.0, 1.0);
     let p = uv * vec2f(aspect * 3.5, 2.5);
-    // Two decorrelated octaves keep this broad mist inexpensive at full resolution.
+    // Broad mist needs only one octave; fine detail disappears into its soft veil.
     let billow = noise2(p + vec2f(t * 0.13, -t * 0.035));
-    let wisps = noise2(p * 2.03 + vec2f(-t * 0.08, billow * 0.6) + 17.7);
     let scene_depth = sample_depth(uv);
-    let density = clamp(params.amount, 0.0, 1.0) * ground * (0.35 + billow * 0.5 + wisps * 0.35) * mix(0.25, 1.0, clamp(scene_depth, 0.0, 1.0));
+    let density = clamp(params.amount, 0.0, 1.0) * ground * (0.4 + billow * 0.8) * mix(0.25, 1.0, clamp(scene_depth, 0.0, 1.0));
     return vec4f(mix(base.rgb, to_display(params.tint.rgb), clamp(density, 0.0, 0.9)), base.a);
 }

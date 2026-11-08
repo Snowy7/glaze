@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "color",
-  "cost": 0.563,
+  "cost": 0.567,
   "cost_estimated": false,
   "description": "A gentle photographic grade follows the real local clock through dawn, daylight, sunset and night.",
   "id": "time-of-day",
@@ -10,7 +10,7 @@
   "name": "Daylight rhythm",
   "params": [
     {
-      "default": 0.55,
+      "default": 0.9,
       "id": "strength",
       "label": "Strength",
       "max": 1,
@@ -19,7 +19,7 @@
       "type": "float"
     },
     {
-      "default": 0.6,
+      "default": 0.85,
       "id": "warmth",
       "label": "Golden hour",
       "max": 1,
@@ -28,7 +28,7 @@
       "type": "float"
     },
     {
-      "default": 0.12,
+      "default": 0.25,
       "id": "night_dim",
       "label": "Night dimming",
       "max": 0.5,

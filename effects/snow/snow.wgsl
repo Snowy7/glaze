@@ -17,10 +17,10 @@ fn effect(frag: vec2f, uv: vec2f) -> vec4f {
         let sway = abs(fract(t * 0.07 + h) * 2.0 - 1.0) - 0.5;
         let delta = p - center + vec2f(sway * 0.1, 0.0);
         let d = dot(delta, delta);
-        let radius = clamp(params.size, 0.3, 2.0) * (0.025 + z * 0.03);
+        let radius = clamp(params.size, 0.3, 4.0) * (0.04 + z * 0.045);
         let shape = max(1.0 - d / max(radius * radius * 3.24, 0.00001), 0.0);
         let flake = shape * shape;
-        flakes += flake * step(h, amount * 0.6) * (0.42 + z * 0.12);
+        flakes += flake * step(h, amount * 0.6) * (0.7 + z * 0.1);
     }
     return vec4f(mix(base.rgb, vec3f(0.88, 0.94, 1.0), clamp(flakes, 0.0, 0.85)), base.a);
 }

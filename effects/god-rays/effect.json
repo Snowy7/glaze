@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "light",
-  "cost": 2.675,
+  "cost": 3.22,
   "cost_estimated": false,
   "description": "Restrained radial shafts gather only from bright parts of the photograph.",
   "id": "god-rays",
@@ -10,7 +10,7 @@
   "name": "Window rays",
   "params": [
     {
-      "default": 0.65,
+      "default": 0.57,
       "id": "light_x",
       "label": "Light X",
       "max": 1,
@@ -28,16 +28,16 @@
       "type": "float"
     },
     {
-      "default": 0.22,
+      "default": 0.8,
       "id": "amount",
       "label": "Strength",
-      "max": 1,
+      "max": 2,
       "min": 0,
       "step": 0.01,
       "type": "float"
     },
     {
-      "default": 0.55,
+      "default": 0.85,
       "id": "length",
       "label": "Ray length",
       "max": 1,
@@ -46,7 +46,7 @@
       "type": "float"
     },
     {
-      "default": 0.65,
+      "default": 0.4,
       "id": "threshold",
       "label": "Highlight threshold",
       "max": 0.95,

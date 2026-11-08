@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "weather",
-  "cost": 0.749,
+  "cost": 0.393,
   "cost_estimated": false,
   "description": "Broad drifting clouds cast soft, gently moving shadows over the image.",
   "id": "clouds",
@@ -10,7 +10,7 @@
   "name": "Passing clouds",
   "params": [
     {
-      "default": 0.22,
+      "default": 0.55,
       "id": "amount",
       "label": "Shadow strength",
       "max": 0.8,
@@ -19,7 +19,7 @@
       "type": "float"
     },
     {
-      "default": 1,
+      "default": 0.85,
       "id": "scale",
       "label": "Cloud size",
       "max": 3,
@@ -48,8 +48,12 @@
   ],
   "passes": [
     {
-      "scale": 1.0,
+      "scale": 0.25,
       "source": "clouds.wgsl"
+    },
+    {
+      "scale": 1.0,
+      "source": "composite.wgsl"
     }
   ],
   "url": "https://github.com/Snowy7/mypaper"

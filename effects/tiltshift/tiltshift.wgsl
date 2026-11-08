@@ -16,5 +16,5 @@ fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let p = (uv - vec2f(0.5, clamp(params.focus, 0.0, 1.0))) * vec2f(paper.resolution.x / max(paper.resolution.y, 1.0), 1.0);
     let band = abs(dot(p, vec2f(sin(a), cos(a))));
     let mask = smoothstep(clamp(params.width, 0.02, 0.8) * 0.5, clamp(params.width, 0.02, 0.8) * 0.5 + 0.25, band);
-    return vec4f(aperture(uv, mask * clamp(params.blur, 0.0, 24.0) * paper.resolution.y / 1080.0), sample_src(uv).a);
+    return vec4f(aperture(uv, mask * clamp(params.blur, 0.0, 80.0) * paper.resolution.y / 1080.0), sample_src(uv).a);
 }

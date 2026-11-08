@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "motion",
-  "cost": 0.859,
+  "cost": 0.852,
   "cost_estimated": false,
   "description": "Fine refractive shimmer can cover the image or settle beneath a waterline.",
   "id": "shimmer",
@@ -10,10 +10,10 @@
   "name": "Water and heat",
   "params": [
     {
-      "default": 2,
+      "default": 7,
       "id": "amount",
       "label": "Refraction",
-      "max": 12,
+      "max": 32,
       "min": 0,
       "step": 0.25,
       "type": "float"
@@ -28,7 +28,7 @@
       "type": "float"
     },
     {
-      "default": 1,
+      "default": 0.8,
       "id": "scale",
       "label": "Ripple scale",
       "max": 4,

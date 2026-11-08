@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "camera",
-  "cost": 2.595,
+  "cost": 2.601,
   "cost_estimated": false,
   "description": "Very faint out-of-focus lens specks catch the image highlights.",
   "id": "lens-dirt",
@@ -10,7 +10,7 @@
   "name": "Lens patina",
   "params": [
     {
-      "default": 0.25,
+      "default": 0.7,
       "id": "amount",
       "label": "Visibility",
       "max": 1,
@@ -19,7 +19,7 @@
       "type": "float"
     },
     {
-      "default": 1,
+      "default": 1.7,
       "id": "size",
       "label": "Speck size",
       "max": 3,

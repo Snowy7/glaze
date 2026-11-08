@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "stylize",
-  "cost": 0.372,
+  "cost": 0.324,
   "cost_estimated": false,
   "description": "Aspect-correct square pixels with optional subtle cell borders.",
   "id": "pixelate",
@@ -10,16 +10,16 @@
   "name": "Pixel mosaic",
   "params": [
     {
-      "default": 8,
+      "default": 22,
       "id": "size",
       "label": "Pixel size",
-      "max": 64,
+      "max": 128,
       "min": 2,
       "step": 1,
       "type": "float"
     },
     {
-      "default": 0.08,
+      "default": 0.18,
       "id": "grid",
       "label": "Cell border",
       "max": 1,

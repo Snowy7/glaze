@@ -19,6 +19,7 @@ fn main() -> Result<()> {
         .to_owned();
     let args: Vec<String> = std::env::args().collect();
     let missing_previews = args.iter().any(|s| s == "--missing-previews");
+    let include_reference = args.iter().any(|s| s == "--include-reference");
     let rendering = missing_previews || args.iter().any(|s| s == "--render");
     let finite = args.iter().any(|s| s == "--check-finite");
     let bloom_identity = args.iter().any(|s| s == "--check-bloom-identity");
@@ -32,6 +33,8 @@ fn main() -> Result<()> {
     let out = PathBuf::from(option("--out", "C:/mypaper-targets/effects-sheet"));
     let photo = PathBuf::from(option("--photo", "themes/rain-city-amber/media/city.jpg"));
     let only = option("--only", "");
+    let values: BTreeMap<String, Value> = serde_json::from_str(&option("--params", "{}"))?;
+    anyhow::ensure!(!update || values.is_empty(), "costs must be measured at defaults");
     let lab = if rendering || finite || bloom_identity {
         Some(Lab::new(
             &photo,
@@ -40,6 +43,7 @@ fn main() -> Result<()> {
                 .parse::<f32>()?
                 .clamp(0.0, 24.0),
             bloom_identity,
+            args.windows(2).find(|w| w[0] == "--time").map(|w| w[1].parse()).transpose()?,
         )?)
     } else {
         None
@@ -69,7 +73,7 @@ fn main() -> Result<()> {
         // Reference packages get thumbnails only when explicitly requested; never edit their costs.
         let id = manifest["id"].as_str().unwrap().to_owned();
         let reference = ["rain", "blur", "color", "vignette", "grain"].contains(&id.as_str());
-        if reference && !missing_previews {
+        if reference && !missing_previews && !include_reference {
             continue;
         }
         if missing_previews && entry.path().join("preview.jpg").exists() {
@@ -139,7 +143,7 @@ fn main() -> Result<()> {
                 println!("{id}: {} finite RGBA16F cases", cases.len());
                 continue;
             }
-            let (image, ms) = lab.render(&manifest, &sources, &id, &BTreeMap::new(), false)?;
+            let (image, ms) = lab.render(&manifest, &sources, &id, &values, false)?;
             let rgb = image::DynamicImage::ImageRgba8(image).to_rgb8();
             save_jpeg(&rgb, &out.join(format!("{id}.jpg")))?;
             if previews {
@@ -214,6 +218,7 @@ struct Lab {
     adapter: String,
     integrated: bool,
     clock_hours: f32,
+    time: Option<f32>,
 }
 
 impl Lab {
@@ -222,6 +227,7 @@ impl Lab {
         depth_ramp: bool,
         clock_hours: f32,
         different_original: bool,
+        time: Option<f32>,
     ) -> Result<Self> {
         let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
         descriptor.backends = wgpu::Backends::DX12;
@@ -360,6 +366,7 @@ impl Lab {
             adapter: info.name,
             integrated: info.device_type == wgpu::DeviceType::IntegratedGpu,
             clock_hours,
+            time,
         })
     }
 
@@ -531,7 +538,7 @@ impl Lab {
                     h,
                     w * 0.63,
                     h * 0.42,
-                    capture_time(manifest, id, values, frame),
+                    self.time.unwrap_or_else(|| capture_time(manifest, id, values, frame)),
                     f32::from_bits(frame),
                     self.clock_hours,
                     0.0,

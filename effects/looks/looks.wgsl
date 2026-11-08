@@ -8,7 +8,7 @@ fn effect(frag: vec2f, uv: vec2f) -> vec4f {
         case 0u: {
             let shadows = 1.0 - smoothstep(0.08, 0.6, y);
             let lights = smoothstep(0.25, 0.9, y);
-            graded = rgb * 1.04 + vec3f(-0.018, 0.025, 0.035) * shadows + vec3f(0.07, 0.018, -0.045) * lights;
+            graded = rgb * 1.04 + vec3f(-0.04, 0.04, 0.08) * shadows + vec3f(0.12, 0.025, -0.08) * lights;
         }
         case 1u: { graded = mix(vec3f(y), rgb, 0.78) * 0.89 + vec3f(0.065, 0.052, 0.045); }
         case 2u: { graded = vec3f(smoothstep(0.015, 0.98, y)); }

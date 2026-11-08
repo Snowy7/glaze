@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "light",
-  "cost": 1.326,
+  "cost": 1.327,
   "cost_estimated": false,
   "description": "A soft sun halo, restrained diffraction rays and a pair of lens ghosts.",
   "id": "sun-flare",
@@ -28,7 +28,7 @@
       "type": "float"
     },
     {
-      "default": 0.3,
+      "default": 0.85,
       "id": "amount",
       "label": "Strength",
       "max": 1,
@@ -37,7 +37,7 @@
       "type": "float"
     },
     {
-      "default": 0.35,
+      "default": 0.65,
       "id": "size",
       "label": "Halo size",
       "max": 1,

@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "motion",
-  "cost": 0.342,
+  "cost": 0.321,
   "cost_estimated": false,
   "description": "A slow, seamless Ken Burns move with enough overscan to hide the edges.",
   "id": "zoom-pan",
@@ -10,7 +10,7 @@
   "name": "Slow camera drift",
   "params": [
     {
-      "default": 1.08,
+      "default": 1.16,
       "id": "zoom",
       "label": "Zoom",
       "max": 1.4,
@@ -19,7 +19,7 @@
       "type": "float"
     },
     {
-      "default": 0.4,
+      "default": 0.65,
       "id": "travel",
       "label": "Travel",
       "max": 1,

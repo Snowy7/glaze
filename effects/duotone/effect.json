@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "color",
-  "cost": 0.572,
+  "cost": 0.59,
   "cost_estimated": false,
   "description": "Smooth two-ink tonal mapping, with adjustable contrast and blend.",
   "id": "duotone",
@@ -10,19 +10,19 @@
   "name": "Duotone",
   "params": [
     {
-      "default": "#162941",
+      "default": "#191338",
       "id": "shadows",
       "label": "Shadow ink",
       "type": "color"
     },
     {
-      "default": "#f5cd99",
+      "default": "#ffc99a",
       "id": "highlights",
       "label": "Highlight ink",
       "type": "color"
     },
     {
-      "default": 1,
+      "default": 1.45,
       "id": "contrast",
       "label": "Contrast",
       "max": 2,
@@ -31,7 +31,7 @@
       "type": "float"
     },
     {
-      "default": 0.8,
+      "default": 1,
       "id": "strength",
       "label": "Strength",
       "max": 1,

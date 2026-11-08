@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "color",
-  "cost": 0.385,
+  "cost": 1.097,
   "cost_estimated": false,
   "description": "Clean tonal steps with a little ordered dither to keep gradients intentional.",
   "id": "posterize",
@@ -10,7 +10,7 @@
   "name": "Poster tones",
   "params": [
     {
-      "default": 7,
+      "default": 5,
       "id": "levels",
       "label": "Tonal levels",
       "max": 24,
@@ -19,7 +19,7 @@
       "type": "float"
     },
     {
-      "default": 0.15,
+      "default": 0.55,
       "id": "dither",
       "label": "Dither",
       "max": 1,
@@ -28,7 +28,7 @@
       "type": "float"
     },
     {
-      "default": 0.8,
+      "default": 1,
       "id": "strength",
       "label": "Strength",
       "max": 1,

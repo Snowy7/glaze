@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "motion",
-  "cost": 0.862,
+  "cost": 0.798,
   "cost_estimated": false,
   "description": "The image leans toward the cursor, using scene depth or a luminance-based depth cue.",
   "id": "parallax",
@@ -10,7 +10,7 @@
   "name": "Cursor depth",
   "params": [
     {
-      "default": 0.012,
+      "default": 0.035,
       "id": "amount",
       "label": "Travel",
       "max": 0.05,
@@ -19,7 +19,7 @@
       "type": "float"
     },
     {
-      "default": 0.8,
+      "default": 1.15,
       "id": "depth",
       "label": "Depth strength",
       "max": 2,

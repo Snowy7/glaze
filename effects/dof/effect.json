@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "camera",
-  "cost": 2.478,
+  "cost": 2.76,
   "cost_estimated": false,
   "description": "A soft twelve-point aperture follows scene depth; photographs use a tilt-shift focus band.",
   "id": "dof",
@@ -10,7 +10,7 @@
   "name": "Depth of field",
   "params": [
     {
-      "default": 0.5,
+      "default": 0.55,
       "id": "focus",
       "label": "Focus distance",
       "max": 1,
@@ -19,16 +19,16 @@
       "type": "float"
     },
     {
-      "default": 9,
+      "default": 32,
       "id": "size",
       "label": "Aperture size",
-      "max": 24,
+      "max": 64,
       "min": 0,
       "step": 0.5,
       "type": "float"
     },
     {
-      "default": 0.2,
+      "default": 0.12,
       "id": "width",
       "label": "Focus width",
       "max": 0.8,

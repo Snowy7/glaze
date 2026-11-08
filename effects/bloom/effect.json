@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "camera",
-  "cost": 1.555,
+  "cost": 1.547,
   "cost_estimated": false,
   "description": "Half-resolution light diffusion gives highlights a soft photographic bloom.",
   "id": "bloom",
@@ -10,16 +10,16 @@
   "name": "Soft bloom",
   "params": [
     {
-      "default": 0.3,
+      "default": 0.85,
       "id": "amount",
       "label": "Bloom strength",
-      "max": 1,
+      "max": 2,
       "min": 0,
       "step": 0.01,
       "type": "float"
     },
     {
-      "default": 0.65,
+      "default": 0.48,
       "id": "threshold",
       "label": "Highlight threshold",
       "max": 0.95,
@@ -28,10 +28,10 @@
       "type": "float"
     },
     {
-      "default": 14,
+      "default": 28,
       "id": "radius",
       "label": "Spread",
-      "max": 40,
+      "max": 80,
       "min": 2,
       "step": 1,
       "type": "float"

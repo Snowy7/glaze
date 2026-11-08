@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "stylize",
-  "cost": 0.678,
+  "cost": 0.703,
   "cost_estimated": false,
   "description": "Fine colored contours follow image detail while preserving the photograph.",
   "id": "edge-glow",
@@ -10,7 +10,7 @@
   "name": "Luminous edges",
   "params": [
     {
-      "default": 0.5,
+      "default": 1.4,
       "id": "amount",
       "label": "Strength",
       "max": 2,
@@ -19,16 +19,16 @@
       "type": "float"
     },
     {
-      "default": 1,
+      "default": 3,
       "id": "radius",
       "label": "Edge width",
-      "max": 4,
+      "max": 12,
       "min": 0.5,
       "step": 0.01,
       "type": "float"
     },
     {
-      "default": 0.07,
+      "default": 0.035,
       "id": "threshold",
       "label": "Detail threshold",
       "max": 0.5,
@@ -37,7 +37,7 @@
       "type": "float"
     },
     {
-      "default": "#77d8ee",
+      "default": "#60d7ff",
       "id": "tint",
       "label": "Edge color",
       "type": "color"

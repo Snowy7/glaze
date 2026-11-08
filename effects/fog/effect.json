@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "weather",
-  "cost": 0.882,
+  "cost": 0.784,
   "cost_estimated": false,
   "description": "Slow billows settle near the ground and build up in distant scene depth.",
   "id": "fog",
@@ -10,7 +10,7 @@
   "name": "Valley mist",
   "params": [
     {
-      "default": 0.35,
+      "default": 0.52,
       "id": "amount",
       "label": "Density",
       "max": 1,
@@ -19,7 +19,7 @@
       "type": "float"
     },
     {
-      "default": 0.5,
+      "default": 0.65,
       "id": "height",
       "label": "Mist height",
       "max": 1,

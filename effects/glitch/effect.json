@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "stylize",
-  "cost": 0.464,
+  "cost": 0.453,
   "cost_estimated": false,
   "description": "Rare, short, restrained signal slips with tiny channel offsets.",
   "id": "glitch",
@@ -19,7 +19,7 @@
       "type": "float"
     },
     {
-      "default": 0.25,
+      "default": 0.45,
       "id": "amount",
       "label": "Displacement",
       "max": 1,

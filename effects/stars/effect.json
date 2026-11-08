@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "weather",
-  "cost": 0.499,
+  "cost": 0.877,
   "cost_estimated": false,
   "description": "Fine twinkling pinpoints appear in dark sky, with a soft horizon fade.",
   "id": "stars",
@@ -10,7 +10,7 @@
   "name": "Twilight stars",
   "params": [
     {
-      "default": 0.5,
+      "default": 0.6,
       "id": "amount",
       "label": "Amount",
       "max": 1,
@@ -19,7 +19,7 @@
       "type": "float"
     },
     {
-      "default": 0.9,
+      "default": 1.45,
       "id": "brightness",
       "label": "Brightness",
       "max": 2,
@@ -28,7 +28,7 @@
       "type": "float"
     },
     {
-      "default": 0.6,
+      "default": 0.65,
       "id": "sky",
       "label": "Sky height",
       "max": 1,
@@ -37,7 +37,7 @@
       "type": "float"
     },
     {
-      "default": 0.5,
+      "default": 0.35,
       "id": "twinkle",
       "label": "Twinkle",
       "max": 1,
@@ -46,10 +46,10 @@
       "type": "float"
     },
     {
-      "default": 1,
+      "default": 1.9,
       "id": "size",
       "label": "Star size",
-      "max": 3,
+      "max": 4,
       "min": 0.5,
       "step": 0.01,
       "type": "float"

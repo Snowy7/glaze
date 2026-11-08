@@ -15,5 +15,5 @@ fn effect(frag: vec2f, uv: vec2f) -> vec4f {
             dirt += exp(-d * d / (r * r)) * step(0.65, h) + exp(-fx_square((d - r * 0.9) / max(r * 0.14, 0.001))) * 0.18 * step(0.8, h);
     }}
     let light = smoothstep(0.25, 0.9, luma(base.rgb));
-    return vec4f(base.rgb + dirt * clamp(params.amount, 0.0, 1.0) * (0.035 + light * 0.2) * vec3f(1.0, 0.85, 0.65), base.a);
+    return vec4f(base.rgb + dirt * clamp(params.amount, 0.0, 1.0) * (0.12 + light * 0.65) * vec3f(1.0, 0.85, 0.65), base.a);
 }

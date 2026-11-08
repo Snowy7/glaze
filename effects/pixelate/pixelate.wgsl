@@ -1,6 +1,6 @@
 // Original mypaper effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
-    let size = clamp(params.size, 2.0, 64.0) * paper.resolution.y / 1080.0;
+    let size = clamp(params.size, 2.0, 128.0) * paper.resolution.y / 1080.0;
     let cell = floor(frag / max(size, 1.0));
     let at = (cell + 0.5) * max(size, 1.0) / max(paper.resolution, vec2f(1.0));
     let base = sample_src(at);

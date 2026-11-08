@@ -8,7 +8,7 @@ fn bright(uv: vec2f) -> vec3f {
 
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     // Five bilinear taps approximate a nine-tap Gaussian, in linear light at half scale.
-    let radius = clamp(params.radius, 2.0, 40.0) * paper.resolution.y / 1080.0;
+    let radius = clamp(params.radius, 2.0, 80.0) * paper.resolution.y / 1080.0;
     let pixel = vec2f(radius / max(paper.resolution.x, 1.0) / 3.230769, 0.0);
     var glow = bright(uv) * 0.227027;
     glow += (bright(uv + pixel * 1.384615) + bright(uv - pixel * 1.384615)) * 0.316216;

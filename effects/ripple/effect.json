@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "motion",
-  "cost": 0.544,
+  "cost": 0.549,
   "cost_estimated": false,
   "description": "Gentle concentric refractive rings spread out from the mouse position.",
   "id": "ripple",
@@ -10,16 +10,16 @@
   "name": "Cursor ripples",
   "params": [
     {
-      "default": 3,
+      "default": 16,
       "id": "amount",
       "label": "Refraction",
-      "max": 12,
+      "max": 32,
       "min": 0,
       "step": 0.25,
       "type": "float"
     },
     {
-      "default": 14,
+      "default": 7,
       "id": "frequency",
       "label": "Ring density",
       "max": 30,
@@ -37,7 +37,7 @@
       "type": "float"
     },
     {
-      "default": 3,
+      "default": 1.8,
       "id": "decay",
       "label": "Falloff",
       "max": 8,

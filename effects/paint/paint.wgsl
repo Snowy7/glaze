@@ -1,7 +1,7 @@
 // Original mypaper effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let base = sample_src(uv);
-    let px = clamp(params.radius, 1.0, 6.0) / max(paper.resolution, vec2f(1.0)) * paper.resolution.y / 1080.0;
+    let px = clamp(params.radius, 1.0, 12.0) / max(paper.resolution, vec2f(1.0)) * paper.resolution.y / 1080.0;
     var chosen = base.rgb;
     var minimum = 1000.0;
     for (var quadrant = 0u; quadrant < 4u; quadrant++) {

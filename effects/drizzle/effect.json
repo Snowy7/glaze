@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "weather",
-  "cost": 0.786,
+  "cost": 0.787,
   "cost_estimated": false,
   "description": "Fine, fast, tapered rain streaks with a restrained cool glint.",
   "id": "drizzle",
@@ -10,7 +10,7 @@
   "name": "Fine drizzle",
   "params": [
     {
-      "default": 0.4,
+      "default": 0.7,
       "id": "amount",
       "label": "Amount",
       "max": 1,
@@ -46,7 +46,7 @@
       "type": "float"
     },
     {
-      "default": 0.8,
+      "default": 1.3,
       "id": "length",
       "label": "Streak length",
       "max": 2,

@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "camera",
-  "cost": 0.738,
+  "cost": 0.751,
   "cost_estimated": false,
   "description": "Slow amber and rose light spills breathe along the film edges.",
   "id": "light-leaks",
@@ -10,7 +10,7 @@
   "name": "Film light leaks",
   "params": [
     {
-      "default": 0.3,
+      "default": 0.65,
       "id": "amount",
       "label": "Strength",
       "max": 1,
@@ -28,7 +28,7 @@
       "type": "float"
     },
     {
-      "default": 0.3,
+      "default": 0.45,
       "id": "width",
       "label": "Spill width",
       "max": 0.8,
@@ -37,7 +37,7 @@
       "type": "float"
     },
     {
-      "default": "#ffae67",
+      "default": "#ff963d",
       "id": "tint",
       "label": "Warm spill",
       "type": "color"
