@@ -178,6 +178,37 @@ fn tabbed_columns_park_inactive_tabs() {
     assert_eq!(t.iter().filter(|t| t.visible).count(), 1);
     assert!(t.iter().find(|t| t.window == WindowId(2)).unwrap().visible);
 }
+#[test]
+fn fullscreen_returns_to_original_column_and_width() {
+    let mut l = layout();
+    for id in 1..=3 {
+        open(&mut l, id);
+    }
+    l.focus(WindowId(2));
+    l.command(Command::CycleWidth);
+    let saved = l.suspend(WindowId(2)).unwrap();
+    l.resume(saved, true);
+    let w = &l.monitors[0].workspaces[0];
+    assert_eq!(w.columns[1].tiles[0].id, WindowId(2));
+    assert_eq!(w.columns[1].width, 2.0 / 3.0);
+}
+#[test]
+fn drop_at_column_center_joins_and_edge_inserts() {
+    let mut l = layout();
+    open(&mut l, 1);
+    open(&mut l, 2);
+    l.focus(WindowId(1));
+    let r = l
+        .targets()
+        .into_iter()
+        .find(|t| t.window == WindowId(1))
+        .unwrap()
+        .rect;
+    l.drop_at(WindowId(2), r.x + r.w / 2.0, r.y + r.h / 2.0);
+    assert_eq!(l.monitors[0].workspaces[0].columns.len(), 1);
+    assert_eq!(l.monitors[0].workspaces[0].columns[0].tiles.len(), 2);
+    check(&l);
+}
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(128))]
     #[test]

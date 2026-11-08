@@ -473,24 +473,28 @@ impl Layout {
         index: usize,
         new_workspace: bool,
     ) -> Vec<Target> {
-        let tile = self.locate(id).and_then(|(mi, wi)| {
-            let w = &self.monitors[mi].workspaces[wi];
-            let ci = w.column(id)?;
-            w.columns[ci].tiles.iter().find(|t| t.id == id).cloned()
-        });
-        let Some(tile) = tile else {
+        let Some(target_monitor) = self.monitors.iter().position(|m| m.id == monitor) else {
             return self.targets();
         };
-        self.remove(id);
+        let target_workspace = self.monitors[target_monitor]
+            .workspaces
+            .get(index)
+            .map(|w| w.id);
+        let Some(saved) = self.suspend(id) else {
+            return self.targets();
+        };
         if let Some(mi) = self.monitors.iter().position(|m| m.id == monitor) {
-            let index = index.min(self.monitors[mi].workspaces.len().saturating_sub(1));
-            if new_workspace {
+            let resolved = target_workspace
+                .and_then(|id| self.monitors[mi].workspaces.iter().position(|w| w.id == id));
+            let index =
+                resolved.unwrap_or(index.min(self.monitors[mi].workspaces.len().saturating_sub(1)));
+            if new_workspace || resolved.is_none() {
                 let w = self.workspace(monitor);
                 self.monitors[mi].workspaces.insert(index, w);
             }
             self.monitors[mi].active = self.monitors[mi].workspaces[index].id;
             self.focused_monitor = Some(monitor.into());
-            self.insert(id, tile.constraints, None, None, true);
+            self.insert(id, saved.constraints, None, saved.floating, true);
         }
         self.normalize();
         self.targets()
@@ -791,6 +795,153 @@ impl Layout {
             }
         }
         result
+    }
+}
+
+/// A native fullscreen window keeps enough state to return to its original column.
+#[derive(Debug, Clone)]
+pub struct Suspended {
+    window: WindowId,
+    monitor: String,
+    workspace: WorkspaceId,
+    column: usize,
+    width: f64,
+    constraints: Constraints,
+    floating: Option<Rect>,
+}
+impl Layout {
+    /// Untile a fixed-size or incompatible client while preserving its workspace.
+    pub fn float_at(&mut self, window: WindowId, rect: Rect) -> Vec<Target> {
+        if let Some(mut saved) = self.suspend(window) {
+            saved.floating = Some(rect);
+            self.resume(saved, false)
+        } else {
+            self.targets()
+        }
+    }
+    pub fn suspend(&mut self, window: WindowId) -> Option<Suspended> {
+        let (mi, wi) = self.locate(window)?;
+        let m = &self.monitors[mi];
+        let w = &m.workspaces[wi];
+        let column = w.column(window);
+        let saved = Suspended {
+            window,
+            monitor: m.id.clone(),
+            workspace: w.id,
+            column: column.unwrap_or(0),
+            width: column.map_or(self.settings.default_width, |i| w.columns[i].width),
+            constraints: column
+                .and_then(|i| w.columns[i].tiles.iter().find(|t| t.id == window))
+                .map_or(Constraints::default(), |t| t.constraints),
+            floating: w.floating.iter().find(|f| f.id == window).map(|f| f.rect),
+        };
+        self.remove(window);
+        Some(saved)
+    }
+    pub fn resume(&mut self, saved: Suspended, activate: bool) -> Vec<Target> {
+        let Some(mi) = self
+            .monitors
+            .iter()
+            .position(|m| m.id == saved.monitor)
+            .or_else(|| (!self.monitors.is_empty()).then_some(0))
+        else {
+            return self.targets();
+        };
+        let wi = self.monitors[mi]
+            .workspaces
+            .iter()
+            .position(|w| w.id == saved.workspace)
+            .unwrap_or(0);
+        let previous = self.focused_monitor.clone();
+        let active = self.monitors[mi].active;
+        self.focused_monitor = Some(self.monitors[mi].id.clone());
+        self.monitors[mi].active = self.monitors[mi].workspaces[wi].id;
+        self.insert(
+            saved.window,
+            saved.constraints,
+            None,
+            saved.floating,
+            activate,
+        );
+        if let Some((mi, wi)) = self.locate(saved.window) {
+            let w = &mut self.monitors[mi].workspaces[wi];
+            if let Some(ci) = w.column(saved.window) {
+                let mut c = w.columns.remove(ci);
+                c.width = saved.width;
+                w.columns.insert(saved.column.min(w.columns.len()), c);
+            }
+            self.fit(mi, wi);
+        }
+        if !activate {
+            self.focused_monitor = previous;
+            self.monitors[mi].active = active;
+        }
+        self.normalize();
+        self.targets()
+    }
+    /// Native maximize/restore requests are idempotent, unlike a keyboard toggle.
+    pub fn set_maximized(&mut self, window: WindowId, on: bool) -> Vec<Target> {
+        if let Some((mi, wi)) = self.locate(window) {
+            let w = &mut self.monitors[mi].workspaces[wi];
+            if let Some(ci) = w.column(window) {
+                w.columns[ci].mode = if on { Mode::Maximized } else { Mode::Normal };
+            }
+            self.fit(mi, wi);
+        }
+        self.targets()
+    }
+    /// A title-bar drop near either column edge inserts; its centre joins the stack.
+    pub fn drop_at(&mut self, window: WindowId, x: f64, y: f64) -> Vec<Target> {
+        let target = self
+            .targets()
+            .into_iter()
+            .find(|t| t.window != window && t.visible && !t.floating && t.rect.contains(x, y));
+        let Some(target) = target else {
+            return self.targets();
+        };
+        let Some(saved) = self.suspend(window) else {
+            return self.targets();
+        };
+        let Some((mi, wi)) = self.locate(target.window) else {
+            return self.resume(saved, true);
+        };
+        let m = &mut self.monitors[mi];
+        let axis = m.axis;
+        let w = &mut m.workspaces[wi];
+        let ci = w.column(target.window).unwrap();
+        let fraction = match axis {
+            Axis::Horizontal => (x - target.rect.x) / target.rect.w,
+            Axis::Vertical => (y - target.rect.y) / target.rect.h,
+        };
+        let tile = Tile {
+            id: window,
+            constraints: saved.constraints,
+            height: 1.0,
+        };
+        if !(0.3..=0.7).contains(&fraction) {
+            let index = ci + usize::from(fraction > 0.7);
+            w.columns.insert(
+                index,
+                Column {
+                    tiles: vec![tile],
+                    active: 0,
+                    width: saved.width,
+                    learned_min: 0.0,
+                    tabbed: false,
+                    mode: Mode::Normal,
+                },
+            );
+        } else {
+            let c = &mut w.columns[ci];
+            c.tiles.push(tile);
+            c.active = c.tiles.len() - 1;
+        }
+        w.focused = Some(window);
+        m.active = w.id;
+        self.focused_monitor = Some(m.id.clone());
+        self.fit(mi, wi);
+        self.normalize();
+        self.targets()
     }
 }
 
