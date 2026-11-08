@@ -23,7 +23,8 @@ use mypaper_desktop::Rect;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::DirectComposition::{
     IDCompositionAnimation, IDCompositionDesktopDevice, IDCompositionRectangleClip,
-    IDCompositionSurface, IDCompositionTarget, IDCompositionVisual2, IDCompositionVisual3,
+    IDCompositionScaleTransform, IDCompositionSurface, IDCompositionTarget, IDCompositionVisual2,
+    IDCompositionVisual3,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_ALPHA_MODE_PREMULTIPLIED, DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -50,6 +51,9 @@ pub struct OverlayWindow {
     // Drop order: the DirectComposition tree, then the window.
     surface: IDCompositionSurface,
     size: (u32, u32),
+    surface_size: (u32, u32),
+    content: IDCompositionVisual2,
+    scale: IDCompositionScaleTransform,
     clip: IDCompositionRectangleClip,
     visual: IDCompositionVisual2,
     _target: IDCompositionTarget,
@@ -106,20 +110,29 @@ impl OverlayWindow {
 
         let size = pixels(frame);
         // SAFETY: DirectComposition calls on a live device and our own window.
-        let (target, visual, clip, surface) = unsafe {
+        let (target, visual, clip, surface, content, scale) = unsafe {
             let target = dcomp.CreateTargetForHwnd(hwnd.0, true)?;
             let visual = dcomp.CreateVisual()?;
             let clip = dcomp.CreateRectangleClip()?;
             let surface = surface(dcomp, size)?;
-            visual.SetContent(&surface)?;
+            let content = dcomp.CreateVisual()?;
+            let scale = dcomp.CreateScaleTransform()?;
+            scale.SetScaleX2(1.0)?;
+            scale.SetScaleY2(1.0)?;
+            content.SetContent(&surface)?;
+            content.SetTransform(&scale)?;
+            visual.AddVisual(&content, false, None)?;
             visual.SetClip(&clip)?;
             visual.cast::<IDCompositionVisual3>()?.SetOpacity2(0.0)?;
             target.SetRoot(&visual)?;
-            (target, visual, clip, surface)
+            (target, visual, clip, surface, content, scale)
         };
         Ok(Self {
             surface,
             size,
+            surface_size: size,
+            content,
+            scale,
             clip,
             visual,
             _target: target,
@@ -136,7 +149,7 @@ impl OverlayWindow {
     /// next commit). Takes effect at the next commit.
     pub fn place(
         &mut self,
-        dcomp: &IDCompositionDesktopDevice,
+        _dcomp: &IDCompositionDesktopDevice,
         client: HWND,
         frame: Rect,
         plate: Rect,
@@ -147,8 +160,12 @@ impl OverlayWindow {
         if size != self.size {
             // SAFETY: DirectComposition calls on live objects.
             unsafe {
-                self.surface = surface(dcomp, size)?;
-                self.visual.SetContent(&self.surface)?;
+                // Keep the last glass visible while capture catches up. Committing an empty
+                // replacement surface here made every dock resize flash fully transparent.
+                self.scale
+                    .SetScaleX2(size.0 as f32 / self.surface_size.0 as f32)?;
+                self.scale
+                    .SetScaleY2(size.1 as f32 / self.surface_size.1 as f32)?;
             }
             self.size = size;
         }
@@ -192,8 +209,29 @@ impl OverlayWindow {
 
     /// Shows `glass` (drawn by wgpu, which the capture device has waited for). Takes effect at
     /// the next commit.
-    pub fn show(&self, capture: &CaptureDevice, glass: &Crop) -> Result<()> {
-        capture.present(glass, &self.surface)
+    pub fn show(
+        &mut self,
+        dcomp: &IDCompositionDesktopDevice,
+        capture: &CaptureDevice,
+        glass: &Crop,
+    ) -> Result<()> {
+        if self.surface_size != self.size {
+            // SAFETY: a live composition device and nonzero surface size.
+            let replacement = unsafe { surface(dcomp, self.size)? };
+            capture.present(glass, &replacement)?;
+            // Publish only a fully painted surface, in the same commit as resetting scale.
+            // SAFETY: these visuals, transform and painted surface belong to this device.
+            unsafe {
+                self.content.SetContent(&replacement)?;
+                self.scale.SetScaleX2(1.0)?;
+                self.scale.SetScaleY2(1.0)?;
+            }
+            self.surface = replacement;
+            self.surface_size = self.size;
+            Ok(())
+        } else {
+            capture.present(glass, &self.surface)
+        }
     }
 
     /// Fades the window in over `fade` (the shell's, [`FADE`] by default), along the resolved
@@ -217,7 +255,13 @@ impl OverlayWindow {
                 fade.AddCubic(0.0, 0.0, 3.0 / t, -3.0 / (t * t), 1.0 / (t * t * t))?;
             } else {
                 for [x0, y0, x1, y1] in curve.segments() {
-                    fade.AddCubic(f64::from(x0) * f64::from(t), y0, (y1 - y0) / ((x1 - x0) * t), 0.0, 0.0)?;
+                    fade.AddCubic(
+                        f64::from(x0) * f64::from(t),
+                        y0,
+                        (y1 - y0) / ((x1 - x0) * t),
+                        0.0,
+                        0.0,
+                    )?;
                 }
             }
             fade.End(f64::from(t), 1.0)?;

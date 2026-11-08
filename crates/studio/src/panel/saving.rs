@@ -588,7 +588,7 @@ mod tests {
             assert!(built.list.ops.iter().any(|op| matches!(
                 op,
                 mypaper_ui::Op::Fill { rect, color, .. }
-                    if *rect == selected.rect && *color == super::super::tokens::thumb(dark)
+                    if *rect == selected.rect && *color == super::super::palette_for(&app).selected
             )));
         }
     }

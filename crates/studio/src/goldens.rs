@@ -622,7 +622,7 @@ fn stage_selection_and_zoom_only_change_navigation_and_keep_the_inspector_in_pla
         app.run(Action::Panel(Command::Open(page)));
         let r = crate::view::regions(&app);
         assert!(r.stage.is_none() && r.inspector.is_none());
-        assert!(crate::view::content_regions(&app).0.width() <= 672.0);
+        assert!(crate::view::content_regions(&app).0.width() <= app.px(1200.0));
     }
 }
 

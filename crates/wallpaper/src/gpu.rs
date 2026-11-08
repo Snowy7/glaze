@@ -14,6 +14,35 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use crate::sources::blit::Blitter;
 use crate::window::Window;
 
+/// A device can be absent only during recovery. All old references must be released before
+/// D3D12CreateDevice can reopen the adapter's removed device; callers must not draw meanwhile.
+pub struct DeviceSlot<T>(Option<T>);
+
+impl<T> From<T> for DeviceSlot<T> {
+    fn from(device: T) -> Self {
+        Self(Some(device))
+    }
+}
+
+impl<T> DeviceSlot<T> {
+    pub fn get(&self) -> Option<&T> {
+        self.0.as_ref()
+    }
+    pub fn clear(&mut self) {
+        self.0 = None;
+    }
+    pub fn replace(&mut self, device: T) {
+        self.0 = Some(device);
+    }
+}
+
+impl<T> std::ops::Deref for DeviceSlot<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        self.0.as_ref().expect("drawing during device recovery")
+    }
+}
+
 pub struct Gpu {
     // Kept alive for as long as the surfaces made from it.
     _instance: wgpu::Instance,
@@ -121,6 +150,28 @@ fn adapter_options<'a, 'w>(
 }
 
 impl Gpu {
+    /// Reopen after a real device loss, retaining the swapchain format. Existing screens
+    /// recreate their surfaces lazily; covered screens remain free of drawing resources.
+    pub fn reopen(preference: GpuPreference, format: wgpu::TextureFormat) -> Result<Self> {
+        let Opened {
+            instance,
+            adapter,
+            device,
+            queue,
+            preference,
+        } = Opening::start(preference).wait()?;
+        let blit = Blitter::new(&device, format);
+        Ok(Self {
+            _instance: instance,
+            adapter,
+            device,
+            queue,
+            preference,
+            format,
+            blit,
+        })
+    }
+
     /// Takes the device `opening` made and creates a surface for each window (in order).
     pub fn new(
         opening: Opening,

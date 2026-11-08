@@ -23,7 +23,7 @@ use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 use crate::backdrop::{Backdrop, Draw};
 use crate::glass_pass::GlassPass;
-use crate::gpu::{Gpu, KeptFrame, Opening, Screen};
+use crate::gpu::{DeviceSlot, Gpu, KeptFrame, Opening, Screen};
 use crate::hold::{Fact, HoldReasons, Holds, Reason};
 use crate::palette;
 use crate::snapshot::{Snapshot, Target};
@@ -51,7 +51,8 @@ pub enum Flow {
 
 pub struct Engine {
     theme: LoadedTheme,
-    gpu: Gpu,
+    gpu: DeviceSlot<Gpu>,
+    recovering_gpu: Option<(mypaper_config::GpuPreference, wgpu::TextureFormat)>,
     source: Box<dyn Source>,
     /// Per screen: what `source` was last told via `Source::set_visible`.
     shown: Vec<Visibility>,
@@ -102,6 +103,7 @@ pub struct Engine {
     resuming: Option<Instant>,
     /// Core's game signal, followed while `engine.during_games` is `pause` (desktop mode).
     game: crate::game::GameSignal,
+    test_game_hold: bool,
 }
 
 impl Engine {
@@ -148,7 +150,8 @@ impl Engine {
         let render_settings = renderer_config.resolve(id, theme.theme.engine);
         Ok(Self {
             theme,
-            gpu,
+            gpu: gpu.into(),
+            recovering_gpu: None,
             source,
             shown: vec![Visibility::Live; screens.len()],
             screens,
@@ -179,6 +182,7 @@ impl Engine {
             refresh_due: true,
             resuming: None,
             game: crate::game::GameSignal::default(),
+            test_game_hold: std::env::var_os("MYPAPER_TEST_GAME_HOLD").is_some(),
         })
     }
 
@@ -191,6 +195,44 @@ impl Engine {
             device,
             queue,
         }
+    }
+
+    /// Replace a removed shared device without restarting the shell or losing its overlays.
+    /// Rest/hold state stays intact: only visible screens recreate drawing resources.
+    pub fn recover_gpu(&mut self) -> Result<()> {
+        let (preference, format) = *self
+            .recovering_gpu
+            .get_or_insert_with(|| (self.gpu.preference, self.gpu.format));
+        self.source = Box::new(sources::Released);
+        for screen in &mut self.screens {
+            screen.release();
+            screen.dirty = true;
+        }
+        self.glass = GlassPass::new(self.monitors.as_deref())?;
+        self.backdrop.release();
+        self.timing = None;
+        self.gpu.clear();
+        self.gpu.replace(Gpu::reopen(preference, format)?);
+        self.recovering_gpu = None;
+        self.timing = crate::timing::Timing::new(&self.gpu)?;
+        self.source_released = true;
+        if !self.released {
+            let hwnds: Vec<_> = self.screens.iter().map(|s| s.window.0).collect();
+            self.source = load_or_broken(&self.gpu, &self.theme, &hwnds).0;
+            self.source_released = false;
+            self.shown.fill(Visibility::Live);
+        }
+        self.refresh_due = true;
+        self.last_tick = None;
+        log::info!(
+            "GPU: shared device recovered (drawing released: {})",
+            self.released
+        );
+        Ok(())
+    }
+
+    pub fn gpu_lost(&self) -> bool {
+        self.gpu.get().is_none() || self.overlay_gpu().removed_reason().is_err()
     }
 
     /// The shell's plates over screens whose wallpaper draws with windows of its own (web, app),
@@ -313,7 +355,9 @@ impl Engine {
 
     /// Follows core's game signal into the holds (cheap unless it changed).
     fn refresh_game(&mut self) {
-        let game = self.game.refresh();
+        // Opt-in live regression fixture: exercises the real game hold and resource release
+        // without changing user settings or sending input. Remove it by restarting normally.
+        let game = self.test_game_hold || self.game.refresh();
         self.holds.set_game(game);
     }
 

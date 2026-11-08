@@ -154,11 +154,30 @@ pub fn bar(
         bar.border = Default::default();
     }
     let material = family(look, surface).map_or(look.material, |f| f.material.over(&look.material));
-    // A design's bare bar has nothing to colour. Selecting a tint restores its glass body;
-    // explicitly configured transparent/background overrides still take precedence.
-    if material.tint.is_some() && !own("/transparent") && !own("/background") {
-        bar.transparent = Some(false);
-        bar.background = None;
+    if !own("/transparent") {
+        if own("/background") {
+            // A chosen body replaces a design's transparent rail, including background: none.
+            bar.transparent = None;
+        } else if material.tint.is_some() {
+            bar.transparent = Some(false);
+        } else if matches!(
+            style(look, surface),
+            Some(NativeStyle::Solid | NativeStyle::Mono)
+        ) {
+            bar.transparent = Some(false);
+            bar.background = None;
+        }
+    }
+    if material.tint.is_some() && bar.transparent != Some(true) && !own("/background") {
+        // A reserved top strip never overlaps maximized apps, even when they pause the
+        // wallpaper. Use live glass for the chosen tint, as for a dock over an app; a
+        // wallpaper plate would remain invisible until the desktop is uncovered.
+        bar.background = Some(mypaper_bars::style::Fill::Blur(
+            mypaper_bars::style::BlurFill {
+                brightness: 1.0,
+                blur: 0.0,
+            },
+        ));
     }
     for (path, value, target) in [
         ("/glass/clarity", material.clarity, &mut bar.glass.clarity),
