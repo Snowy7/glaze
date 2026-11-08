@@ -50,6 +50,8 @@ struct Compose {
 const PREMULTIPLIED: u32 = 1;
 const OPAQUE: u32 = 2;
 const CONTAIN: u32 = 16;
+/// [`Targets::groups`] key of a layer's compose pass.
+const COMPOSE_GROUP: usize = usize::MAX;
 
 fn blend_bits(blend: Blend) -> u32 {
     (match blend {
@@ -195,7 +197,7 @@ struct Kit {
 }
 
 enum BaseDraw {
-    Picture(Picture, mypaper_theme::Fit),
+    Picture(Picture, mypaper_theme::Fit, [f32; 2]),
     Color(wgpu::Color),
     Gradient {
         pipeline: wgpu::RenderPipeline,
@@ -259,6 +261,8 @@ struct Targets {
     chain: [Tex; 2],
     /// Scaled pass outputs and model renders, by (layer, pass).
     temps: HashMap<(usize, usize), Tex>,
+    /// Bind groups by (layer, pass or [`COMPOSE_GROUP`]): every view they bind is fixed per size.
+    groups: HashMap<(usize, usize), wgpu::BindGroup>,
     base_ready: bool,
     prefix_ready: bool,
 }
@@ -336,7 +340,7 @@ impl StackSource {
         let mut effect_dirs = Vec::new();
         let mut layers = Vec::new();
         for layer in &config.layers {
-            if !layer.enabled() {
+            if !layer.active() {
                 layers.push(LayerDraw::Skip);
                 continue;
             }
@@ -358,12 +362,8 @@ impl StackSource {
                 }
             }
         }
-        let base_moves = base.moves();
-        let split = layers
-            .iter()
-            .position(LayerDraw::moves)
-            .unwrap_or(layers.len());
-        let moving = base_moves || split < layers.len();
+        let per_frame = stack::per_frame_from(base.moves(), layers.iter().map(LayerDraw::moves));
+        let moving = per_frame.is_some();
         let reads_mouse = match &config.base {
             Base::Shader(_) | Base::Glsl(_) => {
                 matches!(&base, BaseDraw::Source(s) if !s.shared())
@@ -381,7 +381,7 @@ impl StackSource {
         Ok(Self {
             base,
             layers,
-            split: if base_moves { 0 } else { split },
+            split: per_frame.unwrap_or(config.layers.len()),
             moving,
             interval: Duration::from_secs(1) / config.fps,
             scale: config.scale,
@@ -419,6 +419,7 @@ impl StackSource {
                 Tex::new(gpu, "stack chain", size, format),
             ],
             temps: HashMap::new(),
+            groups: HashMap::new(),
             base_ready: false,
             prefix_ready: false,
         }
@@ -428,9 +429,9 @@ impl StackSource {
         let size = t.size;
         let view = &t.base.view;
         match &mut self.base {
-            BaseDraw::Picture(picture, fit) => {
+            BaseDraw::Picture(picture, fit, focus) => {
                 let mut pass = begin(frame.encoder, view, wgpu::LoadOp::Clear(wgpu::Color::BLACK));
-                picture.draw(gpu, &mut pass, size, *fit, 1.0);
+                picture.draw_focused(gpu, &mut pass, size, *fit, *focus, 1.0);
             }
             BaseDraw::Color(color) => super::clear(frame.encoder, view, *color),
             BaseDraw::Gradient { pipeline, group } => {
@@ -462,7 +463,7 @@ impl StackSource {
                 let time = frame.clock.as_secs_f32();
                 let delta = frame.clock.saturating_sub(*last).as_secs_f32();
                 *last = frame.clock;
-                let mut words = [0u32; 12];
+                let mut words = [0u32; 28];
                 let f = |v: f32| v.to_bits();
                 words[..4].copy_from_slice(&[f(size.0 as f32), f(size.1 as f32), f(1.0), f(time)]);
                 // iMouse: Shadertoy's bottom-left origin; zw (click) stays 0.
@@ -471,6 +472,11 @@ impl StackSource {
                 words[8] = f(delta);
                 words[9] = frame.frame;
                 words[10] = f(1.0 / self.interval.as_secs_f32());
+                // iChannelResolution[0..4]: std140 vec3 array elements, 16 bytes apart.
+                let noise = stack::GLSL_NOISE_SIZE as f32;
+                for c in 0..4 {
+                    words[12 + c * 4..15 + c * 4].copy_from_slice(&[f(noise), f(noise), f(1.0)]);
+                }
                 gpu.queue
                     .write_buffer(uniforms, 0, bytemuck::cast_slice(&words));
                 let mut pass = begin(frame.encoder, view, wgpu::LoadOp::Clear(wgpu::Color::BLACK));
@@ -503,15 +509,19 @@ impl StackSource {
         input: &wgpu::TextureView,
         output: &wgpu::TextureView,
     ) {
+        let range_start = range.start;
         let active: Vec<usize> = range
             .filter(|&i| !matches!(self.layers[i], LayerDraw::Skip))
             .collect();
         if active.is_empty() {
+            let group = t
+                .groups
+                .entry((usize::MAX, range_start))
+                .or_insert_with(|| self.compose_group(gpu, input, input))
+                .clone();
             self.compose(
-                gpu,
                 frame.encoder,
-                input,
-                input,
+                &group,
                 output,
                 t.size,
                 [0.0, 0.0, 1.0, 1.0],
@@ -572,17 +582,20 @@ impl StackSource {
                         }
                         tex.view.clone()
                     };
-                    let group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("effect"),
-                        layout: &self.kit.effect_layout,
-                        entries: &[
-                            entry(0, wgpu::BindingResource::TextureView(&src)),
-                            entry(1, wgpu::BindingResource::Sampler(&self.kit.sampler)),
-                            entry(2, wgpu::BindingResource::TextureView(original)),
-                            entry(3, wgpu::BindingResource::TextureView(depth)),
-                            entry(4, effect.params.as_entire_binding()),
-                            entry(5, wgpu::BindingResource::TextureView(input)),
-                        ],
+                    let kit = &self.kit;
+                    let group = t.groups.entry((index, p)).or_insert_with(|| {
+                        gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                            label: Some("effect"),
+                            layout: &kit.effect_layout,
+                            entries: &[
+                                entry(0, wgpu::BindingResource::TextureView(&src)),
+                                entry(1, wgpu::BindingResource::Sampler(&kit.sampler)),
+                                entry(2, wgpu::BindingResource::TextureView(original)),
+                                entry(3, wgpu::BindingResource::TextureView(depth)),
+                                entry(4, effect.params.as_entire_binding()),
+                                entry(5, wgpu::BindingResource::TextureView(input)),
+                            ],
+                        })
                     });
                     let k = pass_size.0 as f32 / size.0.max(1) as f32;
                     let paper = Paper {
@@ -600,18 +613,21 @@ impl StackSource {
                     );
                     pass.set_pipeline(pipeline);
                     pass.set_immediates(0, bytemuck::bytes_of(&paper));
-                    pass.set_bind_group(0, &group, &[]);
+                    pass.set_bind_group(0, &*group, &[]);
                     pass.draw(0..3, 0..1);
                     drop(pass);
                     src = target;
                 }
                 if !direct {
                     let (mix, flags) = (effect.mix, effect.flags);
+                    let group = t
+                        .groups
+                        .entry((index, COMPOSE_GROUP))
+                        .or_insert_with(|| self.compose_group(gpu, input, &src))
+                        .clone();
                     self.compose(
-                        gpu,
                         frame.encoder,
-                        input,
-                        &src,
+                        &group,
                         output,
                         size,
                         full,
@@ -627,11 +643,14 @@ impl StackSource {
                 mix,
             } => {
                 let (view, rect, flags, mix) = (view.clone(), *rect, *flags, *mix);
+                let group = t
+                    .groups
+                    .entry((index, COMPOSE_GROUP))
+                    .or_insert_with(|| self.compose_group(gpu, input, &view))
+                    .clone();
                 self.compose(
-                    gpu,
                     frame.encoder,
-                    input,
-                    &view,
+                    &group,
                     output,
                     size,
                     rect,
@@ -674,11 +693,14 @@ impl StackSource {
                     frame.screen,
                 );
                 let (rect, flags, mix) = (*rect, *flags, *mix);
+                let group = t
+                    .groups
+                    .entry((index, COMPOSE_GROUP))
+                    .or_insert_with(|| self.compose_group(gpu, input, &view))
+                    .clone();
                 self.compose(
-                    gpu,
                     frame.encoder,
-                    input,
-                    &view,
+                    &group,
                     output,
                     size,
                     rect,
@@ -690,20 +712,14 @@ impl StackSource {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn compose(
+    /// The compose pass's bindings: layer `over` drawn on `under`.
+    fn compose_group(
         &self,
         gpu: &Gpu,
-        encoder: &mut wgpu::CommandEncoder,
         under: &wgpu::TextureView,
         over: &wgpu::TextureView,
-        output: &wgpu::TextureView,
-        size: (u32, u32),
-        rect: [f32; 4],
-        mix: f32,
-        flags: u32,
-    ) {
-        let group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+    ) -> wgpu::BindGroup {
+        gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("compose"),
             layout: &self.kit.compose_layout,
             entries: &[
@@ -711,7 +727,21 @@ impl StackSource {
                 entry(1, wgpu::BindingResource::TextureView(over)),
                 entry(2, wgpu::BindingResource::Sampler(&self.kit.sampler)),
             ],
-        });
+        })
+    }
+
+    /// Draws `group` (from [`Self::compose_group`]) into `output`.
+    #[allow(clippy::too_many_arguments)]
+    fn compose(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        group: &wgpu::BindGroup,
+        output: &wgpu::TextureView,
+        size: (u32, u32),
+        rect: [f32; 4],
+        mix: f32,
+        flags: u32,
+    ) {
         let immediates = Compose {
             rect,
             resolution: [size.0 as f32, size.1 as f32],
@@ -721,7 +751,7 @@ impl StackSource {
         let mut pass = begin(encoder, output, wgpu::LoadOp::Clear(wgpu::Color::BLACK));
         pass.set_pipeline(&self.kit.compose);
         pass.set_immediates(0, bytemuck::bytes_of(&immediates));
-        pass.set_bind_group(0, &group, &[]);
+        pass.set_bind_group(0, group, &[]);
         pass.draw(0..3, 0..1);
     }
 }
@@ -949,7 +979,7 @@ impl BaseDraw {
                 let decoded = Decoder::new()?
                     .decode(&path, Budget::new(gpu, b.fit))
                     .with_context(|| format!("decoding {}", path.display()))?;
-                BaseDraw::Picture(Picture::upload(gpu, "stack base", &decoded)?, b.fit)
+                BaseDraw::Picture(Picture::upload(gpu, "stack base", &decoded)?, b.fit, b.focus)
             }
             Base::Color(b) => BaseDraw::Color(display(b.color)),
             Base::Gradient(b) => gradient(gpu, b)?,
@@ -1087,6 +1117,7 @@ fn uniform_layout(gpu: &Gpu) -> wgpu::BindGroupLayout {
 }
 
 /// A Shadertoy base: naga translates the wrapped GLSL; its errors carry the file's lines.
+/// `iChannel0..3` sample one tiling RGBA noise texture, as most Shadertoy imports expect.
 fn glsl(gpu: &Gpu, path: &Path) -> Result<BaseDraw> {
     let code =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
@@ -1098,7 +1129,55 @@ fn glsl(gpu: &Gpu, path: &Path) -> Result<BaseDraw> {
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
-    let layout = uniform_layout(gpu);
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("shadertoy"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    });
+    let side = stack::GLSL_NOISE_SIZE;
+    let noise = gpu
+        .texture(
+            "shadertoy noise",
+            (side, side),
+            wgpu::TextureFormat::Rgba8Unorm,
+            wgpu::TextureUsages::empty(),
+            Some(&noise_rgba(side)),
+        )
+        .create_view(&Default::default());
+    let repeat = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("shadertoy repeat"),
+        address_mode_u: wgpu::AddressMode::Repeat,
+        address_mode_v: wgpu::AddressMode::Repeat,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
+    });
     let pipeline = gpu.checked(|| {
         let fs = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("shadertoy"),
@@ -1118,7 +1197,11 @@ fn glsl(gpu: &Gpu, path: &Path) -> Result<BaseDraw> {
     let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shadertoy"),
         layout: &layout,
-        entries: &[entry(0, uniforms.as_entire_binding())],
+        entries: &[
+            entry(0, uniforms.as_entire_binding()),
+            entry(1, wgpu::BindingResource::TextureView(&noise)),
+            entry(2, wgpu::BindingResource::Sampler(&repeat)),
+        ],
     });
     Ok(BaseDraw::Glsl {
         pipeline,
@@ -1126,6 +1209,17 @@ fn glsl(gpu: &Gpu, path: &Path) -> Result<BaseDraw> {
         group,
         last: Duration::ZERO,
     })
+}
+
+/// `side`² RGBA texels of uniform white noise, the same every run (a PCG hash per byte).
+fn noise_rgba(side: u32) -> Vec<u8> {
+    (0..side * side * 4)
+        .map(|i| {
+            let state = i.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
+            let word = ((state >> ((state >> 28) + 4)) ^ state).wrapping_mul(277_803_737);
+            ((word >> 22) ^ word) as u8
+        })
+        .collect()
 }
 
 impl LayerDraw {
@@ -1368,6 +1462,8 @@ mod tests {
             disabled.still(),
             "a disabled animated layer does not move the stack"
         );
+        let unmixed = make(r#"{ "kind": "effect", "effect": "rain", "mix": 0 }"#);
+        assert!(unmixed.still(), "nor does one mixed out (Studio's estimate agrees)");
 
         let toy = "void mainImage(out vec4 fragColor, in vec2 fragCoord) {\n    fragColor = vec4(fragCoord / iResolution.xy, 0.5 + 0.5 * sin(iTime), 1.0);\n}\n";
         let (theme, config) = stack_in(
@@ -1406,6 +1502,22 @@ mod tests {
         assert_eq!(errors, [("base", Some(2)), ("a", None)]);
         assert!(matches!(source.layers[0], LayerDraw::Skip));
         assert!(matches!(source.layers[1], LayerDraw::Effect(_)));
+    }
+
+    #[test]
+    fn a_shadertoy_base_samples_noise_through_ichannel0() {
+        let gpu = Gpu::headless().expect("a DX12 GPU");
+        let toy = "void mainImage(out vec4 fragColor, in vec2 fragCoord) {\n    vec2 uv = fragCoord / iChannelResolution[0].xy;\n    fragColor = vec4(texture(iChannel0, uv).rgb, 1.0);\n}\n";
+        let (theme, config) = stack_in(
+            "noise",
+            r#"{ "kind": "stack", "base": { "kind": "glsl", "source": "toy.glsl" } }"#,
+            &[("toy.glsl", toy)],
+        );
+        let mut source = StackSource::new_in(&gpu, &theme, &config, &roots()).unwrap();
+        assert!(source.errors.is_empty(), "{:?}", source.errors);
+        let pixels = render(&gpu, &mut source, (64, 64), 0.0);
+        let greens: std::collections::HashSet<u8> = pixels.chunks(4).map(|p| p[1]).collect();
+        assert!(greens.len() > 64, "noise, not a flat color: {}", greens.len());
     }
 
     /// Renders one frame of `source` at `size` and returns tightly packed BGRA.

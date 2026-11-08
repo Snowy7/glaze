@@ -429,3 +429,35 @@ fn print_own_window(
         }
     }
 }
+
+/// Studio's estimate counts exactly the layers the engine runs every frame
+/// (`stack::per_frame_from`): still effects under the first animated one bake once.
+#[test]
+fn cost_counts_only_what_runs_every_frame() {
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let effects = effects(&repo.join("themes/examples/builder-demo"));
+    let cost = |id: &str| f64::from(effects.iter().find(|e| e.id == id).unwrap().cost);
+    let fx = |id: &str| format!(r#"{{ "kind": "effect", "effect": "{id}" }}"#);
+    let estimate_of = |layers: &[String]| {
+        let json = format!(
+            r##"{{ "kind": "stack", "fps": 30, "base": {{ "kind": "color", "color": "#000000" }},
+                "layers": [{}] }}"##,
+            layers.join(",")
+        );
+        estimate(&serde_json::from_str(&json).unwrap(), &effects, 1920.0 * 1080.0)
+    };
+    let line = |ms: f64| format!("about {:.1}% GPU at 30 fps", ms * 30.0 / 10.0);
+    assert_eq!(
+        estimate_of(&[fx("looks"), fx("bloom"), fx("drizzle")]),
+        line(cost("drizzle")),
+        "looks and bloom bake under the drizzle"
+    );
+    assert_eq!(
+        estimate_of(&[fx("drizzle"), fx("looks"), fx("bloom")]),
+        line(cost("drizzle") + cost("looks") + cost("bloom")),
+        "after the drizzle they rerun every frame"
+    );
+    assert_eq!(estimate_of(&[fx("looks"), fx("bloom")]), "Still: no cost at rest");
+    let off = r#"{ "kind": "effect", "effect": "drizzle", "mix": 0 }"#.to_owned();
+    assert_eq!(estimate_of(&[fx("looks"), off]), "Still: no cost at rest");
+}

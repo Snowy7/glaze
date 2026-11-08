@@ -1058,31 +1058,44 @@ pub fn cost_line(app: &App) -> String {
     let Some(editor) = active(app) else {
         return String::new();
     };
-    let mut moving = stack.base.moves();
-    let mut ms = 0.0;
-    for layer in &stack.layers {
-        if !layer.enabled() || layer.mix() == 0.0 {
-            continue;
-        }
-        match layer {
-            mypaper_theme::Layer::Effect(layer) => {
-                if let Some(effect) = editor.effects.iter().find(|e| e.id == layer.effect) {
-                    moving |= effect.animated;
-                    ms += f64::from(effect.cost);
-                } else {
-                    return "Cost unavailable · missing effect".into();
-                }
-            }
-            mypaper_theme::Layer::Model(layer) => moving |= layer.moves(),
-            mypaper_theme::Layer::Image(_) => {}
-        }
-    }
-    if !moving {
-        return "Still: no cost at rest".into();
-    }
-    let resolution = app.display().map_or(1.0, |m| {
-        f64::from(m.rect.width) * f64::from(m.rect.height) / (1920.0 * 1080.0)
+    let pixels = app.display().map_or(1920.0 * 1080.0, |m| {
+        f64::from(m.rect.width) * f64::from(m.rect.height)
     });
+    estimate(&stack, &editor.effects, pixels)
+}
+
+/// The cost line for `stack` on a screen of `pixels`: only what runs every frame counts,
+/// split exactly where the engine splits (`stack::per_frame_from`). Still layers before the
+/// first animated one bake once; each effect's `cost` is GPU ms at 1920x1080.
+fn estimate(stack: &mypaper_theme::StackWallpaper, effects: &[Effect], pixels: f64) -> String {
+    use mypaper_theme::Layer;
+    let find = |id: &str| effects.iter().find(|e| e.id == id);
+    let mut moves = Vec::with_capacity(stack.layers.len());
+    for layer in &stack.layers {
+        moves.push(
+            layer.active()
+                && match layer {
+                    Layer::Effect(l) => match find(&l.effect) {
+                        Some(effect) => effect.animated,
+                        None => return "Cost unavailable · missing effect".into(),
+                    },
+                    Layer::Model(l) => l.moves(),
+                    Layer::Image(_) => false,
+                },
+        );
+    }
+    let Some(from) = mypaper_theme::stack::per_frame_from(stack.base.moves(), moves) else {
+        return "Still: no cost at rest".into();
+    };
+    let ms: f64 = stack.layers[from..]
+        .iter()
+        .filter(|l| l.active())
+        .filter_map(|l| match l {
+            Layer::Effect(l) => find(&l.effect).map(|e| f64::from(e.cost)),
+            Layer::Image(_) | Layer::Model(_) => None,
+        })
+        .sum();
+    let resolution = pixels / (1920.0 * 1080.0);
     let percent = ms * f64::from(stack.fps) * f64::from(stack.scale).powi(2) * resolution / 10.0;
     format!("about {percent:.1}% GPU at {} fps", stack.fps)
 }

@@ -158,7 +158,20 @@ impl BlitQuad {
         fit: Fit,
         opacity: f32,
     ) {
-        let (scale, offset) = fit_transform(src, dst, fit);
+        self.set_focused(queue, src, dst, fit, CENTER, opacity);
+    }
+
+    /// [`Self::set`] keeping `focus` (fractions of the texture) in view when `Cover` crops.
+    pub fn set_focused(
+        &self,
+        queue: &wgpu::Queue,
+        src: (u32, u32),
+        dst: (u32, u32),
+        fit: Fit,
+        focus: [f32; 2],
+        opacity: f32,
+    ) {
+        let (scale, offset) = fit_transform(src, dst, fit, focus);
         let params = Params {
             scale,
             offset,
@@ -186,9 +199,18 @@ impl BlitQuad {
     }
 }
 
+/// The middle of a texture: the default focus.
+pub const CENTER: [f32; 2] = [0.5, 0.5];
+
 /// Maps screen UV (0..1) to texture UV: `tex = screen * scale + offset`.
-/// Texture UVs outside 0..1 are drawn black (letterbox).
-pub fn fit_transform(src: (u32, u32), dst: (u32, u32), fit: Fit) -> ([f32; 2], [f32; 2]) {
+/// Texture UVs outside 0..1 are drawn black (letterbox). When `Cover` crops, `focus` (0..1 of
+/// the texture, [`CENTER`] by default) picks which part stays: 0 keeps the left/top edge.
+pub fn fit_transform(
+    src: (u32, u32),
+    dst: (u32, u32),
+    fit: Fit,
+    focus: [f32; 2],
+) -> ([f32; 2], [f32; 2]) {
     let (sw, sh) = (src.0.max(1) as f32, src.1.max(1) as f32);
     let (dw, dh) = (dst.0.max(1) as f32, dst.1.max(1) as f32);
     let (src_aspect, dst_aspect) = (sw / sh, dw / dh);
@@ -200,7 +222,11 @@ pub fn fit_transform(src: (u32, u32), dst: (u32, u32), fit: Fit) -> ([f32; 2], [
         Fit::Contain if src_aspect > dst_aspect => [1.0, src_aspect / dst_aspect],
         Fit::Contain => [dst_aspect / src_aspect, 1.0],
     };
-    let offset = [(1.0 - scale[0]) / 2.0, (1.0 - scale[1]) / 2.0];
+    let at = match fit {
+        Fit::Cover => focus.map(|f| f.clamp(0.0, 1.0)),
+        _ => CENTER,
+    };
+    let offset = [(1.0 - scale[0]) * at[0], (1.0 - scale[1]) * at[1]];
     (scale, offset)
 }
 
@@ -215,22 +241,27 @@ mod tests {
     #[test]
     fn cover_crops_the_long_side() {
         // 2:1 image on a 1:1 screen: show the middle half horizontally.
-        let (scale, offset) = fit_transform((2000, 1000), (1000, 1000), Fit::Cover);
+        let (scale, offset) = fit_transform((2000, 1000), (1000, 1000), Fit::Cover, CENTER);
         assert!(close(scale, [0.5, 1.0]) && close(offset, [0.25, 0.0]));
+        // A focus on the right edge keeps the right half; the uncropped axis ignores it.
+        let (_, offset) = fit_transform((2000, 1000), (1000, 1000), Fit::Cover, [1.0, 0.0]);
+        assert!(close(offset, [0.5, 0.0]));
+        let (_, offset) = fit_transform((2000, 1000), (1000, 1000), Fit::Contain, [1.0, 0.0]);
+        assert!(close(offset, [0.0, -0.5]), "focus only steers a cover crop");
     }
 
     #[test]
     fn contain_letterboxes() {
         // 2:1 image on a 1:1 screen: full width, bars top and bottom.
-        let (scale, offset) = fit_transform((2000, 1000), (1000, 1000), Fit::Contain);
+        let (scale, offset) = fit_transform((2000, 1000), (1000, 1000), Fit::Contain, CENTER);
         assert!(close(scale, [1.0, 2.0]) && close(offset, [0.0, -0.5]));
     }
 
     #[test]
     fn center_is_pixel_exact_and_stretch_is_identity() {
-        let (scale, offset) = fit_transform((500, 500), (1000, 1000), Fit::Center);
+        let (scale, offset) = fit_transform((500, 500), (1000, 1000), Fit::Center, CENTER);
         assert!(close(scale, [2.0, 2.0]) && close(offset, [-0.5, -0.5]));
-        let (scale, offset) = fit_transform((123, 456), (1920, 1080), Fit::Stretch);
+        let (scale, offset) = fit_transform((123, 456), (1920, 1080), Fit::Stretch, CENTER);
         assert!(close(scale, [1.0, 1.0]) && close(offset, [0.0, 0.0]));
     }
 }

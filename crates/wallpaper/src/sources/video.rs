@@ -436,7 +436,7 @@ impl Source for VideoSource {
         let Some(shown) = &self.shown else {
             return clear(frame.encoder, frame.view, wgpu::Color::BLACK);
         };
-        let (scale, offset) = fit_transform(shown.size, frame.size, self.fit);
+        let (scale, offset) = fit_transform(shown.size, frame.size, self.fit, super::blit::CENTER);
         let params = Params::new(scale, offset, shown.color);
         // One buffer serves every screen: each screen's frame is its own submission.
         self.draw.set_params(gpu, &params);

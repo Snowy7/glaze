@@ -160,8 +160,9 @@ shader reads `params.amount` with no binding; a change recompiles the shader.
 
 A `glsl` base defines `void mainImage(out vec4 fragColor, in vec2 fragCoord)`. The engine wraps
 it (`stack::glsl_fragment`) with a std140 block of `iResolution`, `iTime`, `iMouse`,
-`iTimeDelta`, `iFrame` and `iFrameRate`; `fragCoord` has Shadertoy's bottom-left origin. Channel
-inputs (`iChannel0..3`) are not provided yet.
+`iTimeDelta`, `iFrame`, `iFrameRate` and `iChannelResolution`; `fragCoord` has Shadertoy's
+bottom-left origin. `iChannel0..3` all sample one 256x256 tiling RGBA noise texture with a
+repeating linear sampler, like Shadertoy's noise inputs, so common imports work as they are.
 
 ### Errors
 
@@ -177,8 +178,10 @@ engine writes `%LOCALAPPDATA%\mypaper\stack-errors.json` on every load of a stac
   size and keeps it as the frame, exactly like an `image` theme.
 - **A moving stack is split.** The static prefix of the layers (everything before the first
   animated layer) is baked once. Only the rest runs at `fps`, at `scale`.
-- Studio shows the sum of the active layers' `cost`, scaled by resolution, fps and scale, as an
-  estimate such as "about 2% GPU at 30 fps".
+- Studio shows the sum of the `cost` of the active layers that run every frame, scaled by
+  resolution, fps and scale, as an estimate such as "about 2% GPU at 30 fps". Studio and the
+  engine split at the same layer (`mypaper_theme::stack::per_frame_from`). A layer is active when
+  it is enabled and its `mix` is above 0; the engine skips the others.
 - The engine's resting rules (pause while covered, refresh once when changed) apply unchanged.
 
 ## Studio's Create mode

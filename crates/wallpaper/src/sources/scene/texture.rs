@@ -141,6 +141,15 @@ pub fn sampler(gpu: &Gpu, info: &TextureInfo) -> wgpu::Sampler {
         } else {
             32.0
         },
+        // Fine detail seen at a grazing angle (a planet's rings) shimmers into moiré under
+        // trilinear alone. wgpu allows anisotropy only when every filter is linear.
+        anisotropy_clamp: if info.mag != Some(MagFilter::Nearest)
+            && matches!(info.min, None | Some(F::LinearMipmapLinear))
+        {
+            16
+        } else {
+            1
+        },
         ..Default::default()
     })
 }

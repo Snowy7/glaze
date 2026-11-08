@@ -271,13 +271,31 @@ impl Layer {
             Layer::Model(l) => l.mix,
         }
     }
+
+    /// Drawn at all: enabled and mixed in. The engine skips the others entirely.
+    pub fn active(&self) -> bool {
+        self.enabled() && self.mix() > 0.0
+    }
+}
+
+/// Where a stack starts running every frame (docs/wallpaper-builder.md, "Cost rules"): the
+/// first layer from which everything runs at `fps`, or `None` for a still stack. `moves` holds,
+/// per layer, whether it is active and animates on its own; a moving base runs every layer.
+/// The layers before the split bake once. The engine and Studio's cost estimate both use this.
+pub fn per_frame_from(base_moves: bool, moves: impl IntoIterator<Item = bool>) -> Option<usize> {
+    if base_moves {
+        return Some(0);
+    }
+    moves.into_iter().position(|m| m)
 }
 
 impl Base {
-    /// True when the base changes over time (or with the cursor) on its own.
+    /// True when the base changes over time (or with the cursor) on its own. A scene base
+    /// moves only when it orbits or follows the cursor (it plays no clip).
     pub fn moves(&self) -> bool {
         match self {
-            Base::Video(_) | Base::Shader(_) | Base::Glsl(_) | Base::Scene(_) => true,
+            Base::Video(_) | Base::Shader(_) | Base::Glsl(_) => true,
+            Base::Scene(s) => s.orbit != 0.0 || s.parallax != 0.0,
             Base::Image(_) | Base::Color(_) | Base::Gradient(_) => false,
         }
     }
@@ -759,8 +777,10 @@ fn param_comment(line: &str) -> Option<Param> {
 /// Wraps a Shadertoy `mainImage(out vec4 fragColor, in vec2 fragCoord)` into a GLSL 450
 /// fragment shader. Inputs are one uniform block at set 0, binding 0 ([`GLSL_UNIFORM_SIZE`]
 /// bytes, std140): `vec3 iResolution; float iTime; vec4 iMouse; float iTimeDelta; int iFrame;
-/// float iFrameRate`. `fragCoord` has Shadertoy's bottom-left origin. The user's line N is line
-/// `N + GLSL_HEADER_LINES` of the result.
+/// float iFrameRate; vec3 iChannelResolution[4]`. `iChannel0..3` all sample one tiling noise
+/// texture (binding 1, [`GLSL_NOISE_SIZE`] square RGBA) through a repeating linear sampler
+/// (binding 2), like Shadertoy's noise inputs. `fragCoord` has Shadertoy's bottom-left origin.
+/// The user's line N is line `N + GLSL_HEADER_LINES` of the result.
 pub fn glsl_fragment(main_image: &str) -> String {
     format!("{GLSL_HEADER}{main_image}\n{GLSL_FOOTER}")
 }
@@ -768,7 +788,14 @@ pub fn glsl_fragment(main_image: &str) -> String {
 const GLSL_HEADER: &str = "#version 450
 layout(set = 0, binding = 0, std140) uniform MypaperShadertoy {
     vec3 iResolution; float iTime; vec4 iMouse; float iTimeDelta; int iFrame; float iFrameRate;
+    vec3 iChannelResolution[4];
 };
+layout(set = 0, binding = 1) uniform texture2D mypaper_noise;
+layout(set = 0, binding = 2) uniform sampler mypaper_repeat;
+#define iChannel0 sampler2D(mypaper_noise, mypaper_repeat)
+#define iChannel1 sampler2D(mypaper_noise, mypaper_repeat)
+#define iChannel2 sampler2D(mypaper_noise, mypaper_repeat)
+#define iChannel3 sampler2D(mypaper_noise, mypaper_repeat)
 layout(location = 0) out vec4 mypaper_color;
 ";
 
@@ -780,10 +807,13 @@ const GLSL_FOOTER: &str = "void main() {
 ";
 
 /// Lines [`glsl_fragment`] puts before the user's code.
-pub const GLSL_HEADER_LINES: u32 = 5;
+pub const GLSL_HEADER_LINES: u32 = 12;
 
 /// Bytes of the GLSL uniform block (std140).
-pub const GLSL_UNIFORM_SIZE: u64 = 48;
+pub const GLSL_UNIFORM_SIZE: u64 = 112;
+
+/// Width and height of the noise texture behind `iChannel0..3`.
+pub const GLSL_NOISE_SIZE: u32 = 256;
 
 /// One compile error, on a line of the user's file (`None` when it is in generated code).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

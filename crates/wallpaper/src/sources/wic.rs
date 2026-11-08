@@ -402,7 +402,20 @@ impl Picture {
         fit: Fit,
         opacity: f32,
     ) {
-        self.quad.set(&gpu.queue, self.size, target, fit, opacity);
+        self.draw_focused(gpu, pass, target, fit, super::blit::CENTER, opacity);
+    }
+
+    /// [`Self::draw`] keeping `focus` in view when `Cover` crops (a stack's image base).
+    pub fn draw_focused(
+        &self,
+        gpu: &Gpu,
+        pass: &mut wgpu::RenderPass<'_>,
+        target: (u32, u32),
+        fit: Fit,
+        focus: [f32; 2],
+        opacity: f32,
+    ) {
+        self.quad.set_focused(&gpu.queue, self.size, target, fit, focus, opacity);
         self.quad.draw(&gpu.blit, pass);
     }
 }
