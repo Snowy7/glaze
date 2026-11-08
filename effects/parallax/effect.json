@@ -1,0 +1,47 @@
+{
+  "animated": true,
+  "author": "mypaper",
+  "category": "motion",
+  "cost": 0.559,
+  "cost_estimated": false,
+  "description": "The image leans toward the cursor, using scene depth or a luminance-based depth cue.",
+  "id": "parallax",
+  "license": "MIT",
+  "name": "Cursor depth",
+  "params": [
+    {
+      "default": 0.012,
+      "id": "amount",
+      "label": "Travel",
+      "max": 0.05,
+      "min": 0,
+      "step": 0.001,
+      "type": "float"
+    },
+    {
+      "default": 0.8,
+      "id": "depth",
+      "label": "Depth strength",
+      "max": 2,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": false,
+      "id": "invert",
+      "label": "Invert depth",
+      "type": "bool"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "parallax.wgsl"
+    }
+  ],
+  "reads": [
+    "depth"
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

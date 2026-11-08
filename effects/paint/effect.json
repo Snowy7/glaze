@@ -1,0 +1,38 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "stylize",
+  "cost": 6.41,
+  "cost_estimated": false,
+  "description": "A compact four-region Kuwahara filter smooths interiors while retaining painted contours.",
+  "id": "paint",
+  "license": "MIT",
+  "name": "Quiet oil paint",
+  "params": [
+    {
+      "default": 2,
+      "id": "radius",
+      "label": "Brush size",
+      "max": 6,
+      "min": 1,
+      "step": 1,
+      "type": "float"
+    },
+    {
+      "default": 0.75,
+      "id": "strength",
+      "label": "Strength",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "paint.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

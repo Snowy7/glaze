@@ -1,0 +1,47 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "camera",
+  "cost": 2.594,
+  "cost_estimated": false,
+  "description": "Very faint out-of-focus lens specks catch the image highlights.",
+  "id": "lens-dirt",
+  "license": "MIT",
+  "name": "Lens patina",
+  "params": [
+    {
+      "default": 0.25,
+      "id": "amount",
+      "label": "Visibility",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 1,
+      "id": "size",
+      "label": "Speck size",
+      "max": 3,
+      "min": 0.3,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 17,
+      "id": "seed",
+      "label": "Pattern",
+      "max": 100,
+      "min": 0,
+      "step": 1,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "lens-dirt.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

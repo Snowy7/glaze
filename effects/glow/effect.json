@@ -1,0 +1,53 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "light",
+  "cost": 2.017,
+  "cost_estimated": false,
+  "description": "Soft highlight halos wrap the image in a gentle luminous veil.",
+  "id": "glow",
+  "license": "MIT",
+  "name": "Dream glow",
+  "params": [
+    {
+      "default": 0.25,
+      "id": "amount",
+      "label": "Strength",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 12,
+      "id": "radius",
+      "label": "Radius",
+      "max": 32,
+      "min": 1,
+      "step": 1,
+      "type": "float"
+    },
+    {
+      "default": 0.5,
+      "id": "threshold",
+      "label": "Highlight threshold",
+      "max": 0.95,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": "#fff0dd",
+      "id": "tint",
+      "label": "Glow color",
+      "type": "color"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "glow.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

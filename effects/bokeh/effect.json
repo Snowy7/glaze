@@ -1,0 +1,53 @@
+{
+  "animated": true,
+  "author": "mypaper",
+  "category": "camera",
+  "cost": 0.904,
+  "cost_estimated": false,
+  "description": "Sparse translucent lens discs drift through a warm, shallow foreground.",
+  "id": "bokeh",
+  "license": "MIT",
+  "name": "Floating bokeh",
+  "params": [
+    {
+      "default": 0.35,
+      "id": "amount",
+      "label": "Amount",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 1,
+      "id": "size",
+      "label": "Orb size",
+      "max": 2.5,
+      "min": 0.3,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.15,
+      "id": "speed",
+      "label": "Drift speed",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": "#ffd6a3",
+      "id": "tint",
+      "label": "Light color",
+      "type": "color"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "bokeh.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

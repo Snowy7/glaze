@@ -1,0 +1,65 @@
+{
+  "animated": true,
+  "author": "mypaper",
+  "category": "weather",
+  "cost": 0.991,
+  "cost_estimated": false,
+  "description": "Slow billows settle near the ground and build up in distant scene depth.",
+  "id": "fog",
+  "license": "MIT",
+  "name": "Valley mist",
+  "params": [
+    {
+      "default": 0.35,
+      "id": "amount",
+      "label": "Density",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.6,
+      "id": "height",
+      "label": "Mist height",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.35,
+      "id": "softness",
+      "label": "Falloff",
+      "max": 0.7,
+      "min": 0.05,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.15,
+      "id": "speed",
+      "label": "Drift speed",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": "#b9c8d2",
+      "id": "tint",
+      "label": "Mist color",
+      "type": "color"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "fog.wgsl"
+    }
+  ],
+  "reads": [
+    "depth"
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

@@ -1,0 +1,47 @@
+{
+  "animated": true,
+  "author": "mypaper",
+  "category": "stylize",
+  "cost": 0.428,
+  "cost_estimated": false,
+  "description": "Rare, short, restrained signal slips with tiny channel offsets.",
+  "id": "glitch",
+  "license": "MIT",
+  "name": "Signal interruption",
+  "params": [
+    {
+      "default": 4,
+      "id": "frequency",
+      "label": "Events per minute",
+      "max": 20,
+      "min": 0.5,
+      "step": 0.5,
+      "type": "float"
+    },
+    {
+      "default": 0.25,
+      "id": "amount",
+      "label": "Displacement",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.12,
+      "id": "duration",
+      "label": "Event duration",
+      "max": 0.5,
+      "min": 0.03,
+      "step": 0.01,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "glitch.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

@@ -1,0 +1,65 @@
+{
+  "animated": true,
+  "author": "mypaper",
+  "category": "weather",
+  "cost": 0.772,
+  "cost_estimated": false,
+  "description": "Fine, fast, tapered rain streaks with a restrained cool glint.",
+  "id": "drizzle",
+  "license": "MIT",
+  "name": "Fine drizzle",
+  "params": [
+    {
+      "default": 0.4,
+      "id": "amount",
+      "label": "Amount",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": -12,
+      "id": "angle",
+      "label": "Angle",
+      "max": 60,
+      "min": -60,
+      "step": 1,
+      "type": "float"
+    },
+    {
+      "default": 0.12,
+      "id": "wind",
+      "label": "Wind",
+      "max": 1,
+      "min": -1,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 1.2,
+      "id": "speed",
+      "label": "Speed",
+      "max": 3,
+      "min": 0.2,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.8,
+      "id": "length",
+      "label": "Streak length",
+      "max": 2,
+      "min": 0.2,
+      "step": 0.01,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "drizzle.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

@@ -1,0 +1,47 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "color",
+  "cost": 0.384,
+  "cost_estimated": false,
+  "description": "Clean tonal steps with a little ordered dither to keep gradients intentional.",
+  "id": "posterize",
+  "license": "MIT",
+  "name": "Poster tones",
+  "params": [
+    {
+      "default": 7,
+      "id": "levels",
+      "label": "Tonal levels",
+      "max": 24,
+      "min": 2,
+      "step": 1,
+      "type": "float"
+    },
+    {
+      "default": 0.15,
+      "id": "dither",
+      "label": "Dither",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.8,
+      "id": "strength",
+      "label": "Strength",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "posterize.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

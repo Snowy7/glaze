@@ -1,0 +1,50 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "color",
+  "cost": 0.572,
+  "cost_estimated": false,
+  "description": "Smooth two-ink tonal mapping, with adjustable contrast and blend.",
+  "id": "duotone",
+  "license": "MIT",
+  "name": "Duotone",
+  "params": [
+    {
+      "default": "#162941",
+      "id": "shadows",
+      "label": "Shadow ink",
+      "type": "color"
+    },
+    {
+      "default": "#f5cd99",
+      "id": "highlights",
+      "label": "Highlight ink",
+      "type": "color"
+    },
+    {
+      "default": 1,
+      "id": "contrast",
+      "label": "Contrast",
+      "max": 2,
+      "min": 0.5,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.8,
+      "id": "strength",
+      "label": "Strength",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "duotone.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

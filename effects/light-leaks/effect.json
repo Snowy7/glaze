@@ -1,0 +1,53 @@
+{
+  "animated": true,
+  "author": "mypaper",
+  "category": "camera",
+  "cost": 0.735,
+  "cost_estimated": false,
+  "description": "Slow amber and rose light spills breathe along the film edges.",
+  "id": "light-leaks",
+  "license": "MIT",
+  "name": "Film light leaks",
+  "params": [
+    {
+      "default": 0.3,
+      "id": "amount",
+      "label": "Strength",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.12,
+      "id": "speed",
+      "label": "Drift speed",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.3,
+      "id": "width",
+      "label": "Spill width",
+      "max": 0.8,
+      "min": 0.05,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": "#ffae67",
+      "id": "tint",
+      "label": "Warm spill",
+      "type": "color"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "light-leaks.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

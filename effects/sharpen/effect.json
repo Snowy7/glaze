@@ -1,0 +1,47 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "color",
+  "cost": 0.687,
+  "cost_estimated": false,
+  "description": "A restrained, halo-limited cross-shaped unsharp filter.",
+  "id": "sharpen",
+  "license": "MIT",
+  "name": "Fine detail",
+  "params": [
+    {
+      "default": 0.45,
+      "id": "amount",
+      "label": "Amount",
+      "max": 2,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 1,
+      "id": "radius",
+      "label": "Radius",
+      "max": 3,
+      "min": 0.5,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.08,
+      "id": "limit",
+      "label": "Halo limit",
+      "max": 0.3,
+      "min": 0.01,
+      "step": 0.01,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "sharpen.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

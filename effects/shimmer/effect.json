@@ -1,0 +1,62 @@
+{
+  "animated": true,
+  "author": "mypaper",
+  "category": "motion",
+  "cost": 0.851,
+  "cost_estimated": false,
+  "description": "Fine refractive shimmer can cover the image or settle beneath a waterline.",
+  "id": "shimmer",
+  "license": "MIT",
+  "name": "Water and heat",
+  "params": [
+    {
+      "default": 2,
+      "id": "amount",
+      "label": "Refraction",
+      "max": 12,
+      "min": 0,
+      "step": 0.25,
+      "type": "float"
+    },
+    {
+      "default": 0.6,
+      "id": "speed",
+      "label": "Speed",
+      "max": 2,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 1,
+      "id": "scale",
+      "label": "Ripple scale",
+      "max": 4,
+      "min": 0.5,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": true,
+      "id": "water",
+      "label": "Lower band only",
+      "type": "bool"
+    },
+    {
+      "default": 0.62,
+      "id": "waterline",
+      "label": "Waterline",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "shimmer.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

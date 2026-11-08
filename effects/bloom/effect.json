@@ -1,0 +1,51 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "camera",
+  "cost": 5.331,
+  "cost_estimated": false,
+  "description": "Half-resolution light diffusion gives highlights a soft photographic bloom.",
+  "id": "bloom",
+  "license": "MIT",
+  "name": "Soft bloom",
+  "params": [
+    {
+      "default": 0.3,
+      "id": "amount",
+      "label": "Bloom strength",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.65,
+      "id": "threshold",
+      "label": "Highlight threshold",
+      "max": 0.95,
+      "min": 0.1,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 14,
+      "id": "radius",
+      "label": "Spread",
+      "max": 40,
+      "min": 2,
+      "step": 1,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 0.5,
+      "source": "bloom.wgsl"
+    },
+    {
+      "scale": 1.0,
+      "source": "diffuse.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

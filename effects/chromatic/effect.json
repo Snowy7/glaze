@@ -1,0 +1,56 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "camera",
+  "cost": 0.479,
+  "cost_estimated": false,
+  "description": "Subtle radial color separation increases toward the lens edges.",
+  "id": "chromatic",
+  "license": "MIT",
+  "name": "Chromatic fringe",
+  "params": [
+    {
+      "default": 2,
+      "id": "amount",
+      "label": "Fringe pixels",
+      "max": 12,
+      "min": 0,
+      "step": 0.25,
+      "type": "float"
+    },
+    {
+      "default": 1.5,
+      "id": "falloff",
+      "label": "Edge falloff",
+      "max": 3,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.5,
+      "id": "center_x",
+      "label": "Lens center X",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.5,
+      "id": "center_y",
+      "label": "Lens center Y",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "chromatic.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

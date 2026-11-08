@@ -1,0 +1,59 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "stylize",
+  "cost": 1.018,
+  "cost_estimated": false,
+  "description": "Rotated ink dots grow with shadow density on warm paper.",
+  "id": "halftone",
+  "license": "MIT",
+  "name": "Print halftone",
+  "params": [
+    {
+      "default": 6,
+      "id": "size",
+      "label": "Dot spacing",
+      "max": 24,
+      "min": 3,
+      "step": 1,
+      "type": "float"
+    },
+    {
+      "default": 30,
+      "id": "angle",
+      "label": "Screen angle",
+      "max": 90,
+      "min": 0,
+      "step": 1,
+      "type": "float"
+    },
+    {
+      "default": 0.85,
+      "id": "strength",
+      "label": "Strength",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": "#233144",
+      "id": "ink",
+      "label": "Ink",
+      "type": "color"
+    },
+    {
+      "default": "#f6e9d0",
+      "id": "paper_color",
+      "label": "Paper",
+      "type": "color"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "halftone.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

@@ -1,0 +1,56 @@
+{
+  "animated": true,
+  "author": "mypaper",
+  "category": "motion",
+  "cost": 0.865,
+  "cost_estimated": false,
+  "description": "A soft, anchored wind distortion brings foliage and fabric to life.",
+  "id": "sway",
+  "license": "MIT",
+  "name": "Gentle wind",
+  "params": [
+    {
+      "default": 3,
+      "id": "amount",
+      "label": "Sway pixels",
+      "max": 20,
+      "min": 0,
+      "step": 0.5,
+      "type": "float"
+    },
+    {
+      "default": 0.35,
+      "id": "speed",
+      "label": "Wind speed",
+      "max": 2,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 2,
+      "id": "scale",
+      "label": "Wind scale",
+      "max": 6,
+      "min": 0.5,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.7,
+      "id": "anchor",
+      "label": "Anchoring",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "sway.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

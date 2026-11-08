@@ -1,0 +1,38 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "stylize",
+  "cost": 0.348,
+  "cost_estimated": false,
+  "description": "Aspect-correct square pixels with optional subtle cell borders.",
+  "id": "pixelate",
+  "license": "MIT",
+  "name": "Pixel mosaic",
+  "params": [
+    {
+      "default": 8,
+      "id": "size",
+      "label": "Pixel size",
+      "max": 64,
+      "min": 2,
+      "step": 1,
+      "type": "float"
+    },
+    {
+      "default": 0.08,
+      "id": "grid",
+      "label": "Cell border",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "pixelate.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

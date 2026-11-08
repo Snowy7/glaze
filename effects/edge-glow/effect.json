@@ -1,0 +1,53 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "stylize",
+  "cost": 0.668,
+  "cost_estimated": false,
+  "description": "Fine colored contours follow image detail while preserving the photograph.",
+  "id": "edge-glow",
+  "license": "MIT",
+  "name": "Luminous edges",
+  "params": [
+    {
+      "default": 0.5,
+      "id": "amount",
+      "label": "Strength",
+      "max": 2,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 1,
+      "id": "radius",
+      "label": "Edge width",
+      "max": 4,
+      "min": 0.5,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.07,
+      "id": "threshold",
+      "label": "Detail threshold",
+      "max": 0.5,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": "#77d8ee",
+      "id": "tint",
+      "label": "Edge color",
+      "type": "color"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "edge-glow.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

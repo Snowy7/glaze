@@ -1,0 +1,53 @@
+{
+  "animated": true,
+  "author": "mypaper",
+  "category": "weather",
+  "cost": 0.919,
+  "cost_estimated": false,
+  "description": "Sparse warm lights float and breathe at different depths.",
+  "id": "fireflies",
+  "license": "MIT",
+  "name": "Fireflies",
+  "params": [
+    {
+      "default": 0.4,
+      "id": "amount",
+      "label": "Amount",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 1,
+      "id": "size",
+      "label": "Glow size",
+      "max": 2,
+      "min": 0.3,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.5,
+      "id": "speed",
+      "label": "Float speed",
+      "max": 2,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": "#ffe697",
+      "id": "tint",
+      "label": "Glow color",
+      "type": "color"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "fireflies.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

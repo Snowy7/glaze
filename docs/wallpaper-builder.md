@@ -86,6 +86,7 @@ Built-in effects use exactly the same format as everyone else's.
   "author": "mypaper", "license": "MIT", "url": null,
   "animated": true,        // false: the result can be baked into a still
   "cost": 1.2,             // measured GPU ms at 1920x1080 on the iGPU, at defaults
+  "cost_estimated": false, // true when cost is an estimate rather than a GPU measurement
   "reads": ["depth"],      // optional: "depth", "original"
   "passes": [ { "source": "rain.wgsl", "scale": 1.0 } ],
   "params": [

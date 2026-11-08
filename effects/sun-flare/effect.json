@@ -1,0 +1,62 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "light",
+  "cost": 1.326,
+  "cost_estimated": false,
+  "description": "A soft sun halo, restrained diffraction rays and a pair of lens ghosts.",
+  "id": "sun-flare",
+  "license": "MIT",
+  "name": "Sunlit lens",
+  "params": [
+    {
+      "default": 0.78,
+      "id": "light_x",
+      "label": "Sun X",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.18,
+      "id": "light_y",
+      "label": "Sun Y",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.3,
+      "id": "amount",
+      "label": "Strength",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.35,
+      "id": "size",
+      "label": "Halo size",
+      "max": 1,
+      "min": 0.1,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": "#ffe2ad",
+      "id": "tint",
+      "label": "Sun color",
+      "type": "color"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "sun-flare.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

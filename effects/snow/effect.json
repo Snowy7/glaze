@@ -1,0 +1,65 @@
+{
+  "animated": true,
+  "author": "mypaper",
+  "category": "weather",
+  "cost": 1.23,
+  "cost_estimated": false,
+  "description": "Three softly focused flake planes, with independent depth, wind and fall speed.",
+  "id": "snow",
+  "license": "MIT",
+  "name": "Snowfall",
+  "params": [
+    {
+      "default": 0.5,
+      "id": "amount",
+      "label": "Amount",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.7,
+      "id": "depth",
+      "label": "Depth",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.18,
+      "id": "wind",
+      "label": "Wind",
+      "max": 1,
+      "min": -1,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 1,
+      "id": "size",
+      "label": "Flake size",
+      "max": 2,
+      "min": 0.3,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.6,
+      "id": "speed",
+      "label": "Speed",
+      "max": 2,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "snow.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}

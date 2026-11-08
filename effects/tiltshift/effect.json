@@ -1,0 +1,56 @@
+{
+  "animated": false,
+  "author": "mypaper",
+  "category": "camera",
+  "cost": 2.65,
+  "cost_estimated": false,
+  "description": "A crisp adjustable focus strip with gently defocused edges.",
+  "id": "tiltshift",
+  "license": "MIT",
+  "name": "Miniature focus",
+  "params": [
+    {
+      "default": 0.52,
+      "id": "focus",
+      "label": "Focus height",
+      "max": 1,
+      "min": 0,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 0.28,
+      "id": "width",
+      "label": "Focus band",
+      "max": 0.8,
+      "min": 0.02,
+      "step": 0.01,
+      "type": "float"
+    },
+    {
+      "default": 10,
+      "id": "blur",
+      "label": "Blur size",
+      "max": 24,
+      "min": 0,
+      "step": 0.5,
+      "type": "float"
+    },
+    {
+      "default": 0,
+      "id": "angle",
+      "label": "Band angle",
+      "max": 90,
+      "min": -90,
+      "step": 1,
+      "type": "float"
+    }
+  ],
+  "passes": [
+    {
+      "scale": 1.0,
+      "source": "tiltshift.wgsl"
+    }
+  ],
+  "url": "https://github.com/Snowy7/mypaper"
+}
