@@ -51,6 +51,20 @@ fn defaults_and_bindings_are_valid() {
     Settings::default().validate().unwrap();
 }
 #[test]
+fn game_bar_screenshot_and_recording_timer_remain_reserved() {
+    for key in [0x2C, 0x54] {
+        let mut settings = Settings::default();
+        settings.keybindings = vec![Binding {
+            key,
+            ctrl: false,
+            shift: false,
+            alt: true,
+            command: Command::Overview,
+        }];
+        assert!(settings.validate().is_err());
+    }
+}
+#[test]
 fn full_width_retains_gaps_and_restores_the_previous_width() {
     let mut l = layout();
     open(&mut l, 1);

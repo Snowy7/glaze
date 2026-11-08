@@ -1,7 +1,7 @@
 //! The Windows key opens the launcher (docs/bars.md, "Launcher"), and Win+N and Win+A open the
 //! notifications and quick settings flyouts, through a low-level keyboard hook (`WH_KEYBOARD_LL`)
 //! in our own process: Windows calls it on our thread, nothing is loaded into anyone else's. It's
-//! only installed while `launcher.winKey` is on and the native taskbar is hidden, on a thread of
+//! installed while the launcher needs it or scrolling tiling is enabled, on a thread of
 //! its own (a hook that answers late is dropped by Windows), and it decides with a few
 //! comparisons and atomic loads per key.
 //!
@@ -324,31 +324,59 @@ unsafe extern "system" fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> L
         let key = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
         let down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
         let ours = key.dwExtraInfo == OURS;
-        HOOK.with(|hook|{if let Ok(mut hook)=hook.try_borrow_mut(){hook.0.sync(EPOCH.load(Ordering::Relaxed));}});
-        // Core owns the panic hotkey. The overview must never swallow its Backspace.
-        if key.vkCode==0x08 && [VK_CONTROL,VK_SHIFT,VK_MENU].iter().all(|vk|unsafe{GetAsyncKeyState(i32::from(vk.0))}<0){return unsafe{CallNextHookEx(None,code,wparam,lparam)};}
-        if !ours && OVERVIEW.load(Ordering::Relaxed) && !is_win(key.vkCode as u16) {
-            if key.vkCode==0x1B && down {
-                if let Some(config)=TILING_CONFIG.get().and_then(|c|c.try_lock().ok()) && let Some((_,handler))=&*config{handler(Command::Overview);}
+        let tiling = tiling_enabled();
+        if tiling && !ours {
+            HOOK.with(|hook| {
+                if let Ok(mut hook) = hook.try_borrow_mut() {
+                    hook.0.sync(EPOCH.load(Ordering::Relaxed));
+                }
+            });
+            // Core owns panic recovery, including while the overview has keyboard capture.
+            if key.vkCode == 0x08
+                && [VK_CONTROL, VK_SHIFT, VK_MENU].iter().all(|vk| {
+                    // SAFETY: read-only modifier state; this never generates input.
+                    unsafe { GetAsyncKeyState(i32::from(vk.0)) < 0 }
+                })
+            {
+                // SAFETY: forwarding the unchanged hook event.
+                return unsafe { CallNextHookEx(None, code, wparam, lparam) };
             }
-            let win=HOOK.with(|h|h.try_borrow().is_ok_and(|h|h.0.held.is_some()));
-            if !win || key.vkCode==0x1B { return LRESULT(1); }
-        }
-        // Classification and enqueue only. Real windows are touched on the shell thread.
-        if !ours && down && tiling_enabled() && !FULLSCREEN.load(Ordering::Relaxed) {
-            let win = HOOK.with(|hook| hook.try_borrow().is_ok_and(|h| h.0.held.is_some()));
-            if win && !is_win(key.vkCode as u16) {
-                let held = |vk: VIRTUAL_KEY| unsafe { GetAsyncKeyState(i32::from(vk.0)) < 0 };
-                let command = TILING_CONFIG.get().and_then(|c| c.try_lock().ok()).and_then(|c| c.as_ref().and_then(|(bindings, handler)| {
-                    bindings.iter().find(|b| b.key == key.vkCode as u16 && b.ctrl == held(VK_CONTROL) && b.shift == held(VK_SHIFT) && b.alt == held(VK_MENU)).map(|b| (b.command, handler.clone()))
-                }));
-                // Win+arrow always belongs to tiling, even after user remapping.
-                if command.is_some() || (0x25..=0x28).contains(&key.vkCode) {
-                    HOOK.with(|hook| { if let Ok(mut h) = hook.try_borrow_mut() { h.0.combo = true; h.0.swallowing = Some(key.vkCode as u16); } });
-                    if let Some((command, handler)) = command { handler(command); }
-                    // The existing menu-mask path prevents Explorer opening Start on release.
-                    let _ = send_mask();
-                    return LRESULT(1);
+            if OVERVIEW.load(Ordering::Relaxed) && launcher_can_open() && !is_win(key.vkCode as u16) {
+                if key.vkCode == 0x1B && down {
+                    if let Some(config) = TILING_CONFIG.get().and_then(|c| c.try_lock().ok())
+                        && let Some((_, handler)) = &*config
+                    {
+                        handler(Command::Overview);
+                    }
+                }
+                let win = HOOK.with(|h| h.try_borrow().is_ok_and(|h| h.0.held.is_some()));
+                if !win || key.vkCode == 0x1B { return LRESULT(1); }
+            }
+            // Classify and enqueue only. A hung shell must leave Windows' keys available.
+            if down && launcher_can_open() {
+                let win = HOOK.with(|hook| hook.try_borrow().is_ok_and(|h| h.0.held.is_some()));
+                if win && !is_win(key.vkCode as u16) {
+                    // SAFETY: cached keyboard state, without messaging another process.
+                    let held = |vk: VIRTUAL_KEY| unsafe { GetAsyncKeyState(i32::from(vk.0)) < 0 };
+                    let command = TILING_CONFIG.get().and_then(|c| c.try_lock().ok()).and_then(|c| {
+                        c.as_ref().and_then(|(bindings, handler)| {
+                            bindings.iter().find(|b| b.key == key.vkCode as u16
+                                && b.ctrl == held(VK_CONTROL) && b.shift == held(VK_SHIFT)
+                                && b.alt == held(VK_MENU)).map(|b| (b.command, handler.clone()))
+                        })
+                    });
+                    // Win+arrow remains ours after remapping. Failed masking falls through
+                    // the normal state machine, so neither a command nor a stuck key results.
+                    if (command.is_some() || (0x25..=0x28).contains(&key.vkCode)) && send_mask() {
+                        HOOK.with(|hook| {
+                            if let Ok(mut h) = hook.try_borrow_mut() {
+                                h.0.combo = true;
+                                h.0.swallowing = Some(key.vkCode as u16);
+                            }
+                        });
+                        if let Some((command, handler)) = command { handler(command); }
+                        return LRESULT(1);
+                    }
                 }
             }
         }
@@ -357,7 +385,7 @@ unsafe extern "system" fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> L
                 return Action::Pass;
             };
             hook.0.sync(EPOCH.load(Ordering::Relaxed));
-            if !ENABLED.load(Ordering::Relaxed) && !tiling_enabled() {
+            if !ENABLED.load(Ordering::Relaxed) && !tiling {
                 return Action::Pass;
             }
             let action = hook.0.on_key_with_files(key.vkCode as u16, down, ours, FILES.load(Ordering::Relaxed));

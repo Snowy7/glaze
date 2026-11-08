@@ -165,7 +165,11 @@ impl Settings {
                 || b.key > 255
                 || matches!(b.key, 0x4C | 0x47 | 0x5B | 0x5C)
                 || (!b.ctrl && !b.shift && !b.alt && matches!(b.key, 0x41 | 0x4E | 0x45))
-                || (b.alt && matches!(b.key, 0x42 | 0x44 | 0x47 | 0x4D | 0x50 | 0x52 | 0x57))
+                || (b.alt
+                    && matches!(
+                        b.key,
+                        0x2C | 0x42 | 0x44 | 0x47 | 0x4D | 0x50 | 0x52 | 0x54 | 0x57
+                    ))
             {
                 return Err("tiling shortcut conflicts with Windows, Game Bar, or Glaze");
             }
