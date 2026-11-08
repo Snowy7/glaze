@@ -135,6 +135,7 @@ pub struct Layout {
     pub detached: Vec<Workspace>,
     pub focused_monitor: Option<String>,
     next_workspace: u64,
+    remembered_active: std::collections::HashMap<String, WorkspaceId>,
 }
 
 impl Layout {
@@ -145,6 +146,7 @@ impl Layout {
             detached: Vec::new(),
             focused_monitor: None,
             next_workspace: 1,
+            remembered_active: std::collections::HashMap::new(),
         }
     }
     fn workspace(&mut self, output: &str) -> Workspace {
@@ -189,7 +191,9 @@ impl Layout {
                 }
             }
             workspaces.push(self.workspace(&id));
-            let active = workspaces[0].id;
+            let active = self.remembered_active.get(&id).copied()
+                .filter(|id| workspaces.iter().any(|w| w.id == *id))
+                .unwrap_or(workspaces[0].id);
             self.monitors.push(Monitor {
                 id: id.clone(),
                 area,
@@ -213,6 +217,7 @@ impl Layout {
     pub fn remove_monitor(&mut self, id: &str) -> Vec<Target> {
         if let Some(index) = self.monitors.iter().position(|m| m.id == id) {
             let m = self.monitors.remove(index);
+            self.remembered_active.insert(m.id.clone(), m.active);
             let occupied = m.workspaces.into_iter().filter(|w| !w.empty());
             if let Some(other) = self.monitors.first_mut() {
                 other.workspaces.extend(occupied);
