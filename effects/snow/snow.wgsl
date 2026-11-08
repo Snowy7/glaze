@@ -1,25 +1,31 @@
 // Original mypaper effect. SPDX-License-Identifier: MIT
 fn snow_layer(screen: vec2f, z: f32, t: f32, size: f32, amount: f32, seed: f32) -> f32 {
-    let cells = 29.0 / (1.0 + z * 0.9);
-    let p = screen * cells - vec2f(t * clamp(params.wind, -1.0, 1.0) * 1.9, t * (1.1 + z));
-    let id = floor(p);
-    let h = hash21(id + seed);
-    if h > amount * 0.6 { return 0.0; }
-    let center = id + 0.5 + (fract(vec2f(h * 13.13, h * 31.71)) - 0.5) * 0.28;
-    let sway = abs(fract(t * 0.07 + h) * 2.0 - 1.0) - 0.5;
-    let delta = p - center + vec2f(sway * 0.1, 0.0);
-    let radius = size * (0.04 + z * 0.045) * (0.65 + h * 0.8);
-    let shape = max(1.0 - dot(delta, delta) / max(radius * radius * 3.24, 0.00001), 0.0);
-    return shape * shape * (0.65 + z * 0.1) * (0.65 + h * 0.7);
+    let cells = mix(38.7, 12.3, z);
+    let wind = clamp(params.wind, -1.0, 1.0);
+    let p = screen * cells - vec2f(t * (wind * (0.7 + z) + sin(t * 0.31 + z * 7.0) * 0.11), 0.0);
+    // Each column falls at its own speed and phase, so rows never travel as a lattice.
+    let column = hash21(vec2f(floor(p.x), seed + 71.0));
+    let falling = p - vec2f(0.0, t * mix(0.45, 1.8, z) * mix(0.65, 1.3, column) + column * 37.0);
+    let h = hash21(floor(falling) + seed);
+    if h > amount * mix(0.65, 0.48, z) { return 0.0; }
+    let random = fract(vec3f(h) * vec3f(13.13, 31.71, 73.37));
+    let center = vec2f(0.08) + random.xy * 0.84;
+    let delta = fract(falling) - center;
+    let defocus = smoothstep(0.65, 1.0, random.z) * z;
+    let radius = size * mix(0.8, 3.4, z) * mix(0.6, 1.5, random.z) * (1.0 + defocus);
+    let pixels = delta * 1080.0 / cells;
+    let shape = max(1.0 - dot(pixels, pixels) / max(radius * radius, 0.001), 0.0);
+    let opacity = mix(0.32, 0.72, z) / (1.0 + defocus * 1.5);
+    return shape * shape * opacity;
 }
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
-    let base = sample_src(uv);
     let screen = uv * vec2f(paper.resolution.x / max(paper.resolution.y, 1.0), 1.0);
     let t = paper.time * clamp(params.speed, 0.0, 2.0);
     let amount = clamp(params.amount, 0.0, 1.0);
     let size = clamp(params.size, 0.3, 4.0);
-    // Explicit near/far layers let the compiler fold the fixed far-layer grid.
-    let flakes = snow_layer(screen, 0.0, t, size, amount, 0.0)
-        + snow_layer(screen, clamp(params.depth, 0.0, 1.0) * 2.0, t, size, amount, 79.1);
-    return vec4f(mix(base.rgb, vec3f(0.88, 0.94, 1.0), clamp(flakes, 0.0, 0.85)), base.a);
+    let depth = clamp(params.depth, 0.0, 1.0);
+    let flakes = snow_layer(screen, 0.0, t, size, amount, 19.07)
+        + snow_layer(screen + vec2f(0.37, 0.19), depth * 0.55, t, size, amount, 79.19)
+        + snow_layer(screen + vec2f(0.13, 0.61), depth, t, size, amount, 154.01);
+    return vec4f(vec3f(clamp(flakes, 0.0, 0.85)), 1.0);
 }

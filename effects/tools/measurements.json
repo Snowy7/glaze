@@ -86,6 +86,12 @@
       "id": "god-rays"
     },
     {
+      "animated": true,
+      "category": "stylize",
+      "gpu_ms": 0.5614,
+      "id": "grain"
+    },
+    {
       "animated": false,
       "category": "stylize",
       "gpu_ms": 1.03236,
@@ -160,7 +166,7 @@
     {
       "animated": true,
       "category": "weather",
-      "gpu_ms": 0.80404,
+      "gpu_ms": 0.72832,
       "id": "snow"
     },
     {

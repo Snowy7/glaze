@@ -2,9 +2,9 @@
   "animated": true,
   "author": "mypaper",
   "category": "weather",
-  "cost": 0.804,
+  "cost": 0.728,
   "cost_estimated": false,
-  "description": "Two softly focused flake planes, with independent depth, wind and fall speed.",
+  "description": "Random drifting flakes at three depths, with soft out-of-focus foreground snow.",
   "id": "snow",
   "license": "MIT",
   "name": "Snowfall",
@@ -57,8 +57,12 @@
   ],
   "passes": [
     {
-      "scale": 1.0,
+      "scale": 0.5,
       "source": "snow.wgsl"
+    },
+    {
+      "scale": 1.0,
+      "source": "composite.wgsl"
     }
   ],
   "url": "https://github.com/Snowy7/mypaper"
