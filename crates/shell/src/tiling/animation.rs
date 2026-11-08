@@ -424,7 +424,7 @@ fn run(
         });
     loop {
         let elapsed = start.elapsed().as_secs_f64();
-        let t = 1.0;
+        let t = progress(elapsed);
         let frame = Instant::now();
         // The region covers old real windows plus the moving proxies, so no input is intercepted.
         // SAFETY: GDI regions are owned locally until SetWindowRgn transfers the union to USER.
