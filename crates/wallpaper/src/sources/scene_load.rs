@@ -3,6 +3,9 @@ use anyhow::{Context, Result, bail};
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat3, Mat4, Quat, Vec3};
 use std::{ops::Range, path::Path};
+#[cfg(test)]
+#[path = "scene/load_tests.rs"]
+mod tests;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
@@ -10,6 +13,7 @@ pub struct Vertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
     pub uv: [f32; 2],
+    pub uv1: [f32; 2],
     pub color: [f32; 4],
 }
 pub struct Texture {
@@ -25,10 +29,19 @@ pub struct MaterialUniform {
     pub surface: [f32; 4],
     /// alpha mode (opaque/mask/blend), cutoff, double sided, unused
     pub alpha: [f32; 4],
+    pub uv_sets: [u32; 4],
+    pub uv_extra: [u32; 4],
 }
 pub struct Material {
     pub uniform: MaterialUniform,
     pub textures: [Option<usize>; 5],
+}
+pub struct TextureInfo {
+    pub image: usize,
+    pub wrap_u: gltf::texture::WrappingMode,
+    pub wrap_v: gltf::texture::WrappingMode,
+    pub mag: Option<gltf::texture::MagFilter>,
+    pub min: Option<gltf::texture::MinFilter>,
 }
 pub struct Batch {
     pub material: usize,
@@ -94,6 +107,7 @@ pub struct SceneData {
     pub batches: Vec<Batch>,
     pub materials: Vec<Material>,
     pub textures: Vec<Texture>,
+    pub texture_info: Vec<TextureInfo>,
     pub clips: Vec<Clip>,
     local: Vec<LocalVertex>,
     primitives: Vec<Primitive>,
@@ -136,13 +150,20 @@ fn material(m: gltf::Material<'_>) -> Material {
                 if m.double_sided() { 1.0 } else { 0.0 },
                 0.0,
             ],
+            uv_sets: [
+                base.as_ref().map_or(0, |t| t.tex_coord()),
+                mr.as_ref().map_or(0, |t| t.tex_coord()),
+                normal.as_ref().map_or(0, |t| t.tex_coord()),
+                emissive.as_ref().map_or(0, |t| t.tex_coord()),
+            ],
+            uv_extra: [occlusion.as_ref().map_or(0, |t| t.tex_coord()), 0, 0, 0],
         },
         textures: [
-            base.map(|t| t.texture().source().index()),
-            mr.map(|t| t.texture().source().index()),
-            normal.map(|t| t.texture().source().index()),
-            emissive.map(|t| t.texture().source().index()),
-            occlusion.map(|t| t.texture().source().index()),
+            base.map(|t| t.texture().index()),
+            mr.map(|t| t.texture().index()),
+            normal.map(|t| t.texture().index()),
+            emissive.map(|t| t.texture().index()),
+            occlusion.map(|t| t.texture().index()),
         ],
     }
 }
@@ -223,6 +244,8 @@ fn build(
             emissive: [0.0; 4],
             surface: [1.0, 1.0, 1.0, 1.0],
             alpha: [0.0, 0.5, 0.0, 0.0],
+            uv_sets: [0; 4],
+            uv_extra: [0; 4],
         },
         textures: [None; 5],
     });
@@ -232,6 +255,19 @@ fn build(
         batches: Vec::new(),
         materials,
         textures: images.iter().map(decode).collect::<Result<_>>()?,
+        texture_info: doc
+            .textures()
+            .map(|t| {
+                let s = t.sampler();
+                TextureInfo {
+                    image: t.source().index(),
+                    wrap_u: s.wrap_s(),
+                    wrap_v: s.wrap_t(),
+                    mag: s.mag_filter(),
+                    min: s.min_filter(),
+                }
+            })
+            .collect(),
         clips: Vec::new(),
         local: Vec::new(),
         primitives: Vec::new(),
@@ -268,6 +304,9 @@ fn build(
                 let normals = r.read_normals().map(Iterator::collect::<Vec<_>>);
                 let uv = r
                     .read_tex_coords(0)
+                    .map(|v| v.into_f32().collect::<Vec<_>>());
+                let uv1 = r
+                    .read_tex_coords(1)
                     .map(|v| v.into_f32().collect::<Vec<_>>());
                 let colors = r
                     .read_colors(0)
@@ -313,6 +352,11 @@ fn build(
                                 .and_then(|v| v.get(i))
                                 .copied()
                                 .unwrap_or([1.0; 4]),
+                            uv1: uv1
+                                .as_ref()
+                                .and_then(|v| v.get(i))
+                                .copied()
+                                .unwrap_or_default(),
                         },
                         joints: joints
                             .as_ref()
@@ -433,6 +477,16 @@ fn build(
         });
     }
     data.deform();
+    // Baking world-space vertices reverses winding under mirrored nodes.
+    for (primitive, batch) in data.primitives.iter().zip(&data.batches) {
+        if data.worlds[primitive.node].determinant() < 0.0 {
+            for tri in data.indices[batch.indices.start as usize..batch.indices.end as usize]
+                .chunks_exact_mut(3)
+            {
+                tri.swap(1, 2);
+            }
+        }
+    }
     Ok(data)
 }
 
@@ -528,7 +582,7 @@ impl SceneData {
         for (p, batch) in self.primitives.iter().zip(&mut self.batches) {
             let node = &self.nodes[p.node];
             let world = self.worlds[p.node];
-            let normal = Mat3::from_mat4(world).inverse().transpose();
+            let normal = normal_matrix(world);
             let mut center = Vec3::ZERO;
             for (j, i) in p.vertices.clone().enumerate() {
                 let local = &self.local[i];
@@ -563,7 +617,7 @@ impl SceneData {
                     }
                     (
                         transform.transform_point3(position),
-                        Mat3::from_mat4(transform).inverse().transpose() * n,
+                        normal_matrix(transform) * n,
                     )
                 } else {
                     (world.transform_point3(position), normal * n)
@@ -576,6 +630,15 @@ impl SceneData {
             }
             batch.center = center / p.vertices.len().max(1) as f32;
         }
+    }
+}
+/// Scale animations can pass through zero while hiding a node.
+fn normal_matrix(transform: Mat4) -> Mat3 {
+    let m = Mat3::from_mat4(transform);
+    if m.determinant().abs() > 1e-12 {
+        m.inverse().transpose()
+    } else {
+        Mat3::IDENTITY
     }
 }
 fn decode(image: &gltf::image::Data) -> Result<Texture> {

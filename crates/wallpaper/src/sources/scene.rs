@@ -9,8 +9,8 @@
 //! `scale` reduces internal render resolution; the caller supplies rect size,
 //! never a full-screen texture for a small model. Targets persist until resize.
 //! `animated()` is false for no clip, orbit=0 and parallax=0: bake that output.
-//! A renderer is one view; the legacy source keeps separate uniform slots for
-//! screens so several renders can be encoded before the queue is submitted.
+//! `render_into` uses view slot 0. For several screens before one submit, use
+//! `render_into_for_screen(..., screen)`; mesh and material resources are shared.
 
 use super::{Frame, Redraw, Source, Visibility, begin};
 use crate::gpu::Gpu;
@@ -30,6 +30,8 @@ mod math;
 #[cfg(test)]
 #[path = "scene/tests.rs"]
 mod tests;
+#[path = "scene/texture.rs"]
+mod texture;
 use load::{SceneData, Vertex};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -109,6 +111,7 @@ pub struct SceneRenderer {
     depth_layout: wgpu::BindGroupLayout,
     opaque: wgpu::RenderPipeline,
     blend: wgpu::RenderPipeline,
+    blended_depth: wgpu::RenderPipeline,
     sky: wgpu::RenderPipeline,
     depth: wgpu::RenderPipeline,
     resolve: wgpu::RenderPipeline,
@@ -178,6 +181,34 @@ impl SceneRenderer {
             Vec2::ZERO,
         );
     }
+    /// Same API with a persistent view slot for stacks shared by several screens.
+    /// Distinct slots may be encoded before one submit, sharing mesh/material resources.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_into_for_screen(
+        &mut self,
+        gpu: &Gpu,
+        encoder: &mut wgpu::CommandEncoder,
+        color_view: &wgpu::TextureView,
+        depth_out: Option<&wgpu::TextureView>,
+        size: (u32, u32),
+        clock: Duration,
+        mouse: [f32; 2],
+        transparent: bool,
+        screen: usize,
+    ) {
+        self.render_view(
+            gpu,
+            encoder,
+            color_view,
+            depth_out,
+            size,
+            clock,
+            mouse,
+            transparent,
+            screen,
+            Vec2::ZERO,
+        );
+    }
     #[allow(clippy::too_many_arguments)]
     fn render_view(
         &mut self,
@@ -195,7 +226,13 @@ impl SceneRenderer {
         let size = (size.0.max(1), size.1.max(1));
         let internal = render_size(size, self.options.scale);
         if let Some(clip) = self.clip.filter(|_| self.last_animation != Some(clock)) {
-            self.data.animate(clip, clock.as_secs_f32());
+            let duration = self.data.clips[clip].duration;
+            let time = if duration > 0.0 {
+                (clock.as_secs_f64() % f64::from(duration)) as f32
+            } else {
+                0.0
+            };
+            self.data.animate(clip, time);
             gpu.queue
                 .write_buffer(&self.vertices, 0, bytemuck::cast_slice(&self.data.vertices));
             self.last_animation = Some(clock);
@@ -317,6 +354,19 @@ impl SceneRenderer {
                 pass.set_bind_group(1, &m.bind, &[]);
                 pass.draw_indexed(batch.indices.clone(), 0, 0..1);
             }
+            // Depth consumers see the nearest visible translucent surface too.
+            // Keep this after color blending so it cannot disturb transparency order.
+            if depth_out.is_some() {
+                pass.set_pipeline(&self.blended_depth);
+                for &i in &self.order {
+                    let batch = &self.data.batches[i];
+                    let material = &self.materials[batch.material];
+                    if material.blend {
+                        pass.set_bind_group(1, &material.bind, &[]);
+                        pass.draw_indexed(batch.indices.clone(), 0, 0..1);
+                    }
+                }
+            }
         }
         if target.upscale.is_some() {
             let mut pass = begin(
@@ -396,6 +446,13 @@ impl SceneRenderer {
                 },
             ));
         }
+        for i in 7..11 {
+            entries.push(entry(
+                i,
+                wgpu::ShaderStages::FRAGMENT,
+                wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            ));
+        }
         let material_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("scene materials"),
             entries: &entries,
@@ -455,12 +512,28 @@ impl SceneRenderer {
         let textures: Vec<_> = data
             .textures
             .iter()
-            .map(|t| {
+            .enumerate()
+            .map(|(image, t)| {
+                let used = |srgb| {
+                    data.materials.iter().any(|m| {
+                        m.textures.iter().enumerate().any(|(i, index)| {
+                            index.is_some_and(|index| {
+                                data.texture_info[index].image == image
+                                    && (i == 0 || i == 3) == srgb
+                            })
+                        })
+                    })
+                };
                 (
-                    upload("scene srgb", t.size, &t.rgba, true),
-                    upload("scene linear", t.size, &t.rgba, false),
+                    used(true).then(|| texture::upload(gpu, t, true)),
+                    used(false).then(|| texture::upload(gpu, t, false)),
                 )
             })
+            .collect();
+        let samplers: Vec<_> = data
+            .texture_info
+            .iter()
+            .map(|info| texture::sampler(gpu, info))
             .collect();
         let materials = data
             .materials
@@ -478,21 +551,37 @@ impl SceneRenderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
+                        resource: wgpu::BindingResource::Sampler(
+                            m.textures[0].map_or(&sampler, |i| &samplers[i]),
+                        ),
                     },
                 ];
                 for (i, texture) in m.textures.iter().enumerate() {
                     let view = texture.map_or(if i == 2 { &normal } else { &white }, |t| {
                         if i == 0 || i == 3 {
-                            &textures[t].0
+                            textures[data.texture_info[t].image]
+                                .0
+                                .as_ref()
+                                .expect("uploaded color map")
                         } else {
-                            &textures[t].1
+                            textures[data.texture_info[t].image]
+                                .1
+                                .as_ref()
+                                .expect("uploaded data map")
                         }
                     });
                     entries.push(wgpu::BindGroupEntry {
                         binding: i as u32 + 2,
                         resource: wgpu::BindingResource::TextureView(view),
                     });
+                    if i > 0 {
+                        entries.push(wgpu::BindGroupEntry {
+                            binding: i as u32 + 6,
+                            resource: wgpu::BindingResource::Sampler(
+                                texture.map_or(&sampler, |i| &samplers[i]),
+                            ),
+                        });
+                    }
                 }
                 Material {
                     bind: d.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -528,7 +617,8 @@ impl SceneRenderer {
                         buffers: &[Option<wgpu::VertexBufferLayout>],
                         depth: Option<wgpu::DepthStencilState>,
                         format,
-                        blend| {
+                        blend,
+                        write_mask| {
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(layout),
@@ -548,7 +638,7 @@ impl SceneRenderer {
                     targets: &[Some(wgpu::ColorTargetState {
                         format,
                         blend,
-                        write_mask: wgpu::ColorWrites::ALL,
+                        write_mask,
                     })],
                 }),
                 multiview_mask: None,
@@ -567,7 +657,7 @@ impl SceneRenderer {
         let vertex_layout = [Some(wgpu::VertexBufferLayout {
             array_stride: size_of::<Vertex>() as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x3,2=>Float32x2,3=>Float32x4],
+            attributes: &wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x3,2=>Float32x2,3=>Float32x2,4=>Float32x4],
         })];
         let opaque = pipeline(
             &module,
@@ -579,6 +669,7 @@ impl SceneRenderer {
             depth_state(true),
             gpu.format,
             None,
+            wgpu::ColorWrites::ALL,
         );
         let blend = pipeline(
             &module,
@@ -590,6 +681,19 @@ impl SceneRenderer {
             depth_state(false),
             gpu.format,
             Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+            wgpu::ColorWrites::ALL,
+        );
+        let blended_depth = pipeline(
+            &module,
+            "scene blended depth",
+            &mesh_layout,
+            "vs_main",
+            "fs_nearest",
+            &vertex_layout,
+            depth_state(true),
+            gpu.format,
+            None,
+            wgpu::ColorWrites::empty(),
         );
         let sky = pipeline(
             &module,
@@ -601,6 +705,7 @@ impl SceneRenderer {
             depth_state(false),
             gpu.format,
             None,
+            wgpu::ColorWrites::ALL,
         );
         let depth = pipeline(
             &output_module,
@@ -612,6 +717,7 @@ impl SceneRenderer {
             None,
             wgpu::TextureFormat::R32Float,
             None,
+            wgpu::ColorWrites::ALL,
         );
         let resolve = pipeline(
             &output_module,
@@ -623,6 +729,7 @@ impl SceneRenderer {
             None,
             gpu.format,
             None,
+            wgpu::ColorWrites::ALL,
         );
         let order = (0..data.batches.len()).collect();
         Self {
@@ -639,6 +746,7 @@ impl SceneRenderer {
             depth_layout,
             opaque,
             blend,
+            blended_depth,
             sky,
             depth,
             resolve,
@@ -762,6 +870,12 @@ impl SceneSource {
             parallax: config.parallax,
             scale: config.scale,
             background: config.background,
+            exposure: config.exposure,
+            environment: match config.environment {
+                mypaper_theme::Environment::Sky => Environment::Sky,
+                mypaper_theme::Environment::Color => Environment::Color,
+                mypaper_theme::Environment::Transparent => Environment::Transparent,
+            },
             ..Default::default()
         };
         Ok(Self {

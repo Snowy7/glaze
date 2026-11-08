@@ -11,9 +11,7 @@ use glam::{Mat4, Vec2, Vec3};
 const FOV_Y: f32 = 40.0 * std::f32::consts::PI / 180.0;
 /// Camera height above the scene's equator, as an angle.
 const ELEVATION: f32 = 14.0 * std::f32::consts::PI / 180.0;
-/// Fraction of the exact "sphere touches the frame" distance the camera sits
-/// at. Below 1 the scene fills more of the screen (the bounding sphere is
-/// conservative, so the actual silhouette still has slack).
+/// Safety margin around the bounding sphere so rotation fits inside a model rect.
 const FRAMING: f32 = 1.08;
 
 /// A bounding sphere.
@@ -42,8 +40,6 @@ impl Sphere {
 pub struct View {
     pub eye: Vec3,
     pub view_proj: Mat4,
-    /// Distance from the eye to the nearest possible scene point (fog starts here).
-    pub nearest: f32,
     pub near: f32,
     pub far: f32,
 }
@@ -80,7 +76,6 @@ pub fn camera(sphere: Sphere, aspect: f32, azimuth: f32, lean: Vec2, parallax: f
     View {
         eye,
         view_proj: proj * view,
-        nearest: (from_center - sphere.radius).max(0.0),
         near,
         far,
     }
@@ -100,6 +95,7 @@ pub fn approach(current: Vec2, target: Vec2, dt: f32, rate: f32) -> Vec2 {
 
 /// Linear light to sRGB-encoded (both 0..1). The shader does the same on
 /// the GPU; the CPU needs it for clear colors on the non-sRGB swapchain.
+#[cfg(test)]
 pub fn linear_to_srgb(c: f32) -> f32 {
     if c <= 0.003_130_8 {
         c * 12.92
