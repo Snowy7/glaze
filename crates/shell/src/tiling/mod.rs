@@ -426,6 +426,198 @@ impl Tiler {
         processes.dedup();
         TilingHooks::processes(processes);
     }
+    /// Process at most one coalesced event batch; empty queues do no Win32 work.
+    pub fn process(&mut self) {
+        let events = std::mem::take(&mut self.queue.lock().unwrap().events);
+        if events.is_empty() {
+            return;
+        }
+        let mut changed = false;
+        let mut processes_changed = false;
+        for event in events {
+            let window = WindowId(event.window as u64);
+            let h = hwnd(window);
+            match event.event {
+                EVENT_OBJECT_DESTROY | EVENT_OBJECT_HIDE => {
+                    if event.event == EVENT_OBJECT_HIDE && platform::visible(h) {
+                        continue;
+                    }
+                    // Display reconfiguration can synthesize both MINIMIZE and HIDE.
+                    if event.event == EVENT_OBJECT_HIDE
+                        && self.changed_at.elapsed() < Duration::from_secs(10)
+                        && platform::iconic(h)
+                    {
+                        continue;
+                    }
+                    if let Some(w) = self.windows.remove(&window) {
+                        if event.event == EVENT_OBJECT_HIDE {
+                            if let Err(e) = self.journal.restore_window(w.admission.identity) {
+                                log::warn!("restoring hidden window: {e:#}");
+                            }
+                        }
+                        self.focus_settle = Instant::now();
+                        if event.event == EVENT_OBJECT_HIDE
+                            && platform::class(h) == "Chrome_WidgetWin_1"
+                            && !self
+                                .rules
+                                .resolve(&w.admission.exe, &platform::class(h), &platform::title(h))
+                                .tray
+                        {
+                            if self.recently_hidden.len() >= 1024 {
+                                self.recently_hidden.pop_front();
+                            }
+                            self.recently_hidden
+                                .push_back((w.admission.identity, Instant::now()));
+                        }
+                        if event.event == EVENT_OBJECT_DESTROY {
+                            let _ = self.journal.release(w.admission.identity);
+                        }
+                        if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                            l.remove(window);
+                        }
+                        self.queue.lock().unwrap().known.remove(&event.window);
+                        changed = true;
+                        processes_changed = true;
+                    }
+                }
+                EVENT_OBJECT_CREATE
+                | EVENT_OBJECT_SHOW
+                | EVENT_OBJECT_UNCLOAKED
+                | EVENT_OBJECT_NAMECHANGE => {
+                    if self.windows.contains_key(&window) {
+                        if event.event == EVENT_OBJECT_NAMECHANGE {
+                            let mut ignored = None;
+                            if let Some(w) = self.windows.get_mut(&window) {
+                                let options = self.rules.resolve(
+                                    &w.admission.exe,
+                                    &platform::class(h),
+                                    &platform::title(h),
+                                );
+                                if options.ignore {
+                                    if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                                        l.remove(window);
+                                    }
+                                    ignored = Some(platform::Placement {
+                                        identity: w.admission.identity,
+                                        rect: w.admission.frame,
+                                        border: w.admission.border,
+                                        hung: !platform::responsive(h),
+                                    });
+                                } else if options.float {
+                                    if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                                        let r = w
+                                            .expected
+                                            .filter(|r| {
+                                                self.displays.iter().any(|m| {
+                                                    monitor_rect(m.rect).contains(r.x, r.y)
+                                                })
+                                            })
+                                            .unwrap_or(w.admission.frame);
+                                        l.float_at(window, r);
+                                        w.expected = None;
+                                    }
+                                }
+                            }
+                            if let Some(placement) = ignored {
+                                if platform::apply(std::slice::from_ref(&placement)).is_ok()
+                                    && !placement.hung
+                                {
+                                    let _ = self.journal.release(placement.identity);
+                                }
+                                self.windows.remove(&window);
+                                self.queue.lock().unwrap().known.remove(&event.window);
+                                changed = true;
+                                processes_changed = true;
+                                continue;
+                            }
+                        }
+                        if self.current_desktop(h) {
+                            if let Some(desktop) = self.desktop(h) {
+                                self.current = desktop;
+                            }
+                            changed = true;
+                        }
+                    } else {
+                        let n = self.windows.len();
+                        self.admit(window);
+                        changed |= self.windows.len() != n;
+                        processes_changed |= self.windows.len() != n;
+                    }
+                    if platform::desktop_window(h)
+                        || matches!(platform::class(h).as_str(), "Progman" | "WorkerW")
+                    {
+                        self.current = self
+                            .desktop(platform::foreground())
+                            .unwrap_or_else(|| format!("{:?}", GUID::zeroed()));
+                        self.enumerate();
+                        if !self.layouts.contains_key(&self.current) {
+                            self.layouts
+                                .insert(self.current.clone(), self.make_layout());
+                        }
+                        changed = true;
+                    }
+                }
+                EVENT_SYSTEM_FOREGROUND => {
+                    // SHQueryUserNotificationState is checked only on foreground events.
+                    let game = platform::notification_game();
+                    self.animation.pause(game || platform::fullscreen(h));
+                    if game || platform::fullscreen(h) {
+                        self.overview = None;
+                        self.hint = None;
+                    }
+                    if let Some(desktop) = self.desktop(h) {
+                        self.current = desktop;
+                    }
+                    if !self.layouts.contains_key(&self.current) {
+                        self.layouts
+                            .insert(self.current.clone(), self.make_layout());
+                    }
+                    if let Some(w) = self.windows.get(&window) {
+                        if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                            l.focus(window);
+                            changed = true;
+                        }
+                    } else {
+                        let before = self.windows.len();
+                        self.admit(window);
+                        changed |= self.windows.len() != before;
+                        processes_changed |= self.windows.len() != before;
+                    }
+                }
+                EVENT_SYSTEM_MINIMIZESTART => {
+                    if self.changed_at.elapsed() < Duration::from_secs(10) {
+                        continue;
+                    }
+                    if let Some(w) = self.windows.get_mut(&window) {
+                        self.focus_settle = Instant::now();
+                        w.minimized = true;
+                        if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                            l.remove(window);
+                            changed = true;
+                        }
+                    }
+                }
+                EVENT_SYSTEM_MINIMIZEEND => {
+                    if let Some(w) = self.windows.remove(&window) {
+                        self.queue.lock().unwrap().known.remove(&event.window);
+                        drop(w);
+                    }
+                    self.admit(window);
+                    changed = true;
+                    processes_changed = true;
+                }
+                _ => {}
+            }
+        }
+        if processes_changed {
+            self.update_process_hooks();
+        }
+        if changed {
+            if let Err(e) = self.commit(true) {
+                log::error!("tiling layout: {e:#}");
+            }
+        }
+    }
     pub fn displays_changed(&mut self) {
         self.cancel_projection();
         self.refresh_displays();
