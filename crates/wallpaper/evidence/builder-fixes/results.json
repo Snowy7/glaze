@@ -1,0 +1,236 @@
+{
+  "wake_cause": "Explorer lifecycle WinEvent callbacks ran on the engine main thread before their callback could discard irrelevant child/object events.",
+  "kept_fix": "Run the existing desktop lifecycle observer on its own thread, forwarding only desktop loss/recovery; preserve coverage detection unchanged.",
+  "original_still_main_wakes_per_second": 41.89464663222893,
+  "runs": [
+    {
+      "shell_running": false,
+      "image": {
+        "before": {
+          "seconds": 40.0126986,
+          "pid": 8996,
+          "main": {
+            "tid": 43820,
+            "name": "main",
+            "wakes": 845,
+            "wakesPerSecond": 21.118295680261866,
+            "cpuPctOneCore": 0
+          },
+          "cpuPctMachine": 0.014643788609649037
+        },
+        "after": {
+          "seconds": 40.0131087,
+          "pid": 21452,
+          "main": {
+            "tid": 44712,
+            "name": "main",
+            "wakes": 0,
+            "wakesPerSecond": 0,
+            "cpuPctOneCore": 0
+          },
+          "cpuPctMachine": 0.01708424494395758
+        }
+      },
+      "still_stack": {
+        "before": {
+          "seconds": 40.0051146,
+          "pid": 8996,
+          "main": {
+            "tid": 43820,
+            "name": "main",
+            "wakes": 406,
+            "wakesPerSecond": 10.148702336175786,
+            "cpuPctOneCore": 0.03905750591200656
+          },
+          "cpuPctMachine": 0.007323282358501231
+        },
+        "after": {
+          "seconds": 40.010931899999996,
+          "pid": 21452,
+          "main": {
+            "tid": 44712,
+            "name": "main",
+            "wakes": 103,
+            "wakesPerSecond": 2.5742964512156243,
+            "cpuPctOneCore": 0
+          },
+          "cpuPctMachine": 0.012203696010389602
+        }
+      }
+    },
+    {
+      "shell_running": true,
+      "image": {
+        "before": {
+          "seconds": 40.0135073,
+          "pid": 1828,
+          "main": {
+            "tid": 41292,
+            "name": "main",
+            "wakes": 86,
+            "wakesPerSecond": 2.149274227705603,
+            "cpuPctOneCore": 0
+          },
+          "cpuPctMachine": 0.0024405821081322707
+        },
+        "after": {
+          "seconds": 40.0025955,
+          "pid": 41528,
+          "main": {
+            "tid": 28624,
+            "name": "main",
+            "wakes": 156,
+            "wakesPerSecond": 3.8997469551694466,
+            "cpuPctOneCore": 0
+          },
+          "cpuPctMachine": 0.009764991374122211
+        }
+      },
+      "still_stack": {
+        "before": {
+          "seconds": 40.0034347,
+          "pid": 1828,
+          "main": {
+            "tid": 41292,
+            "name": "main",
+            "wakes": 745,
+            "wakesPerSecond": 18.623400855127073,
+            "cpuPctOneCore": 0
+          },
+          "cpuPctMachine": 0.007323589891644979
+        },
+        "after": {
+          "seconds": 40.016100099999996,
+          "pid": 41528,
+          "main": {
+            "tid": 28624,
+            "name": "main",
+            "wakes": 316,
+            "wakesPerSecond": 7.896821509600333,
+            "cpuPctOneCore": 0
+          },
+          "cpuPctMachine": 0.014642543839498244
+        }
+      }
+    }
+  ],
+  "wake_status": "Partial improvement. Idle parity with image is not demonstrated by the shell-enabled paired samples. Remaining window/glass activity is not isolated.",
+  "discarded_location_filter": {
+    "alone": {
+      "image": {
+        "before": {
+          "seconds": 40.0126986,
+          "pid": 8996,
+          "main": {
+            "tid": 43820,
+            "name": "main",
+            "wakes": 845,
+            "wakesPerSecond": 21.118295680261866,
+            "cpuPctOneCore": 0
+          },
+          "cpuPctMachine": 0.014643788609649037
+        },
+        "after": {
+          "seconds": 40.006976099999996,
+          "pid": 33860,
+          "main": {
+            "tid": 27112,
+            "name": "main",
+            "wakes": 986,
+            "wakesPerSecond": 24.645701728004383,
+            "cpuPctOneCore": 0.07811137718054127
+          },
+          "cpuPctMachine": 0.017086863758243406
+        }
+      },
+      "stack": {
+        "before": {
+          "seconds": 40.0051146,
+          "pid": 8996,
+          "main": {
+            "tid": 43820,
+            "name": "main",
+            "wakes": 406,
+            "wakesPerSecond": 10.148702336175786,
+            "cpuPctOneCore": 0.03905750591200656
+          },
+          "cpuPctMachine": 0.007323282358501231
+        },
+        "after": {
+          "seconds": 40.0021203,
+          "pid": 33860,
+          "main": {
+            "tid": 27112,
+            "name": "main",
+            "wakes": 424,
+            "wakesPerSecond": 10.599438150282248,
+            "cpuPctOneCore": 0
+          },
+          "cpuPctMachine": 0
+        }
+      }
+    },
+    "with_observer_worker": {
+      "image": {
+        "seconds": 40.0140789,
+        "pid": 43744,
+        "main": {
+          "tid": 30692,
+          "name": "main",
+          "wakes": 718,
+          "wakesPerSecond": 17.943684316571886,
+          "cpuPctOneCore": 0.2342925354705591
+        },
+        "cpuPctMachine": 0.024405472444849904
+      },
+      "stack": {
+        "seconds": 40.0028911,
+        "pid": 43744,
+        "main": {
+          "tid": 30692,
+          "name": "main",
+          "wakes": 2944,
+          "wakesPerSecond": 73.59468076046134,
+          "cpuPctOneCore": 0.8202532141483144
+        },
+        "cpuPctMachine": 0.06103074510032101
+      }
+    },
+    "kept": false
+  },
+  "effects": {
+    "snow": {
+      "gpu_ms_before": 0.804,
+      "gpu_ms_after": 0.72832,
+      "change": "Three randomized depth planes, independent column fall speeds, drift, variable size/defocus; half-resolution field composites over sharp input."
+    },
+    "grain": {
+      "gpu_ms_before": 0.56,
+      "gpu_ms_after": 0.5614,
+      "amount_before": 0.06,
+      "amount_after": 0.018,
+      "change": "Fine monochrome grain with shadow/highlight suppression; alpha preserved."
+    }
+  },
+  "adapter": "AMD Radeon(TM) Graphics",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "gpu_method": "3 warmup frames, median of 24 GPU timestamp samples, sum of passes.",
+  "ring_fix": "Mip generation and trilinear filtering were already present. Replaced dense regular alpha stripes in the CC0 texture with broad irregular bands and soft edges; 256 mesh segments.",
+  "captures": {
+    "planet": "C:/mypaper-targets/builder-fixes/planet-fixed.jpg",
+    "gallery": "C:/mypaper-targets/effects-sheet/preview-grid-v2.jpg",
+    "defaults": "C:/mypaper-targets/builder-fixes/effects"
+  },
+  "validation": {
+    "stack_tests": "6 passed, 2 ignored; every bundled effect compiles",
+    "scene_tests": "16 passed, 3 ignored",
+    "desktop_worker_tests": "2 passed",
+    "explorer_lifecycle_test": "1 passed",
+    "finite_effect_cases": "snow and grain: 3 RGBA16F parameter cases each"
+  },
+  "cleanup": "Inspected C:/mypaper-targets/builder-live/test-themes. Automatic approval review rejected deletion with blocked by policy; folder remains.",
+  "config_restored_byte_for_byte": true
+}

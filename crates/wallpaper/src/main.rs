@@ -20,6 +20,7 @@
 
 mod backdrop;
 mod control;
+mod desktop_events;
 mod engine;
 mod game;
 mod glass_pass;
@@ -45,7 +46,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use mypaper_config::Config;
 use mypaper_desktop::{
-    ControlWindow, DesktopEvents, DesktopHost, EXIT_CONFIG, EXIT_RESTART, WindowEvents, hold,
+    ControlWindow, DesktopHost, EXIT_CONFIG, EXIT_RESTART, WindowEvents, hold,
     monitors, startup,
 };
 use mypaper_theme::LoadedTheme;
@@ -54,6 +55,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::control::Live;
+use crate::desktop_events::DesktopEvents;
 use crate::engine::{Engine, Flow};
 use crate::hold::Fact;
 use crate::trim::Trimmer;
@@ -281,7 +283,7 @@ fn run(args: Args, config: Config, theme: LoadedTheme, gpu: gpu::Opening) -> Res
                     Ok(_) => {}
                     Err(_) => {
                         desktop_lost = true;
-                        events.set_host(None);
+                        events.forget_host();
                     }
                 }
             }
