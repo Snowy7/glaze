@@ -80,7 +80,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
     let mut shown = Some(current);
-    group(b, c, "Style", |b, c| {
+    crate::panel::controls::cards_section(b, c, "Style", |b, c| {
         crate::ui::anchor(app, "style", c.view, c.y);
         shown = style_tiles(app, b, c, Some(current), |style| {
             Action::SetStyle(Some(style))
@@ -300,7 +300,7 @@ fn wallpaper_scope(app: &App, b: &mut B, c: &mut Col) {
     );
     let selected = target::selected(&theme);
     let mut shown = None;
-    group(b, c, "Style", |b, c| {
+    crate::panel::controls::cards_section(b, c, "Style", |b, c| {
         let choices: Vec<_> = STYLES
             .iter()
             .map(|(style, name, _)| {
@@ -489,7 +489,7 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
     let selected = looks
         .iter()
         .position(|(_, preset)| windows_matches(&layer, preset));
-    group(b, c, "Look", |b, c| {
+    crate::panel::controls::cards_section(b, c, "Look", |b, c| {
         let choices: Vec<_> = looks
             .iter()
             .enumerate()

@@ -76,6 +76,7 @@ fn queued_shortcut_keeps_modifiers_until_studio_handles_the_key() {
         menu: None,
         picking: None,
         frame: None,
+        onboarding: None,
     }));
     // SAFETY: no ShowWindow, focus, SendInput, or desktop keyboard-state changes. The reset
     // endpoint belongs to this test thread and closes only the hidden surface above.

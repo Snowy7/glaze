@@ -293,22 +293,16 @@ fn cards(
             let rect = row_rect(index);
             let area = rect;
             let hovered = highlighted == Some(index);
-            super::controls::card(b, area, hovered);
+            // Bound every specimen to its picture; captions own the space below it.
+            let pic = Rect::new(rect.left, rect.top, width, picture_height);
             if b.clip_rect().is_none_or(|clip| rect.intersects(&clip)) {
-                // Bound every specimen to its picture; captions own the space below it.
-                let pic = Rect::new(
-                    rect.left,
-                    rect.top,
-                    width,
-                    picture_height,
-                );
-                super::controls::card_picture(b, area, pic, |b, pic| {
+                super::controls::card_picture(b, pic, hovered, |b, pic| {
                     picture(b, (index < choices.len()).then_some(index), pic);
                 });
                 let label = Rect::new(
-                    rect.left + b.px(8.0),
-                    rect.top + picture_height + b.px(12.0),
-                    width - b.px(36.0),
+                    rect.left,
+                    super::controls::card_label_top(b, pic),
+                    width - b.px(28.0),
                     label_height,
                 );
                 for (line, value) in b
@@ -377,10 +371,10 @@ fn cards(
                 if *applied {
                     b.icon(
                         Rect::new(
-                            rect.right - b.px(26.0),
+                            rect.right - b.px(20.0),
                             label.top,
                             b.px(20.0),
-                            label.height(),
+                            height(b, 22.0),
                         ),
                         crate::theme::glyph::CHECK,
                         13.0,
@@ -389,7 +383,7 @@ fn cards(
                 }
             }
             if *applied {
-                super::controls::card_selection(b, area);
+                super::controls::card_selection(b, pic);
             }
             b.hit_checked(
                 k,
@@ -530,15 +524,16 @@ pub fn tiles(
                 pointer.is_some_and(|point| rect.contains(point))
             };
             let hot = hot && app.panel.as_ref().unwrap().chooser.borrow().suppressed != Some(k);
-            super::controls::card(b, rect, hot);
-            super::controls::card_picture(b, rect, Rect::new(rect.left, rect.top, width, picture_height), |b, pic| picture(b, i, pic));
+            let pic = Rect::new(rect.left, rect.top, width, picture_height);
+            super::controls::card_picture(b, pic, hot, |b, pic| picture(b, i, pic));
+            let top = super::controls::card_label_top(b, pic);
             if let Some(detail) = details.get(i) {
                 text(
                     b,
                     Rect::new(
-                        rect.left + b.px(6.0),
-                        rect.top + picture_height + height(b, 29.0),
-                        width - b.px(12.0),
+                        rect.left,
+                        top + height(b, 22.0),
+                        width,
                         height(b, 18.0),
                     ),
                     detail,
@@ -550,12 +545,7 @@ pub fn tiles(
             }
             text(
                 b,
-                Rect::new(
-                    rect.left + b.px(8.0),
-                    rect.top + picture_height,
-                    width - b.px(32.0),
-                    height(b, 32.0),
-                ),
+                Rect::new(rect.left, top, width - b.px(24.0), height(b, 22.0)),
                 name,
                 13.0,
                 500,
@@ -563,14 +553,9 @@ pub fn tiles(
                 Align::Start,
             );
             if *applied {
-                super::controls::card_selection(b, rect);
+                super::controls::card_selection(b, pic);
                 b.icon(
-                    Rect::new(
-                        rect.right - b.px(24.0),
-                        rect.top + picture_height,
-                        b.px(20.0),
-                        height(b, 32.0),
-                    ),
+                    Rect::new(rect.right - b.px(20.0), top, b.px(20.0), height(b, 22.0)),
                     crate::theme::glyph::CHECK,
                     13.0,
                     b.p.ink1,
@@ -973,7 +958,16 @@ mod tests {
         app.input.pointer = Some(Point::new(rect.left + 1.0, rect.top + 10.0));
         app.input.hover = None;
         let frame = crate::panel::build(&app, &mut ui.text);
-        assert!(frame.list.ops.iter().any(
+        // The hover wash is drawn inside the picture's clip.
+        fn flat(ops: &[mypaper_ui::Op]) -> Vec<&mypaper_ui::Op> {
+            ops.iter()
+                .flat_map(|op| match op {
+                    mypaper_ui::Op::Clipped { ops, .. } | mypaper_ui::Op::RoundedClipped { ops, .. } => flat(ops),
+                    _ => vec![op],
+                })
+                .collect()
+        }
+        assert!(flat(&frame.list.ops).into_iter().any(
             |op| matches!(op, mypaper_ui::Op::Fill { rect: drawn, color, .. }
             if drawn.contains(app.input.pointer.unwrap())
                 && drawn.top >= rect.top && drawn.bottom <= rect.bottom

@@ -410,7 +410,7 @@ pub fn run(app: &mut App, i: usize) {
     if entry.action == Action::FirstRunPick(usize::MAX) {
         app.overlay = Some(Overlay::FirstRun {
             step: 0,
-            starter: 0,
+            starter: None,
             taskbar: 0,
         });
         return;

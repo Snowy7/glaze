@@ -19,6 +19,7 @@ mod images;
 mod library;
 mod look;
 mod editing;
+mod onboarding;
 mod panel;
 mod peek;
 mod search;
@@ -56,6 +57,11 @@ use crate::app::{App, Msg, WM_STUDIO};
 use mypaper_bars::wake as mypaper_bars_wake;
 
 const TITLE: &str = "mypaper Studio";
+/// Decoded pictures the window keeps (RAM counts as much as CPU).
+const IMAGES: usize = 2 << 20;
+/// Full-screen onboarding shows a few large pictures every animation frame: under the window's
+/// budget they evict each other and flicker. Raised only while it is on screen.
+const ONBOARDING_IMAGES: usize = 16 << 20;
 
 /// Wakes the UI thread's loop (workers post after sending a [`Msg`]).
 pub fn wake(thread: u32) {
@@ -91,6 +97,8 @@ struct Studio {
     picking: Option<actions::Choices>,
     /// The DWM frame last set: dark, border colour.
     frame: Option<(bool, mypaper_ui::Rgba)>,
+    /// The full-screen first run, while it covers the displays.
+    onboarding: Option<onboarding::Session>,
 }
 
 impl Studio {
@@ -148,6 +156,10 @@ impl Studio {
     /// The window's border and caption follow the palette (light/dark, contrast) live. DWM
     /// wants an opaque border: the edge wash over the window's chrome.
     fn sync_frame(&mut self) {
+        // Full-screen onboarding has no frame; it is set again when Studio becomes a window.
+        if self.onboarding.is_some() {
+            return;
+        }
         let p = panel::palette_for(&self.app);
         let frame = (p.dark, mypaper_ui::theme::over(p.edge, p.chrome));
         if self.frame != Some(frame) {
@@ -242,6 +254,24 @@ impl Studio {
         }
     }
 
+    /// Onboarding finished or was skipped: fade the main display out, show Studio as a normal
+    /// window where it opens by default, and fade every display back in.
+    fn end_onboarding(&mut self) {
+        let Some(session) = self.onboarding.take() else { return };
+        let scale = self.surface.scale();
+        let (bounds, _) = placement(&self.app, scale);
+        session.cover(self.surface.hwnd(), bounds);
+        if let Some(panel) = self.app.panel.as_mut() {
+            panel.intro = None;
+        }
+        self.app.images.borrow_mut().set_budget(IMAGES);
+        self.frame = None;
+        self.app.scale = self.surface.scale();
+        self.app.dirty = true;
+        self.render();
+        session.reveal();
+    }
+
     fn sync_field(&mut self) {
         let field = self.app.field.as_ref().map(|f| f.field.clone());
         self.surface.set_text_field(field);
@@ -279,13 +309,14 @@ fn run() -> Result<()> {
     let thread = unsafe { GetCurrentThreadId() };
     let (tx, rx) = channel::<Msg>();
     let mut app = App::new(&ui.text, scale, (1280, 800));
-    app.images.borrow_mut().set_budget(2 << 20);
+    app.images.borrow_mut().set_budget(IMAGES);
     app.window = Some(surface.hwnd());
     app.inbox = Some(tx.clone());
     app.thread = thread;
     app.images.borrow_mut().connect(tx.clone(), thread);
     set_window_icons(surface.hwnd(), scale)?;
     let (bounds, maximized) = if panel_mode { (panel::placement(&app), false) } else { placement(&app, scale) };
+    // (First run moves the window over the whole main display once the curtains are down.)
     surface.place(bounds);
     panel::round_window(surface.hwnd());
     if panel_mode {
@@ -293,7 +324,19 @@ fn run() -> Result<()> {
         panel::round_window(surface.hwnd());
         app.scale = surface.scale();
     }
-    let studio = Rc::new(RefCell::new(Studio { app, ui, surface, menu: None, picking: None, frame: None }));
+    // `--onboarding` shows first run again on a set-up PC (every pick still applies, and undoes).
+    if !panel_mode && std::env::args().any(|arg| arg == "--onboarding") {
+        app.panel.as_mut().unwrap().page = panel::Page::FirstRun;
+        app.overlay = Some(app::Overlay::FirstRun { step: 0, starter: None, taskbar: 0 });
+    }
+    let onboarding = (!panel_mode && !no_activate && matches!(app.overlay, Some(app::Overlay::FirstRun { .. })))
+        .then(|| onboarding::Session::begin(surface.hwnd(), &app.monitors));
+    if onboarding.is_some() {
+        app.panel.as_mut().unwrap().intro = Some(Instant::now());
+        app.images.borrow_mut().set_budget(ONBOARDING_IMAGES);
+        app.scale = surface.scale();
+    }
+    let studio = Rc::new(RefCell::new(Studio { app, ui, surface, menu: None, picking: None, frame: None, onboarding }));
     {
         let mut s = studio.borrow_mut();
         s.sync_frame();
@@ -302,7 +345,8 @@ fn run() -> Result<()> {
         if no_activate {
             s.surface.show();
         } else {
-            s.surface.show_active(maximized);
+            // Onboarding is already placed over the whole display: never maximize it into the work area.
+            s.surface.show_active(maximized && s.onboarding.is_none());
         }
     }
     // `READY component=studio open_ms=…`, counted from process creation (the ≤300 ms gate).
@@ -322,7 +366,8 @@ fn run() -> Result<()> {
     let result = pump(&studio, &rx);
     mypaper_ui::set_modal_hook(None);
     let mut s = studio.borrow_mut();
-    if !panel_mode {
+    // A window closed mid-onboarding was full screen: that is no place to reopen at.
+    if !panel_mode && s.onboarding.is_none() {
         remember_placement(&mut s);
     }
     peek::end(&mut s.app);
@@ -439,6 +484,9 @@ fn pump(studio: &Rc<RefCell<Studio>>, rx: &Receiver<Msg>) -> Result<()> {
             return Ok(());
         }
         s.render();
+        if s.onboarding.is_some() && !matches!(s.app.overlay, Some(app::Overlay::FirstRun { .. })) {
+            s.end_onboarding();
+        }
     }
 }
 

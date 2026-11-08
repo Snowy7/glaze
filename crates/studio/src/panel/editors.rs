@@ -2,7 +2,7 @@ mod bars;
 mod connections;
 use crate::panel::tokens::radius;
 pub use bars::{
-    bar_path, bar_value, design_name as bar_design_name, insert_module, move_module,
+    bar_path, bar_value, design_cards as bar_design_cards, design_name as bar_design_name, insert_module, move_module,
     overview as bars_overview, same_bars, selected_module_name,
 };
 pub use connections::{
@@ -452,16 +452,9 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
     let state = app.panel.as_ref().unwrap();
     let (secondary, cancel, primary, commit, enabled) = match state.page {
         Page::FirstRun => (
-            "Skip remaining steps",
+            "Skip setup",
             Action::FirstRunSkip,
-            if matches!(
-                app.overlay,
-                Some(crate::app::Overlay::FirstRun { step: 2, .. })
-            ) {
-                "Open Studio"
-            } else {
-                "Continue"
-            },
+            super::first_run::next_label(app),
             Action::FirstRunNext,
             true,
         ),

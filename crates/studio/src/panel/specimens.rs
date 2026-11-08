@@ -162,9 +162,8 @@ pub fn fit_tiles(
             );
             let k = key(("panel-fit", edit.path.as_ref(), i));
             let on = current == value;
-            super::controls::card(b, rect, b.hovered(k));
             let screen = Rect::new(rect.left, rect.top, width, picture_height);
-            super::controls::card_picture(b, rect, screen, |b, screen| {
+            super::controls::card_picture(b, screen, b.hovered(k), |b, screen| {
                 b.fill(screen, 0.0, hex(0x111114));
                 if let Some(image) = &image {
                     let native = app
@@ -188,8 +187,8 @@ pub fn fit_tiles(
             text(
                 b,
                 Rect::new(
-                    rect.left + b.px(8.0), screen.bottom + b.px(2.0),
-                    width - b.px(32.0), height(b, 29.0),
+                    rect.left, screen.bottom + b.px(2.0),
+                    width - b.px(24.0), height(b, 29.0),
                 ),
                 label,
                 12.0,
@@ -198,9 +197,9 @@ pub fn fit_tiles(
                 Align::Start,
             );
             if on {
-                super::controls::card_selection(b, rect);
+                super::controls::card_selection(b, screen);
                 b.icon(
-                    Rect::new(rect.right - b.px(24.0), screen.bottom + b.px(2.0), b.px(16.0), height(b, 29.0)),
+                    Rect::new(rect.right - b.px(16.0), screen.bottom + b.px(2.0), b.px(16.0), height(b, 29.0)),
                     crate::theme::glyph::CHECK, 12.0, b.p.ink1,
                 );
             }
