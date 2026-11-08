@@ -34,7 +34,7 @@ img{display:block;width:${size}px;height:${size}px}</style></head><body><img src
   $args = @("--headless=new", "--disable-gpu", "--hide-scrollbars", "--user-data-dir=`"$profile`"",
     "--default-background-color=00000000", "--force-device-scale-factor=1",
     "--window-size=$size,$size", "--screenshot=`"$png`"", ([Uri]$html).AbsoluteUri)
-  Start-Process -FilePath $edge -ArgumentList $args -Wait -NoNewWindow `
+  Start-Process -FilePath $edge -ArgumentList $args -Wait -WindowStyle Hidden `
     -RedirectStandardError (Join-Path $env:TEMP "glaze-logo-edge-$PID.log")
   $deadline = (Get-Date).AddSeconds(15)
   while (-not (Test-Path $png) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }
@@ -80,6 +80,8 @@ try {
   Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" |
     Where-Object { $_.CommandLine -like "*$profile*" } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-  Remove-Item $profile -Recurse -Force -ErrorAction SilentlyContinue
+  if ((Split-Path ([IO.Path]::GetFullPath($profile)) -Parent) -ne [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') -or
+      (Split-Path $profile -Leaf) -ne "glaze-logo-edge-$PID") { throw 'Invalid logo profile path' }
+  Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item (Join-Path $env:TEMP "glaze-logo-edge-$PID.log") -ErrorAction SilentlyContinue
 }

@@ -4,7 +4,7 @@
   "notice": "Eight NC selections block commercial distribution of the complete bundle. Preserve ShareAlike and all notices.",
   "new_binary_bytes": 23947981,
   "curated_binary_bytes": 23945606,
-  "curated_bytes": 24706400,
+  "curated_bytes": 24712066,
   "themes": [
     {
       "id": "charge-city",
@@ -87,8 +87,8 @@
               ],
               "mean_flow_speed": 0.20883497595787048,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             },
             {
@@ -98,8 +98,8 @@
               ],
               "mean_flow_speed": 0.0786515548825264,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             },
             {
@@ -109,12 +109,12 @@
               ],
               "mean_flow_speed": 0.11933275312185287,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             }
           ],
-          "boundary_registration_error_px_160x90": 0.0,
+          "boundary_registration_error_px_160x90": 0,
           "overlap_motion_samples_160x90": [
             {
               "frame": 42,
@@ -218,7 +218,7 @@
         "measured": {
           "id": "cozy-fireplace",
           "frames": 552,
-          "duration": 23.0,
+          "duration": 23,
           "width": 1920,
           "height": 1080,
           "fps": "24/1",
@@ -243,8 +243,8 @@
               ],
               "mean_flow_speed": 0.19515377283096313,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             },
             {
@@ -254,8 +254,8 @@
               ],
               "mean_flow_speed": 0.12245584279298782,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             },
             {
@@ -265,12 +265,12 @@
               ],
               "mean_flow_speed": 0.10707331448793411,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             }
           ],
-          "boundary_registration_error_px_160x90": 0.0,
+          "boundary_registration_error_px_160x90": 0,
           "overlap_motion_samples_160x90": [
             {
               "frame": 504,
@@ -446,7 +446,7 @@
         "measured": {
           "id": "milky-way",
           "frames": 400,
-          "duration": 16.0,
+          "duration": 16,
           "width": 1920,
           "height": 1080,
           "fps": "25/1",
@@ -498,7 +498,7 @@
               ]
             }
           ],
-          "boundary_registration_error_px_160x90": 0.0,
+          "boundary_registration_error_px_160x90": 0,
           "overlap_motion_samples_160x90": [
             {
               "frame": 350,
@@ -612,8 +612,8 @@
           "source": "https://github.com/rocksdanister/rain",
           "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size; layer gradients only where the field's smoothstep slopes.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 7637,
-          "sha256": "a5f288cb2edb34f9e47937bed2ed231c51ec0d3671406349f505eca45d3fadba"
+          "bytes": 7635,
+          "sha256": "a3b963ab1d0cf656d7aad2daa6a1e29fdef5291ae6f72f57012df9eb71651cd7"
         },
         {
           "path": "rain-city/profile.wgsl",
@@ -623,11 +623,11 @@
           "source": "https://github.com/rocksdanister/rain",
           "changes": "Theme-owned float32 Heartfelt row/column cache generated once on the selected GPU; CC BY-NC-SA adaptation.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 829,
-          "sha256": "be3394afcd2994bd206a1303a33023af92588c1c76e46f2bde99128c1004148d"
+          "bytes": 827,
+          "sha256": "475b4ec54cfbd980095db84411841128217a935266b1a1cf107841d911e0689b"
         }
       ],
-      "bytes": 935416
+      "bytes": 939506
     },
     {
       "id": "rain-city-amber",
@@ -695,8 +695,8 @@
           "source": "https://github.com/rocksdanister/rain",
           "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size; layer gradients only where the field's smoothstep slopes.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 7643,
-          "sha256": "d748f11f26a07eb525129ec4189e3ac6fdd49772a12f0fa457495b8b5085d437"
+          "bytes": 7641,
+          "sha256": "fe3413a56f399f180a1c853669e5c5848342c8eba3c300a92f269785ef39ea44"
         },
         {
           "path": "rain-city-amber/profile.wgsl",
@@ -706,11 +706,11 @@
           "source": "https://github.com/rocksdanister/rain",
           "changes": "Theme-owned float32 Heartfelt row/column cache generated once on the selected GPU; CC BY-NC-SA adaptation.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 829,
-          "sha256": "be3394afcd2994bd206a1303a33023af92588c1c76e46f2bde99128c1004148d"
+          "bytes": 827,
+          "sha256": "475b4ec54cfbd980095db84411841128217a935266b1a1cf107841d911e0689b"
         }
       ],
-      "bytes": 940437
+      "bytes": 944527
     },
     {
       "id": "rain-city-midnight",
@@ -778,8 +778,8 @@
           "source": "https://github.com/rocksdanister/rain",
           "changes": "Native WGSL image port at 30 fps and 0.65 scale, all 18 photo samples, analytic Heartfelt gradients and float32 row/column cache; original presets retained; drop-free 2x2 quads load the still frame baked once per render size; layer gradients only where the field's smoothstep slopes.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 7643,
-          "sha256": "7379f7f4010ee95724434301278de7fe3a8dca94c0f6abfd142c2bd0863f24b8"
+          "bytes": 7641,
+          "sha256": "f4dfa529563c83e8f6e315637a29a0f464ed80258d4a74dc85e19412bd1bff77"
         },
         {
           "path": "rain-city-midnight/profile.wgsl",
@@ -789,11 +789,11 @@
           "source": "https://github.com/rocksdanister/rain",
           "changes": "Theme-owned float32 Heartfelt row/column cache generated once on the selected GPU; CC BY-NC-SA adaptation.",
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
-          "bytes": 829,
-          "sha256": "be3394afcd2994bd206a1303a33023af92588c1c76e46f2bde99128c1004148d"
+          "bytes": 827,
+          "sha256": "475b4ec54cfbd980095db84411841128217a935266b1a1cf107841d911e0689b"
         }
       ],
-      "bytes": 929656
+      "bytes": 933746
     },
     {
       "id": "seascape",
@@ -981,11 +981,11 @@
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
           "source": "https://github.com/rocksdanister/snow",
           "changes": "Native WGSL/paper port with image binding, 30 fps and 0.65 scale; original photo, presets and non-commercial ShareAlike terms retained. Preserves the original 50 layers and CSS-resolution crop/density.",
-          "bytes": 2121,
-          "sha256": "12c034f7a6b44196c24a2fcd79ea86113e61be2f3727c03d13b506fc27b38bde"
+          "bytes": 2119,
+          "sha256": "660d5ee5f07b38682cf600a932b3fea29825820e66e74c2bd9c6f92cfa62baf5"
         }
       ],
-      "bytes": 919440
+      "bytes": 919438
     },
     {
       "id": "snow-forest",
@@ -1051,11 +1051,11 @@
           "license_url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
           "source": "https://github.com/rocksdanister/snow",
           "changes": "Native WGSL/paper port with image binding, 30 fps and 0.65 scale; original photo, presets and non-commercial ShareAlike terms retained. Preserves the original 50 layers and CSS-resolution crop/density.",
-          "bytes": 2121,
-          "sha256": "12c034f7a6b44196c24a2fcd79ea86113e61be2f3727c03d13b506fc27b38bde"
+          "bytes": 2119,
+          "sha256": "660d5ee5f07b38682cf600a932b3fea29825820e66e74c2bd9c6f92cfa62baf5"
         }
       ],
-      "bytes": 89822
+      "bytes": 89820
     },
     {
       "id": "snowfall",
@@ -1199,8 +1199,8 @@
               ],
               "mean_flow_speed": 0.06522379070520401,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             },
             {
@@ -1210,8 +1210,8 @@
               ],
               "mean_flow_speed": 0.04298647493124008,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             },
             {
@@ -1221,12 +1221,12 @@
               ],
               "mean_flow_speed": 0.012953896075487137,
               "registration_yx": [
-                0.0,
-                0.0
+                0,
+                0
               ]
             }
           ],
-          "boundary_registration_error_px_160x90": 0.0,
+          "boundary_registration_error_px_160x90": 0,
           "overlap_motion_samples_160x90": [
             {
               "frame": 45,
@@ -1429,8 +1429,8 @@
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
       "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
-      "bytes": 3095,
-      "sha256": "d316adfa460936d7243a74a6831fac56616535a23d88eb206d8d041869931dbb"
+      "bytes": 3083,
+      "sha256": "fc3d4b9d83f4f8daf36c10de08737f876d440de93f40db8453f58bebe003af40"
     },
     {
       "path": "examples/aurora/aurora.wgsl",
@@ -1440,8 +1440,8 @@
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
       "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
-      "bytes": 2969,
-      "sha256": "cc1c30aecff2b8b52b400e0a5ec2d8bdcb02b2bb730a1649ca0dd0f4f937ad80"
+      "bytes": 2967,
+      "sha256": "41d9980c944ef3a5378ae980e20f19d237710b9967b00940c62bb8840a2e25c2"
     },
     {
       "path": "examples/aurora/preview.jpg",
@@ -1616,8 +1616,8 @@
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
       "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
-      "bytes": 3496,
-      "sha256": "e2d35528e5682d43a95aee8f1c5141cde92067d86727694abb7c8bfddc3ce2ce"
+      "bytes": 3494,
+      "sha256": "4886ab16da1fe62936cde4c07971348e5944d0cc8ffc6c9a4b9a117483346973"
     },
     {
       "path": "examples/interactive/preview.jpg",
@@ -1793,8 +1793,8 @@
       "license_url": "https://opensource.org/license/mit/",
       "source": "../LICENSE",
       "changes": "Existing Glaze legacy/example asset preserved; moved under examples/.",
-      "bytes": 3911,
-      "sha256": "ec020a72f5d81ef7f9141ee5fc21c8490585a6a8e73912d1e21c6e4786438e41"
+      "bytes": 3909,
+      "sha256": "a6518bf05e7adc40b39897226ee4ca588b202177f231f61f74cbace6c9a2cacc"
     },
     {
       "path": "examples/webdemo/preview.jpg",
@@ -1826,8 +1826,8 @@
       "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "source": "examples/ringed-planet/generate.py",
       "changes": "Original procedural asset generated by generate.py.",
-      "bytes": 196384,
-      "sha256": "1b8f090b83d774a7ee22fafd6e19d62a9732db1054d0a31004acd3c9c9003495"
+      "bytes": 207668,
+      "sha256": "a914d8efe0c8cdd11f8506698bc08ea8763f37028499bff4ca902237ea752d38"
     },
     {
       "path": "examples/ringed-planet/generate.py",
@@ -1837,8 +1837,8 @@
       "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "source": "examples/ringed-planet/README.md",
       "changes": "Original generator for planet.glb.",
-      "bytes": 4848,
-      "sha256": "3828da9a81f349114f583084a8547fce189fd5cd3a6cfaf155675948352f1fb2"
+      "bytes": 5347,
+      "sha256": "325049a6ff472ff9aab276c372e3a2a23d68c8a15b399ff7af8045aa2167895c"
     },
     {
       "path": "examples/ringed-planet/README.md",
@@ -1848,8 +1848,8 @@
       "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "source": "../LICENSE",
       "changes": "Original sample notes.",
-      "bytes": 613,
-      "sha256": "14baa7ad1899ba8e3f7cc00343aa9cc4a42afc82bb7a50886378b8b2575bfde0"
+      "bytes": 1069,
+      "sha256": "381cbc629c0cadead1bc3f3cb174a92c50c6ec60e84ced69ea818c71f863c784"
     },
     {
       "path": "examples/ringed-planet/theme.json",

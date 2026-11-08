@@ -29,7 +29,7 @@
   frame styling are journaled and undone on quit, on the panic hotkey and
   after a crash.
 
-> Looking for the old WebView2 prototype? It's tagged [`v0.0.1`](https://github.com/Snowy7/__GLAZE_REPO__/releases/tag/v0.0.1).
+> Looking for the old WebView2 prototype? It's tagged [`v0.0.1`](https://github.com/Snowy7/glaze/releases/tag/v0.0.1).
 
 ## What's inside
 
@@ -276,6 +276,15 @@ powershell -NoProfile -File scripts/deploy-local.ps1
 Settings live in `%APPDATA%\glaze\` (`config.json`, `widgets.json`, `bars.json`,
 `integrations.json`). Every process watches them and applies changes live. Logs go to
 `%LOCALAPPDATA%\glaze\glaze.log`.
+
+Upgrading a local installation from the old `mypaper` name: stop its desktop and Studio,
+then run `powershell -NoProfile -File scripts/migrate-local.ps1` before deploying Glaze.
+The script backs up both AppData profiles under `%LOCALAPPDATA%\glaze-migration-backups`,
+moves settings, themes and caches, updates saved app paths, and copies integration credentials
+inside Windows Credential Manager. It refuses to overwrite an existing Glaze profile.
+If startup was enabled, disable it with the old core's `--autostart off` and re-enable it with
+`target\release\glaze-core.exe --autostart on` after deployment. Rebuild bundled components
+with `scripts/build-plugins.ps1` when upgrading the plugin contract.
 
 ## Make your own
 

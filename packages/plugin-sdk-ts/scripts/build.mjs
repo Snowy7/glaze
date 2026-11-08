@@ -22,7 +22,7 @@ const output = resolve(values.out);
 if (!output.endsWith('.wasm')) throw new Error('Output must end in .wasm');
 const bundle = resolve(dirname(output), '.hello-ts-build', 'plugin.js');
 await mkdir(dirname(output), { recursive: true });
-await build({ entryPoints: [resolve(positionals[0])], outfile: bundle, bundle: true, format: 'esm', platform: 'neutral', target: 'es2022', external: ['Glaze:*'] });
+await build({ entryPoints: [resolve(positionals[0])], outfile: bundle, bundle: true, format: 'esm', platform: 'neutral', target: 'es2022', external: ['glaze:*'] });
 const flags = values.backend === 'quickjs'
   ? ['--backend', 'quickjs', '--backend-qjs-disable-async', '--backend-qjs-stub-wasi']
   : ['--backend', 'starlingmonkey', '--disable', 'all'];

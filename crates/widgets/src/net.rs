@@ -1,6 +1,6 @@
 //! Origin metadata retained for settings/plugin permission compatibility.
 use std::fmt;
-pub const WIDGET_SUFFIX: &str = ".widget.Glaze";
+pub const WIDGET_SUFFIX: &str = ".widget.glaze";
 
 /// A web origin, `scheme://host[:port]`. The port is `None` when it's the
 /// scheme's default, so `https://a.b` and `https://a.b:443` compare equal.

@@ -18,7 +18,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-Source: https://github.com/Snowy7/__GLAZE_REPO__
+Source: https://github.com/Snowy7/glaze
 
 Preview photograph: separate license
 preview.jpg is adapted from "Hong Kong Skyline Restitch - Dec 2007"
