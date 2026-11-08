@@ -1,6 +1,6 @@
 //! Medium-integrity, PID-scoped desktop fixture. It never injects input or requests foreground.
 #![windows_subsystem = "windows"]
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use glaze_desktop::{
     tiling_recovery::{self, Identity},
     win_events::WinEvents,
@@ -185,7 +185,7 @@ fn run(
     }
     let mut report = serde_json::json!({"count":count,"off":off,"seconds":seconds,"cpu_ms":(after-before) as f64/10000.0,"one_core_percent":(after-before) as f64/100000.0/seconds,"private_bytes":memory.PrivateUsage,"message_wakes":wakes,"foreground_before":foreground.0 as isize});
     if cases {
-        exercise_cases(output, &mut tiler, &identities)?;
+        exercise_cases(output, &mut tiler, &identities).context("running window cases")?;
         report["window_cases"] = true.into();
     }
     if !idle {
@@ -206,7 +206,8 @@ fn run(
                     .any(|m| m.contains_point(r.x as i32, r.y as i32))
                 {
                     let i = visible.len();
-                    capture(identity, &output.join(format!("tiled-{i}.png")))?;
+                    capture(identity, &output.join(format!("tiled-{i}.png")))
+                        .with_context(|| format!("capturing {identity:?}"))?;
                     visible.push((identity, r));
                 }
             }
@@ -284,8 +285,7 @@ fn run(
                 report["restored"] = true.into();
             }
         }
-        report["animation"] =
-            serde_json::to_value(glaze_shell::tiling::animation::measurements())?;
+        report["animation"] = serde_json::to_value(glaze_shell::tiling::animation::measurements())?;
     }
     drop(tiler);
     tiling_recovery::restore_pending()?;
@@ -304,7 +304,8 @@ fn run(
 fn outer_rect(identity: Identity) -> Result<[i32; 4]> {
     let mut r = RECT::default();
     unsafe {
-        GetWindowRect(identity.window(), &mut r)?;
+        GetWindowRect(identity.window(), &mut r)
+            .with_context(|| format!("reading outer bounds of {identity:?}"))?;
     }
     Ok([r.left, r.top, r.right, r.bottom])
 }
@@ -317,7 +318,8 @@ fn verify_placements(tiler: &Tiler) -> Result<()> {
                 windows::Win32::Graphics::Dwm::DWMWA_EXTENDED_FRAME_BOUNDS,
                 (&mut actual as *mut RECT).cast(),
                 size_of::<RECT>() as u32,
-            )?;
+            )
+            .with_context(|| format!("reading placement of {identity:?}"))?;
         }
         ensure!(
             (f64::from(actual.left) - expected.x).abs() < 2.0
@@ -772,7 +774,8 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
     verify_placements(tiler.as_ref().unwrap())?;
     for id in extras {
         unsafe {
-            PostMessageW(Some(id.window()), WM_CLOSE, WPARAM(0), LPARAM(0))?;
+            PostMessageW(Some(id.window()), WM_CLOSE, WPARAM(0), LPARAM(0))
+                .with_context(|| format!("closing case {id:?}"))?;
         }
     }
     pump(tiler, Duration::from_millis(400));

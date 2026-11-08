@@ -8,12 +8,16 @@ param(
     [string]$Label = 'tiling'
 )
 $ErrorActionPreference = 'Stop'
+if (!('GlazeTilingForeground' -as [type])) {
+    Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class GlazeTilingForeground{[DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();}'
+}
 $taskTarget = 'C:\mypaper-targets\tiling\target'
 $fixture = Join-Path $taskTarget 'release\examples\glaze-tiling-fixture.exe'
 $outputDir = Join-Path 'C:\mypaper-targets\tiling\evidence' ($Label + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 $desktopLock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 if (!(Test-Path -LiteralPath $fixture)) { throw 'Build the release tiling_fixture example in the task target directory first.' }
 New-Item -ItemType Directory -Path $outputDir | Out-Null
+$foreground = [GlazeTilingForeground]::GetForegroundWindow()
 New-Item -ItemType Directory -Path $desktopLock -ErrorAction Stop | Out-Null
 $launcher = $null
 try {
@@ -41,11 +45,19 @@ try {
     Write-Output ('Evidence: ' + $outputDir)
 }
 finally {
-    # Only this run's fixture and child: never terminate the user's shell or another fixture.
-    Get-CimInstance Win32_Process -Filter "Name = 'glaze-tiling-fixture.exe'" | Where-Object {
-        $_.ExecutablePath -eq $fixture -and $_.CommandLine -and $_.CommandLine.Contains($outputDir)
-    } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-    if ($launcher -and !$launcher.HasExited) { Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue }
-    if ((Resolve-Path -LiteralPath $desktopLock).Path -ne $desktopLock) { throw 'Unexpected desktop lock path.' }
-    Remove-Item -LiteralPath $desktopLock -Force
+    try {
+        # Only this run's fixture and child: never terminate another fixture or the live shell.
+        Get-CimInstance Win32_Process -Filter "Name = 'glaze-tiling-fixture.exe'" | Where-Object {
+            $_.ExecutablePath -eq $fixture -and $_.CommandLine -and $_.CommandLine.Contains($outputDir)
+        } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        if ($launcher -and !$launcher.HasExited) { Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue }
+    }
+    finally {
+        $after = [GlazeTilingForeground]::GetForegroundWindow()
+        [ordered]@{ before = $foreground.ToInt64(); after = $after.ToInt64(); unchanged = ($foreground -eq $after) } |
+            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputDir 'foreground.json')
+        if ((Resolve-Path -LiteralPath $desktopLock).Path -ne $desktopLock) { throw 'Unexpected desktop lock path.' }
+        Remove-Item -LiteralPath $desktopLock -Force
+        if ($after -ne $foreground) { throw 'Foreground changed; this live run is rejected.' }
+    }
 }
