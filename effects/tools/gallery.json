@@ -265,7 +265,17 @@
       "time": 4
     },
     "ripple": {
-      "photo": "forest"
+      "photo": "forest",
+      "time": 1.5,
+      "mouse": [
+        0.55,
+        0.48
+      ],
+      "params": {
+        "amount": 28,
+        "frequency": 10,
+        "decay": 0.8
+      }
     },
     "sharpen": {
       "photo": "city",
