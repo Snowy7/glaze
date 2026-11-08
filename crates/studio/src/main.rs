@@ -19,6 +19,7 @@ mod images;
 mod library;
 mod look;
 mod editing;
+mod edit_mode;
 mod onboarding;
 mod panel;
 mod peek;
@@ -95,6 +96,8 @@ struct Studio {
     /// the options it is showing.
     menu: Option<glaze_ui::Menu<usize>>,
     picking: Option<Picking>,
+    /// Edit mode on the desktop, while it lasts.
+    edit: Option<edit_mode::Session>,
     /// The DWM frame last set: dark, border colour.
     frame: Option<(bool, glaze_ui::Rgba)>,
     /// The full-screen first run, while it covers the displays.
@@ -293,7 +296,41 @@ impl Studio {
             // An event may have opened or closed the live field: attach it to the window.
             self.sync_field();
             self.open_picker();
+            self.apply_edit_request();
         }
+    }
+
+    /// Enters or leaves edit mode when a page asked for it: the window becomes the docked
+    /// panel over the cleared desktop, and goes back to where it was afterwards.
+    fn apply_edit_request(&mut self) {
+        let Some(on) = self.app.panel.as_mut().and_then(|state| state.edit_request.take()) else { return };
+        if self.app.fixture || on == self.app.panel.as_ref().unwrap().editing {
+            return;
+        }
+        if on {
+            let state = self.app.panel.as_mut().unwrap();
+            // Settings pages have nothing on the desktop: start at its overview.
+            if !crate::view::has_stage(state.page) && state.page != panel::Page::Wallpapers {
+                state.page = panel::Page::Root;
+            }
+            state.windowed = false;
+            state.editing = true;
+            let bounds = panel::placement(&self.app);
+            self.edit = Some(edit_mode::Session::enter(self.surface.hwnd(), bounds));
+            panel::fit_client(&self.surface, bounds);
+        } else {
+            let state = self.app.panel.as_mut().unwrap();
+            state.windowed = true;
+            state.editing = false;
+            if let Some(session) = self.edit.take() {
+                session.exit();
+            }
+        }
+        self.app.scale = self.surface.scale();
+        self.app.input.focus = None;
+        self.frame = None;
+        self.app.dirty = true;
+        self.render();
     }
 
     /// Onboarding finished or was skipped: fade the main display out, show Studio as a normal
@@ -378,7 +415,7 @@ fn run() -> Result<()> {
         app.images.borrow_mut().set_budget(ONBOARDING_IMAGES);
         app.scale = surface.scale();
     }
-    let studio = Rc::new(RefCell::new(Studio { app, ui, surface, menu: None, picking: None, frame: None, onboarding }));
+    let studio = Rc::new(RefCell::new(Studio { app, ui, surface, menu: None, picking: None, edit: None, frame: None, onboarding }));
     {
         let mut s = studio.borrow_mut();
         s.sync_frame();
@@ -408,6 +445,10 @@ fn run() -> Result<()> {
     let result = pump(&studio, &rx);
     glaze_ui::set_modal_hook(None);
     let mut s = studio.borrow_mut();
+    // Closing mid-edit: windows come back and Studio's own place is the window's, not the panel's.
+    if let Some(session) = s.edit.take() {
+        session.exit();
+    }
     // A window closed mid-onboarding was full screen: that is no place to reopen at.
     if !panel_mode && s.onboarding.is_none() {
         remember_placement(&mut s);

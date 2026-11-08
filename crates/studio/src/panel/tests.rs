@@ -1155,3 +1155,33 @@ fn unreadable_history_cannot_be_cleared_by_an_older_reader() {
     assert_eq!(history.error.as_deref(), Some(crate::docs::NEWER));
     assert_eq!(history.entries.len(), count);
 }
+
+/// Edit mode is asked for, not entered, by pages: the window's loop does the Win32 part. While
+/// editing, Done and Esc ask to leave instead of closing Studio, and the panel shows its places.
+#[test]
+fn edit_mode_requests_and_leaves_without_quitting() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    app.panel.as_mut().unwrap().windowed = true;
+    super::run(&mut app, Command::Open(Page::Widgets));
+    super::run(&mut app, Command::EditDesktop(true));
+    assert_eq!(app.panel.as_mut().unwrap().edit_request.take(), Some(true));
+    // What the loop does once the window has become the panel.
+    let state = app.panel.as_mut().unwrap();
+    state.windowed = false;
+    state.editing = true;
+    let built = super::build(&app, &mut ui.text);
+    for place in ["Wallpaper", "Look", "Widgets", "Bars"] {
+        assert!(built.list.hits.iter().any(|hit| hit.label.as_ref() == format!("Edit: {place}")), "{place} is a place to edit");
+    }
+    super::run(&mut app, Command::Done);
+    assert!(!app.quit, "Done leaves edit mode, not Studio");
+    assert_eq!(app.panel.as_mut().unwrap().edit_request.take(), Some(false));
+    assert!(super::on_key(&mut app, 0x1B, (false, false, false)));
+    assert_eq!(app.panel.as_mut().unwrap().edit_request.take(), Some(false));
+    // A deeper page goes back first.
+    super::run(&mut app, Command::Open(Page::Widget));
+    app.nav.widget = Some("clock-1".into());
+    super::on_key(&mut app, 0x1B, (false, false, false));
+    assert_eq!(app.panel.as_ref().unwrap().edit_request, None);
+}

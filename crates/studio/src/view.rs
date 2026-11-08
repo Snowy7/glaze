@@ -145,6 +145,11 @@ pub fn has_stage(page: Page) -> bool {
     )
 }
 
+/// Pages about what's on the desktop; they offer edit mode.
+fn on_desktop(page: Page) -> bool {
+    matches!(page, Page::Root | Page::Look | Page::Widgets | Page::Widget | Page::Bars | Page::Top | Page::Dock | Page::Module | Page::BarDesign)
+}
+
 /// Pages that use the whole width: a grid with a details pane beside it.
 fn wide(page: Page) -> bool {
     page == Page::Wallpapers
@@ -995,6 +1000,13 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
         );
     }
     let page = crate::panel::current_page(app);
+    // What's on the desktop is edited on the desktop itself.
+    if on_desktop(page) {
+        let label = "Edit on desktop";
+        let w = b.measure(label, &b.font(Font::Body)).0 + b.px(28.0);
+        right -= w + b.px(10.0);
+        crate::panel::controls::button(b, Rect::new(right, y, w, b.px(28.0)), label, None, true, true, Action::Panel(Command::EditDesktop(true)));
+    }
     let status = crate::panel::save_status(app, page);
     let caption = b.font(Font::Caption);
     let sw = b.measure(status, &caption).0 + b.px(12.0);
@@ -1009,7 +1021,7 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
     b.announce(status, app.docs.version);
     let mut end = r
         .inspector
-        .map_or(right - b.px(12.0), |inspector| inspector.left - b.px(12.0));
+        .map_or(right - b.px(12.0), |inspector| inspector.left.min(right) - b.px(12.0));
     if r.stage.is_some() {
         let zoom = Rect::new(end - b.px(104.0), y, b.px(104.0), b.px(28.0));
         b.segmented(

@@ -153,6 +153,10 @@ pub struct State {
     pub window: crate::view::State,
     /// The standalone frame borrows desktop previews without panel picking or placement.
     pub windowed: bool,
+    /// Edit mode: the window became the docked panel over the cleared desktop.
+    pub editing: bool,
+    /// Asks the window's loop to enter (`true`) or leave (`false`) edit mode.
+    pub edit_request: Option<bool>,
     pub stage_actual: bool,
     pub chooser: std::cell::RefCell<choosers::State>,
     reclaim_heap: std::cell::Cell<bool>,
@@ -197,6 +201,8 @@ pub enum Command {
     SidebarSettings,
     ResizeInspector,
     Open(Page),
+    /// Enter or leave edit mode on the desktop.
+    EditDesktop(bool),
     StageZoom(bool),
     Back,
     Done,
@@ -377,7 +383,10 @@ pub fn run(app: &mut App, command: Command) {
             }
             state.history.borrow_mut().selected = None;
         }
+        // In edit mode Done goes back to the window; the docked panel closes.
+        Command::Done if app.panel.as_ref().unwrap().editing => app.panel.as_mut().unwrap().edit_request = Some(false),
         Command::Done => app.quit = true,
+        Command::EditDesktop(on) => app.panel.as_mut().unwrap().edit_request = Some(on),
         Command::Disconnect(id) => editors::disconnect(app, &id),
         Command::Connect(id) => editors::connect(app, &id),
         Command::MoveModuleTo(bar, zone) => editors::move_module(app, bar, zone),
@@ -515,6 +524,14 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
     if editors::widgets::on_key(app, vk, ctrl, shift, alt) { return true; }
     if choosers::on_key(app, vk, ctrl, shift, alt) { return true; }
     if vk == 0x1B && choosers::end(app) { app.dirty = true; return true; }
+    // Esc leaves edit mode from one of its four places; deeper pages go back first.
+    if vk == 0x1B && !ctrl && !alt && app.field.is_none() && app.panel.as_ref().is_some_and(|s| {
+        s.editing && matches!(s.page, Page::Root | Page::Wallpapers | Page::Look | Page::Widgets | Page::Bars)
+    }) {
+        app.panel.as_mut().unwrap().edit_request = Some(false);
+        app.dirty = true;
+        return true;
+    }
     if !ctrl && !alt && crate::builder::on_key(app, vk) { return true; }
     if pick_client::on_key(app, vk) {
         return true;
@@ -652,7 +669,12 @@ pub fn build(app: &App, text: &mut Text) -> Built {
     b.fill(window, 0.0, p.chrome);
     let header = Rect::new(0.0, 0.0, window.width(), b.px(48.0));
     pages::header(app, &mut b, header, page);
-    let body = content(app, &mut b, Rect::new(0.0, header.bottom, window.width(), window.height() - header.height()), page);
+    let mut top = header.bottom;
+    if app.panel.as_ref().unwrap().editing {
+        let bar = Rect::new(0.0, top, window.width(), b.px(72.0));
+        top = edit_bar(&mut b, bar, page);
+    }
+    let body = content(app, &mut b, Rect::new(0.0, top, window.width(), window.height() - top), page);
     pages::toast(app, &mut b, window);
     controls::flash_hovered_display(app, &b);
     choosers::finish(app);
@@ -665,6 +687,24 @@ pub fn build(app: &App, text: &mut Text) -> Built {
         regions: vec![header, body],
         overlay_from: if app.overlay.is_some() { 0 } else { usize::MAX },
     }
+}
+
+/// Edit mode's four places, and why Alt+Tab does nothing. Returns where the page starts.
+fn edit_bar(b: &mut crate::ui::B, r: Rect, page: Page) -> f32 {
+    const PLACES: [(Page, &str); 4] = [(Page::Wallpapers, "Wallpaper"), (Page::Look, "Look"), (Page::Widgets, "Widgets"), (Page::Bars, "Bars")];
+    let mut place = page;
+    while !PLACES.iter().any(|(p, _)| *p == place) && place != Page::Root {
+        place = place.parent().unwrap_or(Page::Root);
+    }
+    let labels: Vec<_> = PLACES.iter().map(|(_, l)| *l).collect();
+    let tabs = Rect::new(r.left + b.px(16.0), r.top + b.px(4.0), r.width() - b.px(32.0), b.px(32.0));
+    b.segmented(key("edit-places"), tabs, &labels, PLACES.iter().position(|(p, _)| *p == place), "Edit", true, |i| {
+        Action::Panel(Command::Open(PLACES[i].0))
+    });
+    let hint = Rect::new(tabs.left, tabs.bottom + b.px(6.0), tabs.width(), b.px(20.0));
+    let ink = b.p.ink3;
+    controls::text(b, hint, "Alt+Tab and the Windows key are off while you edit · Esc or Done to leave", 11.0, 400, ink, glaze_ui::controls::Align::Start);
+    r.bottom
 }
 
 pub(crate) fn current_page(app: &App) -> Page {

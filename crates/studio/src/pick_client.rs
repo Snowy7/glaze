@@ -811,7 +811,9 @@ fn connect_with(app: &App, find_shell: impl FnOnce() -> Option<HWND>) {
     let Some(panel) = app.window else { return };
     CLIENT.with(|client| {
         let mut client = client.borrow_mut();
-        if client.as_ref().is_some_and(|c| c.panel != panel) {
+        // Edit mode turns the window into the docked panel: start a session of that kind.
+        let windowed = app.panel.as_ref().unwrap().windowed;
+        if client.as_ref().is_some_and(|c| c.panel != panel || c.windowed != windowed) {
             *client = None;
         }
         if client.is_none() {
