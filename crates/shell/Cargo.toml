@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+regex = "1"
 mypaper-tiling.workspace = true
 mypaper-plugin-api = { path = "../plugin-api" }
 mypaper-plugin-sdk = { path = "../plugin-sdk" }

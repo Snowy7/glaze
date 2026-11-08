@@ -1,4 +1,5 @@
 //! Read-only admission checks and the single batched Win32 placement boundary.
+use super::rules::Rules;
 use anyhow::{Context, Result, ensure};
 use mypaper_desktop::tiling_recovery::Identity;
 use mypaper_tiling::{Rect, WindowId};
@@ -210,7 +211,7 @@ pub struct Admission {
 }
 
 /// Cheap window/style checks precede token, executable, title and DWM queries.
-pub fn admit(h: HWND, scope: &Option<HashSet<u32>>) -> Option<Admission> {
+pub fn admit(h: HWND, scope: &Option<HashSet<u32>>, rules: &Rules) -> Option<Admission> {
     // SAFETY: window/style queries tolerate a disappearing HWND.
     unsafe {
         if !IsWindow(Some(h)).as_bool()
@@ -286,7 +287,8 @@ pub fn admit(h: HWND, scope: &Option<HashSet<u32>>) -> Option<Admission> {
             }
             return None;
         }
-        if ex & WS_EX_LAYERED.0 != 0 {
+        let options = rules.resolve(&exe, &class, &title(h));
+        if options.ignore || (ex & WS_EX_LAYERED.0 != 0 && !options.layered) {
             return None;
         }
         let frame = frame(h)?;
@@ -302,7 +304,11 @@ pub fn admit(h: HWND, scope: &Option<HashSet<u32>>) -> Option<Admission> {
             identity,
             exe,
             owner,
-            floating: owner.is_some() || style & WS_THICKFRAME.0 == 0 || class == "#32770",
+            floating: !options.force
+                && (owner.is_some()
+                    || options.float
+                    || style & WS_THICKFRAME.0 == 0
+                    || class == "#32770"),
             frame,
             border: [
                 outer.x - frame.x,
