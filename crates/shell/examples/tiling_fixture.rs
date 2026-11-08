@@ -441,17 +441,33 @@ fn child(output: &Path, count: usize) -> Result<()> {
     std::fs::write(output.join("child.pid"), std::process::id().to_string())?;
     let front = unsafe { GetForegroundWindow() };
     let monitors = glaze_desktop::monitor_infos();
+    let mut front_bounds = RECT::default();
+    // Read geometry only. Visible frame bounds avoid treating an invisible maximize border
+    // on the adjacent monitor as foreground content.
+    unsafe {
+        if windows::Win32::Graphics::Dwm::DwmGetWindowAttribute(
+            front,
+            windows::Win32::Graphics::Dwm::DWMWA_EXTENDED_FRAME_BOUNDS,
+            (&mut front_bounds as *mut RECT).cast(),
+            size_of::<RECT>() as u32,
+        )
+        .is_err()
+        {
+            GetWindowRect(front, &mut front_bounds).context("reading foreground placement")?;
+        }
+    }
+    // SAFETY: cached desktop HWNDs, without messages or activation.
+    let desktop = unsafe { front == GetDesktopWindow() || front == GetShellWindow() };
     let monitor = monitors
         .iter()
         .find(|m| {
-            let mut r = RECT::default();
-            unsafe {
-                let _ = GetWindowRect(front, &mut r);
-            }
-            !m.rect.contains_point(r.left, r.top)
+            desktop
+                || !(m.rect.x < front_bounds.right
+                    && front_bounds.left < m.rect.x + m.rect.width
+                    && m.rect.y < front_bounds.bottom
+                    && front_bounds.top < m.rect.y + m.rect.height)
         })
-        .or_else(|| monitors.first())
-        .ok_or_else(|| anyhow::anyhow!("no display"))?;
+        .context("no monitor clear of foreground content; refusing the live fixture")?;
     let mut handles = Vec::new();
     unsafe {
         let class = WNDCLASSEXW {
