@@ -196,24 +196,27 @@ Each row says what we do and where the evidence is. The source notes carry the c
 - **Protected/PPL and anti-cheat processes:** skipped (LeopardWM does the same).
 - **Elevated windows:** not managed until there is an elevated design.
 
-## 5. Open checks before building
+## 5. Implementation checks (9 November 2026)
 
-From the spike's list ([animation, Recommendation 5][af5]), these have to be measured before the experimental
-flag ships:
+The original spike checks remain release gates. See [the implementation guide](../tiling.md#validation-and-limits)
+and [raw measurements](scrolling-tiling/measurements-2026-11-09.json). All live runs used only own fixture
+HWNDs at medium integrity, no input or foreground requests, private journals/data and an unchanged
+foreground check. Scoped runs did not alter Snap. No user's desktop build was replaced or stopped.
 
-1. **Display hotplug with parked windows.** Do Windows or apps pull them back, and how often?
-2. **Real apps when parked or animated:** Chrome, Edge, VS Code, Discord, Office, a UWP app, a WinUI3 app.
-   Confirm the occlusion saving in their own CPU and GPU use.
-3. **DWM's own cost** for 30 live thumbnails, sampled at the right integrity on an idle machine.
-4. **Rounded corners and shadows** for proxies: does a region-shaped host window clip thumbnails?
-   **(unverified)**
-5. **Whether an LL hook still sees keys while an elevated window is in the foreground.** filipmares/tile #140
-   suggests it doesn't **(unverified)**.
-6. **`SPI_SETWINARRANGING(FALSE)`:** does it really disable the Snap flyout and drag-to-edge for the
-   session, or does Explorer need the registry values?
+| Check | Measured evidence / remaining work |
+|---|---|
+| Display hotplug with parked windows | Pure migration/reconnect/zero-output and floating/DPI regressions pass. Physical unplug/replug and app pull-back frequency remain untested. |
+| Real Chromium/Electron, Office, UWP and WinUI3 parking | GDI fixture intake/parking/restoration and own overview capture pass. Real-client occlusion CPU/GPU savings remain unmeasured; no new claim replaces the spike evidence. |
+| 30 live thumbnails and DWM cost | Three runs each at 4/10/30 windows: update mean 1.398/1.606/2.871 ms; p95 2.356/2.592/3.948 ms. Interval p95 9.713/10.290/13.050 ms on a 200 Hz output, while DWM reports a 240 Hz primary. Shared-desktop pacing and isolated DWM/GPU attribution remain open. |
+| Rounded proxies and shadows | Own overlay regions clip/crop proxies per output, preserving source scale. Own overview/tiled captures inspected. Proxy shadows and a repaint-acknowledged fade are not implemented; client-specific corners remain unverified. No application's region is changed. |
+| LL hook with elevated foreground | Reserved bindings and hook state-machine tests pass; actual elevated-foreground key delivery remains untested. Elevated clients are filtered before admission. |
+| Session Snap suppression | `SPI_SETWINARRANGING` without `SPIF_UPDATEINIFILE`, with journal restoration, is implemented. Scoped tests deliberately skip the global change; flyout/drag-to-edge behavior remains unverified. |
+| Idle and disabled overhead | Adapter flag-on: 60.009 s, 0 CPU ms, 0 UI wakes, 2,220,032 private bytes. Flag-off: 60.005 s, 15.625 CPU ms, 0 UI wakes, 1,560,576 bytes. No whole-shell baseline/wakes A/B was taken, so flag-off equivalence with main is unproven. |
+| Native correctness and recovery | Own window admission, minima, tray/minimize, hung client, native fullscreen, topmost ordering, overview and exact disable restoration pass. A renamed hard-crash fixture/new recovery process restores four parked windows. Core-death and panic-hotkey wiring were not invoked on the owner's shell. |
 
-Each live test follows the usual rules: test windows are shown without activation, no mouse and no focus
-changes, and the tests touch only windows they created.
+Layout tests cover 38 cases, including randomized operation sequences and saved counterexamples. Full
+hardware/real-client sign-off and the performance gates above remain open. Gesture input and wallpaper
+parallax were withheld while pacing is unresolved; their incremental cost has not been measured.
 
 ## 6. Proposed phases
 
