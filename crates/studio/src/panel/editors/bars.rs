@@ -768,6 +768,12 @@ pub fn designs(app: &App, b: &mut B, c: &mut Col) {
             crate::panel::controls::display_name(app, app.nav.display)
         ),
     );
+    design_cards(app, b, c, bar);
+}
+
+/// Pictured designs for one bar (or presets for both, with `None`); a pick applies at once.
+/// Shared with onboarding.
+pub fn design_cards(app: &App, b: &mut B, c: &mut Col, bar: Option<Bar>) {
     let designs: &[(&str, &str)] = match bar {
         Some(Bar::Top) => &crate::editing::bars::TOP_DESIGNS,
         Some(Bar::Dock) => &crate::editing::bars::DOCK_DESIGNS,

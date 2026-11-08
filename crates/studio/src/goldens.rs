@@ -315,7 +315,6 @@ fn render_window_pages() {
                     (Page::Widget, "widget"),
                     (Page::Settings, "settings"),
                     (Page::History, "history"),
-                    (Page::FirstRun, "first-run"),
                     (Page::Look, "off"),
                 ] {
                     let mut app = window_app(dark, &ui, size);
@@ -366,6 +365,59 @@ fn render_window_pages() {
     }
 }
 
+/// Every full-screen onboarding step, on a large and a small display.
+#[test]
+fn render_onboarding_steps() {
+    use crate::panel::{Command, Page, first_run};
+    let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-window\shots"));
+    let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
+    let mut ui = Ui::new().unwrap();
+    for size in [(1920, 1080), (1280, 800)] {
+        for dark in [true, false] {
+            let mut app = window_app(dark, &ui, size);
+            app.run(Action::Panel(Command::Open(Page::FirstRun)));
+            for (step, name) in [
+                (first_run::WELCOME, "welcome"),
+                (first_run::TASKBAR, "taskbar"),
+                (first_run::LOOK, "look"),
+                (first_run::TOP, "top-bar"),
+                (first_run::DOCK, "dock"),
+                (first_run::WALLPAPER, "wallpaper"),
+                (first_run::EXTRAS, "extras"),
+                (first_run::DONE, "done"),
+            ] {
+                app.overlay = Some(crate::app::Overlay::FirstRun { step, starter: None, taskbar: 0 });
+                app.toast = None;
+                let image = shot(&mut app, &mut ui);
+                assert!(app.frame.targets.iter().any(|t| t.action == Action::FirstRunNext));
+                assert_eq!(
+                    app.frame.targets.iter().any(|t| t.action == Action::FirstRunSkip),
+                    step != first_run::DONE
+                );
+                let file = format!(
+                    "onboarding-{name}-{}x{}-{}.png",
+                    size.0,
+                    size.1,
+                    if dark { "dark" } else { "light" }
+                );
+                golden::write(&image, &out.join(&file)).unwrap();
+                // Large renders are for review only; one size keeps the repository small.
+                if size == (1280, 800) {
+                    check(&image, &baseline.join(&file)).unwrap();
+                }
+            }
+            // The intro part-way through, for review: the mark is in, the words are rising.
+            app.overlay = Some(crate::app::Overlay::FirstRun { step: first_run::WELCOME, starter: None, taskbar: 0 });
+            app.panel.as_mut().unwrap().intro = Some(std::time::Instant::now() - std::time::Duration::from_millis(2150));
+            let image = shot(&mut app, &mut ui);
+            golden::write(&image, &out.join(format!("onboarding-intro-{}x{}.png", size.0, size.1))).unwrap();
+            app.panel.as_mut().unwrap().intro = None;
+        }
+    }
+}
+
 /// Actual card-size pictures in both desktop schemes, without the surrounding inspector.
 #[test]
 fn render_material_signatures() {
@@ -408,11 +460,10 @@ fn render_material_signatures() {
                     130.0,
                     120.0,
                 );
-                controls::card(&mut b, card, false);
                 controls::card_picture(
                     &mut b,
-                    card,
                     Rect::new(card.left, card.top, 130.0, 82.0),
+                    false,
                     |b, rect| {
                         if row == 0 {
                             specimens::material(&app, b, rect, Style::ALL[index]);
@@ -424,7 +475,7 @@ fn render_material_signatures() {
                 let ink = b.p.ink1;
                 controls::text(
                     &mut b,
-                    Rect::new(card.left + 8.0, card.top + 86.0, 114.0, 28.0),
+                    Rect::new(card.left, card.top + 86.0, 130.0, 28.0),
                     name,
                     12.0,
                     500,

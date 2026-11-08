@@ -49,25 +49,25 @@ fn first_run_choices_are_independent_of_the_previous_choice() {
     assert_eq!(app.get(DocId::Bars, "/preset"), Some(&json!("islands")));
     assert_eq!(app.get(DocId::Bars, "/dock/enabled"), Some(&json!(true)));
     assert!(!crate::editing::widgets::layout(&app).instances.is_empty());
-    for step in 0..3 {
+    for step in 0..=super::first_run::DONE {
         app.overlay = Some(crate::app::Overlay::FirstRun {
             step,
-            starter: 2,
+            starter: Some(2),
             taskbar: 0,
         });
         let built = super::build(&app, &mut ui.text);
         assert_eq!(
             built.list.ops.iter().any(
-                |op| matches!(op, mypaper_ui::Op::Text {text,..} if text.as_ref() == "Recovery")
+                |op| matches!(op, mypaper_ui::Op::Text {text,..} if text.as_ref() == "If something goes wrong")
             ),
-            step == 2
+            step == super::first_run::DONE
         );
         assert!(
             built
                 .list
                 .hits
                 .iter()
-                .any(|hit| hit.label.as_ref() == "Skip remaining steps")
+                .any(|hit| hit.label.as_ref() == "Skip setup")
         );
     }
 }

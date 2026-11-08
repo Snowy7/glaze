@@ -282,8 +282,8 @@ fn render_chooser_review() {
         for index in 0..crate::editing::first_run::panel_starters().len() {
             let mut starter = fixture(&ui, dark, Page::FirstRun);
             starter.overlay = Some(crate::app::Overlay::FirstRun {
-                step: 1,
-                starter: 0,
+                step: super::super::first_run::LOOK,
+                starter: None,
                 taskbar: 0,
             });
             starter.panel.as_mut().unwrap().page = Page::FirstRun;
@@ -334,8 +334,8 @@ fn render_gallery_countdown_fits_and_taskbar_choices() {
         for taskbar in 0..3 {
             let mut first = fixture(&ui, dark, Page::FirstRun);
             first.overlay = Some(crate::app::Overlay::FirstRun {
-                step: 1,
-                starter: 0,
+                step: super::super::first_run::LOOK,
+                starter: None,
                 taskbar,
             });
             first.panel.as_mut().unwrap().page = Page::FirstRun;
@@ -348,8 +348,8 @@ fn render_gallery_countdown_fits_and_taskbar_choices() {
             );
             if taskbar == 0 {
                 first.overlay = Some(crate::app::Overlay::FirstRun {
-                    step: 0,
-                    starter: 0,
+                    step: super::super::first_run::TASKBAR,
+                    starter: None,
                     taskbar,
                 });
                 shot(&mut first, &mut ui, "first-run-taskbar-first", None, dark);
@@ -361,8 +361,8 @@ fn render_gallery_countdown_fits_and_taskbar_choices() {
             narrow.theme.ty.text_scale = 1.5;
             if page == Page::FirstRun {
                 narrow.overlay = Some(crate::app::Overlay::FirstRun {
-                    step: 1,
-                    starter: 0,
+                    step: super::super::first_run::LOOK,
+                    starter: None,
                     taskbar: 0,
                 });
                 narrow.panel.as_mut().unwrap().page = Page::FirstRun;

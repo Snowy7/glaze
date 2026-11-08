@@ -291,7 +291,7 @@ fn start(app: &App, b: &mut B, c: &mut Col) {
     c.y += b.px(30.0);
     let gap = b.px(10.0);
     let w = (c.w - gap) / 2.0;
-    let h = b.px(84.0);
+    let h = b.px(112.0);
     let tiles = [
         (glyph::IMAGE, "Photo", "JPG, PNG, WebP", action(Command::Pick("photo"))),
         (glyph::VIDEO, "Video", "MP4, WebM", action(Command::Pick("video"))),
@@ -301,10 +301,11 @@ fn start(app: &App, b: &mut B, c: &mut Col) {
     for (i, (icon, label, detail, act)) in tiles.into_iter().enumerate() {
         let r = Rect::new(c.x + (i % 2) as f32 * (w + gap), c.y + (i / 2) as f32 * (h + gap), w, h);
         let k = key(("builder-start", i));
-        controls::card(b, r, b.hovered(k));
-        b.icon(Rect::new(r.left + b.px(14.0), r.top + b.px(14.0), b.px(20.0), b.px(20.0)), icon, 18.0, b.p.ink1);
-        text(b, Rect::new(r.left + b.px(14.0), r.top + b.px(42.0), r.width() - b.px(20.0), b.px(20.0)), label, 13.0, 600, b.p.ink1, Align::Start);
-        small_text(b, Rect::new(r.left + b.px(14.0), r.top + b.px(60.0), r.width() - b.px(20.0), b.px(18.0)), detail, b.p.ink3);
+        // An icon in place of a picture, the label under it.
+        let pic = Rect::new(r.left, r.top, r.width(), r.height() - b.px(42.0));
+        controls::card_picture(b, pic, b.hovered(k), |b, pic| b.icon(pic, icon, 20.0, b.p.ink1));
+        text(b, Rect::new(r.left, pic.bottom + b.px(6.0), r.width(), b.px(20.0)), label, 13.0, 600, b.p.ink1, Align::Start);
+        small_text(b, Rect::new(r.left, pic.bottom + b.px(24.0), r.width(), b.px(18.0)), detail, b.p.ink3);
         b.hit(k, r, Role::Button, &format!("Start from {label}"), act, Behavior::Click);
         b.focus_ring(k, r, b.px(12.0));
     }
@@ -739,22 +740,21 @@ fn gallery(app: &App, b: &mut B, c: &mut Col) {
         let r = Rect::new(c.x + (n % 2) as f32 * (w + gap), c.y + (n / 2) as f32 * (card_h + gap), w, card_h);
         let k = effect_key(&effect.id);
         let previewing = editor.hover.as_deref() == Some(effect.id.as_str());
-        controls::card(b, r, b.hovered(k));
         // Off-screen cards ask for no pictures: the decoded cache stays a screenful.
         let visible = b.clip_rect().is_none_or(|clip| r.bottom >= clip.top && r.top <= clip.bottom);
         let pic = Rect::new(r.left, r.top, w, pic_h);
-        controls::card_picture(b, r, pic, |b, pic| {
+        controls::card_picture(b, pic, b.hovered(k), |b, pic| {
             match visible.then(|| app.images.borrow_mut().get(&effect.dir.join("preview.jpg"), (pic.width() as u32, pic.height() as u32))).flatten() {
                 Some(image) => crate::stage::image_round(b, pic, &image, 1.0, 0.0),
                 None => b.icon(pic, glyph::LAYERS, 20.0, b.p.ink3),
             }
         });
-        text(b, Rect::new(r.left + b.px(10.0), pic.bottom + b.px(6.0), w - b.px(20.0), b.px(20.0)), &effect.name, 13.0, 600, b.p.ink1, Align::Start);
-        small_text(b, Rect::new(r.left + b.px(10.0), pic.bottom + b.px(26.0), w - b.px(20.0), b.px(18.0)), if effect.animated { "Moving" } else { "Still" }, b.p.ink3);
+        text(b, Rect::new(r.left, pic.bottom + b.px(8.0), w, b.px(20.0)), &effect.name, 13.0, 600, b.p.ink1, Align::Start);
+        small_text(b, Rect::new(r.left, pic.bottom + b.px(28.0), w, b.px(18.0)), if effect.animated { "Moving" } else { "Still" }, b.p.ink3);
         b.hit(k, r, Role::Button, &format!("Add {}", effect.name), action(Command::AddEffect(effect.id.clone())), Behavior::Click);
         b.focus_ring(k, r, b.px(12.0));
         if previewing {
-            controls::card_selection(b, r);
+            controls::card_selection(b, pic);
         }
     }
     c.y += shown.len().div_ceil(2) as f32 * (card_h + gap);

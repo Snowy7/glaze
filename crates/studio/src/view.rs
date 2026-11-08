@@ -78,6 +78,9 @@ pub fn toggle_sidebar(app: &mut App) {
 }
 
 pub fn animation_deadline(app: &App) -> Option<std::time::Instant> {
+    if let Some(at) = crate::panel::first_run::deadline(app) {
+        return Some(at);
+    }
     let animation = app.panel.as_ref()?.window.sidebar.as_ref()?;
     Some(
         (std::time::Instant::now() + std::time::Duration::from_millis(16))
@@ -354,6 +357,9 @@ fn stage_pick(item: Option<&Item>) -> Action {
 
 pub fn build(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
     let page = crate::panel::prepare_page(app, &mut ui.text);
+    if page == Page::FirstRun && matches!(app.overlay, Some(Overlay::FirstRun { .. })) {
+        return onboarding(app, ui);
+    }
     let r = regions(app);
     let (host, _) = content_regions(app);
     let picture = r.stage.map(|viewport| prepare_stage(app, ui, viewport));
@@ -468,6 +474,27 @@ pub fn build(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
         chrome,
         regions: focus_regions,
         overlay_from,
+    }
+}
+
+/// First run takes the whole screen: Studio is placed over the main display (main.rs) and the
+/// onboarding draws edge to edge, always dark, like Windows' own setup.
+fn onboarding(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
+    let full = Rect::new(0.0, 0.0, app.size.0 as f32, app.size.1 as f32);
+    let p = crate::panel::tokens::palette(true);
+    let ty = app.theme.ty.clone();
+    let mut b = crate::ui::builder(&mut ui.text, &p, &ty, app.scale, &app.input);
+    crate::panel::first_run::fullscreen(app, &mut b, full);
+    crate::panel::pages::toast(app, &mut b, full);
+    crate::panel::choosers::finish(app);
+    Built {
+        list: b.list,
+        semantics: b.semantics,
+        targets: b.targets,
+        scrolls: b.scrolls,
+        chrome: Vec::new(),
+        regions: vec![full],
+        overlay_from: 0,
     }
 }
 

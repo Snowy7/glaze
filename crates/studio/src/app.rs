@@ -105,7 +105,7 @@ pub enum Overlay {
     AddWallpaper { source: Option<Source>, picked: Option<String> },
     AddWidget,
     AddModule { bar: Bar },
-    FirstRun { step: u8, starter: usize, taskbar: usize },
+    FirstRun { step: u8, starter: Option<usize>, taskbar: usize },
 }
 
 #[derive(Debug, Clone)]
@@ -204,7 +204,7 @@ impl App {
         app.system.gpus();
         if first_run_due(&app.docs) {
             app.panel.as_mut().unwrap().page = crate::panel::Page::FirstRun;
-            app.overlay = Some(Overlay::FirstRun { step: 0, starter: 0, taskbar: 0 });
+            app.overlay = Some(Overlay::FirstRun { step: 0, starter: None, taskbar: 0 });
         }
 
         app
