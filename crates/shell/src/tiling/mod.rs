@@ -661,6 +661,17 @@ impl Tiler {
                             .insert(self.current.clone(), self.make_layout());
                     }
                     if let Some(w) = self.windows.get(&window) {
+                        // A visible transient foreground after close must not discard the
+                        // remembered view. Off-view activation is still revealed immediately.
+                        if self.focus_settle.elapsed() < Duration::from_millis(500)
+                            && w.expected.is_some_and(|r| {
+                                self.displays
+                                    .iter()
+                                    .any(|m| monitor_rect(m.rect).contains(r.x, r.y))
+                            })
+                        {
+                            continue;
+                        }
                         if let Some(l) = self.layouts.get_mut(&w.desktop) {
                             l.focus(window);
                             changed = true;
