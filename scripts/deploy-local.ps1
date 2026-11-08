@@ -2,21 +2,61 @@
 # with mypaper down only for the copy (build first, elsewhere):
 #   $env:CARGO_TARGET_DIR = "C:\mypaper-targets\main"; cargo build --release --workspace
 #   powershell -NoProfile -File scripts/deploy-local.ps1 [-From C:\mypaper-targets\main\release]
-param([string]$From = "C:\mypaper-targets\main\release")
+param([string]$From = "C:\mypaper-targets\main\release", [switch]$ValidateOnly)
 $ErrorActionPreference = "Stop"
 $repo = Split-Path $PSScriptRoot -Parent
 $lock = "C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock"
 $destination = Join-Path $repo 'target\release'
 $names = "mypaper-core", "mypaper-wallpaper", "mypaper-shell", "mypaper-studio"
+function Start-DesktopCore {
+  # Deploy is often run from an elevated terminal; the desktop must stay at medium integrity.
+  Start-Process -FilePath 'runas.exe' -ArgumentList '/trustlevel:0x20000', "`"$destination\mypaper-core.exe`"" -WorkingDirectory $destination -WindowStyle Hidden
+}
 # Validate and sign before stopping a working desktop. No Rust build is started by deployment.
+function Assert-FreshBinary([string]$Name) {
+  $binary = Get-Item -LiteralPath "$From\$Name.exe"
+  $unitName = $Name.Replace('-', '_')
+  # Cargo can relink an older cached unit over release\*.exe without compiling anything.
+  # Ignore examples and test harnesses: only compare the package's actual binary units.
+  $units = @(Get-ChildItem -Path "$From\build\$Name\*\out\$unitName.exe" -File -ErrorAction SilentlyContinue)
+  $newest = $units | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+  if ($newest -and $newest.LastWriteTimeUtc -gt $binary.LastWriteTimeUtc -and
+      (Get-FileHash -LiteralPath $newest.FullName).Hash -ne (Get-FileHash -LiteralPath $binary.FullName).Hash) {
+    throw "Stale build: $($binary.FullName) predates $($newest.FullName). Rebuild $Name before deploying."
+  }
+  $depInfo = "$From\$Name.d"
+  if (-not (Test-Path -LiteralPath $depInfo)) { throw "Missing dep-info: $depInfo; rebuild $Name before deploying." }
+  # Cargo's top-level dep-info includes local transitive dependencies. Also check the newest
+  # unit's inputs, since the stale unit may not yet know about a newly added module.
+  $depFiles = @($depInfo)
+  if ($newest) { $depFiles += [IO.Path]::ChangeExtension($newest.FullName, '.d') }
+  foreach ($depFile in $depFiles | Select-Object -Unique) {
+    if (-not (Test-Path -LiteralPath $depFile)) { throw "Missing dep-info: $depFile" }
+    $inputs = (Get-Content -LiteralPath $depFile -TotalCount 1) -replace '^.*?:\s+', ''
+    foreach ($inputPath in [regex]::Split($inputs, '(?<!\\)\s+')) {
+      if (-not $inputPath) { continue }
+      $source = $inputPath.Replace('\ ', ' ')
+      if (-not [IO.Path]::IsPathRooted($source)) { $source = Join-Path $repo $source }
+      if (-not (Test-Path -LiteralPath $source) -or (Get-Item -LiteralPath $source).LastWriteTimeUtc -gt $binary.LastWriteTimeUtc) {
+        throw "Stale build: $($binary.FullName) is older than, or missing, input $source. Rebuild $Name before deploying."
+      }
+    }
+  }
+  Write-Host "Fresh build: $Name ($($binary.LastWriteTimeUtc.ToString('o')))"
+}
 foreach ($exe in $names) {
   if (-not (Test-Path -LiteralPath "$From\$exe.exe")) { throw "Missing build: $From\$exe.exe" }
 }
+foreach ($exe in $names + @('mypaper-files', 'mypaper-index', 'mypaper-plugins', 'mypaper-native-host', 'mypaper-styler', 'weather', 'rss')) {
+  if (Test-Path -LiteralPath "$From\$exe.exe") { Assert-FreshBinary $exe }
+}
+if ($ValidateOnly) { return }
 $identity = & "$PSScriptRoot\package\build.ps1" -ExternalLocation $destination
 
-# Serialize with anything else that restarts mypaper (stale after 5 minutes).
+# A long-running owner may still be live: never steal its directory based on age.
+$lockDeadline = (Get-Date).AddMinutes(2)
 while (-not (New-Item -ItemType Directory $lock -ErrorAction SilentlyContinue)) {
-  if (((Get-Date) - (Get-Item $lock).CreationTime).TotalMinutes -gt 5) { [IO.Directory]::Delete($lock); continue }
+  if ((Get-Date) -ge $lockDeadline) { throw "Desktop lock is busy: $lock" }
   Start-Sleep 5
 }
 try {
@@ -117,13 +157,13 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
     }
   }
   & "$PSScriptRoot\package\register.ps1" -PackagePath $identity -ExternalLocation $destination -Development
-  Start-Process -FilePath "$destination\mypaper-core.exe" -WorkingDirectory $destination -WindowStyle Hidden
+  Start-DesktopCore
   Start-Sleep 6
   Get-Process mypaper-* | Select-Object ProcessName, Id, @{ n = 'MB'; e = { [math]::Round($_.WorkingSet64 / 1MB) } } | Format-Table -AutoSize
 } finally {
   # A failed registration/copy must still bring back core (unpackaged snapshots remain supported).
   if (-not (Get-Process mypaper-core -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath "$destination\mypaper-core.exe")) {
-    Start-Process -FilePath "$destination\mypaper-core.exe" -WorkingDirectory $destination -WindowStyle Hidden
+    Start-DesktopCore
   }
   if ([IO.Path]::GetFullPath($lock) -ne 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock') { throw 'Invalid desktop lock path' }
   [IO.Directory]::Delete($lock)
