@@ -154,14 +154,14 @@
     "grain": {
       "photo": "city",
       "params": {
-        "amount": 0.24,
-        "size": 4
+        "amount": 0.035,
+        "size": 1.1
       },
       "detail": [
-        0.15,
-        0.05,
-        0.55,
-        0.45
+        0.24,
+        0.12,
+        0.44,
+        0.32
       ]
     },
     "halftone": {
@@ -191,7 +191,12 @@
       "time": 5
     },
     "lightning": {
-      "photo": "forest"
+      "photo": "forest",
+      "event_peak": true,
+      "params": {
+        "intensity": 0.9,
+        "sky": 0.35
+      }
     },
     "looks": {
       "photo": "city",
@@ -215,7 +220,22 @@
         0.05,
         0.86,
         0.95
-      ]
+      ],
+      "params": {
+        "amount": 0.05,
+        "depth": 2
+      },
+      "mouse": [
+        0.08,
+        0.45
+      ],
+      "motion": {
+        "mouse": [
+          0.92,
+          0.55
+        ],
+        "blend": 0.38
+      }
     },
     "pixelate": {
       "photo": "day",
@@ -271,7 +291,11 @@
     },
     "snow": {
       "photo": "forest",
-      "time": 8
+      "time": 8,
+      "params": {
+        "amount": 0.9,
+        "size": 2.3
+      }
     },
     "stars": {
       "photo": "sunrise",
@@ -293,7 +317,15 @@
         0.95,
         0.95
       ],
-      "time": 1.8
+      "time": 1.2,
+      "params": {
+        "amount": 55,
+        "anchor": 0.2
+      },
+      "motion": {
+        "time": 4.2,
+        "blend": 0.38
+      }
     },
     "tiltshift": {
       "photo": "city"
@@ -324,7 +356,15 @@
         1,
         0.965
       ],
-      "time": 42
+      "time": 16,
+      "params": {
+        "zoom": 1.22,
+        "travel": 1
+      },
+      "motion": {
+        "time": 3,
+        "blend": 0.35
+      }
     }
   }
 }

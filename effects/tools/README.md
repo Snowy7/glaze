@@ -35,9 +35,9 @@ Measurements use the integrated DX12 adapter when available: three warmup frames
 the median of 24 frames of GPU timestamps, summed over every pass at its declared scale.
 They include effect render passes; upload, readback, stack mixing and presentation are excluded.
 Only `--update-costs` writes manifests. A discrete-GPU fallback leaves `cost_estimated: true`.
-The engine agent's rain, blur, color, vignette and grain packages are validated by default.
+The engine agent's rain, blur, color and vignette packages are validated by default.
 `--missing-previews` explicitly adds any absent thumbnails, including those reference packages;
-their manifests, costs and shaders are never modified by the tool.
+their manifests, costs and shaders are never modified by the tool. Grain is owned and measured here.
 
 All library shaders are original MIT-licensed mypaper code; the package URL identifies the source.
 Each package's `CREDITS.txt` carries the MIT notice and its preview's separate photo attribution.
@@ -57,8 +57,8 @@ Bloom blurs highlights in two half-scale Gaussian passes, then composites over `
 
 `gallery.json` records a recipe for every card: source photograph, crop, representative time,
 clock hour and any showcase parameter overrides. Most cards use the effect defaults. Light
-positions are aligned to the source; Film looks demonstrates its noir option; the five engine
-effects use stronger showcase settings without changing their manifests or shaders. A `detail`
+positions are aligned to the source; Film looks demonstrates its noir option; reference
+effects use showcase settings without changing their manifests or shaders. A `detail`
 crop is taken after rendering, so fine grain and sharpening remain visible in a thumbnail.
 Each owned package retains the software license and the correct source-photo credit.
 
@@ -74,11 +74,22 @@ beside the captures, and full-resolution renders plus input photos and recipes i
 Use the city, forest and daytime captures to judge defaults separately from showcase presets.
 All captures and measurements stay offscreen and never start the live wallpaper engine.
 
-The lab's `--include-reference` explicitly includes rain, blur, color, vignette and grain for
-rendering or finite checks, while `--update-costs` still never edits those five manifests.
+The lab's `--include-reference` explicitly includes rain, blur, color and vignette for
+rendering or finite checks, while `--update-costs` still never edits those four manifests.
 `--params '{...}'` supplies showcase overrides; combining nonempty overrides with
 `--update-costs` is rejected so published costs always describe defaults. `--time <seconds>`
 pins animation time, independent of `--clock-hours`. JPEG captures use quality 95.
+
+`--mouse X,Y` supplies normalized cursor coordinates without moving the real cursor. Gallery
+recipes can provide a second `motion` frame (time and/or mouse) and blend the two real renders
+into a still double exposure. Cursor depth, Gentle wind and Slow camera drift use this to show
+displacement. Lightning uses `--event-peak`: its representative time is computed with the GPU's
+own hash, avoiding CPU/GPU floating-point differences that can miss a short flash. Event peaks
+are showcase captures and cannot be used with `--update-costs`.
+
+Snow generates three independently drifting depth planes at half resolution and composites the
+flake field over the sharp layer input. Grain's default is fine monochrome noise, with less weight
+in deep shadows and bright highlights. Both costs are measured at defaults on the integrated GPU.
 
 Clouds computes its fractal field at quarter resolution and composites over the sharp input.
 Dream glow uses two quarter-resolution Gaussian passes and a full-resolution screen blend.

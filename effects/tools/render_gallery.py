@@ -78,12 +78,36 @@ def main():
                    '--clock-hours', str(recipe.get('clock_hours', 17.5))]
         if 'time' in recipe:
             command.extend(['--time', str(recipe['time'])])
+        if 'mouse' in recipe:
+            command.extend(['--mouse', ','.join(map(str, recipe['mouse']))])
+        if recipe.get('event_peak'):
+            command.append('--event-peak')
         subprocess.run(command, cwd=ROOT, check=True)
         rendered = Image.open(folder / (effect_id + '.jpg')).convert('RGB')
+        # A still card can convey cursor/wind travel with two actual displaced frames.
+        if 'motion' in recipe:
+            first = rendered.copy()
+            motion = recipe['motion']
+            second_command = command.copy()
+            for key in ('time', 'mouse'):
+                if key not in motion:
+                    continue
+                flag = '--' + key
+                value = ','.join(map(str, motion[key])) if key == 'mouse' else str(motion[key])
+                if flag in second_command:
+                    second_command[second_command.index(flag) + 1] = value
+                else:
+                    second_command.extend([flag, value])
+            first.save(folder / 'motion-first.jpg', quality=95, subsampling=0)
+            subprocess.run(second_command, cwd=ROOT, check=True)
+            second = Image.open(folder / (effect_id + '.jpg')).convert('RGB')
+            second.save(folder / 'motion-second.jpg', quality=95, subsampling=0)
+            rendered = Image.blend(first, second, motion.get('blend', 0.38))
+            rendered.save(folder / (effect_id + '.jpg'), quality=95, subsampling=0)
         thumbnail = ImageOps.fit(crop(rendered, recipe.get('detail')), (320, 180), method=Image.Resampling.LANCZOS)
         package = ROOT / 'effects' / effect_id
         thumbnail.save(package / 'preview.jpg', quality=95, subsampling=0)
-        if effect_id not in REFERENCES:
+        if effect_id not in REFERENCES or effect_id == 'grain':
             credits_path = package / 'CREDITS.txt'
             software = credits_path.read_text().split('Preview photograph: separate license')[0]
             credits_path.write_text(software + 'Preview photograph: separate license\n'

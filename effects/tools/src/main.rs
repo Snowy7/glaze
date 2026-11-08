@@ -25,6 +25,7 @@ fn main() -> Result<()> {
     let bloom_identity = args.iter().any(|s| s == "--check-bloom-identity");
     let previews = !args.iter().any(|s| s == "--no-previews");
     let update = args.iter().any(|s| s == "--update-costs");
+    let event_peak = args.iter().any(|s| s == "--event-peak");
     let option = |name: &str, default: &str| {
         args.windows(2)
             .find(|w| w[0] == name)
@@ -33,9 +34,18 @@ fn main() -> Result<()> {
     let out = PathBuf::from(option("--out", "C:/mypaper-targets/effects-sheet"));
     let photo = PathBuf::from(option("--photo", "themes/rain-city-amber/media/city.jpg"));
     let only = option("--only", "");
+    let mouse = option("--mouse", "0.63,0.42");
+    let (mouse_x, mouse_y) = mouse.split_once(',').context("--mouse is X,Y in 0..1")?;
+    let mouse = [mouse_x.parse::<f32>()?, mouse_y.parse::<f32>()?];
+    anyhow::ensure!(
+        mouse
+            .iter()
+            .all(|v| v.is_finite() && (0.0..=1.0).contains(v)),
+        "--mouse is X,Y in 0..1"
+    );
     let values: BTreeMap<String, Value> = serde_json::from_str(&option("--params", "{}"))?;
     anyhow::ensure!(
-        !update || values.is_empty(),
+        !update || (values.is_empty() && !event_peak),
         "costs must be measured at defaults"
     );
     let lab = if rendering || finite || bloom_identity {
@@ -50,6 +60,8 @@ fn main() -> Result<()> {
                 .find(|w| w[0] == "--time")
                 .map(|w| w[1].parse())
                 .transpose()?,
+            mouse,
+            event_peak,
         )?)
     } else {
         None
@@ -76,9 +88,9 @@ fn main() -> Result<()> {
             sources.push(source);
             count += 1;
         }
-        // Reference packages get thumbnails only when explicitly requested; never edit their costs.
+        // These reference packages remain owned elsewhere; grain belongs to the effect lab.
         let id = manifest["id"].as_str().unwrap().to_owned();
-        let reference = ["rain", "blur", "color", "vignette", "grain"].contains(&id.as_str());
+        let reference = ["rain", "blur", "color", "vignette"].contains(&id.as_str());
         if reference && !missing_previews && !include_reference {
             continue;
         }
@@ -225,6 +237,8 @@ struct Lab {
     integrated: bool,
     clock_hours: f32,
     time: Option<f32>,
+    mouse: [f32; 2],
+    event_peak: bool,
 }
 
 impl Lab {
@@ -234,6 +248,8 @@ impl Lab {
         clock_hours: f32,
         different_original: bool,
         time: Option<f32>,
+        mouse: [f32; 2],
+        event_peak: bool,
     ) -> Result<Self> {
         let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
         descriptor.backends = wgpu::Backends::DX12;
@@ -373,6 +389,8 @@ impl Lab {
             integrated: info.device_type == wgpu::DeviceType::IntegratedGpu,
             clock_hours,
             time,
+            mouse,
+            event_peak,
         })
     }
 
@@ -409,11 +427,18 @@ impl Lab {
                 (f64::from(HEIGHT) * scale).round() as u32,
                 format,
             ));
+            // Compute the representative flash time with the shader's own hash. CPU/GPU
+            // floating-point contraction can shift this short flash outside a CPU-picked frame.
+            let source = if self.event_peak && id == "lightning" {
+                source.replace("paper.time", "(hash21(vec2f(0.0, 17.0)) * 0.5 * 60.0 / clamp(params.frequency, 0.5, 15.0) + 0.01)")
+            } else {
+                source.clone()
+            };
             let shader = self
                 .device
                 .create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: Some(id),
-                    source: wgpu::ShaderSource::Wgsl(source.clone().into()),
+                    source: wgpu::ShaderSource::Wgsl(source.into()),
                 });
             pipelines.push(
                 self.device
@@ -542,8 +567,8 @@ impl Lab {
                 let paper: [f32; 8] = [
                     w,
                     h,
-                    w * 0.63,
-                    h * 0.42,
+                    w * self.mouse[0],
+                    h * self.mouse[1],
                     self.time
                         .unwrap_or_else(|| capture_time(manifest, id, values, frame)),
                     f32::from_bits(frame),
