@@ -57,6 +57,11 @@ use crate::app::{App, Msg, WM_STUDIO};
 use mypaper_bars::wake as mypaper_bars_wake;
 
 const TITLE: &str = "mypaper Studio";
+/// Decoded pictures the window keeps (RAM counts as much as CPU).
+const IMAGES: usize = 2 << 20;
+/// Full-screen onboarding shows a few large pictures every animation frame: under the window's
+/// budget they evict each other and flicker. Raised only while it is on screen.
+const ONBOARDING_IMAGES: usize = 16 << 20;
 
 /// Wakes the UI thread's loop (workers post after sending a [`Msg`]).
 pub fn wake(thread: u32) {
@@ -259,6 +264,7 @@ impl Studio {
         if let Some(panel) = self.app.panel.as_mut() {
             panel.intro = None;
         }
+        self.app.images.borrow_mut().set_budget(IMAGES);
         self.frame = None;
         self.app.scale = self.surface.scale();
         self.app.dirty = true;
@@ -303,7 +309,7 @@ fn run() -> Result<()> {
     let thread = unsafe { GetCurrentThreadId() };
     let (tx, rx) = channel::<Msg>();
     let mut app = App::new(&ui.text, scale, (1280, 800));
-    app.images.borrow_mut().set_budget(2 << 20);
+    app.images.borrow_mut().set_budget(IMAGES);
     app.window = Some(surface.hwnd());
     app.inbox = Some(tx.clone());
     app.thread = thread;
@@ -327,6 +333,7 @@ fn run() -> Result<()> {
         .then(|| onboarding::Session::begin(surface.hwnd(), &app.monitors));
     if onboarding.is_some() {
         app.panel.as_mut().unwrap().intro = Some(Instant::now());
+        app.images.borrow_mut().set_budget(ONBOARDING_IMAGES);
         app.scale = surface.scale();
     }
     let studio = Rc::new(RefCell::new(Studio { app, ui, surface, menu: None, picking: None, frame: None, onboarding }));
