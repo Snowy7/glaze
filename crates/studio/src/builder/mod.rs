@@ -178,7 +178,12 @@ pub fn validate_theme(text: &str) -> Result<()> {
 }
 
 fn effects(dir: &Path) -> Vec<Effect> {
-    let mut roots = vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../effects")];
+    // Later roots win. A theme's packaged copies come first, so built-ins (and their fixes)
+    // win over old snapshots, as in the engine's `stack::effect_search`.
+    let mut roots = vec![
+        dir.join("effects"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../effects"),
+    ];
     if let Ok(exe) = std::env::current_exe()
         && let Some(parent) = exe.parent()
     {
@@ -187,7 +192,6 @@ fn effects(dir: &Path) -> Vec<Effect> {
     if let Ok(data) = std::env::var("APPDATA") {
         roots.push(PathBuf::from(data).join("mypaper/effects"));
     }
-    roots.push(dir.join("effects"));
     let mut found = std::collections::BTreeMap::new();
     for root in roots {
         for entry in std::fs::read_dir(root).into_iter().flatten().flatten() {

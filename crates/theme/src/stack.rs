@@ -699,7 +699,7 @@ fn check_effect_id(id: &str) -> Result<()> {
 }
 
 /// The shared effect folders: `%APPDATA%\mypaper\effects` (if it exists), then the bundled
-/// `effects/` beside the executable or a parent. A theme's own `effects/` comes first in
+/// `effects/` beside the executable or a parent. A theme's own `effects/` comes after them in
 /// [`locate_effect`].
 pub fn effect_roots() -> Vec<PathBuf> {
     let user = mypaper_config::dir()
@@ -715,16 +715,20 @@ pub fn effect_roots() -> Vec<PathBuf> {
     user.into_iter().chain(bundled).collect()
 }
 
-/// Resolves effect `id` for the theme in `theme_dir`: the theme's `effects/<id>`, then each of
-/// [`effect_roots`].
+/// Resolves effect `id` for the theme in `theme_dir`: each of [`effect_roots`], then the
+/// theme's `effects/<id>` ([`effect_search`]).
 pub fn locate_effect(id: &str, theme_dir: &Path) -> Result<LoadedEffect> {
     locate_effect_in(id, &effect_search(theme_dir))
 }
 
-/// Where [`locate_effect`] looks, in order.
+/// Where [`locate_effect`] looks, in order: the shared roots first, then the theme's own
+/// `effects/`. Studio packages every used effect into a saved theme so it travels when shared;
+/// those copies are only a fallback, or a snapshot would pin a theme to an effect's old bugs
+/// (a black `crt`) forever. A theme's own custom effects have ids no shared root uses.
 pub fn effect_search(theme_dir: &Path) -> Vec<PathBuf> {
-    std::iter::once(theme_dir.join("effects"))
-        .chain(effect_roots())
+    effect_roots()
+        .into_iter()
+        .chain(std::iter::once(theme_dir.join("effects")))
         .collect()
 }
 

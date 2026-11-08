@@ -70,11 +70,14 @@ use it. Any other base gives a flat depth of 1.0.
 
 An effect is a folder. The engine looks for it in three places, in this order:
 
-1. the theme's own `effects/<id>/`;
-2. `%APPDATA%\mypaper\effects\<id>/` for user effects;
-3. the built-ins, in `effects/<id>/` next to the exe (the repo's `effects/` folder).
+1. `%APPDATA%\mypaper\effects\<id>/` for user effects;
+2. the built-ins, in `effects/<id>/` next to the exe (the repo's `effects/` folder);
+3. the theme's own `effects/<id>/`.
 
-Built-in effects use exactly the same format as everyone else's.
+Built-in effects use exactly the same format as everyone else's. Studio packages every used
+effect into a saved theme so it travels when shared, but those copies are only a fallback: an
+id this install knows always runs the current effect, so a fix reaches old themes too. A
+theme's own custom effects (`custom-…`) are found in its folder.
 
 `effect.json`:
 
