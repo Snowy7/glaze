@@ -11,6 +11,15 @@ use crate::docs::Docs;
 use crate::library::Library;
 use crate::theme::Theme;
 
+fn check(image: &mypaper_ui::Image, path: &std::path::Path) -> anyhow::Result<()> {
+    // Keep Studio's documented blessing switch after the kit moved to its own repository.
+    if std::env::var_os("MYPAPER_BLESS").is_some() {
+        golden::write(image, path)
+    } else {
+        golden::check(image, path)
+    }
+}
+
 const CONFIG: &str = r##"{ "theme": "rain-city", "engine": { "gpu": "integrated", "fps": 30 } }"##;
 const BARS: &str = r##"{ "version": 1, "preset": "macos", "taskbar": { "mode": "hide" },
   "dock": { "enabled": true, "pinned": [
@@ -208,20 +217,21 @@ fn inspector_drag_is_bounded_remembered_and_does_not_edit_the_desktop() {
         screen: (0, 0),
     };
     app.event(Event::Press(pointer(left), Button::Left));
+    let initial_width = crate::view::inspector_width(&app);
     app.event(Event::Move(pointer(left - 80.0)));
-    assert_eq!(crate::view::inspector_width(&app), 420.0);
+    assert_eq!(crate::view::inspector_width(&app), initial_width + 80.0);
     app.event(Event::Release(pointer(left - 80.0), Button::Left));
     assert_eq!(
         app.get(crate::docs::DocId::Studio, crate::view::INSPECTOR_SETTING)
             .and_then(serde_json::Value::as_f64),
-        Some(420.0)
+        Some(f64::from(initial_width + 80.0))
     );
     app.panel.as_mut().unwrap().window = Default::default();
-    assert_eq!(crate::view::inspector_width(&app), 420.0);
+    assert_eq!(crate::view::inspector_width(&app), initial_width + 80.0);
     app.size = (960, 640);
     assert_eq!(
         crate::view::inspector_width(&app),
-        520.0_f32.min(960.0 - 56.0 - 360.0).min(420.0)
+        (960.0_f32 - 56.0 - 360.0).min(initial_width + 80.0)
     );
     assert_eq!(
         before,
@@ -349,7 +359,7 @@ fn render_window_pages() {
                         if dark { "dark" } else { "light" }
                     );
                     golden::write(&image, &out.join(&file)).unwrap();
-                    golden::check(&image, &baseline.join(&file)).unwrap();
+                    check(&image, &baseline.join(&file)).unwrap();
                 }
             }
         }
@@ -430,7 +440,7 @@ fn render_material_signatures() {
             if dark { "dark" } else { "light" }
         );
         golden::write(&image, &out.join(&file)).unwrap();
-        golden::check(&image, &baseline.join(&file)).unwrap();
+        check(&image, &baseline.join(&file)).unwrap();
     }
 }
 
@@ -483,8 +493,8 @@ fn window_layout_keeps_the_stage_inspector_band_and_footer_fixed() {
     let mut ui = Ui::new().unwrap();
     for (size, rail, inspector_width) in [
         ((960, 640), true, 340.0),
-        ((1280, 800), false, 340.0),
-        ((1920, 1080), false, 380.0),
+        ((1280, 800), false, 384.0),
+        ((1920, 1080), false, 576.0),
     ] {
         let mut app = window_app(true, &ui, size);
         app.run(Action::Panel(Command::Open(Page::AddWidget)));
@@ -698,7 +708,106 @@ fn render_window_interaction_states() {
                 if dark { "dark" } else { "light" }
             );
             golden::write(&image, &out.join(&file)).unwrap();
-            golden::check(&image, &baseline.join(&file)).unwrap();
+            check(&image, &baseline.join(&file)).unwrap();
         }
     }
+}
+
+#[test]
+fn stage_drag_snaps_rejects_overlap_and_undoes_as_one_change() {
+    use crate::panel::{Command, Page};
+    use mypaper_ui::{Button, Event, Point, Pointer};
+    let mut ui = Ui::new().unwrap();
+    let mut app = window_app(true, &ui, (1280, 800));
+    app.run(Action::Panel(Command::Open(Page::Widgets)));
+    shot(&mut app, &mut ui);
+    let target = app.frame.targets.iter().find(|t| t.action == Action::SelectWidget(Some("clock-1".into()))).unwrap();
+    assert!(matches!(target.behavior, mypaper_ui::controls::Behavior::Drag));
+    let origin = Point::new(target.rect.left + target.rect.width() / 2.0, target.rect.top + target.rect.height() / 2.0);
+    let (grid, scale) = app.stage.borrow().content.grid.unwrap();
+    let cell = ((grid.cell[0] + grid.gap) as f32 * scale, (grid.cell[1] + grid.gap) as f32 * scale);
+    let pointer = |dx: f32, dy: f32| Pointer { at: Point::new(origin.x + dx * cell.0, origin.y + dy * cell.1), screen: (0, 0) };
+    let before = app.docs.doc(crate::docs::DocId::Widgets).raw.clone();
+    let history_before = app.panel.as_ref().unwrap().history.borrow().entries.len();
+    app.event(Event::Press(pointer(0.0, 0.0), Button::Left));
+    app.event(Event::Move(pointer(0.0, 2.0)));
+    assert_eq!(crate::editing::widgets::layout(&app).get("clock-1").unwrap().cell, [0, 0]);
+    app.event(Event::Move(pointer(4.0, 0.0)));
+    app.event(Event::Move(pointer(5.0, 0.0)));
+    assert_eq!(crate::editing::widgets::layout(&app).get("clock-1").unwrap().cell, [5, 0]);
+    app.event(Event::Release(pointer(5.0, 0.0), Button::Left));
+    assert_eq!(app.docs.undo_count(), 1);
+    assert_eq!(app.panel.as_ref().unwrap().history.borrow().entries.len(), history_before + 1);
+    app.run(Action::Undo);
+    assert_eq!(app.docs.doc(crate::docs::DocId::Widgets).raw, before);
+}
+
+#[test]
+fn render_studio_refinements() {
+    use crate::panel::{Command, Page};
+    use crate::docs::{DocId, Op};
+    use serde_json::json;
+    let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\studio-window\shots"));
+    let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
+    let mut ui = Ui::new().unwrap();
+    for dark in [true, false] {
+        for (page, name) in [(Page::Look, "wide-sidebar"), (Page::Look, "look-color"), (Page::Bars, "bars-focused"), (Page::Connections, "connections-rows"), (Page::Widgets, "widgets-arranging"), (Page::Look, "sidebar-resizing")] {
+            let mut app = window_app(dark, &ui, (1920, 1080));
+            app.run(Action::Panel(Command::Open(page)));
+            app.apply("Sidebar width", vec![Op { doc: DocId::Studio, path: crate::view::INSPECTOR_SETTING.into(), value: Some(json!(680.0)) }]);
+            if page == Page::Connections {
+                for (id, name) in [("discord", "Discord"), ("grok", "Grok"), ("obs", "OBS Studio"), ("tailscale", "Tailscale"), ("rss", "RSS")] {
+                    app.plugins.installed.push(mypaper_widgets::manifest::PluginManifest::parse(&json!({"id":id,"name":name,"version":"1.0.0","component":"fixture.wasm","api":"0.1"}).to_string(), id).unwrap());
+                }
+            }
+            if name == "look-color" {
+                app.run(Action::Set(crate::actions::Edit::new(DocId::Config, "/look/accent", "Accent"), json!("#c88d3c")));
+                shot(&mut app, &mut ui);
+                let scroll = mypaper_ui::controls::key(("studio-panel", Page::Look));
+                app.nav.scroll.insert(scroll, 610.0);
+            }
+            if name == "sidebar-resizing" {
+                shot(&mut app, &mut ui);
+                app.panel.as_mut().unwrap().window.inspector_drag = Some(580.0);
+            }
+            if name == "widgets-arranging" {
+                use mypaper_ui::{Button, Event, Point, Pointer};
+                shot(&mut app, &mut ui);
+                let target = app.frame.targets.iter().find(|target| target.action == Action::SelectWidget(Some("clock-1".into()))).unwrap().rect;
+                let (grid, scale) = app.stage.borrow().content.grid.unwrap();
+                let pointer = |dx| Pointer { at: Point::new(target.left + target.width() / 2.0 + dx, target.top + target.height() / 2.0), screen: (0, 0) };
+                app.event(Event::Press(pointer(0.0), Button::Left));
+                app.event(Event::Move(pointer((grid.cell[0] + grid.gap) as f32 * scale * 4.0)));
+            }
+            app.toast = None;
+            let image = shot(&mut app, &mut ui);
+            let file = format!("{name}-1920x1080-{}.png", if dark { "dark" } else { "light" });
+            golden::write(&image, &out.join(&file)).unwrap();
+            check(&image, &baseline.join(&file)).unwrap();
+        }
+    }
+}
+
+#[test]
+fn dragging_onto_display_chip_transfers_and_undoes_the_layout() {
+    use crate::{panel::{Command, Page}, docs::DocId};
+    use mypaper_ui::{Button, Event, Point, Pointer};
+    let mut ui = Ui::new().unwrap();
+    let mut app = window_app(true, &ui, (1280, 800));
+    app.run(Action::Panel(Command::Open(Page::Widgets)));
+    shot(&mut app, &mut ui);
+    let before = app.docs.doc(DocId::Widgets).raw.clone();
+    let widget = app.frame.targets.iter().find(|t| t.action == Action::SelectWidget(Some("clock-1".into()))).unwrap().rect;
+    let destination = (app.nav.display + 1) % app.monitors.len();
+    let chip = app.frame.targets.iter().find(|t| t.action == Action::Panel(Command::Display(destination))).unwrap().rect;
+    let pointer = |r: mypaper_ui::Rect| Pointer { at: Point::new(r.left + r.width() / 2.0, r.top + r.height() / 2.0), screen: (0, 0) };
+    app.event(Event::Press(pointer(widget), Button::Left));
+    app.event(Event::Move(pointer(chip)));
+    app.event(Event::Release(pointer(chip), Button::Left));
+    assert_eq!(app.nav.display, destination);
+    let layout = crate::editing::widgets::layout(&app);
+    assert_eq!(layout.get("clock-1").unwrap().monitor, app.monitors[destination].device);
+    assert_eq!(app.docs.undo_count(), 1);
+    app.run(Action::Undo);
+    assert_eq!(app.docs.doc(DocId::Widgets).raw, before);
 }

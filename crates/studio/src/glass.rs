@@ -107,7 +107,7 @@ impl Glass {
     }
 
     /// The image for `request` if it's in; otherwise asks for it (once) and returns the last
-    /// answer of the same size, so a drag shows the previous glass until the new one lands.
+    /// answer, so a resize keeps the previous glass visible until the new one lands.
     pub fn image(&mut self, request: &Request) -> Option<Arc<Image>> {
         if let Some((r, image)) = &self.answer
             && r == request
@@ -123,7 +123,6 @@ impl Glass {
         }
         self.answer
             .as_ref()
-            .filter(|(r, _)| r.size == request.size)
             .map(|(_, i)| i.clone())
     }
 

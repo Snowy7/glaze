@@ -42,6 +42,11 @@ pub fn start(inbox: Sender<crate::app::Msg>, thread: u32) -> Result<Watch> {
         let mut changes = Vec::new();
         for path in &event.paths {
             if path.starts_with(&themes) {
+                // Draft previews update continuously; their editor owns output polling.
+                if path.strip_prefix(&themes).ok().and_then(|relative| relative.components().next())
+                    .is_some_and(|child| child.as_os_str().to_string_lossy().starts_with(".draft-")) {
+                    continue;
+                }
                 changes.push(Change::Themes);
             } else if let Some((id, _)) = files.iter().find(|(_, n)| Some(n.as_os_str()) == path.file_name()) {
                 changes.push(Change::Doc(*id));

@@ -1154,9 +1154,7 @@ pub(crate) fn nudge(app: &mut App, dx: i32, dy: i32, dw: i32, dh: i32) {
     } else {
         "Move widget"
     };
-    app.apply(
-        label,
-        vec![
+    let ops = vec![
             Op {
                 doc: DocId::Widgets,
                 path: format!("/instances/{n}/cell"),
@@ -1167,8 +1165,15 @@ pub(crate) fn nudge(app: &mut App, dx: i32, dy: i32, dw: i32, dh: i32) {
                 path: format!("/instances/{n}/size"),
                 value: Some(json!(size)),
             },
-        ],
-    );
+        ];
+    if matches!(app.drag, Some(Drag::Widget { .. })) {
+        match app.docs.live(&ops).and_then(|()| app.docs.preview_live(DocId::Widgets)) {
+            Ok(()) => app.dirty = true,
+            Err(error) => app.alert(format!("Could not move widget: {error:#}")),
+        }
+    } else {
+        app.apply(label, ops);
+    }
 }
 
 /// Arrows move the selected widget a cell, Shift+arrows resize it; Delete removes it.
@@ -1215,6 +1220,18 @@ pub fn drag_to(app: &mut App, drag: Drag, p: Point) {
     else {
         return;
     };
+    // The stage shows one display at a time. Drag onto a display chip to carry the widget
+    // there, keeping the transfer and subsequent cell moves in the same undo transaction.
+    if !resize && let Some(display) = app.frame.targets.iter().find_map(|target| {
+        if !target.visible.unwrap_or(target.rect).contains(p) { return None; }
+        match target.action {
+            Action::Panel(crate::panel::Command::Display(index)) if index != app.nav.display => Some(index),
+            _ => None,
+        }
+    }) {
+        transfer(app, &instance, display, p);
+        return;
+    }
     let Some((grid, scale)) = app.stage.borrow().content.grid else {
         return;
     };
@@ -1247,7 +1264,47 @@ pub fn drag_to(app: &mut App, drag: Drag, p: Point) {
     }
 }
 
+fn transfer(app: &mut App, instance: &str, display: usize, pointer: Point) {
+    let layout = layout(app);
+    let Some(index) = layout.instances.iter().position(|i| i.instance == instance) else { return };
+    let current = &layout.instances[index];
+    let Some(monitor) = app.monitors.get(display) else { return };
+    let grid = crate::stage::grid_for(&layout, monitor);
+    let Some(manifest) = app.registry.get(&current.widget).map(|widget| &widget.manifest) else { return };
+    let Some(size) = manifest.fit_size(current.size.map(f64::from), [grid.cols, grid.rows]) else { return };
+    let devices: Vec<_> = app.monitors.iter().map(|m| m.device.clone()).collect();
+    let primary = app.monitors.iter().position(|m| m.primary).unwrap_or(0);
+    let occupied: Vec<_> = layout.instances.iter().filter(|other| other.instance != instance
+        && mypaper_widgets::layout::show_on(&other.monitor, &devices, primary) == Some(monitor.device.as_str())).collect();
+    if !manifest.instances.allows(layout.instances.iter().filter(|other| other.widget == current.widget && other.instance != instance).count(), occupied.iter().filter(|other| other.widget == current.widget).count()) {
+        app.alert("This widget has reached its limit on that display");
+        return;
+    }
+    let cell = (0..=grid.rows.saturating_sub(size[1])).flat_map(|row| (0..=grid.cols.saturating_sub(size[0])).map(move |col| [col, row])).find(|cell| {
+        occupied.iter().all(|other| (0..2).any(|axis| cell[axis] + size[axis] <= other.cell[axis] || other.cell[axis] + other.size[axis] <= cell[axis]))
+    });
+    let Some(cell) = cell else { app.alert("No free cells on that display"); return };
+    let ops = [
+        Op { doc: DocId::Widgets, path: format!("/instances/{index}/monitor"), value: Some(json!(monitor.device)) },
+        Op { doc: DocId::Widgets, path: format!("/instances/{index}/cell"), value: Some(json!(cell)) },
+        Op { doc: DocId::Widgets, path: format!("/instances/{index}/size"), value: Some(json!(size)) },
+    ];
+    match app.docs.live(&ops).and_then(|()| app.docs.preview_live(DocId::Widgets)) {
+        Ok(()) => {
+            app.nav.display = display;
+            app.nav.widget = Some(instance.into());
+            if let Some(Drag::Widget { from, moved, .. }) = &mut app.drag { *from = pointer; *moved = true; }
+            app.dirty = true;
+        }
+        Err(error) => app.alert(format!("Could not move to display: {error:#}")),
+    }
+}
+
 pub fn drop_drag(app: &mut App, drag: Drag) {
+    let label = if matches!(&drag, Drag::Widget { resize: true, .. }) { "Resize widget" } else { "Move widget" };
+    if let Err(error) = app.docs.commit_live(label) {
+        app.alert(format!("Could not save widget layout: {error:#}"));
+    }
     if let Drag::Widget {
         instance,
         moved: false,

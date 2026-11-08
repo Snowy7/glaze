@@ -562,6 +562,7 @@ impl App {
         match drag {
             Drag::Inspector { from, width } => {
                 self.panel.as_mut().unwrap().window.inspector_drag = Some(width + (from - p.x) / self.scale);
+                self.dirty = true;
             }
             Drag::Slider {
                 edit,

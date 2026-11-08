@@ -707,6 +707,10 @@ fn widgets(app: &App, b: &mut B, c: &mut Col) {
         &format!("{} · {} widgets", crate::panel::controls::display_name(app, app.nav.display), items.len()),
     );
     super::controls::displays(app, b, c);
+    notice(b, c, "Drag widgets in the preview to arrange them. They snap to empty grid cells.");
+    if app.monitors.len() > 1 {
+        notice(b, c, "Drag onto a display button below the preview to move it there.");
+    }
     group(b, c, "On this display", |b, c| {
         if items.is_empty() {
             notice(b, c, "No widgets on this display yet.");

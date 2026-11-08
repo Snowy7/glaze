@@ -127,7 +127,7 @@ mod frame_cap_tests {
 }
 
 pub fn general(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "General", "mypaper and Studio");
+    page_title(app, b, c, "General", "mypaper and Studio");
     columns(
         b,
         c,
@@ -244,7 +244,7 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
 }
 
 pub fn keyboard(b: &mut B, c: &mut Col) {
-    title(
+    crate::panel::controls::title(
         b,
         c,
         "Keyboard",
@@ -339,7 +339,7 @@ pub fn keyboard(b: &mut B, c: &mut Col) {
 }
 
 pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "Troubleshoot", "Status and recovery");
+    page_title(app, b, c, "Troubleshoot", "Status and recovery");
     columns(
         b,
         c,
@@ -494,7 +494,7 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
 }
 
 pub fn about(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "About", "mypaper Studio");
+    page_title(app, b, c, "About", "mypaper Studio");
     columns(
         b,
         c,
@@ -611,7 +611,7 @@ pub fn add_menu_item(app: &mut App) {
 }
 
 pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "Desktop menu", "Right-click on bare wallpaper");
+    page_title(app, b, c, "Desktop menu", "Right-click on bare wallpaper");
     group(b, c, "", |b, c| {
         setting(app, b, c, "desktop_menu", "Use mypaper's menu", "")
     });

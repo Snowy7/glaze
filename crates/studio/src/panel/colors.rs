@@ -10,6 +10,11 @@ use mypaper_ui::controls::{Align, key};
 use mypaper_ui::{Button, Event, Point, Rect, Rgba};
 use serde_json::{Value, json};
 
+pub const HIGHLIGHTS: [[u8; 3]; 6] = [
+    [139, 158, 183], [200, 141, 60], [127, 174, 142],
+    [201, 107, 115], [147, 136, 201], [230, 230, 230],
+];
+
 pub fn swatches(
     app: &App,
     b: &mut B,
@@ -852,7 +857,7 @@ mod control_tests {
             Some(&json!("#8b9eb7")),
             true,
             false,
-            &super::super::material::SWATCHES,
+            &HIGHLIGHTS,
         );
         assert_eq!(b.targets.len(), 9);
         assert_eq!(b.list.hits[2].label.as_ref(), "Accent: Blue");

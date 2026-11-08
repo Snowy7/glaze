@@ -164,13 +164,14 @@ impl Images {
                 *used = self.clock;
                 return Some(image.clone());
             }
-            Some(Slot::Pending | Slot::Failed) => return None,
+            Some(Slot::Pending) => return self.previous_size(path),
+            Some(Slot::Failed) => return None,
             None => {}
         }
         if let Some(worker) = &self.worker {
             self.slots.insert(key.clone(), Slot::Pending);
             let _ = worker.send(Job::Decode(page, key, path.to_path_buf(), max));
-            return None;
+            return self.previous_size(path);
         }
         let decoder = match &self.sync {
             Some(decoder) => decoder,
@@ -186,6 +187,18 @@ impl Images {
             received: None,
         });
         image
+    }
+
+    /// Keep the last decoded size visible while its replacement is on the worker.
+    fn previous_size(&mut self, path: &Path) -> Option<Arc<Image>> {
+        let page = self.generation.load(std::sync::atomic::Ordering::Relaxed);
+        let prefix = format!("{page}:{}|", path.display());
+        let (_, slot) = self.slots.iter_mut()
+            .filter(|(key, slot)| key.starts_with(&prefix) && matches!(slot, Slot::Ready(..)))
+            .max_by_key(|(_, slot)| match slot { Slot::Ready(_, used, _) => *used, _ => 0 })?;
+        let Slot::Ready(image, used, _) = slot else { return None };
+        *used = self.clock;
+        Some(image.clone())
     }
 
     pub fn arrived(&mut self, loaded: Loaded) {
@@ -448,6 +461,23 @@ mod tests {
         images.begin_frame();
         assert!(images.finish_frame());
         assert_eq!(images.source_size(&visible), None);
+    }
+
+    #[test]
+    fn resizing_keeps_the_last_picture_visible_until_the_worker_replaces_it() {
+        let mut images = Images::default();
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/icon-32.png");
+        let old = images.get(&path, (16, 16)).unwrap();
+        let (tx, rx) = channel();
+        images.worker = Some(tx);
+        images.begin_frame();
+        let during = images.get(&path, (128, 128)).unwrap();
+        assert!(Arc::ptr_eq(&old, &during));
+        assert!(!images.finish_frame());
+        let Job::Decode(_, key, _, _) = rx.try_recv().unwrap() else { panic!("expected resize decode") };
+        let replacement = Arc::new(Image { width: 128, height: 128, pixels: vec![255; 128 * 128 * 4] });
+        images.arrived(Loaded { key, image: Some(replacement.clone()), source_size: Some((32, 32)), received: None });
+        assert!(Arc::ptr_eq(&replacement, &images.get(&path, (128, 128)).unwrap()));
     }
 
     #[test]

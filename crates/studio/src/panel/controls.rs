@@ -469,13 +469,37 @@ pub fn title(b: &mut B, c: &mut Col, title: &str, subtitle: &str) {
     c.y += b.px(16.0);
 }
 
+/// Keep a sub-page's return action beside its actual heading in the editor column.
+pub fn page_title(app: &App, b: &mut B, c: &mut Col, heading: &str, subtitle: &str) {
+    if app.panel.as_ref().is_some_and(|state| state.windowed) && crate::view::header_back(app) {
+        icon_button(b, Rect::new(c.x, c.y + b.px(6.0), b.px(28.0), b.px(28.0)), glyph::CHEVRON_LEFT, "Back", true, Action::Panel(super::Command::Back));
+        let mut text = Col { x: c.x + b.px(36.0), w: c.w - b.px(36.0), ..*c };
+        title(b, &mut text, heading, subtitle);
+        c.y = text.y;
+    } else {
+        title(b, c, heading, subtitle);
+    }
+}
+
 pub fn group(b: &mut B, c: &mut Col, heading: &str, content: impl FnOnce(&mut B, &mut Col)) {
+    group_heading(b, c, heading, None, content);
+}
+
+pub fn icon_group(b: &mut B, c: &mut Col, heading: &str, icon: Glyph, content: impl FnOnce(&mut B, &mut Col)) {
+    group_heading(b, c, heading, Some(icon), content);
+}
+
+fn group_heading(b: &mut B, c: &mut Col, heading: &str, icon: Option<Glyph>, content: impl FnOnce(&mut B, &mut Col)) {
     if !heading.is_empty() {
         c.y += b.px(20.0);
         let h = height(b, 20.0);
+        let inset = if let Some(icon) = icon {
+            b.icon(Rect::new(c.x, c.y, b.px(18.0), h), icon, 15.0, b.p.ink3);
+            b.px(26.0)
+        } else { 0.0 };
         text(
             b,
-            Rect::new(c.x, c.y, c.w, h),
+            Rect::new(c.x + inset, c.y, c.w - inset, h),
             heading,
             16.0,
             600,

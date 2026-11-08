@@ -27,12 +27,12 @@ fn control_group(setting: &Setting) -> &str {
 pub fn widget(app: &App, b: &mut B, c: &mut Col) {
     let layout = legacy::layout(app);
     let Some(instance) = app.nav.widget.as_deref().and_then(|id| layout.get(id)) else {
-        title(b, c, "Widget", "No longer on this display");
+        page_title(app, b, c, "Widget", "No longer on this display");
         action_button(b, c, "All widgets", open(Page::Widgets));
         return;
     };
     let Some(installed) = app.registry.get(&instance.widget) else {
-        title(b, c, &instance.widget, "Not installed");
+        page_title(app, b, c, &instance.widget, "Not installed");
         notice(
             b,
             c,
@@ -42,7 +42,7 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
         return;
     };
     let manifest = &installed.manifest;
-    title(
+    page_title(app,
         b,
         c,
         &manifest.name,
@@ -1506,7 +1506,7 @@ mod gallery_tests {
 }
 
 pub fn add(app: &App, b: &mut B, c: &mut Col) {
-    title(
+    page_title(app,
         b,
         c,
         "Add a widget",

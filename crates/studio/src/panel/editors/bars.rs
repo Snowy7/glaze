@@ -324,7 +324,7 @@ fn setting(app: &App, b: &mut B, c: &mut Col, id: &'static str, label: &str, cap
 }
 
 pub fn overview(app: &App, b: &mut B, c: &mut Col) {
-    title(
+    page_title(app,
         b,
         c,
         "Bars",
@@ -334,7 +334,7 @@ pub fn overview(app: &App, b: &mut B, c: &mut Col) {
         ),
     );
     crate::panel::controls::displays(app, b, c);
-    group(b, c, "Desktop bars", |b, c| {
+    crate::panel::controls::icon_group(b, c, "Desktop bars", glyph::BARS, |b, c| {
         for (bar, page, label) in [
             (Bar::Top, Page::Top, "Top bar"),
             (Bar::Dock, Page::Dock, "Dock"),
@@ -357,16 +357,19 @@ pub fn overview(app: &App, b: &mut B, c: &mut Col) {
                 open(page),
             );
         }
+        let mut taskbar = Col { x: c.x + b.px(28.0), w: c.w - b.px(28.0), ..*c };
+        b.icon(Rect::new(c.x, c.y, b.px(18.0), height(b, 30.0)), glyph::MONITOR, 16.0, b.p.ink3);
         crate::panel::controls::setting(
             app,
             b,
-            c,
+            &mut taskbar,
             "taskbar_mode",
             "Windows' taskbar",
             "All displays",
         );
+        c.y = taskbar.y;
     });
-    group(b, c, "Design", |b, c| {
+    crate::panel::controls::icon_group(b, c, "Design", glyph::LOOK, |b, c| {
         row(
             b,
             c,
@@ -751,7 +754,7 @@ pub fn intercept_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
 
 pub fn designs(app: &App, b: &mut B, c: &mut Col) {
     let bar = app.nav.bar;
-    title(
+    page_title(app,
         b,
         c,
         if bar.is_some() { "Design" } else { "Preset" },
@@ -825,7 +828,7 @@ pub fn bar(app: &App, b: &mut B, c: &mut Col, page: Page) {
     } else {
         Bar::Top
     };
-    title(
+    page_title(app,
         b,
         c,
         page.title(),
@@ -1052,7 +1055,7 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
     else {
         return;
     };
-    title(
+    page_title(app,
         b,
         c,
         name(id),
@@ -1328,7 +1331,7 @@ pub fn module(app: &App, b: &mut B, c: &mut Col) {
 pub fn add(app: &App, b: &mut B, c: &mut Col) {
     let bar = app.nav.bar.unwrap_or(Bar::Top);
     let document = resolved(app);
-    title(
+    page_title(app,
         b,
         c,
         "Add a module",
@@ -1569,8 +1572,8 @@ pub fn can_insert_module(app: &App, id: &str) -> bool {
             }))
 }
 
-pub fn panels(b: &mut B, c: &mut Col) {
-    title(b, c, "Panels", "The things your bars open");
+pub fn panels(app: &App, b: &mut B, c: &mut Col) {
+    page_title(app, b, c, "Panels", "The things your bars open");
     group(b, c, "", |b, c| {
         for (panel, icon, name, caption) in [
             (
@@ -1625,7 +1628,7 @@ pub fn panel(app: &App, b: &mut B, c: &mut Col) {
         Panel::Tray => ("Tray", &["tray_host"]),
         Panel::Notifications => ("Notifications", &[]),
     };
-    title(b, c, name, "A panel the bars open · All displays");
+    page_title(app, b, c, name, "A panel the bars open · All displays");
     if panel == Panel::Start {
         pinned_apps(app, b, c, Pins::Start);
     }

@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::panel::controls::{more, setting};
+use crate::panel::colors::HIGHLIGHTS as COLORS;
 
 pub(super) const STYLES: [(Style, &str, &str); 5] = [
     (Style::Liquid, "Liquid", "Clear glass, bent light"),
@@ -11,14 +12,6 @@ pub(super) const STYLES: [(Style, &str, &str); 5] = [
     (Style::Solid, "Solid", "Opaque, quiet edges"),
     (Style::Fluent, "Fluent", "Fine frost, crisp edges"),
     (Style::Mono, "Mono", "Flat tint, no blur"),
-];
-const COLORS: [[u8; 3]; 6] = [
-    [139, 158, 183],
-    [200, 141, 60],
-    [127, 174, 142],
-    [201, 107, 115],
-    [147, 136, 201],
-    [230, 230, 230],
 ];
 
 pub fn view(app: &App, b: &mut B, c: &mut Col) {
@@ -56,7 +49,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
             Action::LookReset
         },
     );
-    title(b, c, "Look", &subtitle);
+    page_title(app, b, c, "Look", &subtitle);
     if let Some(wallpaper) = wallpaper {
         let r = Rect::new(c.x, c.y + b.px(6.0), c.w, b.px(30.0));
         let wallpaper_label = format!("{}'s", wallpaper.name);
@@ -164,7 +157,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
                 app.get(DocId::Config, "/look/accent"),
                 true,
                 false,
-                &COLORS,
+                &super::super::colors::HIGHLIGHTS,
             );
         });
     });
@@ -487,7 +480,7 @@ pub fn windows(app: &App, b: &mut B, c: &mut Col) {
         true,
         Action::WindowsLook(0),
     );
-    title(b, c, "Windows", "Your Windows look");
+    page_title(app, b, c, "Windows", "Your Windows look");
     let layer = app
         .get(DocId::Config, "/look/windows")
         .cloned()

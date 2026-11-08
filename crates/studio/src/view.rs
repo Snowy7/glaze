@@ -141,12 +141,25 @@ pub fn has_stage(page: Page) -> bool {
 
 pub fn inspector_width(app: &App) -> f32 {
     // Give larger displays a useful editor without taking over the desktop preview.
-    let default = 340.0 + ((app.size.0 as f32 / app.scale - 1600.0) / 8.0).clamp(0.0, 180.0);
+    let default = (app.size.0 as f32 / app.scale * 0.30).clamp(340.0, 640.0);
     let width = app.panel.as_ref().and_then(|s| s.window.inspector_drag)
         .or_else(|| app.get(DocId::Studio, INSPECTOR_SETTING).and_then(Value::as_f64).map(|v| v as f32))
         .filter(|width| width.is_finite()).unwrap_or(default);
-    let max = (app.size.0 as f32 / app.scale - sidebar_width(app) - 360.0).clamp(300.0, 520.0);
+    let max = (app.size.0 as f32 / app.scale - sidebar_width(app) - 360.0).clamp(300.0, 720.0);
     app.px(width.clamp(300.0, max))
+}
+
+/// During frame motion reuse one stage raster; shell views and glass are rebuilt on settle.
+pub fn resizing(app: &App) -> bool {
+    app.panel.as_ref().is_some_and(|s| s.window.sidebar.is_some() || s.window.inspector_drag.is_some())
+}
+
+fn stage_show(app: &App) -> Show {
+    match crate::panel::current_page(app) {
+        Page::Bars | Page::Top | Page::Dock | Page::Module | Page::BarDesign | Page::AddModule => Show::Bars,
+        Page::Widgets | Page::Widget | Page::AddWidget => Show::Widgets,
+        _ => Show::Desktop,
+    }
 }
 
 pub fn regions(app: &App) -> Regions {
@@ -217,7 +230,11 @@ pub struct Built {
 /// Prepare at the display's scale for 100%, or at the fitted picture's scale for Fit.
 fn prepare_stage(app: &App, ui: &mut mypaper_ui::Ui, viewport: Rect) -> Rect {
     let actual = app.panel.as_ref().unwrap().stage_actual;
-    let mut frame = if actual {
+    let show = stage_show(app);
+    let mut frame = if show == Show::Bars && !actual {
+        let height = app.px(280.0).min(viewport.height() - app.px(48.0));
+        Rect::new(viewport.left, viewport.top + (viewport.height() - height - app.px(48.0)) / 2.0, viewport.width(), height)
+    } else if actual {
         let (w, h) = app.display().map_or((1280.0, 720.0), |m| {
             let dpi = m.dpi as f32 / 96.0;
             (m.rect.width as f32 / dpi, m.rect.height as f32 / dpi)
@@ -233,11 +250,25 @@ fn prepare_stage(app: &App, ui: &mut mypaper_ui::Ui, viewport: Rect) -> Rect {
         );
         crate::stage::frame(app, available)
     };
+    if resizing(app) && app.stage.borrow().content.size.0 > 0 {
+        if app.stage.borrow().picture.is_none() {
+            let size = app.stage.borrow().content.size;
+            let p = crate::panel::palette_for(app);
+            let mut b = crate::ui::builder(&mut ui.text, &p, &app.theme.ty, app.scale, &app.input);
+            crate::stage::draw(app, &mut b, Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32), show, |_| Action::None);
+            let list = b.list;
+            if let Ok(image) = mypaper_ui::render(ui, &list, size.0, size.1) {
+                app.stage.borrow_mut().picture = Some(std::sync::Arc::new(image));
+            }
+        }
+        return frame;
+    }
+    app.stage.borrow_mut().picture = None;
     crate::stage::prepare(
         app,
         ui,
         (frame.width() as u32, frame.height() as u32),
-        Show::Desktop,
+        show,
     );
     if actual {
         let cache = app.stage.borrow();
@@ -300,7 +331,7 @@ fn stage_controls(app: &App, b: &mut B, picture: Rect, viewport: Rect) {
 fn selected(app: &App, what: &What) -> bool {
     let page = crate::panel::current_page(app);
     match what {
-        What::Widget(id) => page == Page::Widget && app.nav.widget.as_ref() == Some(id),
+        What::Widget(id) => (page == Page::Widget || matches!(&app.drag, Some(crate::app::Drag::Widget { instance, .. }) if instance == id)) && app.nav.widget.as_ref() == Some(id),
         What::Module(slot) => page == Page::Module && app.nav.module.as_ref() == Some(slot),
         What::Bar(bar) => {
             matches!(page, Page::Top | Page::Dock | Page::BarDesign) && app.nav.bar == Some(*bar)
@@ -377,7 +408,7 @@ pub fn build(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
                 stage_menu(app, b, viewport);
                 return viewport.bottom;
             }
-            let items = crate::stage::draw(app, b, picture, Show::Desktop, stage_pick);
+            let items = crate::stage::draw(app, b, picture, stage_show(app), stage_pick);
             for item in items.iter().filter(|item| selected(app, &item.what)) {
                 crate::stage::outline(b, item.rect, item.radius, false);
             }
@@ -833,6 +864,11 @@ fn page_title(app: &App, page: Page) -> String {
     window_title(page).to_owned()
 }
 
+pub fn header_back(app: &App) -> bool {
+    let page = crate::panel::current_page(app);
+    !PLACES.contains(&page) && !SETTINGS.contains(&page) && page != Page::Settings
+}
+
 fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) {
     let p = *b.p;
     let bar = r.bar;
@@ -934,18 +970,6 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
     b.focus_ring(k, toggle, b.px(radius::CONTROL));
     x += b.px(36.0);
     let top_level = PLACES.contains(&page) || SETTINGS.contains(&page) || page == Page::Settings;
-    if !top_level {
-        b.icon_button(
-            key("window-back"),
-            Rect::new(x, y, b.px(28.0), b.px(28.0)),
-            glyph::CHEVRON_LEFT,
-            "Back",
-            false,
-            true,
-            Action::Panel(Command::Back),
-        );
-        x += b.px(32.0);
-    }
     let mut crumbs = vec![page];
     let mut next = parent(app, page);
     while let Some(level) = next.filter(|level| *level != Page::Root) {
@@ -955,6 +979,10 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
     crumbs.reverse();
     for (index, level) in crumbs.iter().enumerate() {
         let current = index + 1 == crumbs.len();
+        if current && !top_level && matches!(page, Page::Create | Page::Effects | Page::Shader | Page::FirstRun) {
+            b.icon_button(key("window-back"), Rect::new(x, y, b.px(28.0), b.px(28.0)), glyph::CHEVRON_LEFT, "Back", false, true, Action::Panel(Command::Back));
+            x += b.px(32.0);
+        }
         let title = page_title(app, *level);
         let font = b.font(if current { Font::Strong } else { Font::Caption });
         let width = (b.measure(&title, &font).0 + b.px(12.0)).min((end - x).max(0.0));
@@ -1205,6 +1233,28 @@ fn stage_menu(app: &App, b: &mut B, picture: Rect) {
 #[cfg(test)]
 mod layout_tests {
     use super::*;
+
+    #[test]
+    fn sidebar_motion_reuses_one_stage_picture_until_settled() {
+        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::window_app(true, &ui, (1280, 800));
+        build(&app, &mut ui);
+        let size = app.stage.borrow().content.size;
+        app.panel.as_mut().unwrap().window.sidebar = Some(Transition {
+            start: std::time::Instant::now(), from: 208.0, to: 56.0,
+        });
+        build(&app, &mut ui);
+        let picture = app.stage.borrow().picture.clone().unwrap();
+        for _ in 0..8 {
+            let built = build(&app, &mut ui);
+            assert_eq!(app.stage.borrow().content.size, size);
+            assert!(std::sync::Arc::ptr_eq(&picture, app.stage.borrow().picture.as_ref().unwrap()));
+            assert!(built.list.ops.iter().any(|op| matches!(op, mypaper_ui::Op::RoundedImage { image, .. } if std::sync::Arc::ptr_eq(&picture, image))));
+        }
+        app.panel.as_mut().unwrap().window.sidebar = None;
+        build(&app, &mut ui);
+        assert!(app.stage.borrow().picture.is_none());
+    }
 
     #[test]
     fn settings_grow_and_groups_reflow_without_horizontal_overflow() {

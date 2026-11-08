@@ -71,6 +71,7 @@ pub struct Cache {
     /// Glass requests contain geometry, so a wallpaper edit must also invalidate their answer.
     wallpaper_version: u64,
     pub content: Content,
+    pub picture: Option<Arc<Image>>,
     images: Option<shell::bars::Images>,
     /// The shell's app-icon service (names and icons of pinned apps), started on first use.
     icons: Option<(mypaper_bars::icons::Icons, std::sync::mpsc::Receiver<mypaper_bars::wake::Msg>)>,
@@ -82,6 +83,7 @@ impl Cache {
     pub(crate) fn clear_pictures(&mut self) {
         self.key = 0;
         self.content = Content::default();
+        self.picture = None;
         self.images = None;
     }
 
@@ -147,8 +149,11 @@ pub fn prepare(app: &App, ui: &mut Ui, size: (u32, u32), show: Show) {
     }
     let key = h.finish();
     let mut cache = app.stage.borrow_mut();
-    if cache.wallpaper_version != app.docs.version {
-        cache.wallpaper_version = app.docs.version;
+    let mut wallpaper = std::collections::hash_map::DefaultHasher::new();
+    app.docs.doc(DocId::Config).raw.to_string().hash(&mut wallpaper);
+    let wallpaper_version = wallpaper.finish();
+    if cache.wallpaper_version != wallpaper_version {
+        cache.wallpaper_version = wallpaper_version;
         app.glass.borrow_mut().answer = None;
     }
     if cache.key == key && cache.content.size == size {
@@ -708,6 +713,10 @@ pub fn stand_in(b: &mut B, shapes: &[Shape], dx: f32, dy: f32) {
 /// says what clicking an item does (and `None` for the bare wallpaper).
 pub fn draw(app: &App, b: &mut B, frame: Rect, show: Show, pick: impl Fn(Option<&Item>) -> Action) -> Vec<Item> {
     let p = *b.p;
+    if crate::view::resizing(app) && let Some(image) = &app.stage.borrow().picture {
+        b.list.ops.push(Op::RoundedImage { rect: frame, image: image.clone(), opacity: 1.0, source: None, radius: b.px(12.0) });
+        return Vec::new();
+    }
     let cache = app.stage.borrow();
     let c = &cache.content;
     let size = (frame.width() as u32, frame.height() as u32);
@@ -741,6 +750,16 @@ pub fn draw(app: &App, b: &mut B, frame: Rect, show: Show, pick: impl Fn(Option<
         stand_in(b, &c.shapes, frame.left, frame.top);
     }
     b.list.ops.extend(offset(&c.ops, frame.left, frame.top));
+    if show == Show::Widgets && matches!(app.drag, Some(crate::app::Drag::Widget { .. }))
+        && let Some((grid, scale)) = c.grid {
+        for row in 0..grid.rows {
+            for col in 0..grid.cols {
+                let cell = grid.rect([col, row], [1, 1]);
+                let dot = Rect::new(frame.left + cell.x as f32 * scale, frame.top + cell.y as f32 * scale, 2.0, 2.0);
+                b.fill(dot, 1.0, Rgba::new(1.0, 1.0, 1.0, 0.25));
+            }
+        }
+    }
     // Mask only the rounded corners. An inset stroke also erases the top bar's text.
     round_crop(b, if cropped { b.clip_rect().unwrap_or(frame) } else { frame }, r, p.bg);
     // Items: the bare wallpaper first (so items win), then each.

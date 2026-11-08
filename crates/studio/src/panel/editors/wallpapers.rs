@@ -68,7 +68,7 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
         true,
         Action::AddWallpaper,
     );
-    title(b, c, "Wallpapers", "");
+    page_title(app, b, c, "Wallpapers", "");
     let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(30.0));
     let stacked = c.w < b.px(360.0) || b.t.text_scale > 1.0;
     let filter_w = if stacked {
@@ -352,11 +352,11 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
         .or_else(|| app.library.active())
         .filter(|&i| i < app.library.items.len())
     else {
-        title(b, c, "Wallpaper", "No wallpaper selected");
+        page_title(app, b, c, "Wallpaper", "No wallpaper selected");
         return;
     };
     let w = &app.library.items[i];
-    title(
+    page_title(app,
         b,
         c,
         &w.name,
@@ -575,7 +575,7 @@ const FITS: [(&str, &str); 4] = [
 ];
 
 pub fn add(app: &App, b: &mut B, c: &mut Col) {
-    title(
+    page_title(app,
         b,
         c,
         "Add a wallpaper",

@@ -23,7 +23,7 @@ use mypaper_ui::{Rect, Role};
 use mypaper_widgets::layout::{Instance, Layout};
 use serde_json::Value;
 
-use super::controls::{button, group, height, notice, row, text, title};
+use super::controls::{button, group, height, notice, row, text, page_title};
 use super::{Command, Page};
 use crate::actions::{Action, Choices, Edit, FieldId};
 use crate::app::App;
@@ -119,7 +119,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::BarDesign => bars::designs(app, b, c),
         Page::Module => bars::module(app, b, c),
         Page::AddModule => bars::add(app, b, c),
-        Page::Panels => bars::panels(b, c),
+        Page::Panels => bars::panels(app, b, c),
         Page::BarPanel => bars::panel(app, b, c),
         Page::FirstRun => super::first_run::view(app, b, c),
         _ => {}
@@ -546,7 +546,7 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
 }
 
 fn history(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "History", "Preview on every display");
+    page_title(app, b, c, "History", "Preview on every display");
     if super::history::partial_preview(app) {
         notice(b, c, "Partial preview · wallpaper unchanged");
     }
@@ -681,7 +681,7 @@ fn desktop_preview(
 }
 
 fn search(app: &App, b: &mut B, c: &mut Col) {
-    title(
+    page_title(app,
         b,
         c,
         "Search",

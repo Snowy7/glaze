@@ -71,7 +71,7 @@ pub fn summary(app: &App) -> String {
 }
 
 pub fn list(app: &App, b: &mut B, c: &mut Col) {
-    title(b, c, "Connections", "Your apps and built-in data sources");
+    page_title(app, b, c, "Connections", "Your apps and built-in data sources");
     for name in ["Connected", "Built in", "Available"] {
         let members = members(app, name);
         if members.is_empty() {
@@ -153,7 +153,7 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
         .and_then(|i| app.plugins.installed.get(i))
     {
         let status = plugin_status(app, &plugin.id);
-        title(b, c, &plugin.name, status);
+        page_title(app, b, c, &plugin.name, status);
         crate::panel::controls::displays(app, b, c);
         let disabled = app.plugins.preferences.disabled.contains(&plugin.id);
         let needs_attention = status.starts_with("Stopped") || status.starts_with("Restarting");
@@ -325,7 +325,7 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
         return;
     };
     let on = legacy::enabled(app, item);
-    title(
+    page_title(app,
         b,
         c,
         item.name,
