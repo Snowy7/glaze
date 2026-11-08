@@ -15,6 +15,7 @@ Back to the [project README](../README.md).
 | [windows-styling.md](windows-styling.md) | One-switch native style sync, reversible Windows frames/accent/mode, and the experimental App styler's presets and current limits |
 | [system.md](system.md) | Reversible Windows preferences and games: background quiescence, pause during games, and `engine.during_games` |
 | [index.md](index.md) | Experimental native name/path search and folder sizes: `experimental.file_index`, `index.exclude` / `index.include`, measurements and limits |
+| [tiling.md](tiling.md) | Opt-in scrolling columns, workspaces, overview, keys, compatibility rules, recovery and validation limits |
 | [files.md](files.md) | Glaze Files: native tabs, previews, search and file operations; optional folder/Win+E routing with `experimental.files_default` |
 | [web-and-app-wallpapers.md](web-and-app-wallpapers.md) | `web` (WebView2) and `app` (external renderer) wallpapers |
 | [studio-ux.md](studio-ux.md) | Studio: places, navigation, saving and undo, previews, keyboard, cost, code map |
