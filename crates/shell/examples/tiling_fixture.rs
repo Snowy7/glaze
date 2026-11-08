@@ -772,13 +772,22 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
         .command(Op::MoveWorkspace(Direction::Up));
     pump(tiler, Duration::from_millis(400));
     verify_placements(tiler.as_ref().unwrap())?;
-    for id in extras {
+    for id in &extras {
         unsafe {
             PostMessageW(Some(id.window()), WM_CLOSE, WPARAM(0), LPARAM(0))
                 .with_context(|| format!("closing case {id:?}"))?;
         }
     }
     pump(tiler, Duration::from_millis(400));
+    ensure!(
+        tiler
+            .as_ref()
+            .unwrap()
+            .placements()
+            .iter()
+            .all(|(id, _)| !extras.contains(id)),
+        "destroyed case windows remained in the PID-scoped tiler"
+    );
     Ok(())
 }
 fn capture(identity: Identity, path: &Path) -> Result<()> {

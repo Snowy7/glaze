@@ -3,8 +3,8 @@ pub mod animation;
 pub(crate) mod indicator;
 mod learned;
 mod overview;
-mod platform;
 mod parking;
+mod platform;
 use parking::{bounds, monitor_rect, park};
 mod rules;
 use anyhow::Result;
@@ -143,6 +143,9 @@ impl Tiler {
         let subscription = Subscription::new(move |event| {
             let mut q = events.lock().unwrap();
             if event_scope.is_some()
+                // A destroyed HWND no longer reports its PID. Admission already established
+                // this window's scope; dropping its destroy event would retain a dead tile.
+                && !(event.event == EVENT_OBJECT_DESTROY && q.known.contains(&event.window))
                 && !platform::allowed(hwnd(WindowId(event.window as u64)), &event_scope)
             {
                 return;
