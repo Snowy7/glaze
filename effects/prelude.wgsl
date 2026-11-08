@@ -13,7 +13,8 @@ struct Paper {
     mouse: vec2f,      // cursor position in pixels (same space as frag)
     time: f32,         // seconds; stops while the wallpaper is hidden
     frame: u32,
-    _pad: vec2f,
+    clock_hours: f32,  // local wall-clock hour, 0..24 (fractional), read each frame
+    _pad: f32,
 }
 
 // Immediate data (DX12 root constants): set in the draw itself, so a frame uploads no buffer.

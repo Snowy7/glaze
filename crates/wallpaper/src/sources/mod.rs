@@ -13,6 +13,7 @@ mod scene;
 pub mod shader;
 mod slideshow;
 mod stack;
+pub mod stack_preview;
 mod video;
 mod web;
 mod wic;

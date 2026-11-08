@@ -525,6 +525,30 @@ fn wic_factory() -> Result<IWICImagingFactory> {
         .context("creating the WIC imaging factory")
 }
 
+/// Writes tightly packed BGRA as a JPEG at `path`, atomically (Studio's `--preview` child).
+pub(crate) fn save_jpeg(
+    gpu: &crate::gpu::Gpu,
+    size: (u32, u32),
+    bgra: &[u8],
+    path: &Path,
+) -> Result<()> {
+    let readback = Readback {
+        timing: None,
+        device: gpu.device.clone(),
+        // Unused by the encoder: the pixels are already on the CPU.
+        buffer: gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("preview"),
+            size: 4,
+            usage: wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        }),
+        size,
+        row_bytes: size.0 as usize * 4,
+        bgra: true,
+    };
+    write_jpeg(&wic_factory()?, &readback, bgra, path)
+}
+
 /// Encodes `data` (the readback's mapped pixels) as a JPEG at `path`: written next to it first,
 /// then renamed over it, so a reader never sees half a file.
 fn write_jpeg(

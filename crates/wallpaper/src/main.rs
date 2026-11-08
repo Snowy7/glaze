@@ -59,7 +59,8 @@ use crate::hold::Fact;
 use crate::trim::Trimmer;
 use crate::window::{CONTROL_CLASS, WM_CONFIG, WM_FACT, WM_RELOAD, Waiter, Window};
 
-const USAGE: &str = "usage: mypaper-wallpaper [--windowed] [--parent PID] [THEME]";
+const USAGE: &str = "usage: mypaper-wallpaper [--windowed] [--parent PID] [THEME]
+       mypaper-wallpaper --preview DIR --out FILE.jpg [--size WxH] [--fps N]";
 
 struct Args {
     windowed: bool,
@@ -75,6 +76,21 @@ fn main() -> ExitCode {
     mypaper_desktop::quit_on_ctrl_c();
     #[cfg(feature = "hotpatch")]
     connect_hotpatch();
+
+    // Studio's draft preview: a headless child, no desktop (sources/stack_preview.rs).
+    let mut raw = std::env::args().skip(1);
+    if raw.next().as_deref() == Some("--preview") {
+        let preview = raw
+            .next()
+            .context("--preview needs a theme folder")
+            .and_then(|dir| sources::stack_preview::PreviewArgs::parse(dir, &mut raw))
+            .and_then(sources::stack_preview::run);
+        if let Err(e) = preview {
+            log::error!("{e:#}");
+            return ExitCode::from(EXIT_CONFIG);
+        }
+        return ExitCode::SUCCESS;
+    }
 
     // Bad arguments, config or theme will not fix themselves: exit with
     // EXIT_CONFIG so the supervisor reports it instead of restarting.

@@ -33,7 +33,8 @@ struct Paper {
     mouse: [f32; 2],
     time: f32,
     frame: u32,
-    _pad: [f32; 2],
+    clock_hours: f32,
+    _pad: f32,
 }
 
 /// Immediate data of the compose pass (`COMPOSE`): 32 bytes, the device's immediate limit.
@@ -549,6 +550,7 @@ impl StackSource {
         let full = [0.0, 0.0, 1.0, 1.0];
         match &mut self.layers[index] {
             LayerDraw::Effect(effect) => {
+                let hours = clock_hours();
                 let mut src = input.clone();
                 let last = effect.passes.len() - 1;
                 let direct =
@@ -584,7 +586,8 @@ impl StackSource {
                         mouse: [frame.mouse[0] * k, frame.mouse[1] * k],
                         time: frame.clock.as_secs_f32(),
                         frame: frame.frame,
-                        _pad: [0.0; 2],
+                        clock_hours: hours,
+                        _pad: 0.0,
                     };
                     let mut pass = begin(
                         frame.encoder,
@@ -717,6 +720,13 @@ impl StackSource {
         pass.set_bind_group(0, &group, &[]);
         pass.draw(0..3, 0..1);
     }
+}
+
+/// The local wall-clock hour, 0..24, for `paper.clock_hours`.
+fn clock_hours() -> f32 {
+    // SAFETY: no preconditions.
+    let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+    f32::from(t.wHour) + f32::from(t.wMinute) / 60.0 + f32::from(t.wSecond) / 3600.0
 }
 
 fn entry(binding: u32, resource: wgpu::BindingResource<'_>) -> wgpu::BindGroupEntry<'_> {
