@@ -55,6 +55,8 @@ pub struct Change {
     pub identity: Identity,
     pub from: Rect,
     pub to: Rect,
+    /// The proxy is cropped to its owning output, independently of the global parking rectangle.
+    pub clip: Rect,
     pub border: [f64; 4],
     pub visible: bool,
     pub dpi_changed: bool,
@@ -270,6 +272,33 @@ fn lerp(a: Rect, b: Rect, t: f64) -> Rect {
         h: a.h + (b.h - a.h) * t,
     }
 }
+/// Clip the destination and source together, preserving scale instead of squeezing the image.
+fn crop_projection(destination: Rect, clip: Rect, source: Rect) -> Option<(Rect, Rect)> {
+    if destination.w <= 0.0 || destination.h <= 0.0 || source.w <= 0.0 || source.h <= 0.0 {
+        return None;
+    }
+    let x = destination.x.max(clip.x);
+    let y = destination.y.max(clip.y);
+    let right = (destination.x + destination.w).min(clip.x + clip.w);
+    let bottom = (destination.y + destination.h).min(clip.y + clip.h);
+    if right <= x || bottom <= y {
+        return None;
+    }
+    Some((
+        Rect {
+            x,
+            y,
+            w: right - x,
+            h: bottom - y,
+        },
+        Rect {
+            x: source.x + (x - destination.x) / destination.w * source.w,
+            y: source.y + (y - destination.y) / destination.h * source.h,
+            w: (right - x) / destination.w * source.w,
+            h: (bottom - y) / destination.h * source.h,
+        },
+    ))
+}
 fn native(r: Rect, origin: Rect) -> RECT {
     RECT {
         left: (r.x - origin.x).round() as i32,
@@ -477,20 +506,35 @@ fn run(
             CombineRgn(Some(region), Some(overlay.source_region), None, RGN_COPY);
             for (thumbnail, c, crop) in &sources {
                 let r = lerp(c.from, c.to, t);
-                let dest = native(r, bounds);
-                let visible = dest.right > 0
-                    && dest.bottom > 0
-                    && dest.left < bounds.w as i32
-                    && dest.top < bounds.h as i32;
+                let clipped = crop_projection(r, c.clip, platform::rect(*crop));
+                let geometry = clipped
+                    .map(|(dest, source)| (native(dest, bounds), native(source, Rect::default())));
+                let geometry = geometry.filter(|(dest, source)| {
+                    dest.right > dest.left
+                        && dest.bottom > dest.top
+                        && source.right > source.left
+                        && source.bottom > source.top
+                });
+                let Some((dest, source)) = geometry else {
+                    let _ = DwmUpdateThumbnailProperties(
+                        *thumbnail,
+                        &DWM_THUMBNAIL_PROPERTIES {
+                            dwFlags: DWM_TNP_VISIBLE,
+                            fVisible: false.into(),
+                            ..Default::default()
+                        },
+                    );
+                    continue;
+                };
                 let properties = DWM_THUMBNAIL_PROPERTIES {
                     dwFlags: DWM_TNP_VISIBLE
                         | DWM_TNP_RECTDESTINATION
                         | DWM_TNP_OPACITY
                         | DWM_TNP_SOURCECLIENTAREAONLY,
-                    rcSource: *crop,
+                    rcSource: source,
                     rcDestination: dest,
                     opacity: 255,
-                    fVisible: visible.into(),
+                    fVisible: true.into(),
                     fSourceClientAreaOnly: false.into(),
                     ..Default::default()
                 };
@@ -696,6 +740,47 @@ unsafe extern "system" fn snapshot_proc(h: HWND, msg: u32, w: WPARAM, l: LPARAM)
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn output_cropping_preserves_thumbnail_scale() {
+        let destination = Rect {
+            x: 300.0,
+            y: 100.0,
+            w: 800.0,
+            h: 400.0,
+        };
+        let clip = Rect {
+            x: 0.0,
+            y: 0.0,
+            w: 600.0,
+            h: 1000.0,
+        };
+        let source = Rect {
+            x: 7.0,
+            y: 10.0,
+            w: 400.0,
+            h: 200.0,
+        };
+        let (dest, source) = crop_projection(destination, clip, source).unwrap();
+        assert_eq!(
+            dest,
+            Rect {
+                x: 300.0,
+                y: 100.0,
+                w: 300.0,
+                h: 400.0
+            }
+        );
+        assert_eq!(
+            source,
+            Rect {
+                x: 7.0,
+                y: 10.0,
+                w: 150.0,
+                h: 200.0
+            }
+        );
+        assert!(crop_projection(destination, Rect { x: 1200.0, ..clip }, source).is_none());
+    }
     #[test]
     fn critically_damped_spring_is_monotonic_and_settles() {
         let mut last = 0.0;

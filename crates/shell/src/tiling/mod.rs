@@ -1190,6 +1190,9 @@ impl Tiler {
                     .or_else(|| platform::frame(hwnd(t.window)))
                     .unwrap_or(target),
                 to: target,
+                clip: layout
+                    .locate(t.window)
+                    .map_or(bounds, |(mi, _)| layout.monitors[mi].full),
                 border: w.admission.border,
                 visible: t.visible,
                 dpi_changed,

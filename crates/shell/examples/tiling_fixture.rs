@@ -263,6 +263,21 @@ fn run(
                             y: from.y + 20.0,
                             ..from
                         },
+                        clip: glaze_desktop::monitors()
+                            .into_iter()
+                            .find(|m| {
+                                m.contains_point(
+                                    (from.x + from.w / 2.0) as i32,
+                                    (from.y + from.h / 2.0) as i32,
+                                )
+                            })
+                            .map(|m| Rect {
+                                x: f64::from(m.x),
+                                y: f64::from(m.y),
+                                w: f64::from(m.width),
+                                h: f64::from(m.height),
+                            })
+                            .context("animation fixture is not on an output")?,
                         border: [
                             f64::from(outer.left) - from.x,
                             f64::from(outer.top) - from.y,
