@@ -334,7 +334,7 @@ pub fn overview(app: &App, b: &mut B, c: &mut Col) {
         ),
     );
     crate::panel::controls::displays(app, b, c);
-    group(b, c, "", |b, c| {
+    group(b, c, "Desktop bars", |b, c| {
         for (bar, page, label) in [
             (Bar::Top, Page::Top, "Top bar"),
             (Bar::Dock, Page::Dock, "Dock"),
@@ -345,7 +345,7 @@ pub fn overview(app: &App, b: &mut B, c: &mut Col) {
             row(
                 b,
                 c,
-                None,
+                Some(if bar == Bar::Top { glyph::BARS } else { glyph::APP }),
                 label,
                 &format!(
                     "{} · {}",
@@ -366,11 +366,11 @@ pub fn overview(app: &App, b: &mut B, c: &mut Col) {
             "All displays",
         );
     });
-    group(b, c, "", |b, c| {
+    group(b, c, "Design", |b, c| {
         row(
             b,
             c,
-            None,
+            Some(glyph::LOOK),
             "Preset",
             &design_name(app, None),
             "",

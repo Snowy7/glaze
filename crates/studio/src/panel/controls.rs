@@ -630,6 +630,21 @@ pub fn row(
     checked: Option<bool>,
     action: Action,
 ) {
+    row_content(b, c, icon, None, false, label, value, caption, checked, action);
+}
+
+/// App identities reserve a centered 32 DIP box before either line of text.
+pub fn artwork_row(
+    b: &mut B, c: &mut Col, icon: Glyph, image: Option<&std::sync::Arc<mypaper_ui::Image>>,
+    label: &str, value: &str, caption: &str, action: Action,
+) {
+    row_content(b, c, Some(icon), image, true, label, value, caption, None, action);
+}
+
+fn row_content(
+    b: &mut B, c: &mut Col, icon: Option<Glyph>, image: Option<&std::sync::Arc<mypaper_ui::Image>>,
+    boxed: bool, label: &str, value: &str, caption: &str, checked: Option<bool>, action: Action,
+) {
     let h = row_height(b, caption);
     let r = Rect::new(c.x, c.y, c.w, h);
     let k = key(("panel-row", c.view, label, caption));
@@ -643,19 +658,20 @@ pub fn row(
     }
     let mut x = r.left;
     if let Some(g) = icon {
-        let gw = b.px(18.0);
+        let gw = b.px(if boxed { 32.0 } else { 18.0 });
         let tile = Rect::new(x, c.y + (h - gw) / 2.0, gw, gw);
-        b.icon(
-            tile,
-            g,
-            16.0,
-            if on || b.hovered(k) {
-                b.p.ink1
-            } else {
-                b.p.ink3
-            },
-        );
-        x += gw + b.px(10.0);
+        if let Some(image) = image {
+            crate::stage::image_round(b, tile.inflate(-b.px(2.0)), image, 1.0, b.px(7.0));
+        } else {
+            if boxed { b.fill(tile, b.px(8.0), b.p.well); }
+            b.icon(
+                tile,
+                g,
+                16.0,
+                if on || b.hovered(k) { b.p.ink1 } else { b.p.ink3 },
+            );
+        }
+        x += gw + b.px(if boxed { 12.0 } else { 10.0 });
     }
     let tail_w = height(b, 16.0);
     let tail = Rect::new(r.right - tail_w, r.top, tail_w, h);

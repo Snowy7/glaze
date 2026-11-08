@@ -579,6 +579,19 @@ impl MaterialSample {
 /// editor; choice pictures stay comparable even after the current style has been tuned.
 pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
     material_sample(app, b, r, MaterialSample::defaults(app, style), None);
+    let track = Rect::new(r.left + r.width() * 0.17, r.bottom - r.height() * 0.19, r.width() * 0.54, b.px(3.0));
+    b.fill(track, b.px(2.0), highlight_color(app).with_alpha(0.22));
+    b.fill(Rect::new(track.left, track.top, track.width() * 0.65, track.height()), b.px(2.0), highlight_color(app));
+}
+
+/// The same explicit highlight as the shell; automatic follows the wallpaper palette.
+pub fn highlight_color(app: &App) -> Rgba {
+    app.get(DocId::Config, "/look/accent")
+        .and_then(serde_json::Value::as_str)
+        .and_then(mypaper_config::Color::parse)
+        .map(|color| Rgba::rgb8(color.0, 1.0))
+        .or_else(|| wallpaper_color(app))
+        .unwrap_or(hex(0x8b9eb7))
 }
 
 /// Optical details need pixel coverage even in a 130-pixel card. The material values

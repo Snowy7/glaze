@@ -255,7 +255,7 @@ pub fn row(
     } else {
         b.wash(k, area, b.px(radius::CONTROL));
     }
-    let icon = Rect::new(r.left, r.top + b.px(10.0), b.px(28.0), b.px(28.0));
+    let icon = Rect::new(r.left, r.top + (h - b.px(28.0)) / 2.0, b.px(28.0), b.px(28.0));
     if let Some(image) = image {
         crate::stage::image_round(b, icon, &image, 1.0, b.px(4.0));
     } else {

@@ -131,10 +131,11 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
     group(b, c, "Color", |b, c| {
         crate::panel::material::applied_controls(b, c, preview, |b, c| {
             setting(app, b, c, "appearance", "Appearance", "");
+            notice(b, c, "Light or dark bars. Windows and Studio have their own appearance.");
             text(
                 b,
                 Rect::new(c.x, c.y, c.w, height(b, 28.0)),
-                "Accent",
+                "Highlight colour",
                 13.0,
                 400,
                 b.p.ink1,
@@ -142,6 +143,19 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
             );
             crate::ui::anchor(app, "accent", c.view, c.y);
             c.y += height(b, 28.0);
+            notice(b, c, "Selections, enabled toggles and progress in bars and widgets.");
+            let accent = crate::panel::specimens::highlight_color(app);
+            let sample = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(28.0));
+            let chip = Rect::new(sample.left, sample.top, b.px(86.0), sample.height());
+            b.fill(chip, b.px(7.0), accent.with_alpha(0.18));
+            text(b, chip, "Selected", 12.0, 500, accent, Align::Center);
+            let toggle = Rect::new(chip.right + b.px(14.0), sample.top + b.px(4.0), b.px(34.0), b.px(20.0));
+            b.fill(toggle, b.px(10.0), accent);
+            b.fill(Rect::new(toggle.right - b.px(18.0), toggle.top + b.px(2.0), b.px(16.0), b.px(16.0)), b.px(8.0), b.p.bg);
+            let track = Rect::new(toggle.right + b.px(14.0), sample.top + b.px(11.0), (sample.right - toggle.right - b.px(14.0)).max(0.0), b.px(5.0));
+            b.fill(track, b.px(3.0), b.p.well);
+            b.fill(Rect::new(track.left, track.top, track.width() * 0.65, track.height()), b.px(3.0), accent);
+            c.y = sample.bottom + b.px(8.0);
             super::super::colors::swatches(
                 app,
                 b,

@@ -1,4 +1,3 @@
-use crate::panel::tokens::radius;
 use serde_json::{Value, json};
 
 use super::*;
@@ -82,14 +81,14 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
             for index in members {
                 if let Some(item) = legacy::LIST.get(index) {
                     let on = legacy::enabled(app, item);
-                    row(
+                    crate::panel::controls::artwork_row(
                         b,
                         c,
-                        Some(item.glyph),
+                        item.glyph,
+                        None,
                         item.name,
                         if on { "On" } else { "Off" },
                         item.adds,
-                        None,
                         Action::Panel(Command::Connection(index)),
                     );
                     continue;
@@ -114,29 +113,22 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                         faces
                     }
                 };
-                let row_y = c.y;
-                row(
+                let image = crate::panel::icons::plugin_image(app, &format!("custom:{}", item.id));
+                let icon = match item.id.as_str() {
+                    "rss" => crate::editing::widgets::glyph_of("rss"),
+                    "weather" => mypaper_ui::icons::Icon::CloudSun.into(),
+                    _ => glyph::INTEGRATIONS,
+                };
+                crate::panel::controls::artwork_row(
                     b,
                     c,
-                    Some(glyph::INTEGRATIONS),
+                    icon,
+                    image.as_ref(),
                     &item.name,
                     status,
                     &detail,
-                    None,
                     Action::Panel(Command::Connection(index)),
                 );
-                if let Some(image) =
-                    crate::panel::icons::plugin_image(app, &format!("custom:{}", item.id))
-                {
-                    let pic = Rect::new(
-                        c.x,
-                        row_y + (height(b, 56.0) - b.px(28.0)) / 2.0,
-                        b.px(28.0),
-                        b.px(28.0),
-                    );
-                    b.fill(pic, b.px(radius::CONTROL), b.p.fill);
-                    crate::stage::image_round(b, pic, &image, 1.0, b.px(7.0));
-                }
             }
         });
     }

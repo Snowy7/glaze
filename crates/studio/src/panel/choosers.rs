@@ -201,7 +201,7 @@ fn cards(
     }
     let columns = if b.t.text_scale > 1.0 || c.w < b.px(252.0) {
         1
-    } else if c.w >= b.px(640.0) {
+    } else if c.w >= b.px(500.0) {
         3
     } else {
         2

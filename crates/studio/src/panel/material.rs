@@ -12,11 +12,11 @@ use mypaper_ui::{
 use serde_json::Value;
 
 pub const SWATCHES: [[u8; 3]; 6] = [
-    [139, 158, 183],
-    [200, 141, 60],
-    [127, 174, 142],
-    [201, 107, 115],
-    [147, 136, 201],
+    [52, 58, 66],
+    [91, 98, 107],
+    [122, 117, 109],
+    [117, 128, 121],
+    [142, 138, 148],
     [230, 230, 230],
 ];
 
@@ -113,13 +113,14 @@ pub fn block(
     text(
         b,
         Rect::new(c.x, c.y, c.w, height(b, 28.0)),
-        "Tint",
+        "Glass colour",
         13.0,
         400,
         b.p.ink1,
         Align::Start,
     );
     c.y += height(b, 28.0);
+    super::controls::notice(b, c, "Colours the surface behind text and controls.");
     super::colors::swatches(app, b, c, &tint, current, auto, true, &SWATCHES);
 }
 
