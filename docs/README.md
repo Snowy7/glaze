@@ -41,6 +41,7 @@ Back to the [project README](../README.md).
 | [research/customization-landscape.md](research/customization-landscape.md) | How Seelen UI, YASB, Zebar, Rainmeter, ManagedShell and others work, with sources |
 | [research/integrations.md](research/integrations.md) | Feasibility study for the app integrations |
 | [research/wallpaper-sources.md](research/wallpaper-sources.md) | Where the bundled wallpapers come from and their redistribution terms |
+| [research/scrolling-tiling.md](research/scrolling-tiling.md) | Scrolling (niri-style) tiling on Windows: prior art, Win32 edge cases, measured animation spike, verdict |
 
 ## Media
 
