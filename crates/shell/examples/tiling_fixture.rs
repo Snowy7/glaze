@@ -252,6 +252,7 @@ fn run(
             );
         }
         let mut animator = Animator::new();
+        let mut resize_probe = None;
         let counts = if benchmark {
             ensure!(count == 30, "benchmark needs 30 fixture windows");
             vec![4, 10, 30]
@@ -324,6 +325,13 @@ fn run(
                 for identity in &identities {
                     journal.remember(*identity)?;
                 }
+                if cases && resize_probe.is_none() {
+                    let mut change = changes[0].clone();
+                    change.to.w += 120.0;
+                    change.to.h += 80.0;
+                    change.visual_to = change.to;
+                    resize_probe = Some(change);
+                }
                 animator.apply(changes, true)?;
                 pump(&mut None, Duration::from_secs(1));
                 animator.cancel();
@@ -332,6 +340,27 @@ fn run(
             }
         }
         report["animation"] = serde_json::to_value(glaze_shell::tiling::animation::measurements())?;
+        if let Some(change) = resize_probe {
+            let mut journal = tiling_recovery::Journal::open(output.join("resize-recovery.json"))?;
+            journal.remember(change.identity)?;
+            animator.apply(vec![change], true)?;
+            let deadline = Instant::now() + Duration::from_millis(250);
+            let overlay = loop {
+                if let Ok(window) = owned_overlay("glaze.tiling.animation")
+                    && unsafe { IsWindowVisible(window).as_bool() }
+                {
+                    break window;
+                }
+                ensure!(Instant::now() < deadline, "resize proxy did not appear");
+                pump(&mut None, Duration::from_millis(10));
+            };
+            pump(&mut None, Duration::from_millis(50));
+            capture(Identity::read(overlay)?, &output.join("resize-proxy.png"))?;
+            settle(&mut None)?;
+            animator.cancel();
+            journal.restore()?;
+            report["resize_proxy_captured"] = true.into();
+        }
     }
     drop(tiler);
     tiling_recovery::restore_pending()?;
@@ -906,46 +935,48 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
         "late NAMECHANGE was not admitted"
     );
     let tray = windows[1];
-    unsafe {
-        let _ = ShowWindowAsync(tray.window(), SW_HIDE);
-    }
-    pump(tiler, Duration::from_millis(300));
-    ensure!(
-        !tiler
+    for _ in 0..3 {
+        unsafe {
+            let _ = ShowWindowAsync(tray.window(), SW_HIDE);
+        }
+        pump(tiler, Duration::from_millis(300));
+        ensure!(
+            !tiler
+                .as_ref()
+                .unwrap()
+                .placements()
+                .iter()
+                .any(|(id, _)| *id == tray),
+            "HIDE retained its column"
+        );
+        unsafe {
+            let _ = ShowWindowAsync(tray.window(), SW_SHOWNOACTIVATE);
+        }
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !tiler
             .as_ref()
             .unwrap()
             .placements()
             .iter()
-            .any(|(id, _)| *id == tray),
-        "HIDE retained its column"
-    );
-    unsafe {
-        let _ = ShowWindowAsync(tray.window(), SW_SHOWNOACTIVATE);
+            .any(|(id, _)| *id == tray)
+            && Instant::now() < deadline
+        {
+            pump(tiler, Duration::from_millis(25));
+        }
+        ensure!(
+            tiler
+                .as_ref()
+                .unwrap()
+                .placements()
+                .iter()
+                .any(|(id, _)| *id == tray),
+            "tray restore was not admitted: {tray:?}, visible={}, iconic={}, style={:#x}, placements={:?}",
+            unsafe { IsWindowVisible(tray.window()).as_bool() },
+            unsafe { IsIconic(tray.window()).as_bool() },
+            unsafe { GetWindowLongPtrW(tray.window(), GWL_STYLE) },
+            tiler.as_ref().unwrap().placements()
+        );
     }
-    let deadline = Instant::now() + Duration::from_secs(2);
-    while !tiler
-        .as_ref()
-        .unwrap()
-        .placements()
-        .iter()
-        .any(|(id, _)| *id == tray)
-        && Instant::now() < deadline
-    {
-        pump(tiler, Duration::from_millis(25));
-    }
-    ensure!(
-        tiler
-            .as_ref()
-            .unwrap()
-            .placements()
-            .iter()
-            .any(|(id, _)| *id == tray),
-        "tray restore was not admitted: {tray:?}, visible={}, iconic={}, style={:#x}, placements={:?}",
-        unsafe { IsWindowVisible(tray.window()).as_bool() },
-        unsafe { IsIconic(tray.window()).as_bool() },
-        unsafe { GetWindowLongPtrW(tray.window(), GWL_STYLE) },
-        tiler.as_ref().unwrap().placements()
-    );
     // The real display-change grace period must expire before testing a user minimize.
     pump(tiler, Duration::from_secs(11));
     unsafe {
