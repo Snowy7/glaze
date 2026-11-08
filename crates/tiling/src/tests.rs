@@ -250,6 +250,25 @@ fn closing_a_float_returns_focus_to_the_tiled_layer() {
     assert_eq!(l.focused(), Some(WindowId(1)));
 }
 #[test]
+fn layer_switch_returns_to_the_last_keyboard_focused_tile() {
+    let mut l = layout();
+    open(&mut l, 1);
+    open(&mut l, 2);
+    l.command(Command::Focus(Direction::Left));
+    l.insert(
+        WindowId(3),
+        Constraints::default(),
+        None,
+        Some(area()),
+        false,
+    );
+    l.command(Command::FocusLayer);
+    assert_eq!(l.focused(), Some(WindowId(3)));
+    l.command(Command::FocusLayer);
+    assert_eq!(l.focused(), Some(WindowId(1)));
+    check(&l);
+}
+#[test]
 fn closing_a_temporary_window_after_its_anchor_closed_still_refocuses() {
     let mut l = layout();
     for id in 1..=3 {

@@ -122,6 +122,19 @@ pub struct Workspace {
     floating_focus: Option<WindowId>,
 }
 impl Workspace {
+    /// Keep the selected tab and each layer's return focus aligned with the focused identity.
+    fn sync_focus(&mut self) {
+        let Some(window) = self.focused else {
+            return;
+        };
+        if let Some(ci) = self.column(window) {
+            let c = &mut self.columns[ci];
+            c.active = c.tiles.iter().position(|t| t.id == window).unwrap();
+            self.tiled_focus = Some(window);
+        } else if self.floating.iter().any(|f| f.id == window) {
+            self.floating_focus = Some(window);
+        }
+    }
     fn empty(&self) -> bool {
         self.columns.is_empty() && self.floating.is_empty()
     }
@@ -995,6 +1008,9 @@ impl Layout {
             let m = &mut self.monitors[mi];
             let active = m.active;
             m.workspaces.retain(|w| !w.empty() || w.id == active);
+            for w in &mut m.workspaces {
+                w.sync_focus();
+            }
             if !m.workspaces.iter().any(|w| w.id == m.active) {
                 if let Some(w) = m.workspaces.first() {
                     m.active = w.id;
@@ -1012,6 +1028,9 @@ impl Layout {
             {
                 self.monitors[mi].active = self.monitors[mi].workspaces[0].id;
             }
+        }
+        for w in &mut self.detached {
+            w.sync_focus();
         }
     }
     /// Target rectangles in physical screen coordinates. Invisible targets must be parked by the host.
