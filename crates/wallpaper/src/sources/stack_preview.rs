@@ -66,10 +66,31 @@ pub fn run(args: PreviewArgs) -> Result<()> {
             windows::Win32::System::Com::COINIT_MULTITHREADED,
         )
     };
-    let gpu = Gpu::headless().context("no DX12 GPU for the preview")?;
+    // The integrated GPU: a preview is small, and the desktop may be using the other one.
+    let gpu = Gpu::opened(crate::gpu::Opening::start(
+        mypaper_config::GpuPreference::Integrated,
+    ));
     // SAFETY: no preconditions.
     let thread = unsafe { GetCurrentThreadId() };
-    let _watch = mypaper_fswatch::Watch::directory(&args.theme, true, move |_| {
+    // Our own output (and Studio's previews, logs and credits) must not reload the draft.
+    let out = std::path::absolute(&args.out)?;
+    let _watch = mypaper_fswatch::Watch::directory(&args.theme, true, move |event| {
+        let ignored = |path: &std::path::Path| {
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
+            path.starts_with(&out)
+                || name.ends_with(".tmp")
+                || name.ends_with(".log")
+                || name.starts_with("preview.")
+                || name.eq_ignore_ascii_case("CREDITS.md")
+        };
+        if let mypaper_fswatch::Event::Paths(paths) = &event
+            && paths.iter().all(|p| ignored(p))
+        {
+            return;
+        }
         // SAFETY: posting to a thread id is always safe; failure means it is gone.
         let _ = unsafe { PostThreadMessageW(thread, WM_RELOAD, WPARAM(0), LPARAM(0)) };
     })?;

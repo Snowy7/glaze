@@ -264,9 +264,8 @@ impl Gpu {
         create_surface(&self._instance, window)
     }
 
-    /// The device `opening` made, with no windows (the release lab: the engine's real adapter
-    /// choice and device, without surfaces).
-    #[cfg(test)]
+    /// The device `opening` made, with no windows (the release lab and Studio's `--preview`
+    /// child: the engine's real adapter choice and device, without surfaces).
     pub fn opened(opening: Opening) -> Self {
         let Opened {
             instance,

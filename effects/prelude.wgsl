@@ -31,9 +31,16 @@ var<immediate> paper: Paper;
 @group(0) @binding(3) var depth: texture_2d<f32>;
 // This effect's params, in declared order (`struct Params` is generated from effect.json).
 @group(0) @binding(4) var<uniform> params: Params;
+// This layer's input before its first pass (equal to `src` in a one-pass effect), so a later
+// pass can composite over the sharp stack, e.g. a bloom blurred at half scale.
+@group(0) @binding(5) var layer_input: texture_2d<f32>;
 
 fn sample_src(uv: vec2f) -> vec4f {
     return textureSampleLevel(src, src_sampler, uv, 0.0);
+}
+
+fn sample_layer_input(uv: vec2f) -> vec4f {
+    return textureSampleLevel(layer_input, src_sampler, uv, 0.0);
 }
 
 fn sample_original(uv: vec2f) -> vec4f {

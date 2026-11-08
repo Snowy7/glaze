@@ -109,9 +109,13 @@ fn effect(frag: vec2f, uv: vec2f) -> vec4f
 `frag` is the pixel position (top-left origin) and `uv` is `frag / paper.resolution`. The engine
 prepends `effects/prelude.wgsl`, which provides:
 
-- `paper`: the same `Paper` struct as the theme shader prelude (resolution, mouse, time, frame);
+- `paper`: resolution, mouse, time and frame as in the theme shader prelude, plus
+  `clock_hours`: the current real local hour, 0..24 with fractional minutes, read each frame
+  (also refreshed after pause/resume). Clock-driven effects must set `animated: true`;
 - `src` / `src_sampler`: the input, which is the previous layer or the previous pass;
 - `original`: the base before any layer;
+- `layer_input`: this effect's input before its first pass, retained across passes so a
+  downscaled blur or bloom can composite over the sharp preceding stack;
 - `depth`: 0 is near and 1 is far; flat 1.0 when the base has none;
 - `params`: a uniform struct generated from `params`, in declared order:
   - `float` → `f32`
@@ -120,12 +124,13 @@ prepends `effects/prelude.wgsl`, which provides:
 
   The fields are named exactly as the param `id`s.
 - helpers: `sample_src(uv)`, `hash21`, `noise2`, `fbm2`, `luma`; also `sample_original(uv)`,
+  `sample_layer_input(uv)`,
   `sample_depth(uv)` (depth is not filterable on every GPU, so never sample it with
   `src_sampler`) and `to_linear` / `to_display`. `src` and `original` hold display
   (sRGB-encoded) values; `color` params are linear.
 
 Bindings, all in group 0: `src` 0, `src_sampler` 1, `original` 2, `depth` 3, `params` 4
-(uniform); `paper` is immediate data. `paper.resolution` is the pass's own target size. The
+(uniform), `layer_input` 5; `paper` is immediate data. `paper.resolution` is the pass's own target size. The
 entry points `mypaper_vs` / `mypaper_fx` are the prelude's, so a pass must not define them.
 
 To validate exactly what the engine compiles, use `mypaper_theme::stack::pass_wgsl` (the
@@ -191,3 +196,16 @@ Create mode is a page under Wallpapers.
   lines, and `@param` comments become sliders.
 - **Saving** writes a theme folder under `%APPDATA%\mypaper\themes\<slug>/`, copying in the
   media, any custom effects, a `preview.jpg` and a credits entry for imported shaders.
+
+### Draft preview
+
+Studio previews a draft without touching the desktop by running a headless child:
+
+```text
+mypaper-wallpaper --preview <draft dir> --out <file.jpg> [--size 1280x720] [--fps 10]
+```
+
+It renders the draft offscreen and rewrites `<file.jpg>` atomically (`.tmp`, then rename) at start,
+on every change to the draft folder or a used effect folder, and at `--fps` while the stack moves.
+Its own output, `*.tmp`, `*.log`, `preview.*` and `CREDITS.md` changes do not reload it. Studio
+ends it by ending the process.

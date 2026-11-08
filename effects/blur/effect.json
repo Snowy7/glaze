@@ -7,7 +7,7 @@
   "license": "MIT",
   "url": null,
   "animated": false,
-  "cost": 0.0,
+  "cost": 0.96,
   "passes": [
     { "source": "blur-x.wgsl", "scale": 0.5 },
     { "source": "blur-y.wgsl", "scale": 0.5 }

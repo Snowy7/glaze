@@ -7,7 +7,7 @@
   "license": "MIT",
   "url": null,
   "animated": false,
-  "cost": 0.0,
+  "cost": 0.39,
   "passes": [{ "source": "vignette.wgsl", "scale": 1.0 }],
   "params": [
     { "id": "amount", "label": "Amount", "type": "float", "min": 0, "max": 1, "default": 0.5, "step": 0.01 },

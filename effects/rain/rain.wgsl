@@ -77,11 +77,10 @@ fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let t = paper.time * 0.2 * params.speed;
     let p = vec2f(frag.x - 0.5 * res.x, 0.5 * res.y - frag.y) / res.y / params.size;
     let here = glass(p, t, params.amount);
-    let e = 1.5 / res.y / params.size;
-    let dx = glass(p + vec2f(e, 0.0), t, params.amount).x - here.x;
-    let dy = glass(p + vec2f(0.0, e), t, params.amount).x - here.x;
-    // y-up normal back to the y-down uv.
-    let bent = uv + vec2f(dx, -dy) * 0.5;
+    // The drop's slope from screen derivatives: one evaluation per pixel instead of three.
+    // dpdy runs down the screen while p runs up, so -dpdy is the y-up slope; back in y-down uv.
+    let slope = vec2f(dpdx(here.x), -dpdy(here.x)) * 1.5;
+    let bent = uv + vec2f(slope.x, -slope.y) * 0.5;
     let sharp = sample_src(bent).rgb;
     let clear = clamp(here.x + here.y, 0.0, 1.0);
     let fog = fogged(uv, params.fog * 0.004) * (1.0 - params.fog * 0.15);

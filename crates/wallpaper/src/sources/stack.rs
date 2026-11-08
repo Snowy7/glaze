@@ -177,6 +177,8 @@ pub struct StackSource {
     kit: Kit,
     /// Kept per render size while the stack moves; a still stack keeps none.
     targets: Vec<Targets>,
+    /// This load's errors (also in stack-errors.json); read by the tests.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub errors: Vec<StackError>,
     _watches: Vec<mypaper_fswatch::Watch>,
 }
@@ -393,6 +395,7 @@ impl StackSource {
     }
 
     /// True when nothing in the stack changes over time.
+    #[cfg(test)]
     pub fn still(&self) -> bool {
         !self.moving
     }
@@ -578,6 +581,7 @@ impl StackSource {
                             entry(2, wgpu::BindingResource::TextureView(original)),
                             entry(3, wgpu::BindingResource::TextureView(depth)),
                             entry(4, effect.params.as_entire_binding()),
+                            entry(5, wgpu::BindingResource::TextureView(input)),
                         ],
                     });
                     let k = pass_size.0 as f32 / size.0.max(1) as f32;
@@ -836,6 +840,7 @@ impl Kit {
                     },
                     count: None,
                 },
+                texture(5, true),
             ],
         });
         let effect_pipeline_layout =
@@ -1492,5 +1497,105 @@ mod tests {
             std::fs::write(&out, &b).unwrap();
             eprintln!("{size:?} BGRA -> {out}");
         }
+    }
+
+    /// GPU ms of each reference effect at 1920x1080 over the demo photo, minus a layer-free
+    /// baseline (`cargo test -p mypaper-wallpaper --release time_effects -- --ignored --nocapture`).
+    #[test]
+    #[ignore]
+    fn time_effects() {
+        let gpu = Gpu::headless().expect("a DX12 GPU");
+        let size = (1920, 1080);
+        let dir = repo().join("themes/examples/builder-demo");
+        let time = |layers: &str| -> f64 {
+            let json = format!(
+                r#"{{ "name": "t", "wallpaper": {{ "kind": "stack",
+                "base": {{ "kind": "image", "source": "media/city.jpg" }}, "layers": [{layers}] }} }}"#
+            );
+            let theme = LoadedTheme::parse(dir.clone(), &json).unwrap();
+            let mypaper_theme::Wallpaper::Stack(config) = &theme.theme.wallpaper else {
+                unreachable!()
+            };
+            let mut source = StackSource::new_in(&gpu, &theme, config, &roots()).unwrap();
+            assert!(source.errors.is_empty(), "{:?}", source.errors);
+            let target = gpu.texture(
+                "timing",
+                size,
+                gpu.format,
+                wgpu::TextureUsages::RENDER_ATTACHMENT,
+                None,
+            );
+            let view = target.create_view(&Default::default());
+            let queries = gpu.device.create_query_set(&wgpu::QuerySetDescriptor {
+                label: None,
+                ty: wgpu::QueryType::Timestamp,
+                count: 2,
+            });
+            let resolve = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: 16,
+                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            let read = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: 16,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            let period = f64::from(gpu.queue.get_timestamp_period());
+            let mut samples = Vec::new();
+            for frame in 0..40u32 {
+                let mut encoder = gpu.device.create_command_encoder(&Default::default());
+                encoder.write_timestamp(&queries, 0);
+                source.render(
+                    &gpu,
+                    Frame {
+                        screen: 0,
+                        size,
+                        mouse: [0.0, 0.0],
+                        clock: Duration::from_millis(u64::from(frame) * 33),
+                        frame,
+                        view: &view,
+                        encoder: &mut encoder,
+                    },
+                );
+                encoder.write_timestamp(&queries, 1);
+                encoder.resolve_query_set(&queries, 0..2, &resolve, 0);
+                encoder.copy_buffer_to_buffer(&resolve, 0, &read, 0, 16);
+                gpu.queue.submit([encoder.finish()]);
+                read.map_async(wgpu::MapMode::Read, .., |_| {});
+                gpu.device
+                    .poll(wgpu::PollType::wait_indefinitely())
+                    .unwrap();
+                let stamps: Vec<u64> = read
+                    .get_mapped_range(..)
+                    .unwrap()
+                    .as_chunks::<8>()
+                    .0
+                    .iter()
+                    .map(|b| u64::from_ne_bytes(*b))
+                    .collect();
+                read.unmap();
+                if frame >= 10 {
+                    samples.push(stamps[1].saturating_sub(stamps[0]) as f64 * period / 1e6);
+                }
+            }
+            samples.sort_by(f64::total_cmp);
+            samples[samples.len() / 2]
+        };
+        let baseline = time("");
+        eprintln!("baseline (image + copy): {baseline:.3} ms");
+        for id in ["rain", "blur", "color", "vignette", "grain"] {
+            let ms = time(&format!(r#"{{ "kind": "effect", "effect": "{id}" }}"#));
+            eprintln!("{id}: {:.3} ms (total {ms:.3})", (ms - baseline).max(0.0));
+        }
+        let demo = LoadedTheme::load(&dir).unwrap();
+        let mypaper_theme::Wallpaper::Stack(config) = &demo.theme.wallpaper else {
+            unreachable!()
+        };
+        let layers = serde_json::to_string(&config.layers).unwrap();
+        let layers = &layers[1..layers.len() - 1];
+        eprintln!("demo stack, every layer each frame: {:.3} ms", time(layers));
     }
 }
