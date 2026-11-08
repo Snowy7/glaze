@@ -561,6 +561,14 @@ fn child(output: &Path, count: usize) -> Result<()> {
     Ok(())
 }
 unsafe extern "system" fn window_proc(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    if msg == WM_APP + 93 {
+        if let Err(e) = app_fullscreen(h, w.0 != 0) {
+            CHILD_OUTPUT.with(|path| {
+                let _ = std::fs::write(path.borrow().join("error.txt"), format!("{e:#}"));
+            });
+        }
+        return LRESULT(0);
+    }
     if msg == WM_APP + 92 {
         CHILD_OUTPUT.with(|path| {
             let _ = std::fs::write(path.borrow().join("hung-ready.txt"), "ready");
@@ -644,6 +652,65 @@ unsafe extern "system" fn window_proc(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -
     unsafe { DefWindowProcW(h, msg, w, l) }
 }
 thread_local! {static CHILD_OUTPUT:std::cell::RefCell<PathBuf>=std::cell::RefCell::new(PathBuf::new());}
+struct FullscreenRestore {
+    style: isize,
+    rect: RECT,
+}
+thread_local! {static FULLSCREEN_RESTORE:std::cell::RefCell<Option<FullscreenRestore>>=const {std::cell::RefCell::new(None)};}
+
+/// The fixture application changes only its own window, without any activation or display-mode change.
+fn app_fullscreen(window: HWND, on: bool) -> Result<()> {
+    FULLSCREEN_RESTORE.with_borrow_mut(|saved| -> Result<()> {
+        // SAFETY: called only from this window's own procedure on its creating thread.
+        unsafe {
+            if on {
+                let mut rect = RECT::default();
+                GetWindowRect(window, &mut rect)?;
+                let monitor = glaze_desktop::monitor_infos()
+                    .into_iter()
+                    .find(|m| {
+                        m.rect.contains_point(
+                            (rect.left + rect.right) / 2,
+                            (rect.top + rect.bottom) / 2,
+                        )
+                    })
+                    .context("fullscreen fixture is not on a monitor")?;
+                let style = GetWindowLongPtrW(window, GWL_STYLE);
+                *saved = Some(FullscreenRestore { style, rect });
+                SetWindowLongPtrW(
+                    window,
+                    GWL_STYLE,
+                    style & !(WS_CAPTION.0 | WS_THICKFRAME.0) as isize,
+                );
+                SetWindowPos(
+                    window,
+                    None,
+                    monitor.rect.x,
+                    monitor.rect.y,
+                    monitor.rect.width,
+                    monitor.rect.height,
+                    SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED,
+                )?;
+            } else if let Some(original) = saved.take() {
+                SetWindowLongPtrW(window, GWL_STYLE, original.style);
+                let r = original.rect;
+                SetWindowPos(
+                    window,
+                    None,
+                    r.left,
+                    r.top,
+                    r.right - r.left,
+                    r.bottom - r.top,
+                    SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED,
+                )?;
+            }
+        }
+        Ok(())
+    })?;
+    CHILD_OUTPUT
+        .with(|path| std::fs::write(path.borrow().join(format!("fullscreen-{on}.txt")), "ready"))?;
+    Ok(())
+}
 /// Additional windows are created on the child's existing UI thread without input or activation.
 fn extra_window(owner: HWND, kind: usize) -> Result<()> {
     let mut parent = RECT::default();
@@ -851,6 +918,44 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
     verify_placements(tiler.as_ref().unwrap())?;
     tiler.as_mut().unwrap().command(Op::Maximize);
     pump(tiler, Duration::from_millis(300));
+    for on in [true, false] {
+        unsafe {
+            PostMessageW(
+                Some(controller.window()),
+                WM_APP + 93,
+                WPARAM(usize::from(on)),
+                LPARAM(0),
+            )?;
+        }
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while !output.join(format!("fullscreen-{on}.txt")).exists() {
+            ensure!(
+                Instant::now() < deadline,
+                "fullscreen fixture did not respond"
+            );
+            pump(tiler, Duration::from_millis(20));
+        }
+        pump(tiler, Duration::from_millis(300));
+        let managed = tiler
+            .as_ref()
+            .unwrap()
+            .placements()
+            .iter()
+            .any(|(id, _)| *id == controller);
+        ensure!(
+            managed != on,
+            "native fullscreen did not suspend or resume its tile"
+        );
+        if on {
+            let full = outer_rect(controller)?;
+            tiler.as_mut().unwrap().command(Op::Center);
+            pump(tiler, Duration::from_millis(200));
+            ensure!(
+                outer_rect(controller)? == full,
+                "tiler moved a native fullscreen client"
+            );
+        }
+    }
     tiler.as_mut().unwrap().update(Settings::default());
     tiler.as_mut().unwrap().command(Op::Center);
     pump(tiler, Duration::from_millis(60));
