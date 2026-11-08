@@ -48,6 +48,12 @@ fn check(l: &Layout) {
             w.focused
                 .is_none_or(|id| w.column(id).is_some() || w.floating.iter().any(|f| f.id == id))
         );
+        if let Some(ci) = w.focused.and_then(|id| w.column(id)) {
+            assert_eq!(
+                Some(w.columns[ci].tiles[w.columns[ci].active].id),
+                w.focused
+            );
+        }
     }
     for t in l.targets() {
         assert!(ids.contains(&t.window) && workspaces.contains(&t.workspace));
@@ -135,6 +141,25 @@ fn closing_just_opened_column_restores_view() {
     l.remove(WindowId(2));
     assert_eq!(l.focused(), Some(WindowId(1)));
     assert_eq!(l.targets(), before);
+}
+#[test]
+fn closing_a_consumed_temporary_window_restores_the_correct_tab() {
+    let mut l = layout();
+    open(&mut l, 1);
+    open(&mut l, 2);
+    l.command(Command::Consume);
+    l.focus(WindowId(1));
+    open(&mut l, 3);
+    l.command(Command::Consume);
+    l.command(Command::Tabbed);
+    l.remove(WindowId(3));
+    assert_eq!(l.focused(), Some(WindowId(1)));
+    assert!(
+        l.targets()
+            .iter()
+            .any(|t| t.window == WindowId(1) && t.visible)
+    );
+    check(&l);
 }
 #[test]
 fn closing_left_column_preserves_focused_screen_position() {

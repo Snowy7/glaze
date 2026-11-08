@@ -431,6 +431,13 @@ impl Layout {
                     let previous = saved.previous;
                     if w.column(previous).is_some() || w.floating.iter().any(|f| f.id == previous) {
                         w.focused = Some(previous);
+                        if let Some(ci) = w.column(previous) {
+                            w.columns[ci].active = w.columns[ci]
+                                .tiles
+                                .iter()
+                                .position(|t| t.id == previous)
+                                .unwrap();
+                        }
                         w.view = saved.offset;
                         restored_position = saved.position;
                     } else {
