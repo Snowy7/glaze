@@ -394,7 +394,7 @@ impl Layout {
             });
             self.monitors[mi].active = self.monitors[mi].workspaces[wi].id;
             self.focused_monitor = Some(self.monitors[mi].id.clone());
-            self.fit(mi, wi);
+            self.fit_from(mi, wi, old);
         } else if let Some(before) = before {
             self.preserve_focus(mi, wi, before);
         }
@@ -476,6 +476,7 @@ impl Layout {
     pub fn focus(&mut self, id: WindowId) -> Vec<Target> {
         if let Some((mi, wi)) = self.locate(id) {
             let w = &mut self.monitors[mi].workspaces[wi];
+            let previous = w.focused;
             if w.focused != Some(id) {
                 w.remembered = None;
             }
@@ -494,7 +495,7 @@ impl Layout {
             }
             self.monitors[mi].active = self.monitors[mi].workspaces[wi].id;
             self.focused_monitor = Some(self.monitors[mi].id.clone());
-            self.fit(mi, wi);
+            self.fit_from(mi, wi, previous);
         }
         self.normalize();
         self.targets()
@@ -545,6 +546,10 @@ impl Layout {
         }
     }
     fn fit(&mut self, mi: usize, wi: usize) {
+        self.fit_from(mi, wi, None);
+    }
+    /// On-overflow compares the target with its neighbour in the direction focus came from.
+    fn fit_from(&mut self, mi: usize, wi: usize, previous: Option<WindowId>) {
         let m = &self.monitors[mi];
         let w = &m.workspaces[wi];
         let Some(ci) = w.focused.and_then(|id| w.column(id)) else {
@@ -555,11 +560,26 @@ impl Layout {
         let width = Self::width(&self.settings, m, c);
         let start = self.start(mi, wi, ci);
         let pad = self.settings.gaps.min((length - width).max(0.0) / 2.0);
-        let overflow = start - pad < w.view || start + width + pad > w.view + length;
+        let pair_overflows = previous
+            .and_then(|id| w.column(id))
+            .is_some_and(|previous| {
+                if previous == ci {
+                    return false;
+                }
+                let neighbor = if previous > ci {
+                    (ci + 1).min(w.columns.len() - 1)
+                } else {
+                    ci.saturating_sub(1)
+                };
+                width
+                    + Self::width(&self.settings, m, &w.columns[neighbor])
+                    + self.settings.gaps * 3.0
+                    > length + 0.001
+            });
         let view = if width >= length || c.mode != Mode::Normal {
             start
         } else if self.settings.center_focused_column == Center::Always
-            || (self.settings.center_focused_column == Center::OnOverflow && overflow)
+            || (self.settings.center_focused_column == Center::OnOverflow && pair_overflows)
         {
             start - (length - width) / 2.0
         } else if start - pad < w.view {
@@ -663,7 +683,7 @@ impl Layout {
                         c.active = next;
                         w.focused = Some(c.tiles[next].id);
                     }
-                    self.fit(mi, wi);
+                    self.fit_from(mi, wi, focused);
                 } else if let Some(id) = focused {
                     let m = &mut self.monitors[mi];
                     let area = m.area;

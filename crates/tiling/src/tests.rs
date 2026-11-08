@@ -51,6 +51,38 @@ fn defaults_and_bindings_are_valid() {
     Settings::default().validate().unwrap();
 }
 #[test]
+fn on_overflow_keeps_two_half_width_columns_together() {
+    let mut l = layout();
+    l.settings.center_focused_column = Center::OnOverflow;
+    for id in 1..=3 {
+        open(&mut l, id);
+    }
+    assert_eq!(
+        l.targets()
+            .iter()
+            .find(|t| t.window == WindowId(3))
+            .unwrap()
+            .rect
+            .x,
+        608.0
+    );
+}
+#[test]
+fn on_overflow_centers_when_the_adjacent_pair_cannot_fit() {
+    let mut l = layout();
+    l.settings.center_focused_column = Center::OnOverflow;
+    l.settings.default_width = 2.0 / 3.0;
+    open(&mut l, 1);
+    open(&mut l, 2);
+    let r = l
+        .targets()
+        .into_iter()
+        .find(|t| t.window == WindowId(2))
+        .unwrap()
+        .rect;
+    assert!((r.x - (area().w - r.w) / 2.0).abs() < 0.001);
+}
+#[test]
 fn closing_just_opened_column_restores_view() {
     let mut l = layout();
     open(&mut l, 1);
