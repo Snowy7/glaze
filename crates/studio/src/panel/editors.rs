@@ -2,7 +2,7 @@ mod bars;
 mod connections;
 use crate::panel::tokens::radius;
 pub use bars::{
-    bar_path, bar_value, design_name as bar_design_name, insert_module, move_module,
+    bar_path, bar_value, design_cards as bar_design_cards, design_name as bar_design_name, insert_module, move_module,
     overview as bars_overview, same_bars, selected_module_name,
 };
 pub use connections::{

@@ -1,5 +1,6 @@
-//! Onboarding: welcome, taskbar, starter look, wallpaper, done. Every pick applies to the real
-//! desktop at once (and undoes as one change); Skip keeps whatever is already set.
+//! Onboarding: welcome, taskbar, starter look, top bar, dock, wallpaper, extras, done. Every pick
+//! applies to the real desktop at once (and undoes); everything after the taskbar is optional,
+//! and Skip keeps whatever is already set.
 
 use crate::panel::tokens::radius;
 use super::{
@@ -18,8 +19,26 @@ use mypaper_ui::{Rect, controls::Align};
 pub const WELCOME: u8 = 0;
 pub const TASKBAR: u8 = 1;
 pub const LOOK: u8 = 2;
-pub const WALLPAPER: u8 = 3;
-pub const DONE: u8 = 4;
+pub const TOP: u8 = 3;
+pub const DOCK: u8 = 4;
+pub const WALLPAPER: u8 = 5;
+pub const EXTRAS: u8 = 6;
+pub const DONE: u8 = 7;
+
+/// Whether `step` applies to this taskbar choice: bar steps need mypaper's bars, and the look
+/// step needs bars or widgets to style.
+fn shown(step: u8, taskbar: usize) -> bool {
+    match step {
+        LOOK => taskbar != 2,
+        TOP | DOCK => taskbar == 0,
+        _ => true,
+    }
+}
+
+/// The steps after the welcome, in order, for this taskbar choice.
+fn steps(taskbar: usize) -> Vec<u8> {
+    (TASKBAR..=DONE).filter(|&step| shown(step, taskbar)).collect()
+}
 
 #[derive(Debug, Clone)]
 pub struct Baseline {
@@ -41,19 +60,13 @@ pub fn begin(app: &App) {
     });
 }
 
-/// The step before `step`; the look step is skipped when there are no bars or widgets to style.
+/// The step before `step`, skipping steps that don't apply.
 fn previous(step: u8, taskbar: usize) -> u8 {
-    match step.saturating_sub(1) {
-        LOOK if taskbar == 2 => TASKBAR,
-        step => step,
-    }
+    (WELCOME..step).rev().find(|&s| s == WELCOME || shown(s, taskbar)).unwrap_or(WELCOME)
 }
 
 fn following(step: u8, taskbar: usize) -> u8 {
-    match step + 1 {
-        LOOK if taskbar == 2 => WALLPAPER,
-        step => step,
-    }
+    (step + 1..=DONE).find(|&s| shown(s, taskbar)).unwrap_or(DONE)
 }
 
 pub fn back(app: &mut App) {
@@ -272,6 +285,18 @@ fn copy(step: u8) -> (&'static str, &'static str) {
             "Optional. A starting style for bars, menus and widgets. Skip it to keep things \
              as they are.",
         ),
+        TOP => (
+            "Your top bar",
+            "Optional. Pick how the bar across the top of your screen looks, or turn it off. Its modules and panels are in Studio.",
+        ),
+        DOCK => (
+            "Your dock",
+            "Optional. Pick a dock, or turn it off. Pinned apps and magnification are in Studio.",
+        ),
+        EXTRAS => (
+            "Extras",
+            "Optional. mypaper does more than looks. Each of these is off until you turn it on, and every one turns off again in Studio.",
+        ),
         WALLPAPER => (
             "Choose a wallpaper",
             "Optional. Live wallpapers pause when they're covered, so they cost nothing while \
@@ -369,25 +394,88 @@ fn choices(app: &App, b: &mut B, c: &mut Col) {
                 }
             });
         }
+        TOP | DOCK => {
+            let (bar, id) = if step == TOP { (crate::actions::Bar::Top, "top_enabled") } else { (crate::actions::Bar::Dock, "dock_enabled") };
+            group(b, c, "", |b, c| {
+                let s = crate::settings::Setting::get(id).unwrap();
+                super::controls::setting(app, b, c, id, s.label, "");
+            });
+            c.y += b.px(8.0);
+            super::editors::bar_design_cards(app, b, c, Some(bar));
+        }
+        EXTRAS => extras(app, b, c),
         _ => summary(app, b, c, starter, taskbar),
     }
 }
 
+/// Windows preferences mypaper can manage. Off removes the setting, so Windows' own value
+/// (journaled when mypaper took over) comes back.
+const TWEAKS: [(&str, &str, &str); 3] = [
+    ("show_extensions", "Show file extensions", "report.pdf, not just report"),
+    ("show_hidden", "Show hidden files", "Leaves protected system files hidden"),
+    ("game_mode", "Game Mode", "Windows puts the game first while you play"),
+];
+
+fn extras(app: &App, b: &mut B, c: &mut Col) {
+    use crate::actions::Edit;
+    use crate::docs::DocId;
+    group(b, c, "Files and search", |b, c| {
+        for id in ["experimental_file_index", "experimental_files_default"] {
+            let s = crate::settings::Setting::get(id).unwrap();
+            super::controls::setting(app, b, c, id, s.label, s.hint);
+        }
+    });
+    group(b, c, "Desktop", |b, c| {
+        for id in ["desktop_menu", "classic_menu"] {
+            let s = crate::settings::Setting::get(id).unwrap();
+            super::controls::setting(app, b, c, id, s.label, s.hint);
+        }
+    });
+    group(b, c, "Windows", |b, c| {
+        for (field, label, caption) in TWEAKS {
+            let path = format!("/system/{field}");
+            let on = app.get(DocId::Config, &path).and_then(serde_json::Value::as_bool) == Some(true);
+            let edit = Edit::new(DocId::Config, path, label);
+            let action = if on { Action::Unset(edit) } else { Action::Set(edit, serde_json::json!(true)) };
+            toggle(b, c, label, caption, on, action);
+        }
+    });
+}
+
+/// How many extras are on, for the summary.
+fn extras_on(app: &App) -> usize {
+    [
+        "/experimental/file_index",
+        "/experimental/files_default",
+        "/classic_context_menu",
+        "/system/show_extensions",
+        "/system/show_hidden",
+        "/system/game_mode",
+    ]
+    .into_iter()
+    .filter(|path| app.get(crate::docs::DocId::Config, path).and_then(serde_json::Value::as_bool) == Some(true))
+    .count()
+}
+
 fn summary(app: &App, b: &mut B, c: &mut Col, starter: Option<usize>, taskbar: usize) {
     group(b, c, "Your desktop", |b, c| {
-        let bars = match (taskbar, starter) {
-            (1, _) => "Windows taskbar",
-            (2, _) => "None",
-            (_, Some(index)) => ["Dock and top bar", "Taskbar", "Islands", "Top bar"][index.min(3)],
-            (_, None) => "Top bar and dock",
+        let bars = match taskbar {
+            1 => "Windows taskbar".to_owned(),
+            2 => "None".to_owned(),
+            _ => super::editors::bar_design_name(app, None),
         };
         let look = starter
             .and_then(|index| crate::editing::first_run::panel_starters().get(index).map(|(name, _)| *name))
             .unwrap_or("Unchanged");
         let wallpaper = app.library.active().map_or("None", |i| app.library.items[i].name.as_str());
-        fact(b, c, glyph::BARS, "Bars", bars);
+        fact(b, c, glyph::BARS, "Bars", &bars);
         fact(b, c, glyph::LOOK, "Look", look);
         fact(b, c, glyph::WALLPAPERS, "Wallpaper", wallpaper);
+        let extras = match extras_on(app) {
+            0 => "None".to_owned(),
+            n => format!("{n} on"),
+        };
+        fact(b, c, glyph::SETTINGS, "Extras", &extras);
     });
     group(b, c, "Startup", |b, c| {
         let on = app.system.autostart.as_ref().is_some_and(|a| a.enabled);
@@ -455,60 +543,14 @@ fn ease(t: f32, start: f32, length: f32) -> f32 {
     1.0 - (1.0 - x).powi(3)
 }
 
-/// The next frame the full-screen onboarding wants: smooth while the intro builds, then a
-/// slow drift on the welcome only. Steps are still, so they cost nothing while you read.
+/// The next frame the full-screen onboarding wants: only while the welcome builds itself.
+/// Afterwards every screen is still, so onboarding costs nothing while you read.
 pub fn deadline(app: &App) -> Option<std::time::Instant> {
     let t = elapsed(app);
-    if !t.is_finite() || current(app).0 != WELCOME || !matches!(app.overlay, Some(Overlay::FirstRun { .. })) {
+    if !t.is_finite() || t > INTRO || current(app).0 != WELCOME || !matches!(app.overlay, Some(Overlay::FirstRun { .. })) {
         return None;
     }
-    let frame = if t < INTRO { 16 } else { 50 };
-    Some(std::time::Instant::now() + std::time::Duration::from_millis(frame))
-}
-
-/// Three soft colour fields, made once: a premultiplied radial falloff, scaled up when drawn.
-fn blobs() -> &'static [std::sync::Arc<mypaper_ui::Image>; 3] {
-    static BLOBS: std::sync::OnceLock<[std::sync::Arc<mypaper_ui::Image>; 3]> = std::sync::OnceLock::new();
-    BLOBS.get_or_init(|| {
-        [[70u8, 86, 230], [24, 156, 168], [150, 74, 210]].map(|[r, g, bl]| {
-            const N: u32 = 96;
-            let mut pixels = Vec::with_capacity((N * N * 4) as usize);
-            for y in 0..N {
-                for x in 0..N {
-                    let dx = (x as f32 + 0.5) / N as f32 * 2.0 - 1.0;
-                    let dy = (y as f32 + 0.5) / N as f32 * 2.0 - 1.0;
-                    let a = (1.0 - (dx * dx + dy * dy)).max(0.0).powi(2);
-                    let p = |c: u8| (c as f32 * a).round() as u8;
-                    pixels.extend_from_slice(&[p(bl), p(g), p(r), (a * 255.0).round() as u8]);
-                }
-            }
-            std::sync::Arc::new(mypaper_ui::Image { width: N, height: N, pixels })
-        })
-    })
-}
-
-/// Near-black with slowly drifting colour light: the intro's "shader", drawn as three images.
-fn backdrop(b: &mut B, full: Rect, t: f32, strength: f32) {
-    b.fill(full, 0.0, crate::panel::tokens::hex(0x050608));
-    let (w, h) = (full.width(), full.height());
-    let s = w.min(h);
-    // Fixtures (t infinite) freeze at a pleasant arrangement.
-    let clock = if t.is_finite() { t } else { 7.0 };
-    let fade = if t.is_finite() { ease(t, 0.0, 1.4) } else { 1.0 };
-    for (i, image) in blobs().iter().enumerate() {
-        let size = s * [1.35, 1.1, 1.0][i];
-        let speed = [0.21, 0.17, 0.13][i];
-        let phase = [0.0, 2.1, 4.2][i];
-        let cx = w * [0.26, 0.74, 0.55][i] + w * 0.09 * (clock * speed + phase).sin();
-        let cy = h * [0.32, 0.66, 0.12][i] + h * 0.08 * (clock * speed * 1.3 + phase).cos();
-        b.list.ops.push(mypaper_ui::Op::RoundedImage {
-            rect: Rect::new(full.left + cx - size / 2.0, full.top + cy - size / 2.0, size, size),
-            image: image.clone(),
-            opacity: [0.55, 0.42, 0.36][i] * fade * strength,
-            source: None,
-            radius: 0.0,
-        });
-    }
+    Some(std::time::Instant::now() + std::time::Duration::from_millis(16))
 }
 
 fn centered(b: &mut B, r: Rect, label: &str, size: f32, weight: u16, ink: mypaper_ui::Rgba) {
@@ -623,12 +665,14 @@ fn welcome(app: &App, b: &mut B, full: Rect, t: f32) {
 }
 
 /// Step dots: one per step after the welcome, filled up to the current one.
-fn progress(b: &mut B, r: Rect, step: u8) {
-    let count = DONE as usize;
+fn progress(b: &mut B, r: Rect, step: u8, taskbar: usize) {
+    let all = steps(taskbar);
+    let count = all.len();
+    let step = all.iter().position(|&s| s == step).map_or(count, |i| i + 1);
     let (w, gap, h) = (b.px(28.0), b.px(6.0), b.px(4.0));
     let top = r.top + (r.height() - h) / 2.0;
     for i in 0..count {
-        let on = i < step as usize;
+        let on = i < step;
         b.fill(Rect::new(r.left + i as f32 * (w + gap), top, w, h), h / 2.0, if on { b.p.ink1 } else { b.p.selected });
     }
     let x = r.left + count as f32 * (w + gap) + b.px(6.0);
@@ -636,7 +680,7 @@ fn progress(b: &mut B, r: Rect, step: u8) {
 }
 
 /// A step, the way Windows' own setup lays it out: the words on the left, the choices on the
-/// right in a quiet pane, Back and Continue beneath. Narrow screens stack the two.
+/// right as One UI cards on the page, Back and Continue beneath. Narrow screens stack the two.
 fn step_screen(app: &App, b: &mut B, full: Rect, step: u8) {
     let width = (full.width() - b.px(128.0)).min(b.px(1180.0));
     let height = (full.height() - b.px(200.0)).min(b.px(720.0));
@@ -644,7 +688,7 @@ fn step_screen(app: &App, b: &mut B, full: Rect, step: u8) {
     let top = full.top + (full.height() - height) / 2.0 - b.px(24.0);
     let stacked = width < b.px(860.0);
     let copy_w = if stacked { width } else { width * 0.36 };
-    progress(b, Rect::new(left, top, copy_w, b.px(20.0)), step);
+    progress(b, Rect::new(left, top, copy_w, b.px(20.0)), step, current(app).2);
     let (heading, sentence) = copy(step);
     let mut y = top + b.px(44.0);
     let title_style = super::controls::font(b, 40.0, 700);
@@ -659,25 +703,15 @@ fn step_screen(app: &App, b: &mut B, full: Rect, step: u8) {
         let x = left + copy_w + b.px(56.0);
         Rect::new(x, top, left + width - x, height)
     };
-    let plate = b.list.ops.len();
     let view = key(("first-run-step", step));
     b.scroll(view, pane, app.nav.scroll(view), Action::None, |b, y| {
-        let mut c = Col { x: pane.left + b.px(24.0), y: y + b.px(24.0), w: pane.width() - b.px(48.0), view };
+        // Leave room for selection rings and focus outlines inside the clip.
+        let mut c = Col { x: pane.left + b.px(6.0), y: y + b.px(6.0), w: pane.width() - b.px(16.0), view };
         super::controls::save_banner(app, b, &mut c, super::Page::FirstRun);
         choices(app, b, &mut c);
         super::controls::boundaries(b);
         c.y + b.px(24.0)
     });
-    // The pane hugs its choices; Back and Continue stay put whatever the step holds.
-    let content = b.scrolls.last().map_or(pane.height(), |area| area.content);
-    b.list.ops.insert(
-        plate,
-        mypaper_ui::Op::Fill {
-            rect: Rect::new(pane.left, pane.top, pane.width(), content.min(pane.height())),
-            radius: b.px(24.0),
-            color: mypaper_ui::Rgba::new(1.0, 1.0, 1.0, 0.045),
-        },
-    );
     let h = b.px(42.0);
     let y = pane.bottom + b.px(28.0);
     let label = next_label(app);
@@ -699,12 +733,16 @@ fn step_screen(app: &App, b: &mut B, full: Rect, step: u8) {
     );
 }
 
-/// The whole-screen onboarding: the drifting backdrop, Skip, and the welcome or a step.
+/// The whole-screen onboarding: Skip, and the welcome or a step, in One UI: a near-black
+/// page, large rounded cards and pill controls.
 pub fn fullscreen(app: &App, b: &mut B, full: Rect) {
     begin(app);
+    b.kit.radius.control = None;
+    b.kit.radius.card = 24.0;
     let step = current(app).0;
     let t = elapsed(app);
-    backdrop(b, full, t, if step == WELCOME { 1.0 } else { 0.6 });
+    // Studio's own One UI, dark: the near-black the curtains fade to, cards and pills on it.
+    b.fill(full, 0.0, b.p.chrome);
     if step != DONE && (step != WELCOME || t >= 2.6) {
         let width = b.button_width("Skip setup", false, true);
         let r = Rect::new(full.right - width - b.px(24.0), full.top + b.px(20.0), width, b.px(32.0));

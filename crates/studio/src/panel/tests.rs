@@ -958,8 +958,8 @@ fn first_run_stays_in_the_panel_and_finishes_through_its_footer() {
         app.overlay,
         Some(crate::app::Overlay::FirstRun { step: super::first_run::LOOK, .. })
     ));
-    // Look, wallpaper, then done.
-    for _ in 0..3 {
+    // Keeping Windows' taskbar skips the bar steps: look, wallpaper, extras, then done.
+    for _ in 0..4 {
         app.run(Action::FirstRunNext);
     }
     assert_eq!(app.panel.as_ref().unwrap().page, Page::Root);

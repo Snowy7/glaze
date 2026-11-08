@@ -382,7 +382,10 @@ fn render_onboarding_steps() {
                 (first_run::WELCOME, "welcome"),
                 (first_run::TASKBAR, "taskbar"),
                 (first_run::LOOK, "look"),
+                (first_run::TOP, "top-bar"),
+                (first_run::DOCK, "dock"),
                 (first_run::WALLPAPER, "wallpaper"),
+                (first_run::EXTRAS, "extras"),
                 (first_run::DONE, "done"),
             ] {
                 app.overlay = Some(crate::app::Overlay::FirstRun { step, starter: None, taskbar: 0 });
