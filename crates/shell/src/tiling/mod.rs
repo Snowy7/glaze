@@ -343,12 +343,12 @@ impl Tiler {
         let layout = self.layouts.get_mut(&desktop).unwrap();
         let prior_monitor = layout.focused_monitor.clone();
         let had_focus = layout.focused().is_some();
-        if let Some(owner) = owner {
-            layout.focus(owner);
-        } else if let Some(m) = layout.monitors.iter().find(|m| {
-            m.full
-                .contains(frame.x + frame.w / 2.0, frame.y + frame.h / 2.0)
-        }) {
+        if owner.is_none()
+            && let Some(m) = layout.monitors.iter().find(|m| {
+                m.full
+                    .contains(frame.x + frame.w / 2.0, frame.y + frame.h / 2.0)
+            })
+        {
             layout.focused_monitor = Some(m.id.clone());
         }
         let floating = float.then(|| {
@@ -368,12 +368,13 @@ impl Tiler {
             } else {
                 frame
             };
-            if let Some(m) = layout
-                .monitors
-                .iter()
-                .find(|m| {
-                    m.area
-                        .contains(placed.x + placed.w / 2.0, placed.y + placed.h / 2.0)
+            if let Some(m) = owner
+                .and_then(|window| layout.locate(window).map(|(mi, _)| &layout.monitors[mi]))
+                .or_else(|| {
+                    layout.monitors.iter().find(|m| {
+                        m.area
+                            .contains(placed.x + placed.w / 2.0, placed.y + placed.h / 2.0)
+                    })
                 })
                 .or_else(|| layout.monitors.first())
             {

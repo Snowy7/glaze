@@ -875,7 +875,14 @@ fn extra_window(owner: HWND, kind: usize) -> Result<()> {
 fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]) -> Result<()> {
     let controller = windows[0];
     let mut extras = Vec::new();
+    let focused = windows[3];
+    tiler
+        .as_mut()
+        .unwrap()
+        .reveal(glaze_tiling::WindowId(focused.hwnd as u64));
+    settle(tiler)?;
     let initial = tiler.as_ref().unwrap().placements();
+    let focused_rect = initial.iter().find(|(id, _)| *id == focused).unwrap().1;
     for kind in 1..=7 {
         unsafe {
             PostMessageW(
@@ -936,6 +943,8 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
         );
     }
     let late = extras[5];
+    verify_frame(focused, focused_rect)
+        .context("background opens moved the focused fixture window")?;
     unsafe {
         PostMessageW(Some(late.window()), WM_APP + 91, WPARAM(0), LPARAM(0))?;
     }
