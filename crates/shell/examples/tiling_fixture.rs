@@ -436,6 +436,54 @@ fn pump(tiler: &mut Option<Tiler>, duration: Duration) -> u64 {
     wakes
 }
 
+/// Find only this fixture controller's own top-level overlay, never another process's window.
+fn owned_overlay(class: &str) -> Result<HWND> {
+    struct Search<'a> {
+        class: &'a str,
+        found: Option<HWND>,
+    }
+    unsafe extern "system" fn find(h: HWND, data: LPARAM) -> windows::core::BOOL {
+        // SAFETY: EnumWindows synchronously borrows our stack search; PID/class queries are cached USER state.
+        unsafe {
+            let search = &mut *(data.0 as *mut Search<'_>);
+            let mut pid = 0;
+            GetWindowThreadProcessId(h, Some(&mut pid));
+            if pid == std::process::id() {
+                let mut class = [0u16; 128];
+                let len = GetClassNameW(h, &mut class).max(0) as usize;
+                if String::from_utf16_lossy(&class[..len]) == search.class {
+                    search.found = Some(h);
+                    return false.into();
+                }
+            }
+        }
+        true.into()
+    }
+    let mut search = Search { class, found: None };
+    // SAFETY: the callback cannot outlive this stack value; it selects our own PID only.
+    let _ = unsafe { EnumWindows(Some(find), LPARAM(&mut search as *mut _ as isize)) };
+    search.found.context("fixture overlay not found")
+}
+
+/// Read z-order without activating anything; bound the walk against concurrent window changes.
+fn above(upper: HWND, lower: HWND) -> bool {
+    let mut current = lower;
+    for _ in 0..4096 {
+        // SAFETY: read-only query; a disappearing window terminates the walk.
+        let Ok(previous) = (unsafe { GetWindow(current, GW_HWNDPREV) }) else {
+            return false;
+        };
+        if previous == upper {
+            return true;
+        }
+        if previous.is_invalid() {
+            return false;
+        }
+        current = previous;
+    }
+    false
+}
+
 fn child(output: &Path, count: usize) -> Result<()> {
     CHILD_OUTPUT.with(|path| *path.borrow_mut() = output.into());
     std::fs::write(output.join("child.pid"), std::process::id().to_string())?;
@@ -803,10 +851,27 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
     verify_placements(tiler.as_ref().unwrap())?;
     tiler.as_mut().unwrap().command(Op::Maximize);
     pump(tiler, Duration::from_millis(300));
+    tiler.as_mut().unwrap().update(Settings::default());
+    tiler.as_mut().unwrap().command(Op::Center);
+    pump(tiler, Duration::from_millis(60));
+    let animation = owned_overlay("glaze.tiling.animation")?;
+    ensure!(
+        above(extras[2].window(), animation),
+        "animation covered a topmost fixture window"
+    );
+    tiler.as_mut().unwrap().set_game_activity(true);
+    tiler.as_mut().unwrap().set_game_activity(false);
+    pump(tiler, Duration::from_millis(350));
     let t = tiler.as_mut().unwrap();
     t.command(Op::MoveWorkspace(Direction::Down));
     t.command(Op::Overview);
-    pump(tiler, Duration::from_millis(250));
+    pump(tiler, Duration::from_millis(500));
+    let overview = owned_overlay("glaze.tiling.overview")?;
+    ensure!(
+        above(extras[2].window(), overview),
+        "overview covered a topmost fixture window"
+    );
+    capture(Identity::read(overview)?, &output.join("overview.png"))?;
     tiler.as_mut().unwrap().command(Op::Overview);
     tiler
         .as_mut()
