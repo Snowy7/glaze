@@ -85,6 +85,16 @@ pub struct Column {
     pub tabbed: bool,
     pub mode: Mode,
 }
+impl Column {
+    /// Retain the selected window's identity when a preceding tab leaves the stack.
+    fn remove(&mut self, window: WindowId) {
+        let active = self.tiles.get(self.active).map(|t| t.id);
+        self.tiles.retain(|t| t.id != window);
+        self.active = active
+            .and_then(|id| self.tiles.iter().position(|t| t.id == id))
+            .unwrap_or_else(|| self.active.min(self.tiles.len().saturating_sub(1)));
+    }
+}
 #[derive(Debug, Clone)]
 pub struct Floating {
     pub id: WindowId,
@@ -419,8 +429,7 @@ impl Layout {
             let index = w.column(id);
             if let Some(ci) = index {
                 let c = &mut w.columns[ci];
-                c.tiles.retain(|t| t.id != id);
-                c.active = c.active.min(c.tiles.len().saturating_sub(1));
+                c.remove(id);
                 if c.tiles.is_empty() {
                     w.columns.remove(ci);
                 }
@@ -465,9 +474,7 @@ impl Layout {
             }
         } else {
             for w in &mut self.detached {
-                w.columns
-                    .iter_mut()
-                    .for_each(|c| c.tiles.retain(|t| t.id != id));
+                w.columns.iter_mut().for_each(|c| c.remove(id));
                 w.columns.retain(|c| !c.tiles.is_empty());
                 for c in &mut w.columns {
                     c.active = c.active.min(c.tiles.len() - 1);
@@ -477,7 +484,7 @@ impl Layout {
                     w.focused = w
                         .columns
                         .first()
-                        .map(|c| c.tiles[0].id)
+                        .map(|c| c.tiles[c.active].id)
                         .or_else(|| w.floating.last().map(|f| f.id));
                 }
             }

@@ -162,6 +162,31 @@ fn closing_a_consumed_temporary_window_restores_the_correct_tab() {
     check(&l);
 }
 #[test]
+fn closing_a_preceding_tab_keeps_focus_with_and_without_outputs() {
+    for detached in [false, true] {
+        let mut l = layout();
+        open(&mut l, 1);
+        open(&mut l, 2);
+        l.command(Command::Consume);
+        open(&mut l, 3);
+        l.command(Command::Consume);
+        l.focus(WindowId(2));
+        l.command(Command::Tabbed);
+        if detached {
+            l.remove_monitor("a");
+        }
+        l.remove(WindowId(1));
+        check(&l);
+        let w = if detached {
+            &l.detached[0]
+        } else {
+            &l.monitors[0].workspaces[0]
+        };
+        assert_eq!(w.focused, Some(WindowId(2)));
+        assert_eq!(w.columns[0].tiles[w.columns[0].active].id, WindowId(2));
+    }
+}
+#[test]
 fn closing_left_column_preserves_focused_screen_position() {
     let mut l = layout();
     for id in 1..5 {
@@ -348,6 +373,24 @@ fn closing_a_float_without_any_outputs_keeps_the_remaining_float_focused() {
     l.remove_monitor("a");
     l.remove(WindowId(2));
     assert_eq!(l.detached[0].focused, Some(WindowId(1)));
+    check(&l);
+}
+#[test]
+fn closing_the_last_detached_float_returns_to_the_selected_tab() {
+    let mut l = layout();
+    open(&mut l, 1);
+    open(&mut l, 2);
+    l.command(Command::Consume);
+    l.insert(
+        WindowId(3),
+        Constraints::default(),
+        None,
+        Some(area()),
+        true,
+    );
+    l.remove_monitor("a");
+    l.remove(WindowId(3));
+    assert_eq!(l.detached[0].focused, Some(WindowId(2)));
     check(&l);
 }
 #[test]
