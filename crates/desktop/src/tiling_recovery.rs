@@ -152,7 +152,7 @@ impl Journal {
         }
         Ok(())
     }
-    /// A now-visible fullscreen or topmost window is handed back to its app without moving it.
+    /// Retire a destroyed or permanently unmanaged window without moving it.
     pub fn release(&mut self, identity: Identity) -> Result<()> {
         self.data.windows.retain(|e| e.identity != identity);
         self.save()?;

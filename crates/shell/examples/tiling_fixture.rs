@@ -914,7 +914,11 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
             .placements()
             .iter()
             .any(|(id, _)| *id == tray),
-        "tray restore was not admitted"
+        "tray restore was not admitted: {tray:?}, visible={}, iconic={}, style={:#x}, placements={:?}",
+        unsafe { IsWindowVisible(tray.window()).as_bool() },
+        unsafe { IsIconic(tray.window()).as_bool() },
+        unsafe { GetWindowLongPtrW(tray.window(), GWL_STYLE) },
+        tiler.as_ref().unwrap().placements()
     );
     // The real display-change grace period must expire before testing a user minimize.
     pump(tiler, Duration::from_secs(11));

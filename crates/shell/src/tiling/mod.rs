@@ -888,7 +888,8 @@ impl Tiler {
                         if let Some(l) = self.layouts.get_mut(&w.desktop) {
                             if fullscreen {
                                 w.suspended = l.suspend(window);
-                                let _ = self.journal.release(w.admission.identity);
+                                // Keep the pre-tiling rectangle through a temporary handoff.
+                                // Recovery already leaves a still-fullscreen/topmost client alone.
                             } else if let Some(saved) = w.suspended.take() {
                                 l.resume(saved, platform::foreground() == h);
                             }
