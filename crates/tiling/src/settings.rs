@@ -34,6 +34,7 @@ pub enum Command {
     Fullscreen,
     Center,
     Floating,
+    FocusLayer,
     Tabbed,
     Consume,
     Expel,
@@ -114,6 +115,7 @@ impl Default for Settings {
         for (key, ctrl, command) in [
             (0x52, false, Command::CycleHeight),
             (0x46, false, Command::Fullscreen),
+            (0x56, false, Command::FocusLayer),
             (0x21, true, Command::MoveWorkspace(Direction::Up)),
             (0x22, true, Command::MoveWorkspace(Direction::Down)),
         ] {

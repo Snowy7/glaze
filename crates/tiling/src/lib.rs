@@ -99,6 +99,8 @@ pub struct Workspace {
     pub view: f64,
     pub original_output: String,
     remembered: Option<(WindowId, WindowId, f64)>,
+    tiled_focus: Option<WindowId>,
+    floating_focus: Option<WindowId>,
 }
 impl Workspace {
     fn empty(&self) -> bool {
@@ -198,6 +200,8 @@ impl Layout {
             view: 0.0,
             original_output: output.into(),
             remembered: None,
+            tiled_focus: None,
+            floating_focus: None,
         }
     }
     /// Update by stable output identity. Portrait outputs use a vertical strip.
@@ -229,7 +233,10 @@ impl Layout {
                 }
             }
             workspaces.push(self.workspace(&id));
-            let active = self.remembered_active.get(&id).copied()
+            let active = self
+                .remembered_active
+                .get(&id)
+                .copied()
                 .filter(|id| workspaces.iter().any(|w| w.id == *id))
                 .unwrap_or(workspaces[0].id);
             self.monitors.push(Monitor {
@@ -313,6 +320,7 @@ impl Layout {
             return self.targets();
         };
         let output = self.monitors[mi].id.clone();
+        let before = self.focus_position(mi, wi);
         let w = &mut self.monitors[mi].workspaces[wi];
         let old = w.focused;
         let old_view = w.view;
@@ -340,12 +348,22 @@ impl Layout {
                 },
             );
         }
-        if activate {
+        if activate || old.is_none() {
             w.focused = Some(id);
             w.remembered = old.map(|old| (id, old, old_view));
             self.monitors[mi].active = self.monitors[mi].workspaces[wi].id;
             self.focused_monitor = Some(self.monitors[mi].id.clone());
             self.fit(mi, wi);
+        } else if let Some(before) = before {
+            self.preserve_focus(mi, wi, before);
+        }
+        if activate || old.is_none() {
+            let w = &mut self.monitors[mi].workspaces[wi];
+            if w.column(id).is_some() {
+                w.tiled_focus = Some(id);
+            } else {
+                w.floating_focus = Some(id);
+            }
         }
         self.normalize();
         self.targets()
@@ -411,6 +429,11 @@ impl Layout {
                 w.remembered = None;
             }
             w.focused = Some(id);
+            if w.column(id).is_some() {
+                w.tiled_focus = Some(id);
+            } else {
+                w.floating_focus = Some(id);
+            }
             if let Some(ci) = w.column(id) {
                 w.columns[ci].active = w.columns[ci]
                     .tiles
@@ -584,6 +607,54 @@ impl Layout {
                         w.focused = Some(c.tiles[next].id);
                     }
                     self.fit(mi, wi);
+                } else if let Some(id) = focused {
+                    let m = &mut self.monitors[mi];
+                    let area = m.area;
+                    let scale = m.scale;
+                    let w = &mut m.workspaces[wi];
+                    if let Some(index) = w.floating.iter().position(|f| f.id == id) {
+                        let origin = w.floating[index].rect;
+                        if matches!(command, Command::Move(_)) {
+                            let (dx, dy) = match d {
+                                Direction::Left => (-50.0, 0.0),
+                                Direction::Right => (50.0, 0.0),
+                                Direction::Up => (0.0, -50.0),
+                                Direction::Down => (0.0, 50.0),
+                            };
+                            let r = &mut w.floating[index].rect;
+                            r.x += dx * scale;
+                            r.y += dy * scale;
+                            let min_x = (r.w / 4.0).clamp(10.0 * scale, 75.0 * scale);
+                            let min_y = (r.h / 4.0).clamp(10.0 * scale, 75.0 * scale);
+                            r.x = r.x.clamp(area.x - r.w + min_x, area.x + area.w - min_x);
+                            r.y = r.y.clamp(area.y - r.h + min_y, area.y + area.h - min_y);
+                        } else {
+                            let (x, y) = (origin.x + origin.w / 2.0, origin.y + origin.h / 2.0);
+                            let next = w
+                                .floating
+                                .iter()
+                                .filter(|f| f.id != id)
+                                .filter_map(|f| {
+                                    let (dx, dy) = (
+                                        f.rect.x + f.rect.w / 2.0 - x,
+                                        f.rect.y + f.rect.h / 2.0 - y,
+                                    );
+                                    let direction = match d {
+                                        Direction::Left => dx < 0.0,
+                                        Direction::Right => dx > 0.0,
+                                        Direction::Up => dy < 0.0,
+                                        Direction::Down => dy > 0.0,
+                                    };
+                                    direction.then_some((f.id, dx.hypot(dy)))
+                                })
+                                .min_by(|(_, a), (_, b)| a.total_cmp(b))
+                                .map(|(id, _)| id);
+                            if let Some(next) = next {
+                                w.focused = Some(next);
+                                w.floating_focus = Some(next);
+                            }
+                        }
+                    }
                 }
             }
             Command::CycleWidth
@@ -746,6 +817,21 @@ impl Layout {
                 }
             }
             Command::Overview => {}
+            Command::FocusLayer => {
+                let w = &mut self.monitors[mi].workspaces[wi];
+                let next = if focused.is_some_and(|id| w.column(id).is_some()) {
+                    w.floating_focus
+                        .filter(|id| w.floating.iter().any(|f| f.id == *id))
+                        .or_else(|| w.floating.last().map(|f| f.id))
+                } else {
+                    w.tiled_focus
+                        .filter(|id| w.column(*id).is_some())
+                        .or_else(|| w.columns.first().map(|c| c.tiles[c.active].id))
+                };
+                if let Some(id) = next {
+                    self.focus(id);
+                }
+            }
         }
         self.normalize();
         self.targets()
