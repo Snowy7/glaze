@@ -76,7 +76,8 @@ it. Explicit focus changes forget that bookmark. Minima win over maxima. Proport
 logical coordinates; target rectangles use physical coordinates. Removed outputs migrate workspaces and
 remember their stable display path; reconnecting returns them unless opening a new window reassigned them.
 Floating positions remain relative to the work area through hotplug and DPI changes. Floating toggles
-remember geometry and constraints. Fullscreening a float moves it into a column and restores the float on
+remember geometry and constraints; the first toggle uses niri's clamped 50 logical pixel offset, except
+when columns are always centered. Fullscreening a float moves it into a column and restores the float on
 exit. Maximize/fullscreen expel a stacked member; tabbed columns stay together, showing their active tab.
 
 The shell subscribes to the existing `win-events` source. Cached USER state and the admitted-window set
@@ -169,9 +170,10 @@ recorded. They prove no adapter idle message wake in these runs. They do **not**
 equivalence with main. The shell `wakes` instrumentation includes a tiling bucket, but the owner's running
 main shell was not stopped or replaced to collect a whole-shell A/B.
 
-The pure layout suite has 38 passing tests, including 128 generated sequences over 36 operation families
+The pure layout suite has 39 passing tests, including 128 generated sequences over 36 operation families
 and saved counterexamples. Latest focused runs: config 25, desktop 45 (one ignored), shell tiling 5,
-keyboard 8. Studio's focused settings-page render also passes; its General page was inspected with the
+keyboard 8. Studio's enable/disable/undo/redo test verifies that the flag is written only while on.
+Its focused settings-page render also passes; the General page was inspected with the
 new toggle off. All seven touched crates pass `cargo check` and clippy (warnings remain). At the rename
 checkpoint, bars had 122 passing tests; shell had 218 passing tests and a z-order test that passed in
 isolation. Studio had 184 passing tests and one weather-gallery golden mismatch (missing plugin card),

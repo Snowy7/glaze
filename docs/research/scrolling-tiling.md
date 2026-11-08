@@ -214,7 +214,7 @@ foreground check. Scoped runs did not alter Snap. No user's desktop build was re
 | Idle and disabled overhead | Adapter flag-on: 60.006 s, 0 CPU ms, 0 UI wakes, 2,068,480 private bytes. Flag-off: 60.005 s, 15.625 CPU ms, 0 UI wakes, 1,560,576 bytes. No whole-shell baseline/wakes A/B was taken, so flag-off equivalence with main is unproven. |
 | Native correctness and recovery | Own window admission, minima, tray/minimize, hung client, native fullscreen, topmost ordering, overview and exact disable restoration pass. A renamed hard-crash fixture/new recovery process restores four parked windows. Core-death and panic-hotkey wiring were not invoked on the owner's shell. |
 
-Layout tests cover 38 cases, including randomized operation sequences and saved counterexamples. Full
+Layout tests cover 39 cases, including randomized operation sequences and saved counterexamples. Full
 hardware/real-client sign-off and the performance gates above remain open. Gesture input and wallpaper
 parallax were withheld while pacing is unresolved; their incremental cost has not been measured.
 
