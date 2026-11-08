@@ -582,7 +582,7 @@ fn keyboard_output_and_workspace_moves_carry_the_entire_column() {
     check(&l);
 }
 #[test]
-fn fullscreen_shows_only_the_active_tile_of_a_stack() {
+fn fullscreen_expels_a_stacked_window_without_rejoining_on_exit() {
     let mut l = layout();
     open(&mut l, 1);
     open(&mut l, 2);
@@ -591,8 +591,48 @@ fn fullscreen_shows_only_the_active_tile_of_a_stack() {
     let targets = l.targets();
     assert_eq!(targets.iter().filter(|t| t.visible).count(), 1);
     assert!(targets.iter().any(|t| t.window == WindowId(2) && t.visible));
+    let (mi, wi) = l.locate(WindowId(2)).unwrap();
+    assert_eq!(l.monitors[mi].workspaces[wi].columns.len(), 2);
     l.command(Command::Fullscreen);
-    assert_eq!(l.targets().iter().filter(|t| t.visible).count(), 2);
+    assert!(
+        l.targets()
+            .iter()
+            .any(|t| t.window == WindowId(2) && t.visible)
+    );
+    assert!(
+        l.monitors[mi].workspaces[wi]
+            .columns
+            .iter()
+            .all(|c| c.mode == Mode::Normal)
+    );
+    assert_eq!(l.monitors[mi].workspaces[wi].columns.len(), 2);
+}
+#[test]
+fn maximized_tabbed_columns_show_one_window_to_the_work_area_edges() {
+    let mut l = layout();
+    open(&mut l, 1);
+    open(&mut l, 2);
+    l.command(Command::Consume);
+    l.command(Command::Tabbed);
+    l.command(Command::Maximize);
+    let targets = l.targets();
+    let active = targets.iter().find(|t| t.window == WindowId(2)).unwrap();
+    assert!(active.visible);
+    assert_eq!(active.rect, area());
+    assert!(
+        !targets
+            .iter()
+            .find(|t| t.window == WindowId(1))
+            .unwrap()
+            .visible
+    );
+    l.command(Command::Maximize);
+    let (mi, wi) = l.locate(WindowId(2)).unwrap();
+    assert_eq!(l.monitors[mi].workspaces[wi].columns.len(), 1);
+    l.command(Command::Tabbed);
+    l.set_maximized(WindowId(2), true);
+    assert_eq!(l.monitors[mi].workspaces[wi].columns.len(), 2);
+    check(&l);
 }
 #[test]
 fn drop_at_column_center_joins_and_edge_inserts() {

@@ -689,7 +689,21 @@ impl Layout {
             return self.targets();
         };
         let focused = self.monitors[mi].workspaces[wi].focused;
-        let ci = focused.and_then(|id| self.monitors[mi].workspaces[wi].column(id));
+        let mut ci = focused.and_then(|id| self.monitors[mi].workspaces[wi].column(id));
+        if matches!(command, Command::Maximize | Command::Fullscreen)
+            && let Some(id) = focused
+            && let Some(index) = ci
+        {
+            let mode = self.monitors[mi].workspaces[wi].columns[index].mode;
+            let entering = match command {
+                Command::Maximize => mode != Mode::Maximized,
+                Command::Fullscreen => mode != Mode::Fullscreen,
+                _ => false,
+            };
+            if entering {
+                ci = Some(self.extract_for_mode(mi, wi, id));
+            }
+        }
         match command {
             Command::Focus(d) | Command::Move(d) => {
                 if let Some(ci) = ci {
@@ -1067,7 +1081,9 @@ impl Layout {
                         r.h *= m.scale;
                         // Whole columns only: no window may bleed onto an adjacent output.
                         let visible = w.id == m.active
-                            && (!(c.tabbed || c.mode == Mode::Fullscreen) || ti == c.active)
+                            && (!(c.tabbed
+                                || matches!(c.mode, Mode::Maximized | Mode::Fullscreen))
+                                || ti == c.active)
                             && r.x >= area.x - 0.5
                             && r.y >= area.y - 0.5
                             && r.x + r.w <= area.x + area.w + 0.5
@@ -1118,6 +1134,24 @@ pub struct Suspended {
     learned_min: f64,
 }
 impl Layout {
+    /// niri expels a maximized/fullscreen window from a stack, while retaining tabbed columns.
+    fn extract_for_mode(&mut self, mi: usize, wi: usize, window: WindowId) -> usize {
+        let w = &mut self.monitors[mi].workspaces[wi];
+        let ci = w.column(window).unwrap();
+        let c = &mut w.columns[ci];
+        if c.tabbed || c.tiles.len() == 1 {
+            return ci;
+        }
+        let index = c.tiles.iter().position(|t| t.id == window).unwrap();
+        let tile = c.tiles[index].clone();
+        let mut separate = c.clone();
+        separate.tiles = vec![tile];
+        separate.active = 0;
+        c.remove(window);
+        w.columns.insert(ci + 1, separate);
+        w.remembered = None;
+        ci + 1
+    }
     /// Untile a fixed-size or incompatible client while preserving its workspace.
     pub fn float_at(&mut self, window: WindowId, rect: Rect) -> Vec<Target> {
         if let Some(mut saved) = self.suspend(window) {
@@ -1231,6 +1265,9 @@ impl Layout {
     /// Native maximize/restore requests are idempotent, unlike a keyboard toggle.
     pub fn set_maximized(&mut self, window: WindowId, on: bool) -> Vec<Target> {
         if let Some((mi, wi)) = self.locate(window) {
+            if on && self.monitors[mi].workspaces[wi].column(window).is_some() {
+                self.extract_for_mode(mi, wi, window);
+            }
             let w = &mut self.monitors[mi].workspaces[wi];
             if let Some(ci) = w.column(window) {
                 w.columns[ci].mode = if on { Mode::Maximized } else { Mode::Normal };
@@ -1296,7 +1333,7 @@ impl Layout {
 
 /// Weighted auto heights honor every minimum, even when that overflows the work area.
 fn heights(c: &Column, axis: Axis, breadth: f64, gap: f64) -> Vec<f64> {
-    if c.tabbed {
+    if c.tabbed || matches!(c.mode, Mode::Maximized | Mode::Fullscreen) {
         return vec![breadth; c.tiles.len()];
     }
     let mut remaining = (breadth - gap * c.tiles.len().saturating_sub(1) as f64).max(1.0);
