@@ -10,14 +10,14 @@
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use mypaper_bars::audio::Volume;
-use mypaper_bars::flyouts::quick::{PowerMode, RadioKind};
-use mypaper_bars::network::{self, Kind as Link, NetworkInfo};
-use mypaper_bars::system::{self, Battery};
-use mypaper_bars::wake::Msg;
-use mypaper_ui::icons::Icon;
-use mypaper_ui::layout::{self, Align, Stack};
-use mypaper_ui::{HitId, TextRole, Tile};
+use glaze_bars::audio::Volume;
+use glaze_bars::flyouts::quick::{PowerMode, RadioKind};
+use glaze_bars::network::{self, Kind as Link, NetworkInfo};
+use glaze_bars::system::{self, Battery};
+use glaze_bars::wake::Msg;
+use glaze_ui::icons::Icon;
+use glaze_ui::layout::{self, Align, Stack};
+use glaze_ui::{HitId, TextRole, Tile};
 
 use super::controls;
 use super::kit::{Kit, slider_card, slider_card_height, volume_icon};

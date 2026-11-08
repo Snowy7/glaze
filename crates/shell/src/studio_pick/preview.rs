@@ -6,7 +6,7 @@ pub struct Preview {
     session: Option<u64>,
     sequence: u64,
     values: Vec<Value>,
-    snapshot: Option<Option<mypaper_theme::LoadedTheme>>,
+    snapshot: Option<Option<glaze_theme::LoadedTheme>>,
 }
 
 struct Value {
@@ -70,7 +70,7 @@ impl Preview {
         }).collect();
     }
 
-    pub fn snapshot_theme(&self) -> Option<Option<&mypaper_theme::LoadedTheme>> {
+    pub fn snapshot_theme(&self) -> Option<Option<&glaze_theme::LoadedTheme>> {
         self.snapshot.as_ref().map(Option::as_ref)
     }
 

@@ -1,7 +1,7 @@
 # Your own native widgets
 
 Studio's **Widgets → New custom widget** installs these examples in
-`%APPDATA%\mypaper\widgets`, creates another definition and opens it in your editor. Existing files
+`%APPDATA%\glaze\widgets`, creates another definition and opens it in your editor. Existing files
 are preserved. Each `name.json` appears as a separate `custom-name` entry in both widget pickers.
 Open the picker again after creating or renaming a file. You can add several instances of each.
 

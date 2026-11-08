@@ -18,9 +18,9 @@ mod wallpapers;
 pub(crate) mod widgets;
 pub use widgets::{can_add_widget, pick_asset};
 
-use mypaper_ui::controls::{Align, Behavior, key};
-use mypaper_ui::{Rect, Role};
-use mypaper_widgets::layout::{Instance, Layout};
+use glaze_ui::controls::{Align, Behavior, key};
+use glaze_ui::{Rect, Role};
+use glaze_widgets::layout::{Instance, Layout};
 use serde_json::Value;
 
 use super::controls::{button, group, height, notice, row, text, page_title};
@@ -48,7 +48,7 @@ pub(super) fn columns(
         right(b, c);
         return;
     }
-    use mypaper_ui::layout::{Axis, Length, split};
+    use glaze_ui::layout::{Axis, Length, split};
     let mut slots = [Rect::default(); 2];
     split(
         Rect::new(c.x, c.y, c.w, 0.0),
@@ -317,7 +317,7 @@ pub fn segments(
     options: Vec<(Value, String)>,
 ) {
     let labels: Vec<_> = options.iter().map(|(_, label)| label.as_str()).collect();
-    let style = b.font(mypaper_ui::controls::Font::Caption);
+    let style = b.font(glaze_ui::controls::Font::Caption);
     let needed: f32 = labels
         .iter()
         .map(|label| b.measure(label, &style).0 + b.px(20.0))
@@ -370,7 +370,7 @@ pub fn toggle(b: &mut B, c: &mut Col, label: &str, caption: &str, on: bool, acti
             Align::Start,
         );
     }
-    let point = mypaper_ui::Point::new(c.right() - b.px(36.0), c.y + (h - b.px(20.0)) / 2.0);
+    let point = glaze_ui::Point::new(c.right() - b.px(36.0), c.y + (h - b.px(20.0)) / 2.0);
     b.switch(
         key(("panel-toggle", c.view, label)),
         point,
@@ -897,7 +897,7 @@ pub fn reveal_search(app: &App, b: &mut B, page: Page, first_target: usize) {
         })
         .or_else(|| {
             b.list.ops.iter().find_map(|op| match op {
-                mypaper_ui::Op::Text { rect, text, .. } if text.as_ref() == label => Some(*rect),
+                glaze_ui::Op::Text { rect, text, .. } if text.as_ref() == label => Some(*rect),
                 _ => None,
             })
         });
@@ -982,13 +982,13 @@ mod tests {
 
     #[test]
     fn large_select_stacks_and_renders_the_entire_value() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.size = (360, 760);
         app.theme.ty.text_scale = 1.5;
         let p = crate::panel::palette_for(&app);
         let mut b =
-            mypaper_ui::controls::Builder::new(&mut ui.text, &p, &app.theme.ty, 1.0, &app.input);
+            glaze_ui::controls::Builder::new(&mut ui.text, &p, &app.theme.ty, 1.0, &app.input);
         let mut c = Col {
             x: 28.0,
             y: 0.0,
@@ -1009,7 +1009,7 @@ mod tests {
             .ops
             .iter()
             .filter_map(|op| {
-                if let mypaper_ui::Op::Text { text, .. } = op {
+                if let glaze_ui::Op::Text { text, .. } = op {
                     Some(text.as_ref())
                 } else {
                     None
@@ -1023,7 +1023,7 @@ mod tests {
     }
     #[test]
     fn widget_room_state_and_creation_use_the_actual_display_extent() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
         app.panel = Some(crate::panel::State::default());
         app.monitors.truncate(1);

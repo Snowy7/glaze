@@ -7,7 +7,7 @@
     "cpu_core_pct": 12.023128316706423,
     "cpu_machine_pct": 0.7514455197941514,
     "visible_screens": 2,
-    "timing_file": "C:/mypaper-targets/native-engine/measured-lag.run0.jsonl",
+    "timing_file": "C:/glaze-targets/native-engine/measured-lag.run0.jsonl",
     "sample_started_qpc": 3585385085609,
     "sample_ended_qpc": 3585585220715
   }

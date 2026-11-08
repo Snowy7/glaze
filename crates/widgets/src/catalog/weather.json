@@ -3,7 +3,7 @@
   "name": "Weather",
   "category": "Info",
   "version": "3.0.0",
-  "author": "mypaper",
+  "author": "Glaze",
   "description": "The weather where you are, or in any town: an animated sky, the next hours and the week. Weather by Open-Meteo.",
   "size": {
     "default": [6, 4],

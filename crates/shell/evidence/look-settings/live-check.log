@@ -2,18 +2,18 @@
 
 part                 procs cpu_core_pct gpu3d_pct gpu_video_pct gpu_mem_mb private_mb ws_mb
 ----                 ----- ------------ --------- ------------- ---------- ---------- -----
-mypaper-core             1         0.08         0             0          0          3    18
-mypaper-files            1            0         0             0          0         36    88
-mypaper-index            1         0.16         0             0          0         19     7
-mypaper-look-fixture     1            0         0             0          0         15    37
-mypaper-plugins          1            0         0             0          0         10    21
-mypaper-shell            1         0.23      0.01             0          0         38   104
-mypaper-wallpaper        1         4.53      7.74             0        348        215    62
+glaze-core             1         0.08         0             0          0          3    18
+glaze-files            1            0         0             0          0         36    88
+glaze-index            1         0.16         0             0          0         19     7
+glaze-look-fixture     1            0         0             0          0         15    37
+glaze-plugins          1            0         0             0          0         10    21
+glaze-shell            1         0.23      0.01             0          0         38   104
+glaze-wallpaper        1         4.53      7.74             0        348        215    62
 TOTAL                    7            5      7.75             0        348        336   337
 
 
 
-machine CPU share: 0.313%   saved: C:\Users\you\AppData\Local\Temp\mypaper-tools\measure-look-settings.json
+machine CPU share: 0.313%   saved: C:\Users\you\AppData\Local\Temp\glaze-tools\measure-look-settings.json
 
 
 fixture_pid       : 28456

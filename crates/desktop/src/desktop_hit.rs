@@ -27,7 +27,7 @@ const DESKTOP_WINDOWS: &[&str] = &[
     "SysListView32",
     "Progman",
     "WorkerW",
-    "mypaper.wallpaper",
+    "glaze.wallpaper",
 ];
 /// A desktop-layer window must live under one of these. Folder windows also
 /// contain `SHELLDLL_DefView` and `SysListView32`, but their root is `CabinetWClass`.
@@ -219,7 +219,7 @@ mod tests {
             Under::Desktop,
             "legacy layout"
         );
-        assert_eq!(class("mypaper.wallpaper", "Progman"), Under::Desktop);
+        assert_eq!(class("glaze.wallpaper", "Progman"), Under::Desktop);
         assert_eq!(class("Progman", "Progman"), Under::Desktop);
         // An Explorer folder window has the same inner classes.
         assert_eq!(class("SysListView32", "CabinetWClass"), Under::Other);

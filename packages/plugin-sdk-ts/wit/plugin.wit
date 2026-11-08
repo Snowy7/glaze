@@ -1,6 +1,6 @@
-﻿// mypaper's plugin world (docs/plugins.md). Semver: minor bumps only add; this file is frozen
+﻿// Glaze's plugin world (docs/plugins.md). Semver: minor bumps only add; this file is frozen
 // once a newer minor ships beside it.
-package mypaper:plugin@0.1.0;
+package glaze:plugin@0.1.0;
 
 /// Shared value types.
 interface types {
@@ -215,7 +215,7 @@ interface system {
     foreground: func() -> result<option<window-info>, error>;
 }
 
-/// The plugin's own native modules (`native-code`), run in mypaper's native host process;
+/// The plugin's own native modules (`native-code`), run in Glaze's native host process;
 /// replies arrive as `event::native`.
 interface native {
     use types.{error};

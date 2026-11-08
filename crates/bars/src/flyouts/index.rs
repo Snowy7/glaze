@@ -1,7 +1,7 @@
 //! The launcher's app index: every app the Start menu lists, from `shell:AppsFolder` (packaged
 //! apps by AUMID, and the Start Menu folders' shortcuts, user and common), with names, icons and
 //! search keywords (a shortcut's target exe: "code" finds Visual Studio Code). Built on the `apps`
-//! lane at low priority, cached in `%LOCALAPPDATA%\mypaper\apps.json`, rebuilt when the Start Menu
+//! lane at low priority, cached in `%LOCALAPPDATA%\glaze\apps.json`, rebuilt when the Start Menu
 //! folders change. Also what the launcher remembers (`launcher.json`: what was run, how often and
 //! when) and the recent files (`%APPDATA%\Microsoft\Windows\Recent`).
 
@@ -440,7 +440,7 @@ fn start_menu_links() -> Vec<Link> {
 mod tests {
     use super::*;
 
-    /// The real index of this machine: `cargo nextest run -p mypaper-bars --run-ignored only
+    /// The real index of this machine: `cargo nextest run -p glaze-bars --run-ignored only
     /// real_index`. Reads the shell only (icons go to a temporary folder).
     #[test]
     #[ignore = "reads this machine's Start menu"]
@@ -559,7 +559,7 @@ mod tests {
 
     #[test]
     fn only_existing_documents_are_recommended() {
-        let dir = std::env::temp_dir().join(format!("mypaper-recent-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("glaze-recent-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         for name in ["Budget.xlsx", "setup.exe", "LICENSE", "trace.etl"] {
             std::fs::write(dir.join(name), b"x").unwrap();

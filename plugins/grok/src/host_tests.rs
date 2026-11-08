@@ -4,8 +4,8 @@ use crate::widgets::{
     time::Stamp,
     views,
 };
-use mypaper_ui::{DisplayList, Op, Rect, Rgba, TextStyle, Tokens, Ui, golden, render};
-use mypaper_widgets::{layout::Placed, storage::Storage};
+use glaze_ui::{DisplayList, Op, Rect, Rgba, TextStyle, Tokens, Ui, golden, render};
+use glaze_widgets::{layout::Placed, storage::Storage};
 use serde_json::{Map, Value, json};
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
@@ -23,7 +23,7 @@ fn model(face: &Value, name: &str) -> Model {
     };
     let mut m = Model::new(
         placed,
-        &mut Storage::new(std::env::temp_dir().join("mypaper-grok-plugin-fixture")),
+        &mut Storage::new(std::env::temp_dir().join("glaze-grok-plugin-fixture")),
         Stamp::at(NOW),
     )
     .unwrap();

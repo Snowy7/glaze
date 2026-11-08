@@ -6,8 +6,8 @@ mod custom_tests;
 
 use crate::integrations::widgets::{CONNECT, REFRESH};
 use crate::widgets::model::Model;
-use mypaper_integrations::Availability;
-use mypaper_ui::{
+use glaze_integrations::Availability;
+use glaze_ui::{
     HitId, Rect, Rgba, Role,
     icons::Icon,
     kit::{ButtonKind, Frame},

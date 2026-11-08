@@ -85,7 +85,7 @@ pub fn publish(app: &App, root: &Path) -> Result<PathBuf> {
         // The engine writes preview.jpg atomically into the draft. Copying that complete
         // image packages the same pixels the canvas showed, without capturing the desktop.
         crate::docs::write_atomic(&target.join("theme.json"), text.as_bytes())?;
-        mypaper_theme::LoadedTheme::load(&target)?;
+        glaze_theme::LoadedTheme::load(&target)?;
         Ok(())
     })();
     if let Err(error) = written {
@@ -103,7 +103,7 @@ pub fn save_in_place(app: &App, root: &Path, dir: &Path) -> Result<PathBuf> {
     let result = publish(app, &scratch).and_then(|packaged| copy_tree(&packaged, dir));
     let _ = std::fs::remove_dir_all(&scratch);
     result?;
-    mypaper_theme::LoadedTheme::load(dir)?;
+    glaze_theme::LoadedTheme::load(dir)?;
     Ok(dir.to_path_buf())
 }
 

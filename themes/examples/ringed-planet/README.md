@@ -1,6 +1,6 @@
 # Ringed planet
 
-Original mypaper test asset, dedicated to the public domain under
+Original Glaze test asset, dedicated to the public domain under
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
 The planet, textures and generator may be copied, modified and distributed without attribution.
 

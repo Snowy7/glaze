@@ -38,7 +38,7 @@ impl OpenMeteo {
         let agent = crate::http::Http::new(Duration::from_secs(8));
         let locator = Locator::new(NativeLocation::new());
         if let Some(app_data) = std::env::var_os("APPDATA") {
-            locator.set_data_dir(PathBuf::from(app_data).join("mypaper/plugin-data/weather"));
+            locator.set_data_dir(PathBuf::from(app_data).join("glaze/plugin-data/weather"));
         }
         Self {
             agent,

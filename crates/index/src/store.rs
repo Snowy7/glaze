@@ -1551,7 +1551,7 @@ mod tests {
     #[test]
     fn streamed_subtree_replacement_preserves_siblings_ancestors_and_unknown_sizes() {
         let base =
-            std::env::temp_dir().join(format!("mypaper-stream-subtree-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-stream-subtree-{}", std::process::id()));
         std::fs::create_dir_all(&base).unwrap();
         let path = base.join("snapshot.bin");
         let mut store = Store::new();
@@ -1624,7 +1624,7 @@ mod tests {
 
     #[test]
     fn offline_root_hides_cached_search_and_sizes_and_drops_from_next_generation() {
-        let path = std::env::temp_dir().join(format!("mypaper-offline-{}.bin", std::process::id()));
+        let path = std::env::temp_dir().join(format!("glaze-offline-{}.bin", std::process::id()));
         let delta = path.with_extension("json");
         let mut store = Store::new();
         let c = store.insert(0, "C:", DIRECTORY, 0, 0);
@@ -1682,7 +1682,7 @@ mod tests {
     #[test]
     fn path_prefilter_stays_conservative_after_a_directory_name_change() {
         let path =
-            std::env::temp_dir().join(format!("mypaper-index-pathmask-{}.bin", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-index-pathmask-{}.bin", std::process::id()));
         let mut store = Store::new();
         let root = store.insert(0, "X:", DIRECTORY, 0, 0);
         let dir = store.insert(root, "Before", DIRECTORY, 0, 0);
@@ -1749,7 +1749,7 @@ mod tests {
     #[test]
     fn snapshot_round_trip_overlay_and_corrupt_records() {
         let path =
-            std::env::temp_dir().join(format!("mypaper-index-store-{}.bin", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-index-store-{}.bin", std::process::id()));
         let mut s = Store::new();
         let root = s.insert(0, "D:", DIRECTORY, 0, 0);
         s.insert(root, "A.txt", 128, 42, 8);
@@ -1787,7 +1787,7 @@ mod tests {
     #[test]
     fn snapshot_validation_rejects_a_slice_starting_inside_utf8() {
         let path =
-            std::env::temp_dir().join(format!("mypaper-index-utf8-{}.bin", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-index-utf8-{}.bin", std::process::id()));
         let mut store = Store::new();
         let root = store.insert(0, "X:", DIRECTORY, 0, 0);
         store.insert(root, "é.txt", 128, 1, 0);
@@ -1805,7 +1805,7 @@ mod tests {
     #[test]
     fn incremental_checkpoint_restores_names_changes_and_sizes_and_rejects_old_generations() {
         let base =
-            std::env::temp_dir().join(format!("mypaper-index-delta-{}.bin", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-index-delta-{}.bin", std::process::id()));
         let delta = base.with_extension("json");
         let mut store = Store::new();
         let root = store.insert(0, "X:", DIRECTORY, 0, 0);
@@ -1841,7 +1841,7 @@ mod tests {
     #[test]
     fn streamed_volume_replacement_keeps_other_volumes_and_old_readers() {
         let directory =
-            std::env::temp_dir().join(format!("mypaper-index-stream-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-index-stream-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("snapshot.bin");
         let mut original = Store::new();
@@ -1888,7 +1888,7 @@ mod tests {
     #[test]
     fn forked_reconciliation_keeps_the_previous_mapping_queryable_during_atomic_replace() {
         let path =
-            std::env::temp_dir().join(format!("mypaper-index-fork-{}.bin", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-index-fork-{}.bin", std::process::id()));
         let mut store = Store::new();
         let root = store.insert(0, "X:", DIRECTORY, 0, 0);
         store.upsert(root, "before.txt", 128, 3, 1);

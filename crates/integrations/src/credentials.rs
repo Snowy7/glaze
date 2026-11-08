@@ -11,7 +11,7 @@ fn target(key: &str) -> Result<Vec<u16>> {
                 .all(|c| c.is_ascii_alphanumeric() || "-_/".contains(c)),
         "invalid credential key"
     );
-    Ok(format!("mypaper/integrations/{key}\0")
+    Ok(format!("glaze/integrations/{key}\0")
         .encode_utf16()
         .collect())
 }

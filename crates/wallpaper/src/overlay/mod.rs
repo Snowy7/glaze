@@ -59,7 +59,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::DirectComposition::{
     DCompositionCreateDevice3, IDCompositionDesktopDevice,
@@ -91,11 +91,11 @@ const WM_FRAME: u32 = WM_APP + 0x4F0;
 /// Posted by the window-destroy hook: a client may be gone.
 const WM_PRUNE: u32 = WM_APP + 0x4F1;
 /// Opt-in, input-free live regression fixture. 1 loses capture; 2 removes our shared DX12
-/// device. Ignored unless MYPAPER_TEST_OVERLAY_RECOVERY was set at process start.
+/// device. Ignored unless GLAZE_TEST_OVERLAY_RECOVERY was set at process start.
 const WM_TEST_RECOVERY: u32 = WM_APP + 0x4F3;
 /// Registered message posted to a client whose window must exclude itself from capture
 /// (`WDA_EXCLUDEFROMCAPTURE`), when this Windows has no per-session exclusion list.
-pub const EXCLUDE_YOURSELF: windows::core::PCWSTR = w!("mypaper.glass.exclude-yourself");
+pub const EXCLUDE_YOURSELF: windows::core::PCWSTR = w!("glaze.glass.exclude-yourself");
 /// How long the capture stays running after the last overlay closes.
 pub const WARM: Duration = Duration::from_secs(3);
 
@@ -120,13 +120,13 @@ pub struct PlateOverlay {
 
 impl PlateOverlay {
     /// A published plate as an overlay. The low 32 bits of a plate's id are its surface's window
-    /// (`mypaper_glass_ipc::Plate::id`); `None` unless that is a live window of the plate's
+    /// (`glaze_glass_ipc::Plate::id`); `None` unless that is a live window of the plate's
     /// publisher (`writer`, its process id), so a stale id never puts glass under another
     /// app's window. A topmost surface (a bar) gets a topmost overlay, a desktop one (a widget)
     /// one in the desktop band.
     pub fn of(
-        plate: &mypaper_glass_ipc::Plate,
-        style: &mypaper_glass_ipc::Style,
+        plate: &glaze_glass_ipc::Plate,
+        style: &glaze_glass_ipc::Style,
         writer: u32,
         live: bool,
     ) -> Option<Self> {
@@ -164,7 +164,7 @@ impl PlateOverlay {
             radius: plate.radius.max(0.0),
             material: Material {
                 clarity: m.clarity.clamp(0.0, 1.0),
-                blur: m.blur.clamp(0.0, mypaper_glass_ipc::MAX_BLUR),
+                blur: m.blur.clamp(0.0, glaze_glass_ipc::MAX_BLUR),
                 refraction: m.refraction.clamp(0.0, 1.0),
                 highlight: m.highlight.clamp(0.0, 1.0),
                 tint: m.tint.map(byte),
@@ -525,7 +525,7 @@ impl Overlays {
     pub fn new(gpu: Gpu) -> Result<Self> {
         capture::ask_borderless();
         let inbox = Rc::new(Inbox {
-            diagnostics: std::env::var_os("MYPAPER_TEST_OVERLAY_RECOVERY").is_some(),
+            diagnostics: std::env::var_os("GLAZE_TEST_OVERLAY_RECOVERY").is_some(),
             ..Default::default()
         });
         let window = MessageWindow::new(&inbox)?;
@@ -540,8 +540,8 @@ impl Overlays {
             exclusion_changed: false,
             closed_counts: Counts::default(),
             stats: Stats::default(),
-            // Measuring only: with the device's timestamp queries (MYPAPER_GPU_TIMINGS).
-            timing: std::env::var_os("MYPAPER_OVERLAY_TIMINGS").is_some(),
+            // Measuring only: with the device's timestamp queries (GLAZE_GPU_TIMINGS).
+            timing: std::env::var_os("GLAZE_OVERLAY_TIMINGS").is_some(),
             warm_until: None,
             pipes: None,
             interval: capture::MIN_INTERVAL,
@@ -1541,7 +1541,7 @@ fn render(
 
 /// The px per point of the monitor at `bounds` (its DPI / 96).
 fn scale_of(bounds: Rect) -> f32 {
-    mypaper_desktop::monitor_infos()
+    glaze_desktop::monitor_infos()
         .iter()
         .find(|m| m.rect == bounds)
         .map_or(1.0, |m| m.dpi as f32 / 96.0)
@@ -1552,7 +1552,7 @@ fn size(frame: Rect) -> (u32, u32) {
 }
 
 fn pieces(rect: Rect) -> Vec<(HMONITOR, Rect)> {
-    let mut monitors: Vec<_> = mypaper_desktop::monitor_infos()
+    let mut monitors: Vec<_> = glaze_desktop::monitor_infos()
         .into_iter()
         .filter(|m| geometry::touches(rect, m.rect))
         .map(|m| monitor_of(m.rect))
@@ -1621,7 +1621,7 @@ impl MessageWindow {
             let hwnd = CreateWindowExW(
                 Default::default(),
                 OVERLAY_CLASS,
-                w!("mypaper glass overlays"),
+                w!("Glaze glass overlays"),
                 Default::default(),
                 0,
                 0,
@@ -1757,17 +1757,17 @@ mod plate_tests {
             )
         }
         .unwrap();
-        let plate = mypaper_glass_ipc::Plate {
+        let plate = glaze_glass_ipc::Plate {
             // A bar's second shape on the same window: the window is in the low 32 bits.
             id: (window.0 as usize as u64 & 0xFFFF_FFFF) | (1 << 32),
             rect: [-2559.6, 10.4, 300.2, 99.5],
             radius: 12.0,
-            material: mypaper_glass_ipc::Material {
+            material: glaze_glass_ipc::Material {
                 tint: [0.1, 0.1, 0.12, 0.4],
                 ..Default::default()
             },
         };
-        let style = mypaper_glass_ipc::Style {
+        let style = glaze_glass_ipc::Style {
             smoothing: 0.6,
             sheen: Some(0.5),
             ..Default::default()
@@ -1805,7 +1805,7 @@ mod plate_tests {
             PlateOverlay::of(&plate, &style, me, true).is_none(),
             "a stale id"
         );
-        let auto = mypaper_glass_ipc::Plate { id: 3, ..plate };
+        let auto = glaze_glass_ipc::Plate { id: 3, ..plate };
         assert!(
             PlateOverlay::of(&auto, &style, me, true).is_none(),
             "an id without a window"

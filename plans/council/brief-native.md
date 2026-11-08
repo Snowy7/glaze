@@ -15,9 +15,9 @@ dock/taskbar, widgets, flyouts, notification center, desktop menu) become native
 WebView2.
 
 ## Facts (`D:\Coding\projects\desktop\wallpaper`, main `f378a4c`)
-- Processes (README "Architecture"): `mypaper-core` (supervisor, tray, styling journal),
-  `mypaper-wallpaper` (wgpu, one device, one surface per monitor), `mypaper-widgets` (one transparent
-  WebView2 per monitor, plus plugin processes over JSON-RPC stdio), `mypaper-bars` (top bar and dock as
+- Processes (README "Architecture"): `glaze-core` (supervisor, tray, styling journal),
+  `glaze-wallpaper` (wgpu, one device, one surface per monitor), `glaze-widgets` (one transparent
+  WebView2 per monitor, plus plugin processes over JSON-RPC stdio), `glaze-bars` (top bar and dock as
   app bars, native taskbar control, tray host, flyouts). `apps/studio` is a Tauri settings app, open
   only while in use.
 - **Memory** (`docs/performance.md` table, private MB for every process): image wallpaper alone ~255;

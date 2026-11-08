@@ -3,7 +3,7 @@
     "at":  "2026-11-05T06:02:53",
     "rows":  [
                  {
-                     "part":  "mypaper-widget-fixture",
+                     "part":  "glaze-widget-fixture",
                      "pid":  79912,
                      "cpu_core_pct":  0.21,
                      "gpu3d_pct":  0,
@@ -14,7 +14,7 @@
                      "ws_mb":  83
                  },
                  {
-                     "part":  "mypaper-wallpaper",
+                     "part":  "glaze-wallpaper",
                      "pid":  80992,
                      "cpu_core_pct":  5.13,
                      "gpu3d_pct":  31.38,

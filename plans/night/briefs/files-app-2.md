@@ -7,7 +7,7 @@ tiny, in separate functions, and commit them immediately.
 
 ## Goal
 
-1. **Win+E** opens mypaper Files when `experimental.files_default` is on: mypaper's own Win-key hook
+1. **Win+E** opens Glaze Files when `experimental.files_default` is on: Glaze's own Win-key hook
    (`crates/shell/src/flyouts` winkey provider; it runs while the taskbar is hidden, which is the user's
    setup) catches Win+E and opens Files, and passes it through untouched when the flag is off or the
    hook isn't installed. The registry route stays for folder double-clicks. Test with the flag on
@@ -30,6 +30,6 @@ tabs and the preview pane open.
 ## How / stop
 
 As round 1: scratch folders only, DPI-aware captures (Details, Icons, tabs, preview, quick look, light
-and dark) that you look at yourself, tests for the pure parts. `CARGO_TARGET_DIR=C:\mypaper-targets\files`.
+and dark) that you look at yourself, tests for the pure parts. `CARGO_TARGET_DIR=C:\glaze-targets\files`.
 If the shared build is broken by someone else's in-progress file, wait and retry; don't edit it.
 Stop when done, or after 3 hours. Report as round 1.

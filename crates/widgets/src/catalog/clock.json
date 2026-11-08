@@ -3,7 +3,7 @@
   "name": "Clock",
   "category": "Time",
   "version": "3.0.0",
-  "author": "mypaper",
+  "author": "Glaze",
   "description": "The time five ways: big digital, split-flap, an analog dial, a greeting, or your cities around the world.",
   "size": {
     "default": [6, 4],

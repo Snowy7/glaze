@@ -1,6 +1,6 @@
 //! The connection's truth comes from BackendState, independently of LocalAPI availability.
 use crate::{State, tailscale::Peer};
-use mypaper_plugin_sdk::{Face, Role, SizeClass, Tone, View};
+use glaze_plugin_sdk::{Face, Role, SizeClass, Tone, View};
 
 fn stack(children: impl IntoIterator<Item = View>, gap: f32) -> View {
     View::Stack { children: children.into_iter().collect(), gap: Some(gap) }
@@ -65,9 +65,9 @@ pub fn face(id: &str, size: SizeClass, state: &State, now: i64) -> Face {
             let count = if data.peers_known { format!("{} of {} peers online", data.peers.iter().filter(|p| p.online).count(), data.peers.len()) } else { "Peers unavailable".into() };
             let control = View::button(if connected { "Disconnect" } else { "Connect" }, if connected { "disconnect" } else { "connect" });
             let exit = format!("Exit node · {}", data.exit_node.as_deref().unwrap_or("None"));
-            let mut options = vec![mypaper_plugin_sdk::view::SelectOption { value: String::new(), label: "No exit node".into() }];
+            let mut options = vec![glaze_plugin_sdk::view::SelectOption { value: String::new(), label: "No exit node".into() }];
             for peer in data.peers.iter().filter(|p| p.exit_option && p.online && !p.id.is_empty()) {
-                options.push(mypaper_plugin_sdk::view::SelectOption { value: peer.id.clone(), label: peer.name.split('.').next().unwrap_or(&peer.name).into() });
+                options.push(glaze_plugin_sdk::view::SelectOption { value: peer.id.clone(), label: peer.name.split('.').next().unwrap_or(&peer.name).into() });
             }
             let choose_exit = View::Select { label: exit, action: "exit".into(), options, selected: Some(data.exit_node_id.clone().unwrap_or_default()) };
             let address = data.addresses.first().map_or("No address", String::as_str);

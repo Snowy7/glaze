@@ -6,7 +6,7 @@
 
 use std::fmt;
 
-use mypaper_config::Config;
+use glaze_config::Config;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reason {
@@ -124,7 +124,7 @@ impl Holds {
         self.paused = config.paused;
         self.pause_on_battery = config.pause_on_battery;
         self.pause_on_fullscreen = config.pause_on_fullscreen;
-        self.pause_during_games = config.engine.during_games == mypaper_config::DuringGames::Pause;
+        self.pause_during_games = config.engine.during_games == glaze_config::DuringGames::Pause;
     }
 
     pub fn set(&mut self, fact: Fact, value: bool) {
@@ -235,7 +235,7 @@ mod tests {
         holds.set_game(true);
         assert_eq!(holds.reasons().to_string(), "game running");
         let mut keep = Config::default();
-        keep.engine.during_games = mypaper_config::DuringGames::Keep;
+        keep.engine.during_games = glaze_config::DuringGames::Keep;
         holds.apply(&keep);
         assert!(!holds.wants_game() && holds.reasons().is_empty());
     }

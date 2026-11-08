@@ -18,13 +18,13 @@ pub mod bindings {
         world: "plugin",
         pub_export_macro: true,
         export_macro_name: "__export_plugin",
-        default_bindings_module: "mypaper_plugin_sdk::guest::bindings",
+        default_bindings_module: "glaze_plugin_sdk::guest::bindings",
     });
 }
 
-pub use bindings::exports::mypaper::plugin::lifecycle::{Action, Event, FaceOpen, InitInfo};
-pub use bindings::mypaper::plugin::types::{Error, SizeClass};
-pub use bindings::mypaper::plugin::{events, files, http, launch, native, notify, pipes, process, secrets, storage, style, system, timers, websocket};
+pub use bindings::exports::glaze::plugin::lifecycle::{Action, Event, FaceOpen, InitInfo};
+pub use bindings::glaze::plugin::types::{Error, SizeClass};
+pub use bindings::glaze::plugin::{events, files, http, launch, native, notify, pipes, process, secrets, storage, style, system, timers, websocket};
 
 /// A plugin. One value lives for the instance's lifetime; `save` is what survives an unload.
 pub trait Plugin: Default + 'static {
@@ -66,8 +66,8 @@ pub fn __save<T: Plugin>() -> Vec<u8> {
 #[macro_export]
 macro_rules! export {
     ($ty:ty) => {
-        struct __MypaperPlugin;
-        impl $crate::guest::bindings::exports::mypaper::plugin::lifecycle::Guest for __MypaperPlugin {
+        struct __GlazePlugin;
+        impl $crate::guest::bindings::exports::glaze::plugin::lifecycle::Guest for __GlazePlugin {
             fn init(info: $crate::guest::InitInfo) -> Result<(), String> {
                 $crate::guest::__init::<$ty>(info)
             }
@@ -78,13 +78,13 @@ macro_rules! export {
                 $crate::guest::__save::<$ty>()
             }
         }
-        $crate::guest::bindings::__export_plugin!(__MypaperPlugin with_types_in $crate::guest::bindings);
+        $crate::guest::bindings::__export_plugin!(__GlazePlugin with_types_in $crate::guest::bindings);
     };
 }
 
 /// Faces, bar modules and panels.
 pub mod ui {
-    use super::bindings::mypaper::plugin::ui as wit;
+    use super::bindings::glaze::plugin::ui as wit;
     use super::*;
 
     /// Shows `face` in `instance`; the host drops it when nothing changed.
@@ -104,7 +104,7 @@ pub mod ui {
 
 /// `log::write` at info level.
 pub fn log(message: &str) {
-    bindings::mypaper::plugin::log::write(bindings::mypaper::plugin::log::Level::Info, message);
+    bindings::glaze::plugin::log::write(bindings::glaze::plugin::log::Level::Info, message);
 }
 
 /// A GET to a declared origin; the reply arrives as `Event::Http` with the returned id.
@@ -117,8 +117,8 @@ pub fn settings(open: &FaceOpen) -> serde_json::Value {
     serde_json::from_str(&open.settings).unwrap_or_else(|_| serde_json::json!({}))
 }
 
-use bindings::mypaper::plugin::types as t;
-use bindings::mypaper::plugin::view as v;
+use bindings::glaze::plugin::types as t;
+use bindings::glaze::plugin::view as v;
 
 fn tone(tone: &Tone) -> t::Tone {
     match tone {

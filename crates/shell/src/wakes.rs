@@ -1,13 +1,13 @@
 //! Counts the shell loop's wake-ups by cause and logs them once a minute, on a wake (it never
 //! adds one). Quiet unless the loop's work ran more than 240 times a second on average (a stuck
-//! ticker, say); `MYPAPER_WAKES=1`, or a file `%LOCALAPPDATA%\mypaper\wakes.on` (looked for once
+//! ticker, say); `GLAZE_WAKES=1`, or a file `%LOCALAPPDATA%\glaze\wakes.on` (looked for once
 //! a minute, so it survives restarts and can be switched live), logs every minute. Counting is a
 //! few integer bumps per wake.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use mypaper_shell::cycles::{self, thread as thread_cycles};
+use glaze_shell::cycles::{self, thread as thread_cycles};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, MSG, WM_TIMER};
 
@@ -52,7 +52,7 @@ pub struct Wakes {
 
 impl Wakes {
     pub fn new() -> Self {
-        let always = std::env::var_os("MYPAPER_WAKES").is_some();
+        let always = std::env::var_os("GLAZE_WAKES").is_some();
         let on = always || switched_on();
         cycles::set_counting(on);
         Self {
@@ -193,10 +193,10 @@ impl Wakes {
     }
 }
 
-/// Whether `%LOCALAPPDATA%\mypaper\wakes.on` exists.
+/// Whether `%LOCALAPPDATA%\glaze\wakes.on` exists.
 fn switched_on() -> bool {
     std::env::var_os("LOCALAPPDATA")
-        .is_some_and(|dir| std::path::Path::new(&dir).join("mypaper").join("wakes.on").exists())
+        .is_some_and(|dir| std::path::Path::new(&dir).join("glaze").join("wakes.on").exists())
 }
 
 /// A window's class, `thread` for thread messages, `?` once it is gone.

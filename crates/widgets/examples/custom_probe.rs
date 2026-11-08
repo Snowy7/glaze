@@ -5,15 +5,15 @@ fn main() -> anyhow::Result<()> {
         anyhow::anyhow!("expected evidence JSON path; set an isolated APPDATA first")
     })?;
     anyhow::ensure!(
-        std::env::var("MYPAPER_CUSTOM_FIXTURE").as_deref() == Ok("1"),
-        "Set MYPAPER_CUSTOM_FIXTURE=1 and an isolated APPDATA"
+        std::env::var("GLAZE_CUSTOM_FIXTURE").as_deref() == Ok("1"),
+        "Set GLAZE_CUSTOM_FIXTURE=1 and an isolated APPDATA"
     );
-    let folder = mypaper_widgets::custom::install_examples()?;
-    let registry = mypaper_widgets::registry::builtins();
+    let folder = glaze_widgets::custom::install_examples()?;
+    let registry = glaze_widgets::registry::builtins();
     let mut results = Vec::new();
-    for (name, _) in mypaper_widgets::custom::EXAMPLES {
+    for (name, _) in glaze_widgets::custom::EXAMPLES {
         let id = format!("custom-{name}");
-        let definition = mypaper_widgets::custom::load(&id)?;
+        let definition = glaze_widgets::custom::load(&id)?;
         let manifest = &registry
             .get(&id)
             .ok_or_else(|| anyhow::anyhow!("Custom widget is absent from catalog"))?
@@ -22,7 +22,7 @@ fn main() -> anyhow::Result<()> {
             manifest.instances.allows(4, 4),
             "Custom definition must support multiple instances"
         );
-        let value = mypaper_widgets::custom::evaluate(&id, &definition);
+        let value = glaze_widgets::custom::evaluate(&id, &definition);
         results.push(json!({"id":id,"layout":format!("{:?}",definition.layout),"multipleInstances":true,"value":value.as_ref().ok(),"error":value.as_ref().err().map(ToString::to_string)}));
     }
     let report = json!({"folder":folder,"examples":results});

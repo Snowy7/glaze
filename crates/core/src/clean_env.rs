@@ -1,15 +1,15 @@
 //! Core resets its environment to the user's default one at startup.
 //!
-//! Everything mypaper launches (the shell, the engine, plugins, and through them the user's own
+//! Everything Glaze launches (the shell, the engine, plugins, and through them the user's own
 //! apps from the dock, launcher, menus and plugin links) inherits core's environment. When core is
 //! started from a developer shell, that shell's leftovers leak into those apps. On 2026-11-06 an
-//! agent's PowerShell inside T3 Code carried `ELECTRON_RUN_AS_NODE=1`: every Electron app mypaper
+//! agent's PowerShell inside T3 Code carried `ELECTRON_RUN_AS_NODE=1`: every Electron app Glaze
 //! opened (T3 Code itself for a thread link, VS Code, Discord...) started as plain Node.js, failed
 //! to load its URL argument as a script and exited, so a T3 thread link only raised T3's window.
 //!
 //! So core replaces its environment with the block Windows builds for the user's token
-//! (`CreateEnvironmentBlock`, the same variables Explorer gives apps), keeping only mypaper's own
-//! diagnostic switches (`MYPAPER_*`, `RUST_LOG`, `RUST_BACKTRACE`).
+//! (`CreateEnvironmentBlock`, the same variables Explorer gives apps), keeping only Glaze's own
+//! diagnostic switches (`GLAZE_*`, `RUST_LOG`, `RUST_BACKTRACE`).
 
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
@@ -29,10 +29,10 @@ pub fn reset() {
     }
 }
 
-/// Variables that survive the reset: mypaper's own switches, set on purpose for a run.
+/// Variables that survive the reset: Glaze's own switches, set on purpose for a run.
 fn kept(key: &str) -> bool {
     let key = key.to_ascii_uppercase();
-    key.starts_with("MYPAPER_") || key == "RUST_LOG" || key == "RUST_BACKTRACE"
+    key.starts_with("GLAZE_") || key == "RUST_LOG" || key == "RUST_BACKTRACE"
 }
 
 /// `remove_var`/`set_var` panic on an empty key or one containing `=` (Windows' hidden `=C:`
@@ -144,8 +144,8 @@ mod tests {
     }
 
     #[test]
-    fn keeps_only_mypaper_switches() {
-        assert!(kept("MYPAPER_WAKES"));
+    fn keeps_only_glaze_switches() {
+        assert!(kept("GLAZE_WAKES"));
         assert!(kept("rust_log"));
         assert!(!kept("ELECTRON_RUN_AS_NODE"));
         assert!(!kept("CARGO_TARGET_DIR"));

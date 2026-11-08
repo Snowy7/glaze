@@ -1,5 +1,5 @@
 [package]
-name = "mypaper-bars"
+name = "glaze-bars"
 description = "Windows services and configuration for the native shell bars."
 version.workspace = true
 edition.workspace = true
@@ -11,9 +11,9 @@ path = "src/lib.rs"
 
 [dependencies]
 mypaper-tiling.workspace = true
-mypaper-config.workspace = true
-mypaper-desktop.workspace = true
-mypaper-theme.workspace = true
+glaze-config.workspace = true
+glaze-desktop.workspace = true
+glaze-theme.workspace = true
 
 anyhow.workspace = true
 log.workspace = true

@@ -29,7 +29,7 @@
                     },
                     {
                         "tid":  62584,
-                        "name":  "fswatch-mypaper",
+                        "name":  "fswatch-Glaze",
                         "context_switches":  0,
                         "switches_per_second":  0
                     },
@@ -101,7 +101,7 @@
                     },
                     {
                         "tid":  26336,
-                        "name":  "fswatch-mypaper",
+                        "name":  "fswatch-Glaze",
                         "context_switches":  0,
                         "switches_per_second":  0
                     },

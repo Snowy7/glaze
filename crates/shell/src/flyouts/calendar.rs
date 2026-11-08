@@ -1,16 +1,16 @@
 //! The calendar: today in full, the time, and a month you can page through
-//! (`mypaper_ui::calendar::MonthGrid`, shared with the calendar widget). Names come from
+//! (`glaze_ui::calendar::MonthGrid`, shared with the calendar widget). Names come from
 //! Windows' regional settings. The time redraws once a minute while it is open.
 
 use std::time::{Duration, Instant};
 
-use mypaper_bars::clock;
-use mypaper_bars::config::ClockConfig;
-use mypaper_bars::system;
-use mypaper_ui::calendar::{Date, MonthGrid};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::layout::{Align, Stack};
-use mypaper_ui::{ButtonKind, Frame, HitId, Rect, TextRole};
+use glaze_bars::clock;
+use glaze_bars::config::ClockConfig;
+use glaze_bars::system;
+use glaze_ui::calendar::{Date, MonthGrid};
+use glaze_ui::icons::Icon;
+use glaze_ui::layout::{Align, Stack};
+use glaze_ui::{ButtonKind, Frame, HitId, Rect, TextRole};
 use windows::Win32::Foundation::SYSTEMTIME;
 use windows::Win32::System::SystemInformation::GetLocalTime;
 
@@ -30,7 +30,7 @@ pub struct Calendar {
     /// The month shown (day 1).
     shown: Date,
     week_start: u32,
-    zones: Vec<mypaper_bars::config::Zone>,
+    zones: Vec<glaze_bars::config::Zone>,
     utc_ms: i64,
 }
 
@@ -50,7 +50,7 @@ impl Calendar {
             shown: Date { day: 1, ..today },
             week_start: first_day.unwrap_or_else(locale_first_day),
             zones: vec![],
-            utc_ms: mypaper_bars::flyouts::index::epoch_ms() as i64,
+            utc_ms: glaze_bars::flyouts::index::epoch_ms() as i64,
         }
     }
 
@@ -58,7 +58,7 @@ impl Calendar {
     pub fn with_zones(
         now: SYSTEMTIME,
         utc_ms: i64,
-        zones: Vec<mypaper_bars::config::Zone>,
+        zones: Vec<glaze_bars::config::Zone>,
     ) -> Self {
         let mut calendar = Self::at(now, Some(1));
         calendar.utc_ms = utc_ms;
@@ -165,7 +165,7 @@ impl Calendar {
         let changed = (local.wMinute, local.wHour, local.wDay)
             != (self.now.wMinute, self.now.wHour, self.now.wDay);
         self.now = local;
-        self.utc_ms = mypaper_bars::flyouts::index::epoch_ms() as i64;
+        self.utc_ms = glaze_bars::flyouts::index::epoch_ms() as i64;
         let left = 60_000 - (u64::from(local.wSecond) * 1000 + u64::from(local.wMilliseconds));
         (changed, Some(now + Duration::from_millis(left + 5)))
     }

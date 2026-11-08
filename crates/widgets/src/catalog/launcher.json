@@ -3,7 +3,7 @@
   "name": "Launcher",
   "category": "System",
   "version": "3.0.0",
-  "author": "mypaper",
+  "author": "Glaze",
   "description": "Your apps with their real icons, as a dock, a grid or a list, under an optional web search bar.",
   "size": {
     "default": [8, 4],

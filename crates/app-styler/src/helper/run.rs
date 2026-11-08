@@ -12,10 +12,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use mypaper_app_styler::presets::{self, Colors};
-use mypaper_app_styler::{Attach, Framework, process_stop_marker, stop_marker};
-use mypaper_config::Config;
-use mypaper_theme::LoadedTheme;
+use glaze_app_styler::presets::{self, Colors};
+use glaze_app_styler::{Attach, Framework, process_stop_marker, stop_marker};
+use glaze_config::Config;
+use glaze_theme::LoadedTheme;
 use windows::Win32::Foundation::{
     CloseHandle, ERROR_ALREADY_EXISTS, FILETIME, GetLastError, HANDLE, HWND, LPARAM,
     WAIT_ABANDONED, WAIT_OBJECT_0, WPARAM,
@@ -72,14 +72,14 @@ pub fn run(preview: Option<String>, parent: Option<u32>) -> Result<()> {
         None => None,
     };
     // SAFETY: a named mutex held for the life of the process.
-    let single = unsafe { CreateMutexW(None, true, w!("Local\\mypaper-styler"))? };
+    let single = unsafe { CreateMutexW(None, true, w!("Local\\glaze-styler"))? };
     // SAFETY: reads this thread's last error.
     if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
         // A helper whose core just exited is still putting the apps back; wait for it.
         // SAFETY: the mutex handle from above, kept for the life of the process.
         let waited = unsafe { WaitForSingleObject(single, PREVIOUS_EXIT) };
         if waited != WAIT_OBJECT_0 && waited != WAIT_ABANDONED {
-            bail!("mypaper-styler is already running");
+            bail!("glaze-styler is already running");
         }
     }
     // SAFETY: no preconditions.
@@ -88,10 +88,10 @@ pub fn run(preview: Option<String>, parent: Option<u32>) -> Result<()> {
         // SAFETY: posting to a thread id is always safe; failure means it is gone.
         let _ = unsafe { PostThreadMessageW(thread, WM_RESOLVE, WPARAM(0), LPARAM(0)) };
     };
-    let _config = mypaper_desktop::watch_config(post)
+    let _config = glaze_desktop::watch_config(post)
         .inspect_err(|e| log::warn!("rules won't follow config.json: {e:#}"))
         .ok();
-    let _palette = mypaper_desktop::watch_file(&palette_path()?, post)
+    let _palette = glaze_desktop::watch_file(&palette_path()?, post)
         .inspect_err(|e| log::warn!("rules won't follow the wallpaper: {e:#}"))
         .ok();
 
@@ -165,10 +165,10 @@ impl Drop for Process {
     }
 }
 
-/// `%LOCALAPPDATA%\mypaper\palette.json`, which the wallpaper writes on every theme (re)load.
+/// `%LOCALAPPDATA%\glaze\palette.json`, which the wallpaper writes on every theme (re)load.
 fn palette_path() -> Result<PathBuf> {
     let local = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?;
-    Ok(PathBuf::from(local).join("mypaper").join("palette.json"))
+    Ok(PathBuf::from(local).join("glaze").join("palette.json"))
 }
 
 struct Helper {
@@ -280,20 +280,20 @@ impl Helper {
         if !config.experimental.app_styler && self.preview.is_none() {
             return false;
         }
-        let theme = mypaper_theme::locate(Some(&config.theme))
+        let theme = glaze_theme::locate(Some(&config.theme))
             .and_then(LoadedTheme::load)
             .inspect_err(|e| log::warn!("theme: {e:#}; using the look's rules alone"))
             .ok();
         let palette = read_palette(theme.as_ref().map(|t| t.dir.as_path()));
         // The same `$accent` / `$dominant` the native look and Windows styling use.
-        let shared = mypaper_theme::windows::resolve(
+        let shared = glaze_theme::windows::resolve(
             &config.look,
             theme.as_ref().map(|t| &t.theme),
-            palette.map(|(accent, dominant)| mypaper_theme::windows::Palette {
-                accent: mypaper_config::Color(accent),
-                dominant: mypaper_config::Color(dominant),
+            palette.map(|(accent, dominant)| glaze_theme::windows::Palette {
+                accent: glaze_config::Color(accent),
+                dominant: glaze_config::Color(dominant),
             }),
-            mypaper_tweaks::unmanaged_system_prefers_dark(),
+            glaze_tweaks::unmanaged_system_prefers_dark(),
         );
         let colors = Colors {
             accent: shared.accent.map(|c| c.0),
@@ -304,7 +304,7 @@ impl Helper {
             .look
             .apps
             .over(&theme_apps.cloned().unwrap_or_default());
-        for app in mypaper_config::apps::APPS {
+        for app in glaze_config::apps::APPS {
             // The crash guard gave up on it: its rules aren't published any more.
             if self.disabled.contains(app) {
                 continue;
@@ -337,7 +337,7 @@ impl Helper {
             self.block(app, why_not.as_deref());
             let rules = match &self.preview {
                 Some(name) => {
-                    let user = mypaper_config::AppsStyle {
+                    let user = glaze_config::AppsStyle {
                         preset: Some(name.clone()),
                         ..config.look.apps.clone()
                     };
@@ -638,8 +638,8 @@ fn read_palette(theme: Option<&Path>) -> Option<([u8; 3], [u8; 3])> {
     #[derive(serde::Deserialize)]
     struct File {
         theme: PathBuf,
-        dominant: mypaper_config::Color,
-        accent: mypaper_config::Color,
+        dominant: glaze_config::Color,
+        accent: glaze_config::Color,
     }
     let text = std::fs::read_to_string(palette_path().ok()?).ok()?;
     let file: File = serde_json::from_str(&text).ok()?;

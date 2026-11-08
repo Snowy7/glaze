@@ -1,8 +1,8 @@
 //! Goldens and hit tests use exactly the panels registered in the native flyout controller.
 use super::*;
 use crate::flyouts::{build, look::Look};
-use mypaper_integrations::{media, notifications};
-use mypaper_ui::{Point, render};
+use glaze_integrations::{media, notifications};
+use glaze_ui::{Point, render};
 
 fn fixtures() -> Vec<(&'static str, Provider, Data)> {
     vec![
@@ -81,7 +81,7 @@ fn integration_panels_match_goldens_receive_clicks_and_have_no_idle_damage() {
             let image = render(&mut ui, &list, size.0, size.1).unwrap();
             let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join(format!("src/integrations/golden/{name}-{scale}.png"));
-            mypaper_ui::golden::check(&image, &path).unwrap();
+            glaze_ui::golden::check(&image, &path).unwrap();
             let (glass, _) = build(
                 panel.as_ref(),
                 &mut ui.text,
@@ -136,7 +136,7 @@ fn integration_panels_match_goldens_receive_clicks_and_have_no_idle_damage() {
 #[test]
 fn integration_bar_modules_match_their_golden_and_route_every_click() {
     use crate::bars::{look, services::Model, view};
-    use mypaper_bars::{BarsConfig, custom::Custom, wake::Waker};
+    use glaze_bars::{BarsConfig, custom::Custom, wake::Waker};
     STATE.with_borrow_mut(|s| {
         s.config.notifications.enabled = true;
         for (_, provider, data) in fixtures() {
@@ -155,15 +155,15 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
     config.resolve(Vec::new);
     let tokens = look::Tokens::resolve(
         &config.top.look,
-        &mypaper_theme::Appearance::default(),
-        &mypaper_bars::accent::read(),
+        &glaze_theme::Appearance::default(),
+        &glaze_bars::accent::read(),
     );
     let (tx, _) = std::sync::mpsc::channel();
     let model = Model {
         foreground: None,
         app_name: String::new(),
         app_icon: None,
-        media: Some(mypaper_bars::media::MediaInfo {
+        media: Some(glaze_bars::media::MediaInfo {
             title: "A Quiet Place".into(),
             artist: "Hania Rani".into(),
             app: "Music".into(),
@@ -173,7 +173,7 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
         network: None,
         battery: None,
         stats: None,
-        workspaces: mypaper_bars::desktops::Workspaces {
+        workspaces: glaze_bars::desktops::Workspaces {
             count: 1,
             current: 0,
         },
@@ -198,7 +198,7 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
     let image = render(&mut ui, &frame.list, frame.size.0, frame.size.1).unwrap();
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/integrations/golden/modules.png");
-    mypaper_ui::golden::check(&image, &path).unwrap();
+    glaze_ui::golden::check(&image, &path).unwrap();
     assert_eq!(frame.list.hits.len(), 2);
     for hit in &frame.list.hits {
         let center = Point::new(
@@ -219,7 +219,7 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
         None,
     );
     assert!(frame.list.damage(&same.list).is_none());
-    let app = mypaper_bars::apps::Item {
+    let app = glaze_bars::apps::Item {
         key: "discord".into(),
         name: "Discord".into(),
         path: "discord.exe".into(),
@@ -243,7 +243,7 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
         None,
     );
     let image = render(&mut ui, &dock.list, dock.size.0, dock.size.1).unwrap();
-    mypaper_ui::golden::check(
+    glaze_ui::golden::check(
         &image,
         &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("src/integrations/golden/dock-notifications.png"),
@@ -253,7 +253,7 @@ fn integration_bar_modules_match_their_golden_and_route_every_click() {
         dock.list
             .ops
             .iter()
-            .any(|op| matches!(op,mypaper_ui::Op::Text {text,..} if text.as_ref()=="1")),
+            .any(|op| matches!(op,glaze_ui::Op::Text {text,..} if text.as_ref()=="1")),
         "dock retained-toast badge is missing"
     );
 }
@@ -276,7 +276,7 @@ fn action_panels_match_goldens_and_keep_controls_inside_the_surface() {
             false,
         );
         let image = render(&mut ui, &list, size.0, size.1).unwrap();
-        mypaper_ui::golden::check(
+        glaze_ui::golden::check(
             &image,
             &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join(format!("src/integrations/golden/{name}.png")),

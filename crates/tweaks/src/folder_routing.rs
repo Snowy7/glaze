@@ -63,7 +63,7 @@ mod tests {
     fn restore_preserves_type_absence_and_foreign_changes_across_a_restart() {
         let scratch = Scratch::new("folder-routing");
         std::fs::create_dir_all(&scratch.0).unwrap();
-        let executable = scratch.0.join("mypaper-files.exe");
+        let executable = scratch.0.join("glaze-files.exe");
         std::fs::write(&executable, []).unwrap();
         let mut registry = Memory::default();
         registry.write(KEYS[0], "", &Value::ExpandString("%OLD%\\open.exe".into())).unwrap();
@@ -88,9 +88,9 @@ mod tests {
 
     #[test]
     fn command_quotes_paths_and_placeholders_and_never_journals_a_missing_executable() {
-        let plan = writes(Path::new(r"C:\Some App\mypaper-files.exe")).unwrap();
+        let plan = writes(Path::new(r"C:\Some App\glaze-files.exe")).unwrap();
         assert_eq!(plan.len(), 6);
-        assert_eq!(plan[0].value, Value::String(r#""C:\Some App\mypaper-files.exe" "%1""#.into()));
+        assert_eq!(plan[0].value, Value::String(r#""C:\Some App\glaze-files.exe" "%1""#.into()));
         let scratch = Scratch::new("folder-routing-missing");
         let journal = scratch.journal();
         let mut routing = FolderRouting::with(Memory::default(), journal.clone());

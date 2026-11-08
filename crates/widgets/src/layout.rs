@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
-use mypaper_theme::Appearance;
+use glaze_theme::Appearance;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value};
 
@@ -124,7 +124,7 @@ impl Layout {
         // Said first, and plainly: a newer file is not a broken one (it must never be "started
         // over"). Readers tell the two apart with [`newer_version`].
         if let Some(version) = newer_version(json) {
-            bail!("{NEWER} (layout version {version}; this mypaper reads up to {VERSION})");
+            bail!("{NEWER} (layout version {version}; this Glaze reads up to {VERSION})");
         }
         let mut layout: Self = serde_json::from_str(json)?;
         layout.instances.retain(|instance| {
@@ -234,7 +234,7 @@ impl Layout {
         // write boundary too, so even an edit arriving before the watcher cannot destroy it.
         match std::fs::read(path) {
             Ok(bytes) => {
-                // A newer mypaper's file, or an older layout version over a newer one: refused
+                // A newer Glaze's file, or an older layout version over a newer one: refused
                 // as is (no backup: nothing is wrong with the file).
                 let current = std::str::from_utf8(&bytes).ok();
                 if let Some(version) = current.and_then(newer_version) {
@@ -427,15 +427,15 @@ impl Layout {
     }
 }
 
-/// What a reader says of a layout from a newer mypaper.
-pub const NEWER: &str = "This layout was saved by a newer mypaper";
+/// What a reader says of a layout from a newer glaze.
+pub const NEWER: &str = "This layout was saved by a newer Glaze";
 
 /// The `version` a layout file declares, if it declares one.
 fn file_version(json: &str) -> Option<u64> {
     serde_json::from_str::<Value>(json).ok()?.get("version")?.as_u64()
 }
 
-/// The version of a layout saved by a newer mypaper than this one (above [`VERSION`]). Such a
+/// The version of a layout saved by a newer Glaze than this one (above [`VERSION`]). Such a
 /// file is fine: a reader shows "restart to update" and never offers to start over.
 pub fn newer_version(json: &str) -> Option<u64> {
     file_version(json).filter(|&v| v > u64::from(VERSION))
@@ -809,7 +809,7 @@ mod tests {
             r#"{ "instances": [
                 { "instance": "photo-frame-1", "widget": "photo-frame", "monitor": "m", "cell": [0, 0], "size": [3, 2],
                   "settings": { "variant": "matte", "shuffle": true,
-                                "image1": "https://photo-frame.widget.mypaper/__data/photo-frame-1/a.jpg" } },
+                                "image1": "https://photo-frame.widget.glaze/__data/photo-frame-1/a.jpg" } },
                 { "instance": "clock-1", "widget": "clock", "monitor": "m", "cell": [3, 0], "size": [2, 1] }
             ] }"#,
         )
@@ -831,7 +831,7 @@ mod tests {
         assert_eq!(moved.settings["shuffle"], true, "the rest is kept");
         assert_eq!(
             moved.settings["image1"],
-            "https://photo.widget.mypaper/__data/photo-frame-1/a.jpg"
+            "https://photo.widget.glaze/__data/photo-frame-1/a.jpg"
         );
         assert_eq!(layout.instances[1].widget, "clock");
         assert!(!layout.migrate(replacement), "nothing left to move");

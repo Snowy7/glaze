@@ -2,14 +2,14 @@
 
 part              procs cpu_core_pct gpu3d_pct gpu_video_pct gpu_mem_mb private_mb ws_mb
 ----              ----- ------------ --------- ------------- ---------- ---------- -----
-mypaper-core          1            0         0             0          0          3    18
-mypaper-index         1            0         0             0          0          4     1
-mypaper-plugins       1            0         0             0          0         13    24
-mypaper-shell         1          0.1      0.01             0          0         35   101
-mypaper-styler        1         0.03         0             0          0          3    16
-mypaper-wallpaper     1         3.07      7.37             0        140        173    27
+glaze-core          1            0         0             0          0          3    18
+glaze-index         1            0         0             0          0          4     1
+glaze-plugins       1            0         0             0          0         13    24
+glaze-shell         1          0.1      0.01             0          0         35   101
+glaze-styler        1         0.03         0             0          0          3    16
+glaze-wallpaper     1         3.07      7.37             0        140        173    27
 TOTAL                 6          3.2      7.38             0        140        231   187
 
 
 
-machine CPU share: 0.200%   saved: C:\Users\you\AppData\Local\Temp\mypaper-tools\measure-index-round2-idle.json
+machine CPU share: 0.200%   saved: C:\Users\you\AppData\Local\Temp\glaze-tools\measure-index-round2-idle.json

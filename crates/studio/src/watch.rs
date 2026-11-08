@@ -22,9 +22,9 @@ pub struct Watch {
     _watcher: notify::RecommendedWatcher,
 }
 
-/// Watches `%APPDATA%\mypaper` (the files, and `themes\` below it).
+/// Watches `%APPDATA%\glaze` (the files, and `themes\` below it).
 pub fn start(inbox: Sender<crate::app::Msg>, thread: u32) -> Result<Watch> {
-    let dir = mypaper_config::dir()?;
+    let dir = glaze_config::dir()?;
     std::fs::create_dir_all(&dir)?;
     let files: Vec<(DocId, std::ffi::OsString)> = DocId::ALL
         .iter()

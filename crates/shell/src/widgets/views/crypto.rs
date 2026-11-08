@@ -1,8 +1,8 @@
 //! Markets: a row per coin (its badge, ticker and name, the price and the day's change as a
 //! green or red chip), in two columns when wide, with the time of the last update.
 use super::{Ctx, ITEM, price_label};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Align, Rect, Role, TextRole};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Align, Rect, Role, TextRole};
 use serde_json::Value;
 
 pub fn draw(c: &mut Ctx, r: Rect) {

@@ -1,4 +1,4 @@
-Opened log file 'C:\mypaper-targets\app-styler\round5\hang-85452.txt'
+Opened log file 'C:\glaze-targets\app-styler\round5\hang-85452.txt'
 
 ************* Preparing the environment for Debugger Extensions Gallery repositories **************
    ExtensionRepository : Implicit
@@ -41,8 +41,8 @@ NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\D
 ************* Path validation summary **************
 Response                         Time (ms)     Location
 Deferred                                       srv*C:\symbols*https://msdl.microsoft.com/download/symbols
-OK                                             C:\mypaper-targets\app-styler\release
-Symbol search path is: srv*C:\symbols*https://msdl.microsoft.com/download/symbols;C:\mypaper-targets\app-styler\release
+OK                                             C:\glaze-targets\app-styler\release
+Symbol search path is: srv*C:\symbols*https://msdl.microsoft.com/download/symbols;C:\glaze-targets\app-styler\release
 Executable search path is: 
 WARNING: Process 85452 is not attached as a debuggee
          The process can be examined but debug events will not be received

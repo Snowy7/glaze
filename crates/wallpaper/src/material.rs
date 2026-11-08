@@ -3,7 +3,7 @@
 //! Studio's previews (`preview`). See `docs/glass.md`.
 
 use liquid_rust as lr;
-use mypaper_glass_ipc::Material;
+use glaze_glass_ipc::Material;
 
 /// The highlight control at 1 is the kit's Clear glass (Figma *Light* 40 %); the bars' default
 /// 0.75 is then exactly the kit's regular 30 %.
@@ -50,7 +50,7 @@ pub fn liquid(m: &Material, scale: f32) -> (lr::Material, lr::Appearance) {
     (material, appearance)
 }
 
-/// The finer knobs (`mypaper_glass_ipc::Style`, or an overlay's) applied to `material`, resolved
+/// The finer knobs (`glaze_glass_ipc::Style`, or an overlay's) applied to `material`, resolved
 /// once whenever a plate's style changes: the backdrop's brightness and saturation, and the kit's
 /// rim light (sheen) and rim shade (depth) at `2 * value` times their own, so 0.5 is the kit's.
 /// Unset sheen and depth keep what the highlight made of them.
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn a_default_style_changes_nothing_and_each_knob_drives_one_thing() {
         let (base, _) = liquid(&Material::default(), 1.5);
-        let ipc = mypaper_glass_ipc::Style::default();
+        let ipc = glaze_glass_ipc::Style::default();
         assert_eq!(styled(base, ipc.brightness, ipc.saturation, ipc.sheen, ipc.depth), base);
         assert_eq!(shape(12.0, ipc.smoothing), lr::Shape::Circular(12.0));
         let regular = lr::Material::regular();

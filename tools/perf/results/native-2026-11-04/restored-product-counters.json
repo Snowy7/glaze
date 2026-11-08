@@ -102,7 +102,7 @@
       "ws_mb": 75
     },
     {
-      "part": "mypaper-bars",
+      "part": "glaze-bars",
       "pid": 13972,
       "cpu_core_pct": 0.99,
       "gpu3d_pct": 0,
@@ -168,7 +168,7 @@
       "ws_mb": 84
     },
     {
-      "part": "mypaper-wallpaper",
+      "part": "glaze-wallpaper",
       "pid": 43712,
       "cpu_core_pct": 0.89,
       "gpu3d_pct": 0,
@@ -201,7 +201,7 @@
       "ws_mb": 98
     },
     {
-      "part": "mypaper-core",
+      "part": "glaze-core",
       "pid": 61320,
       "cpu_core_pct": 0.05,
       "gpu3d_pct": 0,
@@ -234,7 +234,7 @@
       "ws_mb": 20
     },
     {
-      "part": "mypaper-widgets",
+      "part": "glaze-widgets",
       "pid": 57204,
       "cpu_core_pct": 0.36,
       "gpu3d_pct": 0,

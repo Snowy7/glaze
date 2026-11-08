@@ -3,7 +3,7 @@
   "name": "Countdown",
   "category": "Time",
   "version": "2.0.0",
-  "author": "mypaper",
+  "author": "Glaze",
   "description": "Days to (or since) a date that matters, as a big number or a ring of the time gone by.",
   "size": {
     "default": [4, 2],

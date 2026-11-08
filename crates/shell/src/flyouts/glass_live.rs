@@ -1,7 +1,7 @@
 //! Input-free live evidence: production menu, weather and overflow views, with fixture-owned
 //! opaque backdrops so no other app's pixels need to be captured. Run explicitly after deploy.
 use super::*;
-use mypaper_ui::{DisplayList, Entry, MenuIcon, Op, Rgba, Tokens};
+use glaze_ui::{DisplayList, Entry, MenuIcon, Op, Rgba, Tokens};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 fn pump(ms: u64) {
@@ -26,7 +26,7 @@ fn menu<C>(
     tokens: &Tokens,
     at: (i32, i32),
 ) {
-    let layout = mypaper_ui::menu::layout(entries, tokens, 1.0, &mut ui.text);
+    let layout = glaze_ui::menu::layout(entries, tokens, 1.0, &mut ui.text);
     let margin = if tokens.shadow {
         tokens.menu.shadow.ceil()
     } else {
@@ -43,38 +43,38 @@ fn menu<C>(
         material,
     }));
     surface.set_glass_style(tokens.glass_style);
-    let list = mypaper_ui::menu::view(entries, &layout, None, tokens);
+    let list = glaze_ui::menu::view(entries, &layout, None, tokens);
     surface.present(ui, at, size, list).unwrap();
     surface.show();
 }
 
 #[test]
-#[ignore = "input-free visual fixture; requires deployed engine and MYPAPER_MENU_GLASS_CAPTURE"]
+#[ignore = "input-free visual fixture; requires deployed engine and GLAZE_MENU_GLASS_CAPTURE"]
 fn live_menu_glass() {
     let root =
-        PathBuf::from(std::env::var_os("MYPAPER_MENU_GLASS_CAPTURE").expect("capture folder"));
+        PathBuf::from(std::env::var_os("GLAZE_MENU_GLASS_CAPTURE").expect("capture folder"));
     std::fs::create_dir_all(&root).unwrap();
     for name in ["live-ready.json", "desktop-captured", "tray-captured"] {
         let _ = std::fs::remove_file(root.join(name));
     }
-    mypaper_desktop::enable_dpi_awareness();
-    let _com = mypaper_desktop::desktop_view::Com::init();
-    let _ = mypaper_ui::set_identity(mypaper_ui::Identity {
-        prefix: "mypaper.ui",
+    glaze_desktop::enable_dpi_awareness();
+    let _com = glaze_desktop::desktop_view::Com::init();
+    let _ = glaze_ui::set_identity(glaze_ui::Identity {
+        prefix: "glaze.ui",
         desktop_classes: &[],
     });
     let mut ui = Ui::new().unwrap();
     crate::overlay_client::install();
     let look = Look::load(&ui.text);
     look.install();
-    let monitor = mypaper_desktop::monitor_infos()
+    let monitor = glaze_desktop::monitor_infos()
         .into_iter()
         .find(|m| m.primary)
         .unwrap();
     let origin = (monitor.work.x + 80, monitor.work.y + 80);
     let mut backdrop = Surface::new(
         SurfaceKind::Popup { activate: false },
-        "mypaper glass evidence backdrop",
+        "Glaze glass evidence backdrop",
         Role::Pane,
     )
     .unwrap();
@@ -101,12 +101,12 @@ fn live_menu_glass() {
     backdrop.show();
     let mut desktop = Surface::new(
         SurfaceKind::Popup { activate: false },
-        "mypaper desktop menu evidence",
+        "Glaze desktop menu evidence",
         Role::Menu,
     )
     .unwrap();
     let entries = crate::preview::menu::build(
-        &mypaper_config::DesktopMenu::default(),
+        &glaze_config::DesktopMenu::default(),
         crate::preview::menu::ViewState {
             icons_visible: true,
             ..Default::default()
@@ -122,41 +122,41 @@ fn live_menu_glass() {
     );
     let mut widget = Surface::new(
         SurfaceKind::Popup { activate: false },
-        "mypaper weather evidence",
+        "Glaze weather evidence",
         Role::Pane,
     )
     .unwrap();
-    let registry = mypaper_widgets::registry::builtins();
+    let registry = glaze_widgets::registry::builtins();
     let manifest = &registry.get("weather").unwrap().manifest;
-    let mut layout = mypaper_widgets::layout::Layout::default();
+    let mut layout = glaze_widgets::layout::Layout::default();
     let id = layout.add("weather", "fixture", [0, 0], manifest.size.default);
-    let grid = mypaper_widgets::layout::Grid::new(
+    let grid = glaze_widgets::layout::Grid::new(
         &layout.grid,
         [96.0; 2],
-        mypaper_widgets::layout::RectF {
+        glaze_widgets::layout::RectF {
             x: 0.0,
             y: 0.0,
             width: 1200.0,
             height: 704.0,
         },
     );
-    let placed = mypaper_widgets::layout::place(
+    let placed = glaze_widgets::layout::place(
         layout.get(&id).unwrap(),
         manifest,
         &grid,
-        &mypaper_widgets::look::defaults(),
+        &glaze_widgets::look::defaults(),
     );
     let now = crate::preview::widgets::Stamp::now();
     let mut model = crate::preview::widgets::Model::new(
         placed,
-        &mut mypaper_widgets::storage::Storage::new(root.join("data")),
+        &mut glaze_widgets::storage::Storage::new(root.join("data")),
         now,
     )
     .unwrap();
     model.visible = true;
     model.data = serde_json::json!({"current":{"location":{"name":"Oslo"},"temperature":35,"condition":"Clear sky","code":0},"forecast":{"days":[{"date":"2026-11-08","max":36,"min":27,"code":0},{"date":"2026-11-09","max":35,"min":26,"code":2},{"date":"2026-11-10","max":34,"min":26,"code":3}]}});
     let mut widget_tokens = crate::preview::widgets::tokens(&model.placed.appearance);
-    let material = crate::glass::liquid_material(mypaper_widgets::look::DEFAULT_TINT);
+    let material = crate::glass::liquid_material(glaze_widgets::look::DEFAULT_TINT);
     widget_tokens.glass = Some(material);
     let list = crate::preview::widgets::view(
         &model,
@@ -191,12 +191,12 @@ fn live_menu_glass() {
     widget.hide();
     let mut overflow = Surface::new(
         SurfaceKind::Popup { activate: false },
-        "mypaper overflow evidence",
+        "Glaze overflow evidence",
         Role::Dialog,
     )
     .unwrap();
     let items = (0..5)
-        .map(|i| mypaper_bars::tray_data::TrayItem {
+        .map(|i| glaze_bars::tray_data::TrayItem {
             id: i.to_string(),
             name: format!("Tray app {i}"),
             icon: None,
@@ -226,7 +226,7 @@ fn live_menu_glass() {
     pump(800);
     let mut tray = Surface::new(
         SurfaceKind::Popup { activate: false },
-        "mypaper tray menu evidence",
+        "Glaze tray menu evidence",
         Role::Menu,
     )
     .unwrap();

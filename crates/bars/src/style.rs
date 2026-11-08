@@ -495,7 +495,7 @@ pub enum Corners {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Family {
-    /// mypaper's own: monochrome, "on" is the text color.
+    /// Glaze's own: monochrome, "on" is the text color.
     #[default]
     Mono,
     /// Windows 11: acrylic, accent-filled toggles, 8 DIP corners, Segoe Fluent Icons.
@@ -506,7 +506,7 @@ pub enum Family {
     Material,
 }
 
-/// The module glyphs: mypaper's own line icons, Windows' Segoe Fluent Icons (the system font,
+/// The module glyphs: Glaze's own line icons, Windows' Segoe Fluent Icons (the system font,
 /// pixel-exact on Windows 11), or SF Symbols-style outlines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -714,7 +714,7 @@ pub struct Look {
     /// The OS family of the flyouts and menus; missing: `mono`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub family: Option<Family>,
-    /// The module glyph set; missing: mypaper's own.
+    /// The module glyph set; missing: Glaze's own.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub glyphs: Option<Glyphs>,
     pub font: FontStyle,

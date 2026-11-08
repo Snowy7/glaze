@@ -5,9 +5,9 @@
 //! or a colour shows on the desktop at once. Only the keys behind the look paths an edit touched
 //! are written, so anything else in those files is left alone.
 
-use mypaper_config::Look;
-use mypaper_config::look::{FamilyLook, Icons, Material, Scheme, Style, Tone};
-use mypaper_config::Paint;
+use glaze_config::Look;
+use glaze_config::look::{FamilyLook, Icons, Material, Scheme, Style, Tone};
+use glaze_config::Paint;
 use serde_json::{Value, json};
 
 use crate::docs::{DocId, Docs, Op, apply_op};

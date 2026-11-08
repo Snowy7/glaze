@@ -1,0 +1,133 @@
+[2026-11-05T06:36:57Z INFO  glaze_wallpaper] theme: Rainy Hong Kong (non-commercial) (C:\Users\you\.t3\worktrees\wallpaper\t3-dcf0a0a7\themes\rain-city)
+[2026-11-05T06:36:57Z INFO  glaze_wallpaper] desktop host: Layered { progman: HWND(0xbd0512), defview: HWND(0x1802fc) }
+[2026-11-05T06:36:57Z INFO  glaze_desktop::startup] READY component=wallpaper windows_ms=134.4 epoch_us=1793860617900642
+[2026-11-05T06:36:58Z INFO  glaze_wallpaper::gpu] GPU: AMD Radeon(TM) Graphics (Dx12), preference=Integrated
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=wallpaper device_ms=820.2 epoch_us=1793860618586387
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=shell main_ms=49.4 epoch_us=1793860618692054
+[2026-11-05T06:36:58Z WARN  glaze_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=shell config_ms=62.2 epoch_us=1793860618704900
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=shell prepared_ms=62.2 epoch_us=1793860618704910
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=shell factories_ms=65.9 epoch_us=1793860618708610
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=shell services_ms=66.0 epoch_us=1793860618708657
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=shell theme_ms=67.3 epoch_us=1793860618709980
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=shell monitors_ms=67.4 epoch_us=1793860618710027
+[2026-11-05T06:36:58Z INFO  glaze_wallpaper::engine] Rainy Hong Kong (non-commercial) ready in 173.1ms
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=wallpaper source_ms=993.7 epoch_us=1793860618759890
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=wallpaper loop_ms=1034.2 epoch_us=1793860618800399
+[2026-11-05T06:36:58Z INFO  glaze_wallpaper::engine] held: display off
+[2026-11-05T06:36:58Z INFO  glaze_wallpaper::engine] released (was held: display off)
+[2026-11-05T06:36:58Z INFO  glaze_wallpaper::overlay::capture] glass overlays: borderless capture allowed
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=shell first_paint_ms=182.1 epoch_us=1793860618824810
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=shell surfaces_ms=332.0 epoch_us=1793860618974629
+[2026-11-05T06:36:58Z INFO  glaze_desktop::startup] READY component=shell bars_painted_ms=332.1 epoch_us=1793860618974726
+[2026-11-05T06:36:59Z INFO  glaze_desktop::startup] READY component=shell replayed_ms=577.0 epoch_us=1793860619219668
+[2026-11-05T06:36:59Z INFO  glaze_desktop::startup] READY component=wallpaper first_frame_ms=1498.1 epoch_us=1793860619264308
+[2026-11-05T06:36:59Z INFO  glaze_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-05T06:36:59Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY1 320x180 (2 screens): ready after 147.1 ms (not waited on), copy 0.06 ms on the frame, write 2.45 ms off it
+[2026-11-05T06:36:59Z INFO  glaze_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T06:36:59Z INFO  glaze_bars::tray_host] tray: hosting the notification area
+[2026-11-05T06:37:00Z INFO  glaze_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T06:37:00Z INFO  glaze_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T06:37:00Z INFO  glaze_shell] desktop right-click menu on
+[2026-11-05T06:37:00Z INFO  glaze_desktop::startup] READY component=shell ready_ms=2097.5 epoch_us=1793860620740187
+[2026-11-05T06:37:00Z INFO  glaze_shell] running
+[2026-11-05T06:37:00Z INFO  glaze_desktop::startup] READY component=shell widgets_init_ms=2142.9 epoch_us=1793860620785514
+[2026-11-05T06:37:00Z INFO  glaze_wallpaper::trim] trimmed the working set
+[2026-11-05T06:37:01Z INFO  glaze_desktop::startup] READY component=shell widgets_ready_ms=2774.4 epoch_us=1793860621417047
+[2026-11-05T06:37:09Z INFO  glaze_bars::flyouts::index] launcher: 41 apps indexed in 1.2557696s
+[2026-11-05T06:38:01Z INFO  glaze_shell::widgets] widget checkpoint presents=(39, 2) costs=WorkCosts { clock_us: 68, coverage_us: 1458, stats_us: 41761, paint_us: 43713, polls: 92, orders: 1, order_us: 45, plate_us: 124, poll_us: 610312 }
+[2026-11-05T06:38:01Z INFO  glaze_shell::widgets] widget checkpoint id=calendar-1 rect=Rect { left: -642.0, top: 49.0, right: -333.0, bottom: 370.5 } visible=true
+[2026-11-05T06:38:01Z INFO  glaze_shell::widgets] widget checkpoint id=clock-1 rect=Rect { left: 1918.0, top: 40.0, right: 2227.0, bottom: 251.66667 } visible=true
+[2026-11-05T06:38:01Z INFO  glaze_shell::widgets] widget checkpoint id=notes-1 rect=Rect { left: -642.0, top: 708.0, right: -438.6667, bottom: 919.6667 } visible=true
+[2026-11-05T06:38:01Z INFO  glaze_shell::widgets] widget checkpoint id=now-playing-1 rect=Rect { left: 1918.0, top: 369.5, right: 2332.6667, bottom: 581.1667 } visible=true
+[2026-11-05T06:38:01Z INFO  glaze_shell::widgets] widget checkpoint id=system-monitor-1 rect=Rect { left: 1918.0, top: 699.0, right: 2227.0, bottom: 910.6667 } visible=true
+[2026-11-05T06:38:01Z INFO  glaze_shell::widgets] widget checkpoint id=weather-1 rect=Rect { left: -642.0, top: 378.5, right: -333.0, bottom: 590.1667 } visible=true
+[2026-11-05T06:39:12Z INFO  glaze_shell::widgets] widget checkpoint presents=(75, 3) costs=WorkCosts { clock_us: 175, coverage_us: 1502, stats_us: 88284, paint_us: 69149, polls: 159, orders: 1, order_us: 45, plate_us: 124, poll_us: 684012 }
+[2026-11-05T06:39:12Z INFO  glaze_shell::widgets] widget checkpoint id=calendar-1 rect=Rect { left: -642.0, top: 49.0, right: -333.0, bottom: 370.5 } visible=true
+[2026-11-05T06:39:12Z INFO  glaze_shell::widgets] widget checkpoint id=clock-1 rect=Rect { left: 1918.0, top: 40.0, right: 2227.0, bottom: 251.66667 } visible=true
+[2026-11-05T06:39:12Z INFO  glaze_shell::widgets] widget checkpoint id=notes-1 rect=Rect { left: -642.0, top: 708.0, right: -438.6667, bottom: 919.6667 } visible=true
+[2026-11-05T06:39:12Z INFO  glaze_shell::widgets] widget checkpoint id=now-playing-1 rect=Rect { left: 1918.0, top: 369.5, right: 2332.6667, bottom: 581.1667 } visible=true
+[2026-11-05T06:39:12Z INFO  glaze_shell::widgets] widget checkpoint id=system-monitor-1 rect=Rect { left: 1918.0, top: 699.0, right: 2227.0, bottom: 910.6667 } visible=true
+[2026-11-05T06:39:12Z INFO  glaze_shell::widgets] widget checkpoint id=weather-1 rect=Rect { left: -642.0, top: 378.5, right: -333.0, bottom: 590.1667 } visible=true
+[2026-11-05T06:39:12Z INFO  glaze_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
+[2026-11-05T06:39:12Z INFO  glaze_shell::widgets] native widgets stopped: presents=75 clock_presents=3
+[2026-11-05T06:39:12Z INFO  glaze_bars::flyouts::winkey] launcher: Windows key hook removed
+[2026-11-05T06:39:12Z INFO  glaze_shell] stopped
+[2026-11-05T06:39:13Z INFO  glaze_desktop::startup] READY component=shell main_ms=58.7 epoch_us=1793860753037406
+[2026-11-05T06:39:13Z WARN  glaze_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T06:39:13Z INFO  glaze_desktop::startup] READY component=shell config_ms=70.3 epoch_us=1793860753049062
+[2026-11-05T06:39:13Z INFO  glaze_desktop::startup] READY component=shell prepared_ms=70.4 epoch_us=1793860753049072
+[2026-11-05T06:39:13Z INFO  glaze_desktop::startup] READY component=shell factories_ms=86.0 epoch_us=1793860753064714
+[2026-11-05T06:39:13Z INFO  glaze_desktop::startup] READY component=shell services_ms=86.1 epoch_us=1793860753064778
+[2026-11-05T06:39:13Z INFO  glaze_desktop::startup] READY component=shell theme_ms=88.0 epoch_us=1793860753066695
+[2026-11-05T06:39:13Z INFO  glaze_desktop::startup] READY component=shell monitors_ms=88.0 epoch_us=1793860753066756
+[2026-11-05T06:39:13Z INFO  glaze_desktop::startup] READY component=shell first_paint_ms=196.8 epoch_us=1793860753175491
+[2026-11-05T06:39:13Z INFO  glaze_desktop::startup] READY component=shell surfaces_ms=327.1 epoch_us=1793860753305827
+[2026-11-05T06:39:13Z INFO  glaze_desktop::startup] READY component=shell bars_painted_ms=327.3 epoch_us=1793860753305979
+[2026-11-05T06:39:13Z INFO  glaze_desktop::startup] READY component=shell replayed_ms=543.2 epoch_us=1793860753521964
+[2026-11-05T06:39:13Z INFO  glaze_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T06:39:13Z INFO  glaze_bars::tray_host] tray: hosting the notification area
+[2026-11-05T06:39:13Z INFO  glaze_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T06:39:14Z INFO  glaze_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T06:39:14Z INFO  glaze_bars::tray_host] tray: WM_COPYDATA 0 took 222.4713ms
+[2026-11-05T06:39:14Z INFO  glaze_shell] desktop right-click menu on
+[2026-11-05T06:39:14Z INFO  glaze_desktop::startup] READY component=shell ready_ms=1677.0 epoch_us=1793860754655704
+[2026-11-05T06:39:14Z INFO  glaze_shell] running
+[2026-11-05T06:39:14Z INFO  glaze_desktop::startup] READY component=shell widgets_init_ms=1978.2 epoch_us=1793860754956913
+[2026-11-05T06:39:15Z INFO  glaze_desktop::startup] READY component=shell widgets_ready_ms=2582.5 epoch_us=1793860755561208
+[2026-11-05T06:39:15Z INFO  glaze_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
+[2026-11-05T06:39:15Z INFO  glaze_shell::widgets] native widgets stopped: presents=7 clock_presents=1
+[2026-11-05T06:39:16Z INFO  glaze_bars::flyouts::winkey] launcher: Windows key hook removed
+[2026-11-05T06:39:16Z INFO  glaze_shell] stopped
+[2026-11-05T06:39:16Z INFO  glaze_desktop::startup] READY component=shell main_ms=59.2 epoch_us=1793860756141403
+[2026-11-05T06:39:16Z WARN  glaze_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T06:39:16Z INFO  glaze_desktop::startup] READY component=shell config_ms=72.5 epoch_us=1793860756154659
+[2026-11-05T06:39:16Z INFO  glaze_desktop::startup] READY component=shell prepared_ms=72.5 epoch_us=1793860756154669
+[2026-11-05T06:39:16Z INFO  glaze_desktop::startup] READY component=shell factories_ms=104.5 epoch_us=1793860756186688
+[2026-11-05T06:39:16Z INFO  glaze_desktop::startup] READY component=shell services_ms=104.6 epoch_us=1793860756186752
+[2026-11-05T06:39:16Z INFO  glaze_desktop::startup] READY component=shell theme_ms=107.8 epoch_us=1793860756189972
+[2026-11-05T06:39:16Z INFO  glaze_desktop::startup] READY component=shell monitors_ms=108.3 epoch_us=1793860756190461
+[2026-11-05T06:39:16Z INFO  glaze_desktop::startup] READY component=shell first_paint_ms=237.0 epoch_us=1793860756319154
+[2026-11-05T06:39:16Z INFO  glaze_desktop::startup] READY component=shell surfaces_ms=372.9 epoch_us=1793860756455028
+[2026-11-05T06:39:16Z INFO  glaze_desktop::startup] READY component=shell bars_painted_ms=373.0 epoch_us=1793860756455154
+[2026-11-05T06:39:16Z INFO  glaze_desktop::startup] READY component=shell replayed_ms=586.2 epoch_us=1793860756668360
+[2026-11-05T06:39:16Z INFO  glaze_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T06:39:16Z INFO  glaze_bars::tray_host] tray: hosting the notification area
+[2026-11-05T06:39:17Z INFO  glaze_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T06:39:17Z INFO  glaze_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T06:39:17Z INFO  glaze_bars::tray_host] tray: WM_COPYDATA 0 took 256.5938ms
+[2026-11-05T06:39:17Z INFO  glaze_shell] desktop right-click menu on
+[2026-11-05T06:39:17Z INFO  glaze_desktop::startup] READY component=shell ready_ms=1753.7 epoch_us=1793860757835869
+[2026-11-05T06:39:17Z INFO  glaze_shell] running
+[2026-11-05T06:39:17Z INFO  glaze_desktop::startup] READY component=shell widgets_init_ms=1787.3 epoch_us=1793860757869502
+[2026-11-05T06:39:18Z INFO  glaze_desktop::startup] READY component=shell widgets_ready_ms=2415.6 epoch_us=1793860758497779
+[2026-11-05T06:39:18Z INFO  glaze_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
+[2026-11-05T06:39:18Z INFO  glaze_shell::widgets] native widgets stopped: presents=7 clock_presents=1
+[2026-11-05T06:39:18Z INFO  glaze_bars::flyouts::winkey] launcher: Windows key hook removed
+[2026-11-05T06:39:18Z INFO  glaze_shell] stopped
+[2026-11-05T06:39:19Z INFO  glaze_desktop::startup] READY component=shell main_ms=66.1 epoch_us=1793860759122435
+[2026-11-05T06:39:19Z WARN  glaze_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T06:39:19Z INFO  glaze_desktop::startup] READY component=shell config_ms=77.9 epoch_us=1793860759134194
+[2026-11-05T06:39:19Z INFO  glaze_desktop::startup] READY component=shell prepared_ms=77.9 epoch_us=1793860759134203
+[2026-11-05T06:39:19Z INFO  glaze_desktop::startup] READY component=shell factories_ms=112.4 epoch_us=1793860759168733
+[2026-11-05T06:39:19Z INFO  glaze_desktop::startup] READY component=shell services_ms=112.5 epoch_us=1793860759168810
+[2026-11-05T06:39:19Z INFO  glaze_desktop::startup] READY component=shell theme_ms=115.0 epoch_us=1793860759171355
+[2026-11-05T06:39:19Z INFO  glaze_desktop::startup] READY component=shell monitors_ms=115.5 epoch_us=1793860759171814
+[2026-11-05T06:39:19Z INFO  glaze_desktop::startup] READY component=shell first_paint_ms=242.8 epoch_us=1793860759299179
+[2026-11-05T06:39:19Z INFO  glaze_desktop::startup] READY component=shell surfaces_ms=376.4 epoch_us=1793860759432777
+[2026-11-05T06:39:19Z INFO  glaze_desktop::startup] READY component=shell bars_painted_ms=376.6 epoch_us=1793860759432895
+[2026-11-05T06:39:19Z INFO  glaze_desktop::startup] READY component=shell replayed_ms=591.9 epoch_us=1793860759648205
+[2026-11-05T06:39:19Z INFO  glaze_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T06:39:19Z INFO  glaze_bars::tray_host] tray: hosting the notification area
+[2026-11-05T06:39:20Z INFO  glaze_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T06:39:20Z INFO  glaze_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T06:39:20Z INFO  glaze_bars::tray_host] tray: WM_COPYDATA 0 took 239.005ms
+[2026-11-05T06:39:20Z INFO  glaze_shell] desktop right-click menu on
+[2026-11-05T06:39:20Z INFO  glaze_desktop::startup] READY component=shell ready_ms=1723.6 epoch_us=1793860760779962
+[2026-11-05T06:39:20Z INFO  glaze_shell] running
+[2026-11-05T06:39:20Z INFO  glaze_desktop::startup] READY component=shell widgets_init_ms=1765.2 epoch_us=1793860760821509
+[2026-11-05T06:39:21Z INFO  glaze_desktop::startup] READY component=shell widgets_ready_ms=2375.1 epoch_us=1793860761431445
+[2026-11-05T06:39:21Z INFO  glaze_bars::tray_host] tray: stopped hosting; apps re-register with Explorer
+[2026-11-05T06:39:21Z INFO  glaze_shell::widgets] native widgets stopped: presents=6 clock_presents=1
+[2026-11-05T06:39:21Z INFO  glaze_bars::flyouts::winkey] launcher: Windows key hook removed
+[2026-11-05T06:39:21Z INFO  glaze_shell] stopped

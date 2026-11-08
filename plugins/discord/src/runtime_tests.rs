@@ -1,8 +1,8 @@
 //! Runs the actual component and inspects its broker effects. No requests are dispatched to
 //! Discord and no real pipe is opened; fixture secrets live in a unique test namespace.
 use crate::{caps, runtime::{Effect, Manifest, Runtime}};
-use crate::runtime::exports::mypaper::plugin::lifecycle::{Action, Event, FaceOpen};
-use crate::runtime::mypaper::plugin::{http::{Reply,Response},pipes::PipeEvent,types::SizeClass};
+use crate::runtime::exports::glaze::plugin::lifecycle::{Action, Event, FaceOpen};
+use crate::runtime::glaze::plugin::{http::{Reply,Response},pipes::PipeEvent,types::SizeClass};
 use serde_json::{Value,json};
 
 fn view(effects: &[Effect]) -> String {

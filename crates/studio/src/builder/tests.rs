@@ -6,7 +6,7 @@ fn contract_is_validated_by_the_engine() {
     assert!(validate_theme(r##"{"name":"Test","wallpaper":{"kind":"stack","scale":2,"base":{"kind":"color","color":"#202124"},"layers":[]}}"##).is_err());
 }
 
-fn fixture(dark: bool, ui: &mypaper_ui::Ui) -> App {
+fn fixture(dark: bool, ui: &glaze_ui::Ui) -> App {
     let mut app = crate::goldens::window_app(dark, ui, (1440, 960));
     begin(&mut app, None).unwrap();
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -45,13 +45,13 @@ fn fixture(dark: bool, ui: &mypaper_ui::Ui) -> App {
 }
 
 /// The editor's states, each in both themes at two window sizes:
-/// `MYPAPER_BLESS=1` updates tests/golden/window; review copies go to the shots folder.
+/// `GLAZE_BLESS=1` updates tests/golden/window; review copies go to the shots folder.
 #[test]
 fn render_builder_window_goldens() {
-    use mypaper_ui::Ui;
-    let out = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS")
+    use glaze_ui::Ui;
+    let out = std::env::var_os("GLAZE_STUDIO_WINDOW_SHOTS")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"C:\mypaper-targets\create-v2\shots"));
+        .unwrap_or_else(|| PathBuf::from(r"C:\glaze-targets\create-v2\shots"));
     let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut ui = Ui::new().unwrap();
@@ -66,7 +66,7 @@ fn render_builder_window_goldens() {
                     size.1,
                     if dark { "dark" } else { "light" }
                 );
-                mypaper_ui::golden::write(&image, &out.join(&file)).unwrap();
+                glaze_ui::golden::write(&image, &out.join(&file)).unwrap();
                 crate::goldens::check(&image, &baseline.join(&file)).unwrap();
             };
             // A new wallpaper: what to start from.
@@ -113,7 +113,7 @@ fn render_builder_window_goldens() {
 }
 #[test]
 fn draft_edits_reorder_and_undo_without_changing_desktop() {
-    let ui = mypaper_ui::Ui::new().unwrap();
+    let ui = glaze_ui::Ui::new().unwrap();
     let mut app = fixture(true, &ui);
     let desktop = app.docs.doc(DocId::Config).raw.clone();
     let original = layers(&app);
@@ -126,7 +126,7 @@ fn draft_edits_reorder_and_undo_without_changing_desktop() {
 
 #[test]
 fn shader_diagnostics_point_to_user_source_lines() {
-    let ui = mypaper_ui::Ui::new().unwrap();
+    let ui = glaze_ui::Ui::new().unwrap();
     let mut app = fixture(true, &ui);
     execute(&mut app, Command::Base("shader")).unwrap();
     execute(&mut app, Command::Shader).unwrap();
@@ -144,9 +144,9 @@ fn shader_diagnostics_point_to_user_source_lines() {
 
 #[test]
 fn save_packages_assets_credits_and_defaults_without_overwriting_unknown_themes() {
-    let ui = mypaper_ui::Ui::new().unwrap();
+    let ui = glaze_ui::Ui::new().unwrap();
     let mut app = fixture(true, &ui);
-    let root = std::env::temp_dir().join(format!("mypaper-builder-save-{}", unique()));
+    let root = std::env::temp_dir().join(format!("glaze-builder-save-{}", unique()));
     let existing = root.join("after-the-rain");
     std::fs::create_dir_all(&existing).unwrap();
     std::fs::write(existing.join("theme.json"), "newer-format-do-not-touch").unwrap();
@@ -191,14 +191,14 @@ fn save_packages_assets_credits_and_defaults_without_overwriting_unknown_themes(
     assert!(target.join("preview.jpg").is_file());
     let credits: Vec<Value> =
         serde_json::from_slice(&std::fs::read(target.join("credits.json")).unwrap()).unwrap();
-    assert!(credits.iter().any(|c| c["author"] == "mypaper"));
+    assert!(credits.iter().any(|c| c["author"] == "Glaze"));
     assert!(credits.iter().any(|c| c["name"] == "city.jpg"));
     std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn source_versions_use_document_undo_and_custom_annotations_update_the_schema() {
-    let ui = mypaper_ui::Ui::new().unwrap();
+    let ui = glaze_ui::Ui::new().unwrap();
     let mut app = fixture(true, &ui);
     execute(&mut app, Command::Base("shader")).unwrap();
     execute(&mut app, Command::Shader).unwrap();
@@ -245,8 +245,8 @@ fn source_versions_use_document_undo_and_custom_annotations_update_the_schema() 
 
 #[test]
 fn multiline_field_changes_reach_the_shader_buffer_without_native_input() {
-    use mypaper_ui::{Event, Kind, Rect, Role, Surface, TextField};
-    let ui = mypaper_ui::Ui::new().unwrap();
+    use glaze_ui::{Event, Kind, Rect, Role, Surface, TextField};
+    let ui = glaze_ui::Ui::new().unwrap();
     let mut app = fixture(true, &ui);
     execute(&mut app, Command::Base("shader")).unwrap();
     execute(&mut app, Command::Shader).unwrap();
@@ -280,7 +280,7 @@ fn multiline_field_changes_reach_the_shader_buffer_without_native_input() {
 #[test]
 #[ignore = "explicit headless DX12 engine + own hidden-window PrintWindow check"]
 fn live_engine_canvas_and_native_window() {
-    use mypaper_ui::{Kind, Role, Surface, Ui, golden};
+    use glaze_ui::{Kind, Role, Surface, Ui, golden};
     use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, IsWindowVisible};
     let mut ui = Ui::new().unwrap();
     let mut app = fixture(true, &ui);
@@ -298,7 +298,7 @@ fn live_engine_canvas_and_native_window() {
         "{:?}",
         active(&app).unwrap().preview.error
     );
-    let out = PathBuf::from(r"C:\mypaper-targets\studio-create\live");
+    let out = PathBuf::from(r"C:\glaze-targets\studio-create\live");
     std::fs::create_dir_all(&out).unwrap();
     std::fs::copy(&snapshot, out.join("engine-snapshot.jpg")).unwrap();
     let mut surface = Surface::new_deferred_accessibility(
@@ -403,7 +403,7 @@ fn live_engine_canvas_and_native_window() {
 fn print_own_window(
     window: windows::Win32::Foundation::HWND,
     size: (u32, u32),
-) -> mypaper_ui::Image {
+) -> glaze_ui::Image {
     use windows::Win32::{Graphics::Gdi::*, UI::WindowsAndMessaging::GetWindowThreadProcessId};
     #[link(name = "user32")]
     unsafe extern "system" {
@@ -449,7 +449,7 @@ fn print_own_window(
         for pixel in pixels.chunks_exact_mut(4) {
             pixel[3] = 255;
         }
-        mypaper_ui::Image {
+        glaze_ui::Image {
             width: size.0,
             height: size.1,
             pixels,

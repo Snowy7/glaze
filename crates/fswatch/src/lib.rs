@@ -589,7 +589,7 @@ mod tests {
     #[test]
     fn real_kernel_overflow_is_reported_and_watching_continues() {
         let dir =
-            std::env::temp_dir().join(format!("mypaper-fswatch-overflow-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-fswatch-overflow-{}", std::process::id()));
         std::fs::create_dir(&dir).unwrap();
         let (tx, rx) = mpsc::channel();
         let (release, blocked) = mpsc::channel();

@@ -1,11 +1,11 @@
 //! Native shell fixture: bar, dock and six widgets on every physical monitor.
 //! Run only under the desktop lock. `plates [--animate] [--seconds N] [--hz N]`.
 use anyhow::{Context, Result};
-use mypaper_glass_ipc::{Material, Plate, Writer};
+use glaze_glass_ipc::{Material, Plate, Writer};
 use std::time::{Duration, Instant};
 
 fn main() -> Result<()> {
-    mypaper_desktop::enable_dpi_awareness();
+    glaze_desktop::enable_dpi_awareness();
     let args: Vec<_> = std::env::args().collect();
     let value = |flag: &str, default: f64| -> Result<f64> {
         args.iter()
@@ -21,7 +21,7 @@ fn main() -> Result<()> {
     let hz = value("--hz", 60.0)?.clamp(1.0, 360.0);
     let animate = args.iter().any(|a| a == "--animate");
     let mut plates = Vec::new();
-    for (index, m) in mypaper_desktop::monitors().iter().enumerate() {
+    for (index, m) in glaze_desktop::monitors().iter().enumerate() {
         let (x, y, w, h) = (m.x as f32, m.y as f32, m.width as f32, m.height as f32);
         let mut add = |rect, radius| {
             plates.push(Plate {

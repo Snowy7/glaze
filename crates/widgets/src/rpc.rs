@@ -35,7 +35,7 @@ pub fn method_not_found(id: &Value) -> String {
 pub struct RpcError {
     pub code: i64,
     pub message: String,
-    /// `error.data.code`: the mypaper error name the plugin chose, if any.
+    /// `error.data.code`: the Glaze error name the plugin chose, if any.
     pub name: Option<String>,
 }
 

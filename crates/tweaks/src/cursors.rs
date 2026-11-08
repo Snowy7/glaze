@@ -3,9 +3,9 @@
 //! journaled like the accent, and applied with `SystemParametersInfoW(SPI_SETCURSORS)`.
 //!
 //! A *set* is a folder of `.cur`/`.ani` files named after the cursor they
-//! replace ([`Role::stems`]). `mypaper-dark` and `mypaper-light` are drawn in
+//! replace ([`Role::stems`]). `glaze-dark` and `glaze-light` are drawn in
 //! code ([`cursor_art`](crate::cursor_art)) and written to
-//! `%LOCALAPPDATA%\mypaper\cursors\<name>` when first used.
+//! `%LOCALAPPDATA%\glaze\cursors\<name>` when first used.
 
 use std::path::{Path, PathBuf};
 
@@ -167,7 +167,7 @@ fn candidates(spec: &str, theme_dir: &Path, user_dir: &Path) -> Vec<PathBuf> {
 }
 
 /// Finds the set `spec` names (see [`candidates`]), or draws a built-in one
-/// into `local_dir\cursors`. `user_dir` is `%APPDATA%\mypaper\cursors`.
+/// into `local_dir\cursors`. `user_dir` is `%APPDATA%\glaze\cursors`.
 pub fn resolve(spec: &str, theme_dir: &Path, user_dir: &Path, local_dir: &Path) -> Result<Scheme> {
     if let Some(look) = Look::from_name(spec) {
         let dir = install_builtin(look, &local_dir.join("cursors"))?;
@@ -183,11 +183,11 @@ pub fn resolve(spec: &str, theme_dir: &Path, user_dir: &Path, local_dir: &Path) 
     scan(&name, &dir)
 }
 
-/// [`resolve`] with the real folders: `%APPDATA%\mypaper\cursors` for the
-/// user's sets, `%LOCALAPPDATA%\mypaper` for the drawn ones.
+/// [`resolve`] with the real folders: `%APPDATA%\glaze\cursors` for the
+/// user's sets, `%LOCALAPPDATA%\glaze` for the drawn ones.
 pub fn resolve_default(spec: &str, theme_dir: &Path) -> Result<Scheme> {
     let roaming = std::env::var_os("APPDATA").context("APPDATA is not set")?;
-    let user_dir = PathBuf::from(roaming).join("mypaper").join("cursors");
+    let user_dir = PathBuf::from(roaming).join("glaze").join("cursors");
     resolve(spec, theme_dir, &user_dir, &crate::palette::local_dir()?)
 }
 
@@ -219,7 +219,7 @@ fn file_name(role: &Role) -> String {
     )
 }
 
-/// Writes every built-in set into `root` (`cargo run -p mypaper-tweaks --example export_cursors`).
+/// Writes every built-in set into `root` (`cargo run -p glaze-tweaks --example export_cursors`).
 pub fn export_builtin(root: &Path) -> Result<Vec<PathBuf>> {
     [Look::Dark, Look::Light]
         .into_iter()
@@ -290,7 +290,7 @@ mod tests {
     fn a_spec_resolves_absolute_then_theme_relative_then_by_name() {
         let (theme, user) = (
             Path::new(r"C:\themes\t"),
-            Path::new(r"C:\Users\me\mypaper\cursors"),
+            Path::new(r"C:\Users\me\glaze\cursors"),
         );
         assert_eq!(
             candidates(r"D:\sets\mine", theme, user),
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn writes_select_the_scheme_and_keep_registry_types() {
         let scheme = Scheme {
-            name: "mypaper-dark".into(),
+            name: "glaze-dark".into(),
             files: vec![
                 ("Arrow", PathBuf::from(r"C:\c\arrow.cur")),
                 ("Wait", PathBuf::from(r"C:\c\wait.ani")),
@@ -321,7 +321,7 @@ mod tests {
             by_name("Arrow"),
             Some(&Value::ExpandString(r"C:\c\arrow.cur".into()))
         );
-        assert_eq!(by_name(""), Some(&Value::String("mypaper-dark".into())));
+        assert_eq!(by_name(""), Some(&Value::String("glaze-dark".into())));
         assert_eq!(by_name("Scheme Source"), Some(&Value::Dword(1)));
         assert_eq!(
             by_name("Hand"),
@@ -348,7 +348,7 @@ mod tests {
             registry.write(CURSORS_KEY, name, value).unwrap();
         }
         let scheme = Scheme {
-            name: "mypaper-light".into(),
+            name: "glaze-light".into(),
             files: vec![
                 ("Arrow", PathBuf::from(r"C:\c\arrow.cur")),
                 ("Hand", PathBuf::from(r"C:\c\hand.cur")), // absent before
@@ -358,7 +358,7 @@ mod tests {
         assert!(undo.apply(&writes(&scheme)).unwrap());
         assert_eq!(
             registry.read(CURSORS_KEY, "").unwrap(),
-            Some(Value::String("mypaper-light".into()))
+            Some(Value::String("glaze-light".into()))
         );
         assert!(undo.journaled_key(CURSORS_KEY));
 
@@ -381,8 +381,8 @@ mod tests {
     fn built_in_sets_are_drawn_once_and_found_again() {
         let root = Scratch::new("cursor-builtin");
         let local = root.0.join("local");
-        let scheme = resolve("mypaper-dark", Path::new("."), &root.0.join("user"), &local).unwrap();
-        assert_eq!(scheme.name, "mypaper-dark");
+        let scheme = resolve("glaze-dark", Path::new("."), &root.0.join("user"), &local).unwrap();
+        assert_eq!(scheme.name, "glaze-dark");
         assert_eq!(scheme.files.len(), ROLES.len());
         assert!(scheme.files.iter().all(|(_, path)| path.is_file()));
         let wait = scheme.files.iter().find(|(v, _)| *v == "Wait").unwrap();
@@ -391,7 +391,7 @@ mod tests {
         // A second resolve reuses the files instead of drawing again.
         let arrow = &scheme.files[0].1;
         let stamp = std::fs::metadata(arrow).unwrap().modified().unwrap();
-        resolve("MyPaper-Dark", Path::new("."), &root.0.join("user"), &local).unwrap();
+        resolve("Glaze-Dark", Path::new("."), &root.0.join("user"), &local).unwrap();
         assert_eq!(std::fs::metadata(arrow).unwrap().modified().unwrap(), stamp);
 
         // A user folder works too, and an empty or missing one is an error.

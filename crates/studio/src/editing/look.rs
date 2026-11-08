@@ -2,8 +2,8 @@
 
 use std::path::PathBuf;
 
-use mypaper_bars::icon_pack::{self, IconPack};
-use mypaper_config::look::Style;
+use glaze_bars::icon_pack::{self, IconPack};
+use glaze_config::look::Style;
 use serde_json::{Value, json};
 
 use crate::actions::{Action, Edit, Page};
@@ -60,9 +60,9 @@ fn own_wallpaper(app: &App) -> Option<&crate::library::Wallpaper> {
         .filter(|w| w.editable())
 }
 
-/// Where your icon packs are (`%APPDATA%\mypaper\icons`).
+/// Where your icon packs are (`%APPDATA%\glaze\icons`).
 fn packs_dir() -> Option<PathBuf> {
-    mypaper_config::dir().ok().map(|d| d.join("icons"))
+    glaze_config::dir().ok().map(|d| d.join("icons"))
 }
 
 /// The pack in use, when it's one of your own folders.
@@ -95,7 +95,7 @@ const WINDOWS_LOOKS: [(&str, &str); 4] = [
         r#"{ "accent": null, "border": null, "caption": null, "caption_text": null, "corners": null, "backdrop": null, "apps": "as-is", "cursors": null }"#,
     ),
     (
-        "Match mypaper",
+        "Match Glaze",
         r#"{ "accent": "auto", "border": "auto", "corners": "round", "backdrop": "mica", "apps": "match" }"#,
     ),
     (

@@ -1,11 +1,11 @@
-cargo :    Compiling mypaper-ui v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\ui)
+cargo :    Compiling glaze-ui v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\ui)
 At line:2 char:211
-+ ... Exit -eq 0){cargo test -p mypaper-shell --lib -- --test-threads=1 --n ...
++ ... Exit -eq 0){cargo test -p glaze-shell --lib -- --test-threads=1 --n ...
 +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (   Compiling my...aper\crates\ui):String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
-   Compiling mypaper-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
+   Compiling glaze-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
 warning: struct `Layout` is never constructed
   --> crates\shell\src\widgets\views\integrations\mod.rs:19:19
    |
@@ -50,10 +50,10 @@ warning: function `icon_action` is never used
 144 | pub(super) fn icon_action(
     |               ^^^^^^^^^^^
 
-warning: `mypaper-shell` (lib test) generated 7 warnings
+warning: `glaze-shell` (lib test) generated 7 warnings
     Finished `test` profile [unoptimized + debuginfo] target(s) in 6.10s
      Running unittests src\lib.rs 
-(C:\mypaper-targets\main\debug\build\mypaper-shell/55f7fec482424c16\out\mypaper_shell-55f7fec482424c16.exe)
+(C:\glaze-targets\main\debug\build\glaze-shell/55f7fec482424c16\out\glaze_shell-55f7fec482424c16.exe)
 
 running 213 tests
 test bars::bar::tests::only_the_covered_island_loses_its_plate_and_uncover_restores_it ... ok
@@ -95,25 +95,25 @@ test bars::tests::docks_on_all_edges_and_taskbar_module_clicks_have_alpha ... ok
 test bars::tests::explicit_native_actions_bypass_custom_panels_and_hover_respects_overrides ... ok
 test bars::tests::floating_dock_draws_added_modules_without_revealing_hidden_defaults ... ok
 test bars::tests::future_deadlines_never_turn_into_busy_polling ... ok
-test bars::tests::headless_bar_renders ... ignored, writes images: MYPAPER_BAR_SHOTS=<dir> [MYPAPER_BAR_BACKDROP=<png>]
+test bars::tests::headless_bar_renders ... ignored, writes images: GLAZE_BAR_SHOTS=<dir> [GLAZE_BAR_BACKDROP=<png>]
 test bars::tests::island_crops_route_clicks_to_original_targets_and_keep_focus_inside_their_tree ... ok
 test bars::tests::islands_leave_the_gaps_click_through_and_minute_clock_damages_only_its_module ... ok
 test bars::tests::liquid_material_uses_the_resolved_style_controls ... ok
 test bars::tests::module_status_tooltips_keep_provider_details_and_custom_failures ... ok
-test bars::tests::preset_style_grid ... ignored, writes images: MYPAPER_BAR_GRID=<dir> [MYPAPER_BAR_BACKDROP=<image>]
-test bars::tests::readme_scene_bars ... ignored, writes images: MYPAPER_README_SCENE=<dir>
+test bars::tests::preset_style_grid ... ignored, writes images: GLAZE_BAR_GRID=<dir> [GLAZE_BAR_BACKDROP=<image>]
+test bars::tests::readme_scene_bars ... ignored, writes images: GLAZE_README_SCENE=<dir>
 test bars::tests::studio_dock_preview_matches_saved_override_resolution_without_mutating_the_base ... ok
 test bars::tests::studio_fields_reach_the_shared_preview_and_native_bar_views ... ok
 test bars::tray_menu::tests::a_late_or_unacknowledged_request_cannot_open_a_second_tray_menu ... ok
 test desktop_menu::hook::tests::screen_points_survive_the_message_round_trip_including_negative_monitors ... ok
 test desktop_menu::items::plugin_tests::plugin_items_sit_under_their_plugins_name_and_icon ... ok
-test desktop_menu::items::tests::an_installed_terminal_handler_replaces_mypapers_own ... ok
+test desktop_menu::items::tests::an_installed_terminal_handler_replaces_Glazes_own ... ok
 test desktop_menu::items::tests::check_marks_and_radio_dots_follow_the_desktops_state ... ok
 test desktop_menu::items::tests::existing_explicit_lists_keep_their_order_and_hidden_items ... ok
 test desktop_menu::items::tests::hidden_items_leave_no_gap_and_custom_commands_carry_their_arguments ... ok
 test desktop_menu::items::tests::open_items_are_named_by_what_they_open ... ok
 test desktop_menu::items::tests::preview_order_is_the_editable_list_order_even_after_the_first_reorder ... ok
-test desktop_menu::items::tests::the_default_menu_is_windows_full_menu_then_mypapers ... ok
+test desktop_menu::items::tests::the_default_menu_is_windows_full_menu_then_Glazes ... ok
 test desktop_menu::items::tests::the_default_menu_matches_its_golden_images ... ok
 test desktop_menu::items::tests::without_the_shells_menu_the_built_ins_open_at_once ... ok
 test desktop_menu::shell_menu::live::draw_this_machines_desktop_menu ... ignored
@@ -264,7 +264,7 @@ test widgets::tests::long_content_scrolls_to_the_last_item_without_hits_outside_
 test widgets::tests::media_timeline_updates_reuse_artwork_and_removing_art_clears_its_material ... ok
 test widgets::tests::metric_invalidation_uses_displayed_precision_and_stable_trace_identity ... ok
 test widgets::tests::profile_system_repaint_cost ... ignored, compares real meter repaint strategies under the desktop lock
-test widgets::tests::readme_scene_widgets ... ignored, writes images: MYPAPER_README_SCENE=<dir>
+test widgets::tests::readme_scene_widgets ... ignored, writes images: GLAZE_README_SCENE=<dir>
 test widgets::tests::scheduled_ticks_stop_when_hidden_and_minute_clock_never_ticks_faster ... ok
 test widgets::tests::widget_actions_have_click_targets_and_edit_controls_cover_their_shapes ... ok
 test widgets::tests::widget_size_sheets ... ignored, writes docs/media/native/widget-*.png; run when widget views change

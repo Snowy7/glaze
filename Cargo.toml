@@ -11,19 +11,19 @@ edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
-mypaper-glass-ipc = { path = "crates/glass-ipc" }
-mypaper-theme = { path = "crates/theme" }
-mypaper-config = { path = "crates/config" }
-mypaper-fswatch = { path = "crates/fswatch" }
-mypaper-index = { path = "crates/index" }
-mypaper-desktop = { path = "crates/desktop" }
-mypaper-inject = { path = "crates/inject" }
-mypaper-tweaks = { path = "crates/tweaks" }
-mypaper-bars = { path = "crates/bars" }
+glaze-glass-ipc = { path = "crates/glass-ipc" }
+glaze-theme = { path = "crates/theme" }
+glaze-config = { path = "crates/config" }
+glaze-fswatch = { path = "crates/fswatch" }
+glaze-index = { path = "crates/index" }
+glaze-desktop = { path = "crates/desktop" }
+glaze-inject = { path = "crates/inject" }
+glaze-tweaks = { path = "crates/tweaks" }
+glaze-bars = { path = "crates/bars" }
 mypaper-tiling = { path = "crates/tiling" }
 # The UI library, its own repo since 2026-11-07. .cargo/config.toml patches it to the sibling
 # checkout at D:/Coding/projects/desktop/stillkit, so both change together on this PC.
-mypaper-ui = { package = "stillkit", git = "https://github.com/Snowy7/stillkit", rev = "5f9d05796c2492d7c08cac48f3eca4fedd927741" }
+glaze-ui = { package = "stillkit", git = "https://github.com/Snowy7/stillkit", rev = "5f9d05796c2492d7c08cac48f3eca4fedd927741" }
 
 anyhow = "1"
 bytemuck = { version = "1", features = ["derive"] }
@@ -65,7 +65,7 @@ panic = "abort"
 strip = true
 
 # Studio's many native settings views favor a smaller resident code footprint.
-[profile.release.package.mypaper-studio]
+[profile.release.package.glaze-studio]
 opt-level = "s"
 
 

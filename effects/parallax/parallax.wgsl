@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let amount = clamp(params.amount, 0.0, 0.05);
     let mouse = clamp(paper.mouse / max(paper.resolution, vec2f(1.0)), vec2f(0.0), vec2f(1.0)) - 0.5;

@@ -1,4 +1,4 @@
-//! Per-instance widget storage: `%APPDATA%\mypaper\widget-data\<instance>.json`,
+//! Per-instance widget storage: `%APPDATA%\glaze\widget-data\<instance>.json`,
 //! one JSON object per instance, written atomically on every `set`.
 
 use std::collections::HashMap;

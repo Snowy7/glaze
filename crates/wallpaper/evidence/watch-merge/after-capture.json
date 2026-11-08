@@ -7,7 +7,7 @@
                    "x":  -2560
                },
     "dpi_awareness":  "PER_MONITOR_AWARE_V2",
-    "fixture":  "C:\\mypaper-targets\\watch-merge\\debug\\examples\\game_primary.exe",
+    "fixture":  "C:\\glaze-targets\\watch-merge\\debug\\examples\\game_primary.exe",
     "seconds":  18,
     "fixture_exit":  0,
     "captures":  [
@@ -69,19 +69,19 @@
                  ],
     "processes":  [
                       {
-                          "ProcessName":  "mypaper-core",
+                          "ProcessName":  "glaze-core",
                           "Id":  67296,
-                          "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-core.exe"
+                          "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\glaze-core.exe"
                       },
                       {
-                          "ProcessName":  "mypaper-shell",
+                          "ProcessName":  "glaze-shell",
                           "Id":  48596,
-                          "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-shell.exe"
+                          "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\glaze-shell.exe"
                       },
                       {
-                          "ProcessName":  "mypaper-wallpaper",
+                          "ProcessName":  "glaze-wallpaper",
                           "Id":  19340,
-                          "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\mypaper-wallpaper.exe"
+                          "Path":  "D:\\Coding\\projects\\desktop\\wallpaper\\target\\release\\glaze-wallpaper.exe"
                       }
                   ]
 }

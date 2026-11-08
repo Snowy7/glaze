@@ -14,10 +14,10 @@ mod view;
 
 fn main() -> std::process::ExitCode {
     env_logger::init();
-    // mypaper's window names, as the shell and Studio set them.
-    let _ = mypaper_ui::set_identity(mypaper_ui::Identity {
-        prefix: "mypaper.ui",
-        desktop_classes: &["mypaper.wallpaper.glass"],
+    // Glaze's window names, as the shell and Studio set them.
+    let _ = glaze_ui::set_identity(glaze_ui::Identity {
+        prefix: "glaze.ui",
+        desktop_classes: &["glaze.wallpaper.glass"],
     });
     match run() {
         Ok(()) => std::process::ExitCode::SUCCESS,
@@ -29,7 +29,7 @@ fn main() -> std::process::ExitCode {
 }
 
 fn run() -> anyhow::Result<()> {
-    use mypaper_ui::{FileWatch, Scheme, next_event};
+    use glaze_ui::{FileWatch, Scheme, next_event};
     use windows::Win32::{
         Foundation::*,
         System::Ole::*,
@@ -48,10 +48,10 @@ fn run() -> anyhow::Result<()> {
             "--light" => scheme = Some(Scheme::Light),
             "--dark" => scheme = Some(Scheme::Dark),
             "--restore-routing" => {
-                let mut config = mypaper_config::Config::load()?;
+                let mut config = glaze_config::Config::load()?;
                 config.experimental.files_default = false;
                 config.save()?;
-                mypaper_tweaks::folder_routing::FolderRouting::new()?
+                glaze_tweaks::folder_routing::FolderRouting::new()?
                     .set(false, &std::env::current_exe()?)?;
                 // SAFETY: this balances the successful OleInitialize before the early CLI return.
                 unsafe {
@@ -68,16 +68,16 @@ fn run() -> anyhow::Result<()> {
             _ => path = arg,
         }
     }
-    let mut ui = mypaper_ui::Ui::new()?;
+    let mut ui = glaze_ui::Ui::new()?;
     let mut app = app::App::new(path, scheme)?;
     set_window_icons(app.surface.hwnd(), app.surface.scale())?;
     let hwnd = app.surface.hwnd().0 as usize;
     let reload = WM_APP + 172;
     let mut watches = Vec::new();
     for path in [
-        mypaper_config::path(),
-        mypaper_bars::config::path(),
-        mypaper_tweaks::palette::path(),
+        glaze_config::path(),
+        glaze_bars::config::path(),
+        glaze_tweaks::palette::path(),
     ]
     .into_iter()
     .flatten()
@@ -231,7 +231,7 @@ mod icon_tests {
     #[test]
     #[ignore = "live icon proof requires the desktop lock"]
     fn embedded_icons_on_a_nonactivating_window() {
-        use mypaper_ui::{Kind, Role, Surface, Ui};
+        use glaze_ui::{Kind, Role, Surface, Ui};
         use windows::Win32::UI::WindowsAndMessaging::*;
         let _ui = Ui::new().unwrap();
         let surface = Surface::new(

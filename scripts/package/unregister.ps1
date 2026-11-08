@@ -3,22 +3,22 @@ param([string]$AppDirectory = (Join-Path (Split-Path (Split-Path $PSScriptRoot -
 . "$PSScriptRoot\common.ps1"
 # Restore opt-in folder associations before removing identity or an installed app directory.
 # The Files CLI also switches its config flag off, so a later core launch cannot re-enable it.
-$files = Join-Path $AppDirectory 'mypaper-files.exe'
+$files = Join-Path $AppDirectory 'glaze-files.exe'
 if (Test-Path -LiteralPath $files) {
     $restore = Start-Process -FilePath $files -ArgumentList '--restore-routing' -Wait -PassThru -WindowStyle Hidden
     if ($restore.ExitCode -ne 0) { throw 'Folder routing could not be restored; package registration was left intact.' }
-} elseif (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'mypaper\undo-folders.json')) {
-    throw 'Restore folder routing with mypaper-files --restore-routing before unregistering this installation.'
+} elseif (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'glaze\undo-folders.json')) {
+    throw 'Restore folder routing with glaze-files --restore-routing before unregistering this installation.'
 }
 $installed = Get-AppxPackage -Name (Get-PackageManifest).Package.Identity.Name
 if ($installed) {
-    Assert-MypaperStopped
+    Assert-GlazeStopped
     $layout = [IO.Path]::GetFullPath($installed.InstallLocation)
     Remove-AppxPackage -Package $installed.PackageFullName
-    $developmentRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'mypaper\identity')).TrimEnd('\') + '\'
+    $developmentRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'glaze\identity')).TrimEnd('\') + '\'
     if ($installed.IsDevelopmentMode -and $layout.StartsWith($developmentRoot, [StringComparison]::OrdinalIgnoreCase) -and
         (Test-Path -LiteralPath $layout)) {
         Remove-Item -LiteralPath $layout -Recurse -Force
     }
-    Write-Host 'mypaper identity removed; the next launch uses notification snapshots.'
-} else { Write-Host 'mypaper identity is already unregistered.' }
+    Write-Host 'Glaze identity removed; the next launch uses notification snapshots.'
+} else { Write-Host 'Glaze identity is already unregistered.' }

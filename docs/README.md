@@ -1,4 +1,4 @@
-# mypaper docs
+# Glaze docs
 
 Back to the [project README](../README.md).
 
@@ -6,7 +6,7 @@ Back to the [project README](../README.md).
 
 | Doc | About |
 |---|---|
-| [ui.md](ui.md) | The UI kit (`crates/ui`) and `mypaper-shell`: surfaces, display lists, text, icons, input, accessibility, measurements |
+| [ui.md](ui.md) | The UI kit (`crates/ui`) and `glaze-shell`: surfaces, display lists, text, icons, input, accessibility, measurements |
 | [glass.md](glass.md) | Liquid Glass: materials, live glass over web/app wallpapers, GPU cost and the GPU default |
 | [bars.md](bars.md) | The top bar, dock and taskbar: presets, styles, modules, tray host, flyouts, and their live measurements |
 | [widgets.md](widgets.md) | Native desktop widgets: windows and glass, edit mode, sizes, scheduling, storage, Studio settings |
@@ -15,7 +15,7 @@ Back to the [project README](../README.md).
 | [windows-styling.md](windows-styling.md) | One-switch native style sync, reversible Windows frames/accent/mode, and the experimental App styler's presets and current limits |
 | [system.md](system.md) | Reversible Windows preferences and games: background quiescence, pause during games, and `engine.during_games` |
 | [index.md](index.md) | Experimental native name/path search and folder sizes: `experimental.file_index`, `index.exclude` / `index.include`, measurements and limits |
-| [files.md](files.md) | mypaper Files: native tabs, previews, search and file operations; optional folder/Win+E routing with `experimental.files_default` |
+| [files.md](files.md) | Glaze Files: native tabs, previews, search and file operations; optional folder/Win+E routing with `experimental.files_default` |
 | [web-and-app-wallpapers.md](web-and-app-wallpapers.md) | `web` (WebView2) and `app` (external renderer) wallpapers |
 | [studio-ux.md](studio-ux.md) | Studio: places, navigation, saving and undo, previews, keyboard, cost, code map |
 

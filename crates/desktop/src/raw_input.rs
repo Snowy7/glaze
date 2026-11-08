@@ -34,7 +34,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{PCWSTR, w};
 
-const CLASS: PCWSTR = w!("mypaper.rawinput");
+const CLASS: PCWSTR = w!("glaze.rawinput");
 const TIMER: usize = 1;
 
 // `usButtonFlags` bits of RAWMOUSE.
@@ -200,7 +200,7 @@ impl RawMouse {
             CreateWindowExW(
                 Default::default(),
                 CLASS,
-                w!("mypaper raw input"),
+                w!("Glaze raw input"),
                 Default::default(),
                 0,
                 0,

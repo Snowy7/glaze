@@ -1,5 +1,5 @@
 //! `plugin.json` as plugins and tooling see it (docs/plugins.md, "Folder and manifest").
-//! The host parses the same file with `mypaper_widgets::manifest::PluginManifest`.
+//! The host parses the same file with `glaze_widgets::manifest::PluginManifest`.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

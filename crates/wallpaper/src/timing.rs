@@ -11,7 +11,7 @@ pub const FEATURES: wgpu::Features =
     wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS);
 
 pub fn requested() -> bool {
-    std::env::var_os("MYPAPER_GPU_TIMINGS").is_some()
+    std::env::var_os("GLAZE_GPU_TIMINGS").is_some()
 }
 
 /// Two GPU timestamps, allocated only for a covered change or a Studio request.
@@ -107,7 +107,7 @@ pub struct Meta {
 }
 impl Timing {
     pub fn new(gpu: &Gpu) -> Result<Option<Self>> {
-        let Some(path) = std::env::var_os("MYPAPER_GPU_TIMINGS") else {
+        let Some(path) = std::env::var_os("GLAZE_GPU_TIMINGS") else {
             return Ok(None);
         };
         ensure!(
@@ -151,7 +151,7 @@ impl Timing {
             slots,
             sender: Some(sender),
             worker: Some(worker),
-            composition: std::env::var_os("MYPAPER_COMPOSITION_TIMING").is_some(),
+            composition: std::env::var_os("GLAZE_COMPOSITION_TIMING").is_some(),
             period: f64::from(gpu.queue.get_timestamp_period()),
         }))
     }
@@ -183,7 +183,7 @@ impl Timing {
     }
     pub fn submitted(&mut self, index: usize, glass: bool) {
         let s = &mut self.slots[index];
-        s.meta.submit_qpc = mypaper_glass_ipc::qpc();
+        s.meta.submit_qpc = glaze_glass_ipc::qpc();
         s.meta.glass = glass;
         let ready = s.ready.clone();
         s.read.map_async(wgpu::MapMode::Read, .., move |r| {
@@ -201,7 +201,7 @@ impl Timing {
             log::error!("composition timing: {error}");
             return;
         }
-        let now = mypaper_glass_ipc::qpc();
+        let now = glaze_glass_ipc::qpc();
         for slot in &mut self.slots {
             if slot.meta.frame == frame && slot.ready.load(Ordering::Acquire) != 0 {
                 slot.meta.composition_qpc = now;
@@ -233,12 +233,12 @@ impl Timing {
                     };
                     let m = s.meta;
                     let lag = m.submit_qpc.saturating_sub(m.published_qpc) as f64 * 1000.0
-                        / mypaper_glass_ipc::qpc_frequency() as f64;
+                        / glaze_glass_ipc::qpc_frequency() as f64;
                     let composed = if m.composition_qpc == 0 {
                         "null".into()
                     } else {
                         (m.composition_qpc.saturating_sub(m.published_qpc) as f64 * 1000.0
-                            / mypaper_glass_ipc::qpc_frequency() as f64)
+                            / glaze_glass_ipc::qpc_frequency() as f64)
                             .to_string()
                     };
                     let line = format!(
@@ -255,7 +255,7 @@ impl Timing {
                         lag,
                         composed,
                         m.submit_qpc,
-                        mypaper_glass_ipc::qpc_frequency()
+                        glaze_glass_ipc::qpc_frequency()
                     );
                     if let Some(sender) = &self.sender {
                         let _ = sender.send(line);

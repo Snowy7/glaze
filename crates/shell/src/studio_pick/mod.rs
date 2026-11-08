@@ -11,9 +11,9 @@ pub mod wallpaper;
 pub mod wire;
 
 use anyhow::Result;
-use mypaper_bars::config::BarsConfig;
-use mypaper_desktop::{DesktopHost, Monitor, monitor_infos};
-use mypaper_ui::{
+use glaze_bars::config::BarsConfig;
+use glaze_desktop::{DesktopHost, Monitor, monitor_infos};
+use glaze_ui::{
     Button, DisplayList, Event, Kind as SurfaceKind, Op, Point, Rect, Rgba, Role, Surface,
     SurfaceId, TextStyle, Ui,
 };
@@ -101,7 +101,7 @@ struct Gesture {
     pending: ([u32; 2], [u32; 2]),
     capture: SurfaceId,
     window: HWND,
-    _frames: mypaper_ui::AnimationFrames,
+    _frames: glaze_ui::AnimationFrames,
 }
 
 impl Gesture {
@@ -448,7 +448,7 @@ impl StudioPick {
             self.monitors = monitors;
             self.anchor = anchor;
             if let Some(parent) = self.anchor {
-                let icons = mypaper_desktop::desktop_view::DesktopView::open()
+                let icons = glaze_desktop::desktop_view::DesktopView::open()
                     .and_then(|v| v.icon_rects())
                     .unwrap_or_default();
                 for monitor in &self.monitors {

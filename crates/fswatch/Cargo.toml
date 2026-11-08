@@ -1,5 +1,5 @@
 [package]
-name = "mypaper-fswatch"
+name = "glaze-fswatch"
 description = "Native Windows directory notifications with no idle polling."
 version.workspace = true
 edition.workspace = true

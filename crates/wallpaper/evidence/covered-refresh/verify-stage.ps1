@@ -1,7 +1,7 @@
 $ErrorActionPreference='Stop'
-$lock='C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
-$backup='C:\Users\you\AppData\Local\mypaper\backups\covered-refresh-20261107-153959'
-$config=Join-Path $env:APPDATA 'mypaper\config.json'
+$lock='C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$backup='C:\Users\you\AppData\Local\glaze\backups\covered-refresh-20261107-153959'
+$config=Join-Path $env:APPDATA 'glaze\config.json'
 $until=(Get-Date).AddMinutes(2)
 while(-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) {
   if((Get-Date) -ge $until){throw 'Desktop lock is busy'}
@@ -10,7 +10,7 @@ while(-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContin
 try {
   Add-Type -AssemblyName UIAutomationClient
   Add-Type -AssemblyName UIAutomationTypes
-  $studio=Get-Process mypaper-studio
+  $studio=Get-Process glaze-studio
   $root=[System.Windows.Automation.AutomationElement]::FromHandle($studio.MainWindowHandle)
   $condition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty,'Your desktop')
   $items=$root.FindAll([System.Windows.Automation.TreeScope]::Descendants,$condition)
@@ -30,7 +30,7 @@ try {
   try {
     Copy-Item -LiteralPath (Join-Path $backup 'config.json') -Destination $config -Force
     Start-Sleep 4
-    Copy-Item -LiteralPath (Join-Path $backup 'wallpaper.json') -Destination (Join-Path $env:LOCALAPPDATA 'mypaper\wallpaper.json') -Force
+    Copy-Item -LiteralPath (Join-Path $backup 'wallpaper.json') -Destination (Join-Path $env:LOCALAPPDATA 'glaze\wallpaper.json') -Force
     & powershell -NoProfile -File (Join-Path $PSScriptRoot 'capture-studio.ps1') -LockHeld -Out (Join-Path $PSScriptRoot 'studio-restored.png')
   } finally {[IO.Directory]::Delete($lock)}
 }

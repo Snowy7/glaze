@@ -1,14 +1,14 @@
-//! `mypaper-plugins`: the plugin runtime (docs/plugins.md). One process, one Wasmtime engine,
+//! `glaze-plugins`: the plugin runtime (docs/plugins.md). One process, one Wasmtime engine,
 //! every WebAssembly component plugin. The shell starts it lazily, speaks binary frames on its
-//! stdio (`mypaper_plugin_api::wire`), and stops it when no plugin is active.
+//! stdio (`glaze_plugin_api::wire`), and stops it when no plugin is active.
 //!
-//! `mypaper-plugins` serves the shell; `--compile <root>...` AOT-compiles every WASM plugin under
+//! `glaze-plugins` serves the shell; `--compile <root>...` AOT-compiles every WASM plugin under
 //! the roots into the cache (install time); `--bench <plugin dir>...` prints the budget table.
 //!
 //! Capabilities are `caps.rs` (HTTP, secrets, storage, launch, toasts, system info), `io.rs`
 //! (websockets, pipes, HTTP over pipes, each connection on its own threads), `images.rs`
 //! (`ui.put-image` shared memory) and `native.rs` (the plugin's own modules in
-//! `mypaper-native-host`). System events arrive from the shell as `HostMsg::System`.
+//! `glaze-native-host`). System events arrive from the shell as `HostMsg::System`.
 #![cfg_attr(not(test), windows_subsystem = "windows")]
 
 mod bench;
@@ -43,7 +43,7 @@ use std::sync::mpsc;
 use std::time::Instant;
 
 use anyhow::Result;
-use mypaper_plugin_api::wire::{self, HostMsg};
+use glaze_plugin_api::wire::{self, HostMsg};
 
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();

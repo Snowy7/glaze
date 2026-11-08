@@ -1,7 +1,7 @@
 # Builds the in-repo WebAssembly plugins (docs/plugins.md) into their plugin folders, where the
 # shell finds them as bundled plugins; deploy-local.ps1 then AOT-compiles them.
-#   powershell -NoProfile -File scripts/build-plugins.ps1 [-Target C:\mypaper-targets\wasm-guests]
-param([string]$Target = "C:\mypaper-targets\wasm-guests")
+#   powershell -NoProfile -File scripts/build-plugins.ps1 [-Target C:\glaze-targets\wasm-guests]
+param([string]$Target = "C:\glaze-targets\wasm-guests")
 $ErrorActionPreference = "Stop"
 $repo = Split-Path $PSScriptRoot -Parent
 # Each guest is its own workspace (the root Cargo.toml excludes them) built for wasm32-wasip2.

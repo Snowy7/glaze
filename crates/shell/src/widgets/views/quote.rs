@@ -1,8 +1,8 @@
 //! A quote: the words as large as they fit (13 to 24 px, down to 11), the author under them
 //! after a short dash. A click shows another.
 use super::{Ctx, PRIMARY};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Align, Rect, Role, TextRole};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Align, Rect, Role, TextRole};
 use serde_json::Value;
 
 pub fn draw(c: &mut Ctx, r: Rect) {
@@ -29,7 +29,7 @@ pub fn draw(c: &mut Ctx, r: Rect) {
     let q = &quotes[index];
     let text = q["text"].as_str().unwrap_or("");
     let author = q["author"].as_str().unwrap_or("").trim();
-    let r = r.inset(mypaper_ui::Insets::xy(c.px(2.0), c.px(2.0)));
+    let r = r.inset(glaze_ui::Insets::xy(c.px(2.0), c.px(2.0)));
     let author_h = if author.is_empty() { 0.0 } else { c.f.line(TextRole::Caption) + c.px(8.0) };
     let room = r.height() - author_h;
     let (w, h) = (r.width() / s, r.height() / s);

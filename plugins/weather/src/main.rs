@@ -1,10 +1,10 @@
-//! mypaper weather plugin: JSON-RPC 2.0 over stdio (docs/widgets.md, "Plugins").
+//! Glaze weather plugin: JSON-RPC 2.0 over stdio (docs/widgets.md, "Plugins").
 //!
 //! Methods `current` and `forecast` default to automatic location; `locate` reports the device's
 //! location and `search` disambiguates towns. Weather is cached for 10 minutes; stale entries are
 //! refreshed in the background and announced with an `updated` event.
 
-use mypaper_plugin_weather::{client, location, rpc, service};
+use glaze_plugin_weather::{client, location, rpc, service};
 
 use std::io::{self, BufRead};
 use std::sync::Arc;

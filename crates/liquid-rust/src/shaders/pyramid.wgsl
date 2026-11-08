@@ -1,5 +1,5 @@
 // Vendored from liquid-rust (https://github.com/al1h3n/liquid-rust, commit 2073cd9) by al1h3n,
-// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "mypaper:".
+// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "Glaze:".
 // Backdrop pyramid: each level is a 2x downsample with Jimenez's 13-tap filter
 // (Call of Duty: Advanced Warfare). Frost samples it with a B-spline at a continuous
 // level, so one pyramid serves every blur radius on screen.

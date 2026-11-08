@@ -1,5 +1,5 @@
 //! The `native` capability (docs/plugins.md › "Native modules"): a plugin's own native modules
-//! run in `mypaper-native-host.exe`, supervised by `mypaper_native_host::Supervisor`. The
+//! run in `glaze-native-host.exe`, supervised by `glaze_native_host::Supervisor`. The
 //! supervisor blocks, so it lives on its own lane: one thread runs activate, deactivate and
 //! calls in order and posts replies to the host loop as `event::native`, and another blocks on
 //! its event queue and posts `event::native-event` (including `native-module-restarted`).
@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Sender};
 use std::time::Duration;
 
-use mypaper_native_host::{HostConfig, Isolation, PluginSpec, Supervisor};
+use glaze_native_host::{HostConfig, Isolation, PluginSpec, Supervisor};
 
 use crate::host::Input;
 
@@ -28,10 +28,10 @@ pub struct Lane {
 impl Lane {
     /// Starts the lane threads; the supervisor starts a host process only on `Activate`.
     pub fn start(tx: Sender<Input>) -> std::io::Result<Self> {
-        // The sibling exe; `MYPAPER_NATIVE_HOST` points the tests at a freshly built one.
-        let exe = match std::env::var_os("MYPAPER_NATIVE_HOST") {
+        // The sibling exe; `GLAZE_NATIVE_HOST` points the tests at a freshly built one.
+        let exe = match std::env::var_os("GLAZE_NATIVE_HOST") {
             Some(path) => PathBuf::from(path),
-            None => std::env::current_exe()?.with_file_name("mypaper-native-host.exe"),
+            None => std::env::current_exe()?.with_file_name("glaze-native-host.exe"),
         };
         let supervisor = Arc::new(Supervisor::new(exe, HostConfig::default()));
         let (events, posts) = (Arc::clone(&supervisor), tx.clone());

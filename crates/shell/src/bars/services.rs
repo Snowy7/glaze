@@ -1,6 +1,6 @@
 //! Bar subscriptions and their deadlines. Providers start only for visible modules.
 use crate::integrations::media::BarMedia as Media;
-use mypaper_bars::{
+use glaze_bars::{
     self as services, BarsConfig, ModuleRef,
     actions::*,
     apps::{self, Apps, Item, Pin, Running},
@@ -213,8 +213,8 @@ impl Services {
         if self.topics.contains(&Topic::Custom) {
             for config in configs {
                 for (id, options) in config.custom_modules() {
-                    let shown = super::visible_modules(mypaper_bars::actions::BarKind::Top,config)
-                        .chain(super::visible_modules(mypaper_bars::actions::BarKind::Dock,config))
+                    let shown = super::visible_modules(glaze_bars::actions::BarKind::Top,config)
+                        .chain(super::visible_modules(glaze_bars::actions::BarKind::Dock,config))
                         .any(|m| matches!(m, ModuleRef::Custom(key) if key == id));
                     if shown && let Some(command) = &options.command {
                         custom.insert(
@@ -587,7 +587,7 @@ pub fn default_pins() -> Vec<services::config::Pinned> {
 #[cfg(test)]
 mod stats_tests {
     use super::*;
-    use mypaper_bars::system::Memory;
+    use glaze_bars::system::Memory;
 
     #[test]
     fn stats_invalidation_follows_the_rendered_integer_percentages() {

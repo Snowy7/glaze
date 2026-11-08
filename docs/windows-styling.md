@@ -37,7 +37,7 @@ wallpaper change. See [studio-ux.md](studio-ux.md#6-look-and-windows-styling-as-
 { "look": { "style": "fluent", "appearance": "dark", "accent": "auto" } }
 ```
 
-The pure resolver is [`mypaper_theme::windows::resolve`](../crates/theme/src/windows.rs).
+The pure resolver is [`glaze_theme::windows::resolve`](../crates/theme/src/windows.rs).
 Layers are native style defaults < wallpaper `windows` < shared `look.accent`/`appearance` <
 explicit `look.windows` fields. A missing `look.style` preserves the previous behavior: only
 the wallpaper and explicit Windows layer manage Windows. Removing both releases Windows.
@@ -59,7 +59,7 @@ wallpaper there too. Cursors are never chosen by a style.
 `look.appearance: light/dark` sets both app and system mode. If absent, a theme's `dark_mode`,
 then its bar text tone, then the native dark default supplies the mode. `appearance: auto`
 leaves Windows' mode alone and resolves caption/mono colours against its unmanaged app scheme.
-The journal's original scheme prevents a previous mypaper override feeding back into auto.
+The journal's original scheme prevents a previous Glaze override feeding back into auto.
 In `look.windows`, `apps: light/dark/match/as-is` is the higher-priority mode control (`dark_mode`
 is the theme's field). `match` follows this same appearance resolution; `as-is` releases mode.
 
@@ -94,7 +94,7 @@ Windows alone when no style was selected. Unknown fields are rejected.
 | `dark_mode` | `true` / `false` | Dark title bars (`DWMWA_USE_IMMERSIVE_DARK_MODE`) and the system's app/system theme |
 | `accent_on_taskbar` | `true` / `false` | Accent on Start/taskbar (`Themes\Personalize\ColorPrevalence`) |
 | `accent_on_title_bars` | `true` / `false` | Accent on title bars/borders (`DWM\ColorPrevalence`) |
-| `cursors` | `"mypaper-dark"`, `"mypaper-light"`, a set name, or a folder | The mouse cursor scheme (`HKCU\Control Panel\Cursors` + `SPI_SETCURSORS`), journaled like the accent; see [desktop-extras.md](desktop-extras.md#cursor-themes) |
+| `cursors` | `"glaze-dark"`, `"glaze-light"`, a set name, or a folder | The mouse cursor scheme (`HKCU\Control Panel\Cursors` + `SPI_SETCURSORS`), journaled like the accent; see [desktop-extras.md](desktop-extras.md#cursor-themes) |
 
 Border, caption, corner and backdrop attributes need Windows 11 (build 22000, and 22621 for
 `backdrop`); older builds ignore them. Dark title bars need Windows 10 20H1 or later. Whether a
@@ -107,7 +107,7 @@ A window is styled only if all of this holds:
 
 - It is top-level, visible and has a title bar.
 - Its process passes the injection allowlist in [`crates/inject`](../crates/inject/src/lib.rs)
-  (`mypaper_inject::evaluate`): Explorer, Settings, the frames around UWP apps, a few inbox apps,
+  (`glaze_inject::evaluate`): Explorer, Settings, the frames around UWP apps, a few inbox apps,
   never games or third-party apps. The inputs are the image path
   (`QueryFullProcessImageNameW`), the package family name (`GetPackageFamilyName`) and whether the
   image is Microsoft-signed.
@@ -154,7 +154,7 @@ restored when their fields are released, styling stops, or core recovers after a
    small vivid streak can win the accent while the dominant stays the broad color. The accent is then
    pushed to saturation 0.6-1.0 and lightness 0.45-0.62 so it works as a UI color. A wallpaper with
    no usable color (all black, all white) gets no palette, and gray wallpapers get a gray accent.
-3. The result is written atomically to `%LOCALAPPDATA%\mypaper\palette.json`:
+3. The result is written atomically to `%LOCALAPPDATA%\glaze\palette.json`:
 
    ```json
    { "theme": "D:\\themes\\midnight", "dominant": "#1a714f", "accent": "#19cd86" }
@@ -174,7 +174,7 @@ Nothing is changed without a way back.
   written to, in case its handle was reused.
 - **Registry**: before the first write, the original of every value (including "absent", and its
   exact type: `REG_DWORD`, `REG_BINARY`, `REG_SZ`, `REG_EXPAND_SZ`) is saved to
-  `%LOCALAPPDATA%\mypaper\undo.json`, written atomically. Registry keys the styling had to create are
+  `%LOCALAPPDATA%\glaze\undo.json`, written atomically. Registry keys the styling had to create are
   recorded too and removed again. Later style and palette updates keep the first originals for
   fields that remain managed. Transitions diff against the registry, restore originals only of
   released values, and send one broadcast if anything changed (none for an unchanged registry).
@@ -192,7 +192,7 @@ Nothing is changed without a way back.
   anything else. Windows opened or styled by the dead run are reset to defaults too. Their original
   dark-mode value is lost, so if the dead run forced dark mode, windows get the system's current
   setting (Windows' own apps follow it). A second instance never undoes a running instance's journal.
-- **By hand**: if something is ever stuck, quit mypaper, set the values in the table above back (or
+- **By hand**: if something is ever stuck, quit Glaze, set the values in the table above back (or
   just pick your accent again in Settings), and delete `undo.json`.
 
 ## Behavior notes and limits
@@ -252,7 +252,7 @@ pixel-level corner check remain for the parent after the shared Studio merge.
 
 ## Earlier style-sync verification (2026-11-06)
 
-`CARGO_TARGET_DIR=C:\mypaper-targets\style-sync`. Config 21, theme 21 and tweaks 43 library tests
+`CARGO_TARGET_DIR=C:\glaze-targets\style-sync`. Config 21, theme 21 and tweaks 43 library tests
 passed; core 16 passed with four existing Task Scheduler/tray tests ignored. Strict Clippy passed
 for all config/theme/tweaks targets, and core/app-styler checks and the release workspace build
 passed. Pure tests cover all five styles in both schemes, the absent/null/value layers, no palette,
@@ -291,7 +291,7 @@ actual Settings in [dark](../crates/tweaks/evidence/style-sync/liquid-dark-setti
 9,159–9,196 pixels matching their expected RGB within two channel values. Native reference windows
 were owned, nonactivating and closed after capture; no clicks/keys, user-window movement or focus
 changes were used. Full captures and their [hashes](../crates/tweaks/evidence/style-sync/full-capture-hashes.json)
-are retained in `C:\Users\you\AppData\Local\Temp\mypaper-tools\style-sync-full`; only compact crops are committed.
+are retained in `C:\Users\you\AppData\Local\Temp\glaze-tools\style-sync-full`; only compact crops are committed.
 
 DWM's [colour attributes](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwmwindowattribute)
 are documented for setting, and their getters returned no colour on this build, so colour paint
@@ -328,7 +328,7 @@ The app-styler owner made its corresponding helper call-site edits. Studio was n
 the two new tri-state Windows accent-visibility fields in its Look/Windows editor; the selected
 style already drives the synchronization.
 
-For the next consumers: `mypaper_theme::windows::Palette { dominant: Color, accent: Color }`,
+For the next consumers: `glaze_theme::windows::Palette { dominant: Color, accent: Color }`,
 `resolve(&Look, Option<&Theme>, Option<Palette>, system_dark: bool) -> Resolved`, where
 `Resolved { windows: Option<WindowsStyle>, accent: Option<Color>, dominant: Option<Color> }`.
 `WindowsStyle` has `accent_on_taskbar` / `accent_on_title_bars: Option<bool>`;
@@ -363,8 +363,8 @@ Background" below). `"enabled": false` under `look.apps.explorer` switches Explo
 theme's `apps` can set `enabled` too; the user's wins. A switched-off app's live sessions put it
 back and detach, and it comes back when the switch does.
 
-Off costs nothing: no process, no hook, nothing loaded anywhere. On, core runs `mypaper-styler`
-(`--parent <core's pid>`); turning the flag off, quitting mypaper, the panic hotkey, core ending
+Off costs nothing: no process, no hook, nothing loaded anywhere. On, core runs `glaze-styler`
+(`--parent <core's pid>`); turning the flag off, quitting Glaze, the panic hotkey, core ending
 for any reason (a crash included: the helper exits with it) or the helper dying for any reason
 puts both apps back as they were. A helper started while the previous one is still exiting waits
 up to 10 s for it. Studio has no switch for it yet (Experimental section, later).
@@ -373,7 +373,7 @@ up to 10 s for it. Studio has no switch for it yet (Experimental section, later)
 
 - It uses the documented **XAML Diagnostics** API, the one Visual Studio's Live Visual Tree uses.
   The helper calls `InitializeXamlDiagnosticsEx` for the target process. Windows then loads our TAP
-  DLL (`mypaper_app_styler.dll`) there and hands it `IXamlDiagnostics` and `IVisualTreeService3`.
+  DLL (`glaze_app_styler.dll`) there and hands it `IXamlDiagnostics` and `IVisualTreeService3`.
   The TAP subscribes to the visual tree. Every element that appears (the existing tree first, then
   new windows, pages and re-created elements) is matched against the rules on its own UI thread
   and styled there. No polling.
@@ -395,7 +395,7 @@ up to 10 s for it. Studio has no switch for it yet (Experimental section, later)
   `Microsoft.Internal.FrameworkUdk.dll`, loaded from the same folder Explorer uses, when the
   first folder window appears. Explorer's *system* XAML is the taskbar, which the styler never
   attaches to.
-- **Rules reach the TAP** as one file per app, `%LOCALAPPDATA%\mypaper\app-styler\<app>.json`.
+- **Rules reach the TAP** as one file per app, `%LOCALAPPDATA%\glaze\app-styler\<app>.json`.
   The helper rewrites it when `config.json`, the theme or the wallpaper's palette changes. The TAP
   watches that folder, so a change applies live without restarting either app. Elements no rule
   wants any more get their values back.
@@ -477,7 +477,7 @@ Data in [`crates/app-styler/presets`](../crates/app-styler/presets):
 | `glass` | borderless 10 px cards, a pill search box, softer translucent fills per theme, `$accent` selection mark | tabs and nav row on the window backdrop, a soft selected tab, pill address and search boxes, softer fills, transparent details pane |
 | `compact` | 44 px cards, 30 px nav rows, 13 px nav text | 28 px command and nav buttons, 28 px address and search boxes, 13 px breadcrumb |
 
-Before/after captures of each preset, light and dark: `C:\mypaper-targets\app-styler\round2\shots`
+Before/after captures of each preset, light and dark: `C:\glaze-targets\app-styler\round2\shots`
 (on the dev machine). Explorer's command bar row and file list are painted by Explorer's own
 window behind the XAML, so they stay solid in `glass`.
 
@@ -528,7 +528,7 @@ window behind the XAML, so they stay solid in `glass`.
   Core stops the helper when the flag really goes off.
 - **Soak, 2026-11-06** (glass, live desktop, about 45 min with the flag on, 29 of them scripted):
   Explorer windows and tabs opened, navigated (folders, Home, Gallery) and closed, Settings pages,
-  two Explorer restarts, several mypaper redeploys and flag off/on cycles. No Explorer or Settings
+  two Explorer restarts, several Glaze redeploys and flag off/on cycles. No Explorer or Settings
   crash, no guard trip, bars and wallpaper back after each restart. Helper: 2.9–3.3 MB private,
   47 ms CPU in 120 s idle (0.04 % of one core; it wakes only for window-show events).
 - **Known issue (round 3, 2026-11-06): Explorer keeps memory while attached.** With a session
@@ -615,16 +615,16 @@ window behind the XAML, so they stay solid in `glass`.
 ### Tools
 
 ```text
-mypaper-styler --dump PID [--winui] [--out FILE] [--props "SEL; SEL"]
+glaze-styler --dump PID [--winui] [--out FILE] [--props "SEL; SEL"]
                                                     the live XAML tree, to write selectors
-mypaper-styler --preview glass                      run with a preset, whatever the flag says
+glaze-styler --preview glass                      run with a preset, whatever the flag says
 ```
 
 `--dump` attaches with no rules and writes an indented outline (`Type#Name`, with what is styled)
-to `%LOCALAPPDATA%\mypaper\app-styler\tree-<pid>.txt`. `--props` adds every property value of the
+to `%LOCALAPPDATA%\glaze\app-styler\tree-<pid>.txt`. `--props` adds every property value of the
 elements the selectors (`;`-separated) pick, with where each comes from (local, style, template,
 visual state) and brushes' colours, so a rule can target what is actually drawn. Use `--winui` for
-Explorer's folder process. The TAP's own log is `%LOCALAPPDATA%\mypaper\app-styler\styler.log`.
+Explorer's folder process. The TAP's own log is `%LOCALAPPDATA%\glaze\app-styler\styler.log`.
 
 XAML Diagnostics silently drops initialization data much longer than 256 characters (the TAP is
 then never created), so the helper passes one folder and short file names.

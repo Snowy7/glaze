@@ -14,7 +14,7 @@
 
 use anyhow::Result;
 use liquid_rust as lr;
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 
 use super::capture::{CaptureDevice, Crop};
 use super::request::{Material, Style};
@@ -28,9 +28,9 @@ const SRGB: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
 /// the colour scheme; clarity tints the glass through the transparency slider. The fourth byte
 /// is a stained tint's strength: the shell sends 0, a plate drawn as an overlay (a web or app
 /// wallpaper's, [`super::PlateOverlay`]) keeps its own.
-pub fn controls(material: &Material) -> mypaper_glass_ipc::Material {
+pub fn controls(material: &Material) -> glaze_glass_ipc::Material {
     let tint = material.tint.map(|c| f32::from(c) / 255.0);
-    mypaper_glass_ipc::Material {
+    glaze_glass_ipc::Material {
         clarity: material.clarity,
         blur: material.blur,
         refraction: material.refraction,

@@ -5,15 +5,15 @@ param(
   [Parameter(Mandatory=$true)]
   [ValidateSet('liquid-dark','oneui-dark','fluent-dark','solid-dark','mono-dark','liquid-light','explicit','auto','palette','release')]
   [string]$Case,
-  [string]$Probe = 'C:\mypaper-targets\style-sync\debug\examples\inspect_style_sync.exe'
+  [string]$Probe = 'C:\glaze-targets\style-sync\debug\examples\inspect_style_sync.exe'
 )
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\..'))
 $out = $PSScriptRoot
-$configPath = Join-Path $env:APPDATA 'mypaper\config.json'
-$palettePath = Join-Path $env:LOCALAPPDATA 'mypaper\palette.json'
-$journalPath = Join-Path $env:LOCALAPPDATA 'mypaper\undo.json'
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$configPath = Join-Path $env:APPDATA 'glaze\config.json'
+$palettePath = Join-Path $env:LOCALAPPDATA 'glaze\palette.json'
+$journalPath = Join-Path $env:LOCALAPPDATA 'glaze\undo.json'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 $tools = Split-Path $lock -Parent
 if (-not (Test-Path -LiteralPath $Probe)) { throw "Build the read-only probe first: $Probe" }
 Set-Location -LiteralPath $repo
@@ -71,7 +71,7 @@ function Originals-Restored($Journal, $Current) {
 }
 function Check-AppTokens($Resolved, [bool]$CheckDominant) {
   # The neighbouring app-styler soak already enabled glass; this probe never enables it.
-  $path = Join-Path $env:LOCALAPPDATA 'mypaper\app-styler\settings.json'
+  $path = Join-Path $env:LOCALAPPDATA 'glaze\app-styler\settings.json'
   $deadline = (Get-Date).AddSeconds(12)
   do {
     $rules = Get-Content -Raw -LiteralPath $path | ConvertFrom-Json
@@ -93,7 +93,7 @@ try {
   $paletteBytes = [IO.File]::ReadAllBytes($palettePath)
   $hashBefore = (Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash
   $before = Snapshot
-  $stylerBefore = @(Get-Process mypaper-styler -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
+  $stylerBefore = @(Get-Process glaze-styler -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
   $before.registry | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $out "$Case-before-registry.json") -Encoding utf8
 } catch { [IO.Directory]::Delete($lock); throw }
 $failure = $null
@@ -168,7 +168,7 @@ finally {
     } while (-not $equal -and (Get-Date) -lt $deadline)
     $after = Check-Settled "$Case-restored-look"
     $hashAfter = (Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash
-    $stylerAfter = @(Get-Process mypaper-styler -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
+    $stylerAfter = @(Get-Process glaze-styler -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
     $report = [ordered]@{
       case=$Case; config_sha256_before=$hashBefore; config_sha256_after=$hashAfter
       config_restored=($hashBefore -eq $hashAfter); all_eight_registry_values_restored=$equal

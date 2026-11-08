@@ -1,5 +1,5 @@
 // Vendored from liquid-rust (https://github.com/al1h3n/liquid-rust, commit 2073cd9) by al1h3n,
-// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "mypaper:".
+// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "Glaze:".
 //! Analytic damped springs with Apple's `duration` / `bounce` parameterisation.
 //!
 //! Springs are solved in closed form, so any frame delta (60 Hz, 120 Hz, a dropped

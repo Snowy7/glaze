@@ -3,7 +3,7 @@
 //! (`views::plugin`), and clicks go back to the plugin as actions.
 use std::time::Instant;
 
-use mypaper_widgets::plugins::{FaceStatus, Plugins};
+use glaze_widgets::plugins::{FaceStatus, Plugins};
 use serde_json::json;
 
 use super::Widgets;
@@ -11,12 +11,12 @@ use super::model::{Model, Widget, plugin_face};
 use super::views::plugin::{Hit, action_at};
 
 /// Use the same design-pixel thresholds as the built-in views, independent of grid cells.
-fn size_class(width: f32, height: f32, scale: f32) -> mypaper_plugin_sdk::SizeClass {
-    use mypaper_plugin_sdk::SizeClass;
-    match mypaper_ui::layout::SizeClass::of(width / scale, height / scale) {
-        mypaper_ui::layout::SizeClass::Compact => SizeClass::Small,
-        mypaper_ui::layout::SizeClass::Regular => SizeClass::Medium,
-        mypaper_ui::layout::SizeClass::Large => SizeClass::Large,
+fn size_class(width: f32, height: f32, scale: f32) -> glaze_plugin_sdk::SizeClass {
+    use glaze_plugin_sdk::SizeClass;
+    match glaze_ui::layout::SizeClass::of(width / scale, height / scale) {
+        glaze_ui::layout::SizeClass::Compact => SizeClass::Small,
+        glaze_ui::layout::SizeClass::Regular => SizeClass::Medium,
+        glaze_ui::layout::SizeClass::Large => SizeClass::Large,
     }
 }
 
@@ -40,9 +40,9 @@ impl Widgets {
             if m.kind != Widget::Plugin { continue; }
             let size = size_class(entry.rect.width(), entry.rect.height(), entry.dpi_scale * entry.tokens.scale);
             let size_key = match size {
-                mypaper_plugin_sdk::SizeClass::Small => "small",
-                mypaper_plugin_sdk::SizeClass::Medium => "medium",
-                mypaper_plugin_sdk::SizeClass::Large => "large",
+                glaze_plugin_sdk::SizeClass::Small => "small",
+                glaze_plugin_sdk::SizeClass::Medium => "medium",
+                glaze_plugin_sdk::SizeClass::Large => "large",
             };
             if m.data["opened_size"].as_str() == Some(size_key)
                 && m.data["opened_settings"].as_object() == Some(&m.placed.settings)
@@ -102,15 +102,15 @@ impl Widgets {
         let stamp = crate::studio_pick::wire::revision(&faces);
         let changed = self.studio_faces.is_none_or(|(_, old)| old != stamp);
         self.studio_faces = Some((now, stamp));
-        if changed && let Ok(path) = mypaper_widgets::files::local("plugins/studio-faces.json")
-            && let Err(error) = mypaper_widgets::files::write_atomic(&path, &bytes)
+        if changed && let Ok(path) = glaze_widgets::files::local("plugins/studio-faces.json")
+            && let Err(error) = glaze_widgets::files::write_atomic(&path, &bytes)
         {
             self.studio_faces = None;
             log::warn!("Studio retained plugin faces: {error:#}");
         }
     }
 
-    pub(super) fn plugin_action(&mut self, ui: &mut mypaper_ui::Ui, id: &str, hit: mypaper_ui::HitId) {
+    pub(super) fn plugin_action(&mut self, ui: &mut glaze_ui::Ui, id: &str, hit: glaze_ui::HitId) {
         let found = self.plugins.face_view(id).map(|face| action_at(face, hit));
         log::debug!("plugin face {id}: hit {hit} -> {found:?}");
         match found.flatten() {
@@ -123,7 +123,7 @@ impl Widgets {
                 self.open_field(id, None);
             }
             Some(Hit::Select { action, options, selected }) => {
-                use mypaper_ui::menu::{Entry, Menu, screen_at};
+                use glaze_ui::menu::{Entry, Menu, screen_at};
                 let Some(entry) = self.entries.get(id) else { return };
                 let at = (entry.rect.left as i32, entry.rect.bottom as i32);
                 let items = options.into_iter().map(|option| Entry::radio(&option.label, (id.to_owned(), action.clone(), option.value.clone()), selected.as_ref() == Some(&option.value))).collect();
@@ -142,7 +142,7 @@ impl Widgets {
 
     /// A wheel over plugin widget `id`: the `scroll` pane under the pointer moves, and its
     /// `on_reach_end` goes to the plugin when the scroll heads to the end.
-    pub(super) fn plugin_wheel(&mut self, id: &str, at: mypaper_ui::Point, delta: i16) {
+    pub(super) fn plugin_wheel(&mut self, id: &str, at: glaze_ui::Point, delta: i16) {
         let wheeled = super::views::plugin::scroll::wheel(id, at, delta, Instant::now());
         if let Some(action) = wheeled.reach_end {
             self.plugins.face_action(id, &action, None);
@@ -172,7 +172,7 @@ impl Widgets {
 #[cfg(test)]
 mod tests {
     use super::size_class;
-    use mypaper_plugin_sdk::SizeClass;
+    use glaze_plugin_sdk::SizeClass;
 
     #[test]
     fn face_variants_follow_rendered_size_and_scale() {

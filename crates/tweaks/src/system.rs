@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
-use mypaper_config::SystemConfig;
+use glaze_config::SystemConfig;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::System::Registry::REG_DWORD;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -197,7 +197,7 @@ fn announce() {
 mod tests {
     use super::*;
     use crate::undo::tests::{Memory, Scratch};
-    use mypaper_config::PowerMode;
+    use glaze_config::PowerMode;
 
     fn settings() -> SystemConfig {
         SystemConfig {

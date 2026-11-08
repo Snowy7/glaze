@@ -15,7 +15,7 @@ function Append-Line([string]$file, [string]$line) {
   for ($i = 0; $i -lt 20; $i++) { try { [IO.File]::AppendAllText($file, $line + "`r`n"); break } catch { Start-Sleep -Milliseconds 100 } }
   Write-Host $line
 }
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 
 Add-Type -Namespace R4 -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hwnd, out uint pid);
@@ -28,7 +28,7 @@ function Note([string]$m) {
 function Sample([string]$what) {
   $p = Get-Process -Id $Target -ErrorAction SilentlyContinue
   if (-not $p) { Note "[$what] explorer $Target is gone"; return }
-  $s = Get-Process mypaper-styler -ErrorAction SilentlyContinue | Select-Object -First 1
+  $s = Get-Process glaze-styler -ErrorAction SilentlyContinue | Select-Object -First 1
   $styler = if ($s) { ' | styler {0}: {1:N1} MB priv' -f $s.Id, ($s.PrivateMemorySize64 / 1MB) } else { '' }
   Note ('[{0}] explorer {1}: {2:N1} MB priv, {3:N1} MB ws, {4} handles, {5:N2} s cpu{6}' -f $what, $Target,
     ($p.PrivateMemorySize64 / 1MB), ($p.WorkingSet64 / 1MB), $p.HandleCount, $p.TotalProcessorTime.TotalSeconds, $styler)
@@ -83,7 +83,7 @@ function Close-Extra-Tabs {
 }
 $folders = 'C:\Windows', 'C:\Windows\System32', 'C:\Program Files', 'C:\Users\Public',
   'shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}', 'shell:::{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}',
-  'C:\Windows\Fonts', 'C:\mypaper-targets\app-styler\round4'
+  'C:\Windows\Fonts', 'C:\glaze-targets\app-styler\round4'
 $r = New-Object Random 7
 
 # A new folder window, by Shell COM: it opens in the shell Explorer (so -Windows targets that).

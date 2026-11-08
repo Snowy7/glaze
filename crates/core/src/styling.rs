@@ -1,4 +1,4 @@
-//! Native Windows styling for the active theme: keeps `mypaper-tweaks`
+//! Native Windows styling for the active theme: keeps `glaze-tweaks`
 //! in step with `config.json` (which theme) and `palette.json` (what the
 //! wallpaper's `"auto"` colors resolve to). Both files are watched, so core
 //! stays idle until one changes. Requests go to Tweaks' latest-request worker; core's
@@ -11,11 +11,11 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use mypaper_config::Config;
-use mypaper_desktop::{ConfigWatcher, watch_config};
-use mypaper_theme::{LoadedTheme, WindowsStyle};
-use mypaper_tweaks::Tweaks;
-use mypaper_tweaks::palette::{self, PaletteWatcher};
+use glaze_config::Config;
+use glaze_desktop::{ConfigWatcher, watch_config};
+use glaze_theme::{LoadedTheme, WindowsStyle};
+use glaze_tweaks::Tweaks;
+use glaze_tweaks::palette::{self, PaletteWatcher};
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_APP};
@@ -31,7 +31,7 @@ pub struct Styling {
     /// (`look.windows`, D2) over the theme's `windows` section.
     theme: Option<(PathBuf, Option<WindowsStyle>)>,
     /// The user's look, as last read from `config.json`.
-    look: mypaper_config::Look,
+    look: glaze_config::Look,
     /// The config's theme the last time we looked. Like the wallpaper, we
     /// only switch when this changes, so a `THEME` override on the command
     /// line stays in effect through unrelated config edits.
@@ -74,7 +74,7 @@ impl Styling {
     /// theme that fails to load leaves the current styling in place, like
     /// the wallpaper does.
     pub fn set_theme(&mut self, name: &str) {
-        match mypaper_theme::locate(Some(name)).and_then(LoadedTheme::load) {
+        match glaze_theme::locate(Some(name)).and_then(LoadedTheme::load) {
             Ok(loaded) => self.use_theme(loaded),
             Err(e) => log::warn!("styling unchanged: {e:#}"),
         }
@@ -120,7 +120,7 @@ impl Styling {
         let palette = palette::read()
             .filter(|snapshot| snapshot.is_for(&loaded.dir))
             .map(|snapshot| snapshot.palette);
-        let resolved = mypaper_theme::windows::resolve(
+        let resolved = glaze_theme::windows::resolve(
             &self.look,
             Some(&loaded.theme),
             palette,

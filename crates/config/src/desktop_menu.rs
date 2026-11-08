@@ -1,4 +1,4 @@
-//! `desktop_menu` in `config.json`: mypaper's own right-click menu for the
+//! `desktop_menu` in `config.json`: Glaze's own right-click menu for the
 //! bare desktop (docs/desktop-extras.md). On by default; `"enabled": false` turns it off.
 //!
 //! ```json
@@ -32,14 +32,14 @@ pub enum Builtin {
     /// New folder, new text document.
     New,
     Paste,
-    /// Opens mypaper Studio.
+    /// Opens Glaze Studio.
     Wallpaper,
     /// Toggles widget edit mode.
     Widgets,
     /// Opens Studio's Add a widget page.
     #[serde(rename = "add-widget")]
     AddWidget,
-    /// Opens mypaper Studio's Home page.
+    /// Opens Glaze Studio's Home page.
     Studio,
     /// `ms-settings:display`.
     Display,

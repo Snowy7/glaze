@@ -35,6 +35,6 @@
     "Native web/app sources without a shipped poster cannot supply a wgpu snapshot.",
     "Aurora is a hidden example, so Studio labels it No wallpaper although the stage is correct. The restored curated wallpaper label is correct."
   ],
-  "backup": "C:\\Users\\you\\AppData\\Local\\mypaper\\backups\\covered-refresh-20261107-153959",
+  "backup": "C:\\Users\\you\\AppData\\Local\\glaze\\backups\\covered-refresh-20261107-153959",
   "ownership": "Only owned wallpaper paths and six preview/cache lines in studio/src/stage.rs; no widgets() edits. Shared stage hunks committed via git apply --cached."
 }

@@ -10,7 +10,7 @@ pub mod settings;
 pub mod wallpapers;
 pub mod widgets;
 
-use mypaper_ui::Point;
+use glaze_ui::Point;
 
 use crate::actions::{Action, Page};
 use crate::app::{App, Drag};

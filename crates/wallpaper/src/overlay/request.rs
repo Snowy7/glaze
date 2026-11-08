@@ -9,7 +9,7 @@
 //! a click-through window directly under it.
 
 use bytemuck::{Pod, Zeroable};
-use mypaper_desktop::Rect;
+use glaze_desktop::Rect;
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::System::DataExchange::COPYDATASTRUCT;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -26,7 +26,7 @@ pub use curve::FadeCurve;
 pub const WM_PLACEMENT: u32 = channel::WM_PLACEMENT;
 
 /// The window class of the engine's overlay message window (message-only).
-pub const OVERLAY_CLASS: PCWSTR = w!("mypaper.wallpaper.overlay");
+pub const OVERLAY_CLASS: PCWSTR = w!("glaze.wallpaper.overlay");
 /// `COPYDATASTRUCT::dwData` of an overlay request ("MPOV"), and the wire version in its high byte.
 const MAGIC: usize = 0x4D50_4F56;
 /// How long the shell waits for the engine to take a request.
@@ -73,7 +73,7 @@ impl Material {
 
 /// An overlay's finer glass knobs and its fade (parity C07, C10, C12, C13), sent with
 /// [`Request::Style`] after each `Open` (a new overlay starts at [`Style::DEFAULT`]). The knobs
-/// mean what `mypaper_glass_ipc::Style`'s do for plates.
+/// mean what `glaze_glass_ipc::Style`'s do for plates.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 pub struct Style {
@@ -535,12 +535,19 @@ mod tests {
             CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassW, WNDCLASSW,
         };
         thread_local! { static PAYLOADS: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) }; }
-        unsafe extern "system" fn old_engine(hwnd: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+        unsafe extern "system" fn old_engine(
+            hwnd: HWND,
+            message: u32,
+            w: WPARAM,
+            l: LPARAM,
+        ) -> LRESULT {
             if message == WM_COPYDATA {
                 // SAFETY: WM_COPYDATA supplies a live payload for this synchronous call.
                 let data = unsafe { &*(l.0 as *const COPYDATASTRUCT) };
                 // SAFETY: these cbData bytes belong to the caller until we return.
-                let bytes = unsafe { std::slice::from_raw_parts(data.lpData.cast::<u8>(), data.cbData as usize) };
+                let bytes = unsafe {
+                    std::slice::from_raw_parts(data.lpData.cast::<u8>(), data.cbData as usize)
+                };
                 PAYLOADS.with_borrow_mut(|p| p.push(bytes.to_vec()));
                 // This is the old decoder's size gate; it knows only the 80-byte style.
                 return LRESULT(isize::from(data.dwData == MAGIC && bytes.len() == STYLE_V1));
@@ -548,21 +555,49 @@ mod tests {
             // SAFETY: forwarding this window's unhandled message unchanged.
             unsafe { DefWindowProcW(hwnd, message, w, l) }
         }
-        let class = w!("mypaper.test.legacy-glass-style");
+        let class = w!("glaze.test.legacy-glass-style");
         // SAFETY: a process-local class and message-only test window, never shown or activated.
         let hwnd = unsafe {
-            assert_ne!(RegisterClassW(&WNDCLASSW { lpfnWndProc: Some(old_engine), lpszClassName: class, ..Default::default() }), 0);
-            CreateWindowExW(Default::default(), class, w!(""), Default::default(), 0, 0, 0, 0,
-                Some(HWND_MESSAGE), None, None, None).unwrap()
+            assert_ne!(
+                RegisterClassW(&WNDCLASSW {
+                    lpfnWndProc: Some(old_engine),
+                    lpszClassName: class,
+                    ..Default::default()
+                }),
+                0
+            );
+            CreateWindowExW(
+                Default::default(),
+                class,
+                w!(""),
+                Default::default(),
+                0,
+                0,
+                0,
+                0,
+                Some(HWND_MESSAGE),
+                None,
+                None,
+                None,
+            )
+            .unwrap()
         };
-        let reply = send(hwnd, &Request::Style {
-            client: HWND(0x1234 as *mut _),
-            style: Style {
-                brightness: 1.8, saturation: 0.7, smoothing: 0.6, sheen: 0.2, depth: 0.3,
-                fade_ms: 5000.0, inner_shadow: 1.0,
-                fade_curve: FadeCurve::bezier([0.42, 0.0, 1.0, 1.0]),
+        let reply = send(
+            hwnd,
+            &Request::Style {
+                client: HWND(0x1234 as *mut _),
+                style: Style {
+                    brightness: 1.8,
+                    saturation: 0.7,
+                    smoothing: 0.6,
+                    sheen: 0.2,
+                    depth: 0.3,
+                    fade_ms: 5000.0,
+                    inner_shadow: 1.0,
+                    fade_curve: FadeCurve::bezier([0.42, 0.0, 1.0, 1.0]),
+                },
             },
-        });
+        );
         // SAFETY: our own message-only window, on its creating thread.
         unsafe { DestroyWindow(hwnd) }.unwrap();
         assert_eq!(reply, Reply::Taken);

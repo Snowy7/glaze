@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let base = sample_src(uv);
     let screen = uv * vec2f(paper.resolution.x / max(paper.resolution.y, 1.0), 1.0);

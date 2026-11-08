@@ -1,7 +1,7 @@
 # fswatch implementation report — 6 November 2026
 
 Completed in about 35 minutes, on shared `main`; no push. Deployed from
-`C:\mypaper-targets\main` at 09:49:59 after the orchestrator's all-clear. The three changed
+`C:\glaze-targets\main` at 09:49:59 after the orchestrator's all-clear. The three changed
 executables' deployed hashes match the main release target (`deployed-binaries.json`).
 
 ## Callers migrated
@@ -37,7 +37,7 @@ The isolated real watcher also measured **0 switches/s for 35.444 seconds**, inc
 thread (`isolated-idle-wakes.json`). The fixture stopped and joined normally after 90 seconds.
 
 The remaining 0.254–0.394 switches/s per local-state watcher are real directory changes:
-`mypaper.log` shares the palette/game directory and the engine logs a backdrop update roughly
+`glaze.log` shares the palette/game directory and the engine logs a backdrop update roughly
 every 10 seconds. Filename filtering suppresses callbacks and debounce timers for those writes;
 ReadDirectoryChangesW still completes for changes to other files in the watched directory.
 There is no periodic timer or timeout while a watch has no pending matching changes.
@@ -55,7 +55,7 @@ memory was 37/3/17 MiB; unrelated UI, engine and styling work affects whole-proc
   overflow and recovery, create/modify/atomic replace/rename/delete, recursion, and idle or
   pending drop/join. Construction arms its first read before returning.
 - `cargo check` and `cargo test` passed for tweaks, bars, index, and shell, plus a core check.
-- Strict `cargo clippy -p mypaper-fswatch --all-targets -- -D warnings` passed, including the
+- Strict `cargo clippy -p glaze-fswatch --all-targets -- -D warnings` passed, including the
   idle fixture. Broader Clippy passed with pre-existing warnings outside this change.
 - Live config change switched to a copied theme and changed the Windows accent. A theme edit
   visibly made both bars/docks magenta; the restored screenshot shows the original blue glass.
@@ -88,7 +88,7 @@ interruption was fixed immediately by the registration commit.
   screenshots. All mutations are within the brief's paths plus the required workspace manifest
   and Cargo.lock; Studio, desktop, core, and the index bulk watcher were not edited.
 
-API: `mypaper_fswatch::Watch::directory(&Path, bool, impl FnMut(Event) + Send + 'static)` and
+API: `glaze_fswatch::Watch::directory(&Path, bool, impl FnMut(Event) + Send + 'static)` and
 `Watch::files(&Path, &[&str], impl FnMut() + Send + 'static)`, each returning
 `anyhow::Result<Watch>`. `Event` is `Paths(Vec<PathBuf>)` (absolute paths) or `Rescan`.
 Callbacks should post to the existing event loop. Keep the watch alive; dropping it cancels,

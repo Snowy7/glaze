@@ -1,10 +1,10 @@
 //! View goldens: every face at every size class, for the main fixture (`golden/faces.json`) and
 //! for the edge cases (`golden/edges.json`). The shell renders both into size sheets
 //! (`plugin-t3-sizes.png`, `plugin-t3-edges.png`; crates/shell, `views::plugin_tests`).
-//! `MYPAPER_BLESS=1` rewrites.
+//! `GLAZE_BLESS=1` rewrites.
 use crate::t3::{self, History, Limit, ProviderHistory, Status, Thread, ThreadDetail};
 use crate::{Availability, Data, Snapshot};
-use mypaper_plugin_sdk::SizeClass;
+use glaze_plugin_sdk::SizeClass;
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
@@ -91,7 +91,7 @@ fn snapshot(availability: Availability, threads: Vec<Thread>, details: Vec<(&str
         data: Some(Data::T3(t3::Snapshot {
             threads,
             details: details.into_iter().map(|(id, d)| (id.into(), d)).collect(),
-            projects: BTreeMap::from([("paper".into(), "mypaper".into())]),
+            projects: BTreeMap::from([("paper".into(), "Glaze".into())]),
             environment_id: Some("fixture".into()),
             models: vec![t3::ModelChoice { provider: "codex".into(), provider_name: "Codex".into(), model: "sol".into(), name: "GPT-6.1 Sol".into() }],
             permissions: vec!["orchestration:read".into(), "orchestration:operate".into(), "diagnostics:read".into()],
@@ -118,7 +118,7 @@ pub fn fixture() -> Snapshot {
     approval.pending_runtime_request = Some(t3::Request { id: "approval".into(), kind: "command".into() });
     let mut threads = vec![
         approval,
-        thread("thread-1", "Redesign the T3 faces in mypaper's own style", Status::Running, Some(12)),
+        thread("thread-1", "Redesign the T3 faces in Glaze's own style", Status::Running, Some(12)),
         thread("thread-2", "Fix half-size plugin layout", Status::Running, Some(25)),
         thread("thread-3", "Decode server.getConfig without a Value tree", Status::Starting, Some(1)),
         finished("thread-4", "Wire the dock magnification spring", Status::Completed, 18, Some(90)),
@@ -253,11 +253,11 @@ pub fn edge_faces() -> Value {
 fn check(name: &str, actual: Value) {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("golden").join(name);
     let actual = serde_json::to_string_pretty(&actual).unwrap() + "\n";
-    if std::env::var_os("MYPAPER_BLESS").is_some() {
+    if std::env::var_os("GLAZE_BLESS").is_some() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, &actual).unwrap();
     }
-    let golden = std::fs::read_to_string(&path).expect("run with MYPAPER_BLESS=1 to write the golden");
+    let golden = std::fs::read_to_string(&path).expect("run with GLAZE_BLESS=1 to write the golden");
     assert_eq!(golden.replace("\r\n", "\n"), actual, "T3 faces changed; check the size sheets and bless");
 }
 

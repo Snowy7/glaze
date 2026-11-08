@@ -1,6 +1,6 @@
 //! Built-in connection catalog, credentials and connection actions.
 
-use mypaper_ui::controls::Glyph;
+use glaze_ui::controls::Glyph;
 use serde_json::{Value, json};
 
 use crate::actions::{Action, Page};
@@ -112,7 +112,7 @@ fn has_secret(app: &App, i: &Integration) -> Option<bool> {
     if app.fixture {
         return Some(false);
     }
-    Some(mypaper_integrations::credentials::read(k).is_ok())
+    Some(glaze_integrations::credentials::read(k).is_ok())
 }
 
 /// Where its module is in the top bar, if anywhere.
@@ -149,7 +149,7 @@ pub fn intercept(app: &mut App, path: &str) -> bool {
         let Some((k, name)) = LIST.get(i).and_then(|item| item.secret) else {
             return true;
         };
-        match mypaper_integrations::credentials::remove(k) {
+        match glaze_integrations::credentials::remove(k) {
             Ok(()) => app.toast(format!("Forgot the {}", name.to_lowercase()), None),
             Err(e) => app.alert(format!("{e:#}")),
         }
@@ -250,7 +250,7 @@ fn paste_secret(app: &mut App, credential: &str, name: &str) {
         app.alert(format!("That doesn't look like a {}", name.to_lowercase()));
         return;
     }
-    match mypaper_integrations::credentials::write(credential, &text) {
+    match glaze_integrations::credentials::write(credential, &text) {
         Ok(()) => {
             crate::system::copy_text("");
             app.toast(format!("{name} stored in Windows Credential Manager"), None);
@@ -283,7 +283,7 @@ fn clipboard_text() -> Option<String> {
 
 /// Asks Windows for notification access (only on this click, on the UI thread).
 fn grant_access(app: &mut App) {
-    match mypaper_integrations::notifications::request_access() {
+    match glaze_integrations::notifications::request_access() {
         Ok(operation) => match operation.join() {
             Ok(status) => {
                 use windows::UI::Notifications::Management::UserNotificationListenerAccessStatus as Status;

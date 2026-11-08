@@ -1,7 +1,7 @@
 //! A click-through, nonactivating display outline, present only during segment hover.
 use anyhow::Result;
-use mypaper_desktop::Monitor;
-use mypaper_ui::{DisplayList, Kind, Op, Rect, Rgba, Role, Surface, Ui};
+use glaze_desktop::Monitor;
+use glaze_ui::{DisplayList, Kind, Op, Rect, Rgba, Role, Surface, Ui};
 
 #[derive(Default)]
 pub(super) struct Flash {

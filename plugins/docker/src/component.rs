@@ -1,5 +1,5 @@
 use super::*;
-use mypaper_plugin_sdk::guest::{self, Event, Plugin, SizeClass, http, pipes, timers, ui};
+use glaze_plugin_sdk::guest::{self, Event, Plugin, SizeClass, http, pipes, timers, ui};
 use std::collections::{BTreeMap, VecDeque};
 
 #[derive(Debug)]
@@ -65,9 +65,9 @@ impl Docker {
                 instance,
                 faces::face(
                     match size {
-                        SizeClass::Small => mypaper_plugin_sdk::SizeClass::Small,
-                        SizeClass::Medium => mypaper_plugin_sdk::SizeClass::Medium,
-                        SizeClass::Large => mypaper_plugin_sdk::SizeClass::Large,
+                        SizeClass::Small => glaze_plugin_sdk::SizeClass::Small,
+                        SizeClass::Medium => glaze_plugin_sdk::SizeClass::Medium,
+                        SizeClass::Large => glaze_plugin_sdk::SizeClass::Large,
                     },
                     &self.snapshot,
                 ),
@@ -225,4 +225,4 @@ impl Plugin for Docker {
     }
 }
 
-mypaper_plugin_sdk::export!(Docker);
+glaze_plugin_sdk::export!(Docker);

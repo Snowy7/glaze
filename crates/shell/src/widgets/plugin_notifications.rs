@@ -1,7 +1,7 @@
 //! Notification delivery reuses the shell's one reference-counted listener. No timer or polling.
-use mypaper_integrations::{Data, Lease, Provider, notifications::Card};
-use mypaper_plugin_api::wire::SystemEvent;
-use mypaper_widgets::plugins::Plugins;
+use glaze_integrations::{Data, Lease, Provider, notifications::Card};
+use glaze_plugin_api::wire::SystemEvent;
+use glaze_widgets::plugins::Plugins;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 

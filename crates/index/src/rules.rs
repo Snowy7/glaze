@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
-use mypaper_config::IndexConfig;
+use glaze_config::IndexConfig;
 
 const DEFAULTS: &[&str] = &[
     "**/node_modules",
@@ -25,7 +25,7 @@ const DEFAULTS: &[&str] = &[
     "**/pnpm-store",
     "**/.cargo/registry",
     "**/.rustup/toolchains",
-    "c:/mypaper-targets",
+    "c:/glaze-targets",
 ];
 
 #[derive(Clone)]
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn marker_decisions_are_reused_per_directory_and_inherited_by_children() {
-        let root = std::env::temp_dir().join(format!("mypaper-markers-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("glaze-markers-{}", std::process::id()));
         let target = root.join("target");
         let bin = root.join("bin");
         std::fs::create_dir_all(&target).unwrap();
@@ -292,7 +292,7 @@ mod tests {
             "C:/Windows/WinSxS/a",
             "C:/Users/me/AppData/Local/Browser/Cache_Data/x",
             "D:/secret/a",
-            "C:/mypaper-targets/index/a",
+            "C:/glaze-targets/index/a",
         ] {
             assert_eq!(
                 rules.decide(Path::new(path), false),

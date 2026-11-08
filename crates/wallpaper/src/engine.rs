@@ -12,11 +12,11 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use mypaper_config::{Config, EngineConfig, RenderSettings};
-use mypaper_desktop::{
+use glaze_config::{Config, EngineConfig, RenderSettings};
+use glaze_desktop::{
     EXIT_RESTART, Rect, WindowEvents, covered_monitors, fullscreen_app_in_front, monitors, startup,
 };
-use mypaper_theme::LoadedTheme;
+use glaze_theme::LoadedTheme;
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
@@ -52,7 +52,7 @@ pub enum Flow {
 pub struct Engine {
     theme: LoadedTheme,
     gpu: DeviceSlot<Gpu>,
-    recovering_gpu: Option<(mypaper_config::GpuPreference, wgpu::TextureFormat)>,
+    recovering_gpu: Option<(glaze_config::GpuPreference, wgpu::TextureFormat)>,
     source: Box<dyn Source>,
     /// Per screen: what `source` was last told via `Source::set_visible`.
     shown: Vec<Visibility>,
@@ -182,7 +182,7 @@ impl Engine {
             refresh_due: true,
             resuming: None,
             game: crate::game::GameSignal::default(),
-            test_game_hold: std::env::var_os("MYPAPER_TEST_GAME_HOLD").is_some(),
+            test_game_hold: std::env::var_os("GLAZE_TEST_GAME_HOLD").is_some(),
         })
     }
 

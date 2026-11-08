@@ -1,12 +1,12 @@
 cargo :     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
 At line:2 char:50
-+ ... gets\main'; cargo test -p mypaper-ui --lib -- --test-threads=1 --noca ...
++ ... gets\main'; cargo test -p glaze-ui --lib -- --test-threads=1 --noca ...
 +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (    Finished `t...get(s) in 0.22s:String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
      Running unittests src\lib.rs 
-(C:\mypaper-targets\main\debug\build\mypaper-ui/2b26dd1333197c7a\out\mypaper_ui-2b26dd1333197c7a.exe)
+(C:\glaze-targets\main\debug\build\glaze-ui/2b26dd1333197c7a\out\glaze_ui-2b26dd1333197c7a.exe)
 
 running 71 tests
 test a11y::semantic_tests::ranges_fields_reordering_and_live_feedback_expose_semantic_contracts ... ok

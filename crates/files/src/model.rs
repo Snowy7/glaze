@@ -290,14 +290,14 @@ impl Preferences {
         }
     }
     pub fn load() -> Self {
-        mypaper_config::dir()
+        glaze_config::dir()
             .ok()
             .and_then(|dir| std::fs::read(dir.join("files.json")).ok())
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or_default()
     }
     pub fn save(&self) -> anyhow::Result<()> {
-        let dir = mypaper_config::dir()?;
+        let dir = glaze_config::dir()?;
         std::fs::create_dir_all(&dir)?;
         // Distinct temp names allow multiple independent browser windows to save safely.
         let temp = dir.join(format!("files.{}.tmp", std::process::id()));

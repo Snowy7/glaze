@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let size = clamp(params.size, 2.0, 128.0) * paper.resolution.y / 1080.0;
     let cell = floor(frag / max(size, 1.0));

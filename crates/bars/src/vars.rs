@@ -4,7 +4,7 @@
 //! the declarations and the page sets them on `:root`.
 //!
 //! ```css
-//! /* @mypaper-vars
+//! /* @glaze-vars
 //! {
 //!   "--glow": { "type": "color", "label": "Glow", "default": "#ff2bd6" },
 //!   "--glow-size": { "type": "length", "label": "Glow size", "min": 0, "max": 40, "default": 14 },
@@ -23,7 +23,7 @@ use serde_json::Value;
 use crate::style::ColorRef;
 
 /// What starts the declaration comment.
-pub const MARKER: &str = "@mypaper-vars";
+pub const MARKER: &str = "@glaze-vars";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -172,9 +172,9 @@ pub fn declared(css: &str) -> Result<BTreeMap<String, VarDecl>> {
     let body = &css[start + MARKER.len()..];
     let end = body
         .find("*/")
-        .context("the @mypaper-vars comment isn't closed")?;
+        .context("the @glaze-vars comment isn't closed")?;
     let decls: BTreeMap<String, VarDecl> =
-        serde_json::from_str(body[..end].trim()).context("in the @mypaper-vars block")?;
+        serde_json::from_str(body[..end].trim()).context("in the @glaze-vars block")?;
     for (name, decl) in &decls {
         let bare = name.strip_prefix("--").unwrap_or_default();
         if !css_ident(bare) {
@@ -219,7 +219,7 @@ mod tests {
     use serde_json::json;
 
     const CSS: &str = r##"
-        /* @mypaper-vars
+        /* @glaze-vars
         {
           "--glow": { "type": "color", "label": "Glow", "default": "#ff2bd6" },
           "--glow-size": { "type": "length", "label": "Glow size", "min": 0, "max": 40, "default": 14 },
@@ -239,12 +239,12 @@ mod tests {
         assert_eq!(decls["--glow-size"].unit, Unit::Px);
         assert!(declared(".a { color: red }").unwrap().is_empty());
         for bad in [
-            r#"/* @mypaper-vars { "--a": { "type": "color", "label": "A", "default": "red" } } */"#,
-            r#"/* @mypaper-vars { "--a": { "type": "number", "label": "A", "default": 9, "max": 1 } } */"#,
-            r#"/* @mypaper-vars { "--a": { "type": "select", "label": "A", "default": "x", "options": [] } } */"#,
-            r#"/* @mypaper-vars { "a": { "type": "bool", "label": "A", "default": true } } */"#,
-            r#"/* @mypaper-vars { "--a": { "type": "bool", "label": "A", "default": true, "colour": 1 } } */"#,
-            r#"/* @mypaper-vars { "--a": [1 "#,
+            r#"/* @glaze-vars { "--a": { "type": "color", "label": "A", "default": "red" } } */"#,
+            r#"/* @glaze-vars { "--a": { "type": "number", "label": "A", "default": 9, "max": 1 } } */"#,
+            r#"/* @glaze-vars { "--a": { "type": "select", "label": "A", "default": "x", "options": [] } } */"#,
+            r#"/* @glaze-vars { "a": { "type": "bool", "label": "A", "default": true } } */"#,
+            r#"/* @glaze-vars { "--a": { "type": "bool", "label": "A", "default": true, "colour": 1 } } */"#,
+            r#"/* @glaze-vars { "--a": [1 "#,
         ] {
             assert!(declared(bad).is_err(), "accepted {bad}");
         }

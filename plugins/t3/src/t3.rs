@@ -814,7 +814,7 @@ mod tests {
         let snapshot = crate::Snapshot { availability: crate::Availability::Live, data: Some(crate::Data::T3(state)) };
         let started = std::time::Instant::now();
         for face in ["running", "attention", "limits", "status"] {
-            for size in [mypaper_plugin_sdk::SizeClass::Small, mypaper_plugin_sdk::SizeClass::Large] {
+            for size in [glaze_plugin_sdk::SizeClass::Small, glaze_plugin_sdk::SizeClass::Large] {
                 std::hint::black_box(crate::faces::face(face, size, &snapshot, &Default::default(), 0));
             }
         }

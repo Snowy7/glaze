@@ -53,7 +53,7 @@ pub struct Calendar {
 }
 impl Default for Calendar {
     fn default() -> Self {
-        Self { enabled: true, windows: true, google_client_id: option_env!("MYPAPER_GOOGLE_CLIENT_ID").unwrap_or("").into(), microsoft_client_id: option_env!("MYPAPER_MICROSOFT_CLIENT_ID").unwrap_or("").into() }
+        Self { enabled: true, windows: true, google_client_id: option_env!("GLAZE_GOOGLE_CLIENT_ID").unwrap_or("").into(), microsoft_client_id: option_env!("GLAZE_MICROSOFT_CLIENT_ID").unwrap_or("").into() }
     }
 }
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

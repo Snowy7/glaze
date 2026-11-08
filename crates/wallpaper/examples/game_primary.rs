@@ -2,7 +2,7 @@
 //! of our own covering the primary monitor, made foreground (a guarded click on our own window if
 //! Windows refuses, cursor put back), so core's game signal turns on while the other screens stay
 //! uncovered. Exits after the given seconds. Take the desktop lock before running it.
-//! `cargo run -p mypaper-wallpaper --example game_primary --release -- 60`
+//! `cargo run -p glaze-wallpaper --example game_primary --release -- 60`
 
 use std::time::{Duration, Instant};
 
@@ -65,13 +65,13 @@ unsafe fn activate(window: HWND, center: POINT) -> Result<()> {
 
 fn main() -> Result<()> {
     ensure!(
-        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock")
+        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock")
             .is_dir(),
         "take the desktop lock first"
     );
-    mypaper_desktop::enable_dpi_awareness();
+    glaze_desktop::enable_dpi_awareness();
     let seconds: u64 = std::env::args().nth(1).unwrap_or_else(|| "60".into()).parse()?;
-    let primary = mypaper_desktop::monitor_infos()
+    let primary = glaze_desktop::monitor_infos()
         .into_iter()
         .find(|m| m.rect.contains_point(0, 0))
         .map(|m| m.rect)
@@ -82,7 +82,7 @@ fn main() -> Result<()> {
         let class = WNDCLASSW {
             lpfnWndProc: Some(proc),
             hInstance: instance.into(),
-            lpszClassName: w!("mypaper.engine.game-primary"),
+            lpszClassName: w!("glaze.engine.game-primary"),
             hbrBackground: windows::Win32::Graphics::Gdi::HBRUSH(
                 (windows::Win32::Graphics::Gdi::COLOR_WINDOW.0 + 1) as _,
             ),
@@ -92,7 +92,7 @@ fn main() -> Result<()> {
         let window = CreateWindowExW(
             WS_EX_TOPMOST,
             class.lpszClassName,
-            w!("mypaper game fixture (primary monitor only)"),
+            w!("Glaze game fixture (primary monitor only)"),
             WS_POPUP,
             primary.x,
             primary.y,
@@ -117,7 +117,7 @@ fn main() -> Result<()> {
     let mut said = false;
     while Instant::now() < until {
         pump(250);
-        if !said && let Some((signal, _)) = mypaper_tweaks::game_activity::read()
+        if !said && let Some((signal, _)) = glaze_tweaks::game_activity::read()
             && signal.activity.pause_background
         {
             println!("game signal on: {:?}", signal.activity);

@@ -4,7 +4,7 @@
 //! footprint is the GPU stack and not ours.
 //!
 //! ```text
-//! cargo run --release -p mypaper-wallpaper --example bare_wgpu -- [auto|fxc] [SECONDS] [render] [trim]
+//! cargo run --release -p glaze-wallpaper --example bare_wgpu -- [auto|fxc] [SECONDS] [render] [trim]
 //! ```
 //!
 //! `render` presents 60 frames a second instead of idling; `trim` empties the
@@ -54,13 +54,13 @@ fn main() -> Result<()> {
         let class = WNDCLASSW {
             lpfnWndProc: Some(wndproc),
             hInstance: hinstance.into(),
-            lpszClassName: w!("mypaper-bare"),
+            lpszClassName: w!("glaze-bare"),
             ..Default::default()
         };
         RegisterClassW(&class);
         let hwnd = CreateWindowExW(
             Default::default(),
-            w!("mypaper-bare"),
+            w!("glaze-bare"),
             w!("bare"),
             WS_POPUP,
             0,

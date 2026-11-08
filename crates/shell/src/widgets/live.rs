@@ -1,37 +1,37 @@
 //! Live N4 harness. Run under the desktop lock with isolated APPDATA/LOCALAPPDATA. It uses the
 //! production widget host and services, six instances across the real monitors, plus a warmed
-//! native menu. It never stops the user's mypaper or changes taskbar state.
-use mypaper_shell::{bars, inbox, integrations, widgets};
+//! native menu. It never stops the user's Glaze or changes taskbar state.
+use glaze_shell::{bars, inbox, integrations, widgets};
 // Use the product's performance harness math, including wall time normalization.
 #[allow(dead_code)]
 #[path = "../../../../tools/perf/src/cpu.rs"]
 mod perf_cpu;
 
 use anyhow::Result;
-use mypaper_ui::{Entry, Menu, Tokens, Ui, next_event};
-use mypaper_widgets::{files, layout::Layout, registry, storage::Storage};
+use glaze_ui::{Entry, Menu, Tokens, Ui, next_event};
+use glaze_widgets::{files, layout::Layout, registry, storage::Storage};
 use std::time::{Duration, Instant};
 use windows::Win32::Foundation::WAIT_OBJECT_0;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 fn main() -> Result<()> {
     anyhow::ensure!(
-        std::env::var_os("MYPAPER_N4_FIXTURE").is_some(),
-        "set MYPAPER_N4_FIXTURE and isolated APPDATA before running"
+        std::env::var_os("GLAZE_N4_FIXTURE").is_some(),
+        "set GLAZE_N4_FIXTURE and isolated APPDATA before running"
     );
-    mypaper_desktop::init_logging();
-    mypaper_desktop::enable_dpi_awareness();
+    glaze_desktop::init_logging();
+    glaze_desktop::enable_dpi_awareness();
     let _restore = RestoreInput::new();
     let _awake = Awake::new()?;
     let seconds = std::env::args()
         .nth(1)
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(240);
-    let monitors = mypaper_desktop::monitor_infos();
+    let monitors = glaze_desktop::monitor_infos();
     anyhow::ensure!(!monitors.is_empty(), "no monitors");
     let registry = registry::builtins();
     let mut layout = Layout::default();
-    layout.appearance.style = Some(mypaper_theme::WidgetStyle::Liquid);
+    layout.appearance.style = Some(glaze_theme::WidgetStyle::Liquid);
     for (i, id) in [
         "clock",
         "calendar",
@@ -70,13 +70,13 @@ fn main() -> Result<()> {
     )?;
     let mut ui = Ui::new()?;
     let _media_pause = PausedMedia::new();
-    if std::env::var_os("MYPAPER_N4_SEED_ONLY").is_some() {
+    if std::env::var_os("GLAZE_N4_SEED_ONLY").is_some() {
         return seed_only(seconds, monitors.len());
     }
     let inbox = inbox::Inbox::new()?;
     let mut host = widgets::Widgets::new(&mut ui, inbox.hwnd(), &[])?;
     let mut menu = Menu::<u8>::new("N4 fixture menu")?;
-    let screen = mypaper_ui::screen_at(monitors[0].work.x + 40, monitors[0].work.y + 40);
+    let screen = glaze_ui::screen_at(monitors[0].work.x + 40, monitors[0].work.y + 40);
     menu.open(
         &mut ui,
         vec![
@@ -89,15 +89,15 @@ fn main() -> Result<()> {
         &Tokens::default(),
     )?;
     menu.close();
-    if std::env::var_os("MYPAPER_N4_INTERACTIONS").is_some() {
+    if std::env::var_os("GLAZE_N4_INTERACTIONS").is_some() {
         exercise(&mut ui, &mut host)?;
     }
-    let mut bars = if std::env::var_os("MYPAPER_N4_BARS").is_some() {
+    let mut bars = if std::env::var_os("GLAZE_N4_BARS").is_some() {
         Some(bars::Bars::new(&mut ui, bars::prepare()?)?)
     } else {
         None
     };
-    let _visible_desktop = if std::env::var_os("MYPAPER_N4_DESKTOP_VISIBLE").is_some() {
+    let _visible_desktop = if std::env::var_os("GLAZE_N4_DESKTOP_VISIBLE").is_some() {
         Some(VisibleDesktop::new()?)
     } else {
         None
@@ -115,7 +115,7 @@ fn main() -> Result<()> {
             .map(|m| (&m.device, m.dpi))
             .collect::<Vec<_>>()
     );
-    let stop_name = format!("Local\\mypaper-n4-fixture-stop-{}", std::process::id());
+    let stop_name = format!("Local\\glaze-n4-fixture-stop-{}", std::process::id());
     // SAFETY: an event owned by this harness, signalled by measure.ps1 after its last sample.
     let stop = unsafe {
         windows::Win32::System::Threading::CreateEventW(
@@ -132,14 +132,14 @@ fn main() -> Result<()> {
             false,
             false,
             &windows::core::HSTRING::from(format!(
-                "Local\\mypaper-n4-fixture-snapshot-{}",
+                "Local\\glaze-n4-fixture-snapshot-{}",
                 std::process::id()
             )),
         )
     }?;
     let started = Instant::now();
     let deadline = Instant::now() + Duration::from_secs(seconds);
-    let profiling = std::env::var_os("MYPAPER_N4_PROFILE").is_some();
+    let profiling = std::env::var_os("GLAZE_N4_PROFILE").is_some();
     let mut profile_phase = 0;
     let mut sample_at = if profiling {
         Instant::now() + Duration::from_secs(20)
@@ -196,7 +196,7 @@ fn main() -> Result<()> {
                 if let Some(bars) = &mut bars {
                     bars.message(&message);
                 }
-                if message.hwnd.is_invalid() && message.message == mypaper_desktop::WM_FACT {
+                if message.hwnd.is_invalid() && message.message == glaze_desktop::WM_FACT {
                     host.fact(message.wParam.0, message.lParam.0);
                     if let Some(bars) = &mut bars {
                         bars.fact(message.wParam.0, message.lParam.0);
@@ -318,7 +318,7 @@ fn main() -> Result<()> {
         }
     }
     checkpoint(&host, started);
-    println!("N4_DONE drivers={:?}", mypaper_ui::modules::gpu_drivers());
+    println!("N4_DONE drivers={:?}", glaze_ui::modules::gpu_drivers());
     // SAFETY: the harness owns this event and its wait loop has ended.
     unsafe {
         let _ = windows::Win32::Foundation::CloseHandle(stop);
@@ -338,7 +338,7 @@ fn seed_only(seconds: u64, monitors: usize) -> Result<()> {
             true,
             false,
             &windows::core::HSTRING::from(format!(
-                "Local\\mypaper-n4-fixture-stop-{}",
+                "Local\\glaze-n4-fixture-stop-{}",
                 std::process::id()
             )),
         )
@@ -373,7 +373,7 @@ fn seed_only(seconds: u64, monitors: usize) -> Result<()> {
         }
         let _ = windows::Win32::Foundation::CloseHandle(stop);
     }
-    println!("N4_DONE drivers={:?}", mypaper_ui::modules::gpu_drivers());
+    println!("N4_DONE drivers={:?}", glaze_ui::modules::gpu_drivers());
     Ok(())
 }
 
@@ -533,7 +533,7 @@ fn pump_for(ui: &mut Ui, host: &mut widgets::Widgets, duration: Duration) {
         unsafe {
             while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
                 host.raw_message(&message);
-                if message.hwnd.is_invalid() && message.message == mypaper_desktop::WM_FACT {
+                if message.hwnd.is_invalid() && message.message == glaze_desktop::WM_FACT {
                     host.fact(message.wParam.0, message.lParam.0);
                 }
                 let _ = TranslateMessage(&message);
@@ -561,7 +561,7 @@ fn exercise(ui: &mut Ui, host: &mut widgets::Widgets) -> Result<()> {
     use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
     use windows::Win32::UI::Input::KeyboardAndMouse::*;
     use windows::core::w;
-    let monitor = &mypaper_desktop::monitor_infos()[0];
+    let monitor = &glaze_desktop::monitor_infos()[0];
     // SAFETY: built-in STATIC window class; this test owns and destroys the app window.
     let app = TestApp(unsafe {
         CreateWindowExW(

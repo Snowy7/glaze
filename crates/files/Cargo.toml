@@ -1,6 +1,6 @@
 [package]
-name = "mypaper-files"
-description = "On-demand native file browser built on the mypaper kit"
+name = "glaze-files"
+description = "On-demand native file browser built on the Glaze kit"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,13 +11,13 @@ env_logger.workspace = true
 log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-mypaper-ui.workspace = true
-mypaper-config.workspace = true
-mypaper-theme.workspace = true
-mypaper-bars.workspace = true
-mypaper-index.workspace = true
-mypaper-tweaks.workspace = true
-mypaper-desktop.workspace = true
+glaze-ui.workspace = true
+glaze-config.workspace = true
+glaze-theme.workspace = true
+glaze-bars.workspace = true
+glaze-index.workspace = true
+glaze-tweaks.workspace = true
+glaze-desktop.workspace = true
 bytemuck.workspace = true
 windows-core = "0.62"
 

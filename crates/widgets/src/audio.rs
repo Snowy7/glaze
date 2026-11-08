@@ -1299,14 +1299,14 @@ mod tests {
         assert!(audio.on_frame(1, &frame).is_empty());
     }
 
-    /// Real capture for `MYPAPER_AUDIO_SECS` (default 15) seconds: reports the capture
+    /// Real capture for `GLAZE_AUDIO_SECS` (default 15) seconds: reports the capture
     /// thread's CPU as a share of one core, and the frames it produced. Run it while audio
     /// plays, and again in silence:
-    /// `cargo test --release -p mypaper-widgets measure_capture_cost -- --ignored --nocapture`.
+    /// `cargo test --release -p glaze-widgets measure_capture_cost -- --ignored --nocapture`.
     #[test]
     #[ignore = "uses the real audio device and takes seconds"]
     fn measure_capture_cost() {
-        let secs: u64 = std::env::var("MYPAPER_AUDIO_SECS")
+        let secs: u64 = std::env::var("GLAZE_AUDIO_SECS")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(15);

@@ -1,6 +1,6 @@
 //! One-time compatibility for Discord's old widget settings and Credential Manager targets.
-use mypaper_integrations::credentials;
-use mypaper_widgets::{faces, layout::Layout};
+use glaze_integrations::credentials;
+use glaze_widgets::{faces, layout::Layout};
 use serde_json::json;
 
 pub(super) fn migrate(layout: &mut Layout) -> bool {

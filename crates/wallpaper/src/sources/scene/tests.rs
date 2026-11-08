@@ -76,7 +76,7 @@ fn alpha_fixture(mode: &str, alpha: f32) -> std::path::PathBuf {
     glb.extend((bin.len() as u32).to_le_bytes());
     glb.extend(b"BIN\0");
     glb.extend(bin);
-    let dir = std::path::Path::new("C:/mypaper-targets/scene3d");
+    let dir = std::path::Path::new("C:/glaze-targets/scene3d");
     std::fs::create_dir_all(dir).unwrap();
     let path = dir.join(format!("alpha-{mode}-{alpha}.glb"));
     std::fs::write(&path, glb).unwrap();
@@ -88,7 +88,7 @@ fn alpha_fixture(mode: &str, alpha: f32) -> std::path::PathBuf {
 fn lab_model_layer_in_still_stack() {
     let gpu = Gpu::headless().expect("DX12 GPU");
     let size = (1920, 1080);
-    let dir = std::path::Path::new("C:/mypaper-targets/scene3d/stack-fixture");
+    let dir = std::path::Path::new("C:/glaze-targets/scene3d/stack-fixture");
     std::fs::create_dir_all(dir).unwrap();
     std::fs::copy(
         root().join("themes/examples/ringed-planet/planet.glb"),
@@ -141,7 +141,7 @@ fn lab_model_layer_in_still_stack() {
             }
         }
     }
-    std::fs::write("C:/mypaper-targets/scene3d/stack-planet.bgra", rgba).unwrap();
+    std::fs::write("C:/glaze-targets/scene3d/stack-planet.bgra", rgba).unwrap();
 }
 
 #[test]
@@ -282,18 +282,18 @@ fn lab_material_alpha_environment_and_view_slots() {
 }
 
 /// Offscreen only: never creates a desktop window or changes the current theme.
-/// `MYPAPER_SCENE_MODEL` selects a repo-relative model; `MYPAPER_SCENE_CLIP` selects a clip.
+/// `GLAZE_SCENE_MODEL` selects a repo-relative model; `GLAZE_SCENE_CLIP` selects a clip.
 #[test]
-#[ignore = "GPU frame lab; writes C:/mypaper-targets/scene3d"]
+#[ignore = "GPU frame lab; writes C:/glaze-targets/scene3d"]
 fn lab_transparency_depth_and_cost() {
     let gpu = Gpu::headless().expect("DX12 GPU");
     let size = (1920, 1080);
     let path = root().join(
-        std::env::var("MYPAPER_SCENE_MODEL")
+        std::env::var("GLAZE_SCENE_MODEL")
             .unwrap_or_else(|_| "themes/examples/islands/islands.glb".into()),
     );
     let name = path.file_stem().unwrap().to_string_lossy();
-    let output = std::path::Path::new("C:/mypaper-targets/scene3d");
+    let output = std::path::Path::new("C:/glaze-targets/scene3d");
     std::fs::create_dir_all(output).unwrap();
     let color = gpu.texture(
         "scene lab color",
@@ -312,10 +312,10 @@ fn lab_transparency_depth_and_cost() {
     let color_view = color.create_view(&Default::default());
     let depth_view = depth.create_view(&Default::default());
     let options = SceneOptions {
-        animation: std::env::var("MYPAPER_SCENE_CLIP").ok(),
+        animation: std::env::var("GLAZE_SCENE_CLIP").ok(),
         rotation: [
             0.0,
-            std::env::var("MYPAPER_SCENE_YAW")
+            std::env::var("GLAZE_SCENE_YAW")
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0.0),

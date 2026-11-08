@@ -10,8 +10,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail, ensure};
-use mypaper_plugin_api::wire::{StylePatch, TokenValue};
-use mypaper_plugin_sdk::view as sdk;
+use glaze_plugin_api::wire::{StylePatch, TokenValue};
+use glaze_plugin_sdk::view as sdk;
 use serde::Deserialize;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, InstanceAllocationStrategy, ResourceLimiter, Store};
@@ -21,10 +21,10 @@ use crate::{caps, images, io};
 
 wasmtime::component::bindgen!({ path: "../plugin-api/wit", world: "plugin" });
 
-use exports::mypaper::plugin::lifecycle::{Event, InitInfo};
-use mypaper::plugin::events::Topic;
-use mypaper::plugin::types::{Error as WitError, Tone};
-use mypaper::plugin::view::{Node, NodeKind};
+use exports::glaze::plugin::lifecycle::{Event, InitInfo};
+use glaze::plugin::events::Topic;
+use glaze::plugin::types::{Error as WitError, Tone};
+use glaze::plugin::view::{Node, NodeKind};
 
 /// Hard cap on one plugin's linear memory; a manifest may only lower it.
 pub const MEMORY_CAP: usize = 32 << 20;
@@ -85,7 +85,7 @@ pub struct Manifest {
     pub settings: Vec<serde_json::Value>,
     #[serde(default)]
     pub limits: Limits,
-    /// Native module DLLs in the plugin folder (`native-code`), run by `mypaper-native-host`.
+    /// Native module DLLs in the plugin folder (`native-code`), run by `glaze-native-host`.
     #[serde(default)]
     pub native: Vec<String>,
 }
@@ -102,7 +102,7 @@ impl Manifest {
         let folder = dir.file_name().and_then(|n| n.to_str()).unwrap_or_default();
         ensure!(manifest.id == folder, "id {:?} isn't its folder's name {folder:?}", manifest.id);
         let (major, minor) = manifest.api.split_once('.').and_then(|(a, b)| Some((a.parse::<u32>().ok()?, b.parse::<u32>().ok()?))).context("api must be \"<major>.<minor>\"")?;
-        ensure!(major == mypaper_plugin_api::API_MAJOR && minor <= mypaper_plugin_api::API_MINOR, "built for plugin api {}; this mypaper has {}.{} (needs a newer mypaper)", manifest.api, mypaper_plugin_api::API_MAJOR, mypaper_plugin_api::API_MINOR);
+        ensure!(major == glaze_plugin_api::API_MAJOR && minor <= glaze_plugin_api::API_MINOR, "built for plugin api {}; this Glaze has {}.{} (needs a newer Glaze)", manifest.api, glaze_plugin_api::API_MAJOR, glaze_plugin_api::API_MINOR);
         let defaults = crate::settings_permissions::settings(&manifest.settings, "{}")?;
         for permission in crate::settings_permissions::resolve_all(&manifest.permissions, &defaults)? {
             let known = WORDS.contains(&permission.as_str())
@@ -286,11 +286,11 @@ fn failed(e: String) -> WitError {
     WitError::Failed(e)
 }
 
-impl mypaper::plugin::types::Host for State {}
-impl mypaper::plugin::view::Host for State {}
+impl glaze::plugin::types::Host for State {}
+impl glaze::plugin::view::Host for State {}
 
-impl mypaper::plugin::ui::Host for State {
-    fn set_view(&mut self, instance: String, face: mypaper::plugin::view::Face) {
+impl glaze::plugin::ui::Host for State {
+    fn set_view(&mut self, instance: String, face: glaze::plugin::view::Face) {
         match tree(&face.nodes) {
             Ok(body) => self.effects.push(Effect::View(instance, sdk::Face { body, footer: face.footer, refresh: face.refresh })),
             Err(e) => log::warn!("plugin {}: bad view for {instance}: {e}", self.id),
@@ -307,9 +307,9 @@ impl mypaper::plugin::ui::Host for State {
     }
 }
 
-impl mypaper::plugin::style::Host for State {
-    fn apply(&mut self, patch: mypaper::plugin::style::StylePatch) -> Result<(), WitError> {
-        use mypaper::plugin::style::TokenValue as V;
+impl glaze::plugin::style::Host for State {
+    fn apply(&mut self, patch: glaze::plugin::style::StylePatch) -> Result<(), WitError> {
+        use glaze::plugin::style::TokenValue as V;
         let surface = surface_name(patch.surface);
         if !self.styles.iter().any(|s| s == surface) {
             return Err(WitError::Denied(format!("the manifest's styles don't list {surface:?}")));
@@ -327,7 +327,7 @@ impl mypaper::plugin::style::Host for State {
         self.effects.push(Effect::Style(surface.into(), Some(patch)));
         Ok(())
     }
-    fn reset(&mut self, surface: mypaper::plugin::style::Surface) {
+    fn reset(&mut self, surface: glaze::plugin::style::Surface) {
         let surface = surface_name(surface);
         if self.styles.iter().any(|s| s == surface) {
             self.effects.push(Effect::Style(surface.into(), None));
@@ -335,8 +335,8 @@ impl mypaper::plugin::style::Host for State {
     }
 }
 
-fn surface_name(surface: mypaper::plugin::style::Surface) -> &'static str {
-    use mypaper::plugin::style::Surface::*;
+fn surface_name(surface: glaze::plugin::style::Surface) -> &'static str {
+    use glaze::plugin::style::Surface::*;
     match surface {
         TopBar => "top-bar",
         Dock => "dock",
@@ -347,7 +347,7 @@ fn surface_name(surface: mypaper::plugin::style::Surface) -> &'static str {
     }
 }
 
-impl mypaper::plugin::timers::Host for State {
+impl glaze::plugin::timers::Host for State {
     fn after(&mut self, id: String, ms: u32) {
         self.effects.push(Effect::After(id, ms));
     }
@@ -363,8 +363,8 @@ impl mypaper::plugin::timers::Host for State {
     }
 }
 
-impl mypaper::plugin::events::Host for State {
-    fn subscribe(&mut self, topics: Vec<mypaper::plugin::events::Topic>) -> Result<(), WitError> {
+impl glaze::plugin::events::Host for State {
+    fn subscribe(&mut self, topics: Vec<glaze::plugin::events::Topic>) -> Result<(), WitError> {
         if topics.contains(&Topic::Windows) {
             self.allowed("windows")?;
         }
@@ -378,13 +378,13 @@ impl mypaper::plugin::events::Host for State {
         }
         Ok(())
     }
-    fn unsubscribe(&mut self, topics: Vec<mypaper::plugin::events::Topic>) {
+    fn unsubscribe(&mut self, topics: Vec<glaze::plugin::events::Topic>) {
         self.topics.retain(|t| !topics.contains(t));
     }
 }
 
-impl mypaper::plugin::http::Host for State {
-    fn fetch(&mut self, request: mypaper::plugin::http::Request) -> Result<u64, WitError> {
+impl glaze::plugin::http::Host for State {
+    fn fetch(&mut self, request: glaze::plugin::http::Request) -> Result<u64, WitError> {
         if !caps::origin_allowed(&self.permissions, &request.url) {
             log::warn!("plugin {}: refused fetch of an undeclared origin", self.id);
             return Err(WitError::Denied(format!("no network permission for {}", request.url.split('?').next().unwrap_or(""))));
@@ -398,8 +398,8 @@ impl mypaper::plugin::http::Host for State {
     }
 }
 
-fn http_method(method: mypaper::plugin::http::Method) -> &'static str {
-    use mypaper::plugin::http::Method;
+fn http_method(method: glaze::plugin::http::Method) -> &'static str {
+    use glaze::plugin::http::Method;
     match method {
         Method::Get => "GET",
         Method::Post => "POST",
@@ -409,11 +409,11 @@ fn http_method(method: mypaper::plugin::http::Method) -> &'static str {
     }
 }
 
-impl mypaper::plugin::websocket::Host for State {
+impl glaze::plugin::websocket::Host for State {
     fn connect(&mut self, url: String) -> Result<u64, WitError> {
-        self.connect_with(mypaper::plugin::websocket::ConnectRequest { url, headers: Vec::new(), protocols: Vec::new() })
+        self.connect_with(glaze::plugin::websocket::ConnectRequest { url, headers: Vec::new(), protocols: Vec::new() })
     }
-    fn connect_with(&mut self, request: mypaper::plugin::websocket::ConnectRequest) -> Result<u64, WitError> {
+    fn connect_with(&mut self, request: glaze::plugin::websocket::ConnectRequest) -> Result<u64, WitError> {
         if !request.url.starts_with("ws") || !caps::origin_allowed(&self.permissions, &request.url) {
             log::warn!("plugin {}: refused a websocket to an undeclared origin", self.id);
             return Err(WitError::Denied(format!("no network permission for {}", request.url.split('?').next().unwrap_or(""))));
@@ -428,7 +428,7 @@ impl mypaper::plugin::websocket::Host for State {
         self.effects.push(Effect::Socket { id, request: io::SocketRequest { url: request.url, headers, protocols: request.protocols } });
         Ok(id)
     }
-    fn send(&mut self, socket: u64, message: mypaper::plugin::websocket::Message) -> Result<(), WitError> {
+    fn send(&mut self, socket: u64, message: glaze::plugin::websocket::Message) -> Result<(), WitError> {
         self.sockets.get(&socket).ok_or_else(|| WitError::Invalid("no such socket".into()))?.send(message).map_err(failed)
     }
     fn close(&mut self, socket: u64) {
@@ -436,7 +436,7 @@ impl mypaper::plugin::websocket::Host for State {
     }
 }
 
-impl mypaper::plugin::pipes::Host for State {
+impl glaze::plugin::pipes::Host for State {
     fn open(&mut self, name: String) -> Result<u64, WitError> {
         self.allowed(&format!("pipe:{name}"))?;
         if self.pipes.len() >= io::MAX_CONNECTIONS {
@@ -450,12 +450,12 @@ impl mypaper::plugin::pipes::Host for State {
     }
     fn write(&mut self, pipe: u64, bytes: Vec<u8>) -> Result<(), WitError> {
         let conn = self.pipes.get(&pipe).ok_or_else(|| WitError::Invalid("no such pipe".into()))?;
-        conn.send(mypaper::plugin::websocket::Message::Binary(bytes)).map_err(failed)
+        conn.send(glaze::plugin::websocket::Message::Binary(bytes)).map_err(failed)
     }
     fn close(&mut self, pipe: u64) {
         self.pipes.remove(&pipe);
     }
-    fn http_request(&mut self, name: String, request: mypaper::plugin::http::Request) -> Result<u64, WitError> {
+    fn http_request(&mut self, name: String, request: glaze::plugin::http::Request) -> Result<u64, WitError> {
         self.allowed(&format!("pipe:{name}"))?;
         let id = self.request_id();
         let headers = request.headers.into_iter().map(|h| (h.name, h.value)).collect();
@@ -464,8 +464,8 @@ impl mypaper::plugin::pipes::Host for State {
     }
 }
 
-impl mypaper::plugin::launch::Host for State {
-    fn inspect(&mut self, app: String) -> Result<mypaper::plugin::launch::DesktopStatus, WitError> {
+impl glaze::plugin::launch::Host for State {
+    fn inspect(&mut self, app: String) -> Result<glaze::plugin::launch::DesktopStatus, WitError> {
         self.allowed("launch")?;
         timed(&mut self.host_time, || caps::desktop_status(&app)).map_err(failed)
     }
@@ -479,8 +479,8 @@ impl mypaper::plugin::launch::Host for State {
     }
 }
 
-impl mypaper::plugin::notify::Host for State {
-    fn show(&mut self, notification: mypaper::plugin::notify::Notification) -> Result<(), WitError> {
+impl glaze::plugin::notify::Host for State {
+    fn show(&mut self, notification: glaze::plugin::notify::Notification) -> Result<(), WitError> {
         self.allowed("notifications")?;
         if notification.title.is_empty() || notification.title.len() + notification.body.len() > 2000 {
             return Err(WitError::Invalid("a title, and at most 2000 bytes of text".into()));
@@ -490,7 +490,7 @@ impl mypaper::plugin::notify::Host for State {
     }
 }
 
-impl mypaper::plugin::secrets::Host for State {
+impl glaze::plugin::secrets::Host for State {
     fn get(&mut self, key: String) -> Result<Option<String>, WitError> {
         self.allowed("secrets")?;
         timed(&mut self.host_time, || caps::secret_get(&self.id, &key)).map_err(failed)
@@ -505,7 +505,7 @@ impl mypaper::plugin::secrets::Host for State {
     }
 }
 
-impl mypaper::plugin::storage::Host for State {
+impl glaze::plugin::storage::Host for State {
     fn get(&mut self, key: String) -> Result<Option<Vec<u8>>, WitError> {
         self.allowed("storage")?;
         timed(&mut self.host_time, || caps::storage_get(&self.data_dir, &key)).map_err(failed)
@@ -520,27 +520,27 @@ impl mypaper::plugin::storage::Host for State {
     }
 }
 
-impl mypaper::plugin::system::Host for State {
-    fn monitors(&mut self) -> Vec<mypaper::plugin::system::Monitor> {
+impl glaze::plugin::system::Host for State {
+    fn monitors(&mut self) -> Vec<glaze::plugin::system::Monitor> {
         caps::monitors()
             .into_iter()
-            .map(|m| mypaper::plugin::system::Monitor { id: m.id, x: m.rect.0, y: m.rect.1, width: m.rect.2, height: m.rect.3, scale: 1.0, primary: m.primary })
+            .map(|m| glaze::plugin::system::Monitor { id: m.id, x: m.rect.0, y: m.rect.1, width: m.rect.2, height: m.rect.3, scale: 1.0, primary: m.primary })
             .collect()
     }
-    fn theme(&mut self) -> mypaper::plugin::system::ThemeInfo {
-        mypaper::plugin::system::ThemeInfo { dark: caps::dark(), accent: String::new() }
+    fn theme(&mut self) -> glaze::plugin::system::ThemeInfo {
+        glaze::plugin::system::ThemeInfo { dark: caps::dark(), accent: String::new() }
     }
-    fn power(&mut self) -> mypaper::plugin::system::PowerInfo {
+    fn power(&mut self) -> glaze::plugin::system::PowerInfo {
         let (on_battery, percent, saver) = caps::power();
-        mypaper::plugin::system::PowerInfo { on_battery, percent, saver }
+        glaze::plugin::system::PowerInfo { on_battery, percent, saver }
     }
-    fn foreground(&mut self) -> Result<Option<mypaper::plugin::system::WindowInfo>, WitError> {
+    fn foreground(&mut self) -> Result<Option<glaze::plugin::system::WindowInfo>, WitError> {
         self.allowed("windows")?;
-        Ok(timed(&mut self.host_time, caps::foreground).map(|w| mypaper::plugin::system::WindowInfo { id: w.id, title: w.title, process: w.process, x: w.rect.0, y: w.rect.1, width: w.rect.2, height: w.rect.3 }))
+        Ok(timed(&mut self.host_time, caps::foreground).map(|w| glaze::plugin::system::WindowInfo { id: w.id, title: w.title, process: w.process, x: w.rect.0, y: w.rect.1, width: w.rect.2, height: w.rect.3 }))
     }
 }
 
-impl mypaper::plugin::native::Host for State {
+impl glaze::plugin::native::Host for State {
     fn call(&mut self, module: String, method: String, bytes: Vec<u8>) -> Result<u64, WitError> {
         self.allowed("native-code")?;
         if !self.native.contains(&module) {
@@ -552,8 +552,8 @@ impl mypaper::plugin::native::Host for State {
     }
 }
 
-impl mypaper::plugin::process::Host for State {
-    fn run(&mut self, request: mypaper::plugin::process::RunRequest) -> Result<u64, WitError> {
+impl glaze::plugin::process::Host for State {
+    fn run(&mut self, request: glaze::plugin::process::RunRequest) -> Result<u64, WitError> {
         let exe = caps::resolve_exe(&self.permissions, &request.exe).map_err(|e| {
             log::warn!("plugin {}: refused process.run: {e}", self.id);
             WitError::Denied(e)
@@ -568,16 +568,16 @@ impl mypaper::plugin::process::Host for State {
     }
 }
 
-impl mypaper::plugin::files::Host for State {
+impl glaze::plugin::files::Host for State {
     fn read(&mut self, path: String) -> Result<Option<Vec<u8>>, WitError> {
         self.allowed(&format!("file:{path}"))?;
         timed(&mut self.host_time, || caps::read_file(&path)).map_err(failed)
     }
 }
 
-impl mypaper::plugin::log::Host for State {
-    fn write(&mut self, level: mypaper::plugin::log::Level, message: String) {
-        use mypaper::plugin::log::Level;
+impl glaze::plugin::log::Host for State {
+    fn write(&mut self, level: glaze::plugin::log::Level, message: String) {
+        use glaze::plugin::log::Level;
         let level = match level {
             Level::Debug => log::Level::Debug,
             Level::Info => log::Level::Info,
@@ -621,8 +621,8 @@ fn tones(t: &Option<Tone>) -> Option<sdk::Tone> {
     t.as_ref().map(tone)
 }
 
-fn role(role: mypaper::plugin::types::TextRole) -> sdk::Role {
-    use mypaper::plugin::types::TextRole::*;
+fn role(role: glaze::plugin::types::TextRole) -> sdk::Role {
+    use glaze::plugin::types::TextRole::*;
     match role {
         LargeTitle => sdk::Role::LargeTitle,
         Title1 => sdk::Role::Title1,
@@ -651,7 +651,7 @@ pub fn tree(nodes: &[Node]) -> Result<sdk::View, String> {
 }
 
 fn node(nodes: &[Node], at: &mut usize, depth: u32) -> Result<sdk::View, String> {
-    use mypaper::plugin::types::Align;
+    use glaze::plugin::types::Align;
     use sdk::View as V;
     if depth > 64 {
         return Err("views nest at most 64 deep".into());
@@ -715,8 +715,8 @@ fn node(nodes: &[Node], at: &mut usize, depth: u32) -> Result<sdk::View, String>
 }
 
 /// A WIT canvas command as the shell renderer's (`sdk::Draw`).
-fn draw(command: &mypaper::plugin::view::Draw) -> sdk::Draw {
-    use mypaper::plugin::view::{Draw as D, Paint as P};
+fn draw(command: &glaze::plugin::view::Draw) -> sdk::Draw {
+    use glaze::plugin::view::{Draw as D, Paint as P};
     let paint = |p: &P| match p {
         P::Fill(c) => sdk::Paint::Fill(tone(c)),
         P::Stroke((c, w)) => sdk::Paint::Stroke(tone(c), *w),
@@ -777,10 +777,10 @@ pub struct Runtime {
     pub data: PathBuf,
 }
 
-/// `%LOCALAPPDATA%\mypaper\plugins\cache` and `%APPDATA%\mypaper\plugin-data`.
+/// `%LOCALAPPDATA%\glaze\plugins\cache` and `%APPDATA%\glaze\plugin-data`.
 pub fn default_dirs() -> (PathBuf, PathBuf) {
     let env = |k: &str| std::env::var_os(k).map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
-    (env("LOCALAPPDATA").join(r"mypaper\plugins\cache"), env("APPDATA").join(r"mypaper\plugin-data"))
+    (env("LOCALAPPDATA").join(r"glaze\plugins\cache"), env("APPDATA").join(r"glaze\plugin-data"))
 }
 
 impl Runtime {
@@ -878,7 +878,7 @@ impl Runtime {
         let bindings = Plugin::instantiate(&mut store, component, &self.linker)?;
         let info = InitInfo { plugin: manifest.id.clone(), settings: serde_json::to_string(&settings)?, state };
         self.ticker.set(true);
-        let result = bindings.mypaper_plugin_lifecycle().call_init(&mut store, &info);
+        let result = bindings.glaze_plugin_lifecycle().call_init(&mut store, &info);
         self.ticker.set(false);
         match result? {
             Ok(()) => Ok(Instance { store, bindings, ticker: self.ticker.clone(), cpu: Duration::ZERO, last: Duration::ZERO, events: 0 }),
@@ -906,7 +906,7 @@ impl Instance {
         self.store.data_mut().host_time = Duration::ZERO;
         let started = Instant::now();
         self.ticker.set(true);
-        let result = self.bindings.mypaper_plugin_lifecycle().call_on_event(&mut self.store, event);
+        let result = self.bindings.glaze_plugin_lifecycle().call_on_event(&mut self.store, event);
         self.ticker.set(false);
         self.last = started.elapsed().saturating_sub(self.store.data().host_time);
         self.cpu += self.last;
@@ -918,7 +918,7 @@ impl Instance {
     pub fn save(&mut self) -> Result<Vec<u8>> {
         self.store.set_epoch_deadline(EVENT_TICKS * 2);
         self.ticker.set(true);
-        let result = self.bindings.mypaper_plugin_lifecycle().call_save(&mut self.store);
+        let result = self.bindings.glaze_plugin_lifecycle().call_save(&mut self.store);
         self.ticker.set(false);
         result.map_err(Into::into)
     }

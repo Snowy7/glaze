@@ -1,15 +1,15 @@
 # Measure a truly quiet watched tree, then verify off/on and restore the core-owned helper.
-param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\mypaper-index.exe', [int]$Seconds = 60)
+param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\glaze-index.exe', [int]$Seconds = 60)
 $ErrorActionPreference = 'Stop'
-$toolsDir = 'C:\Users\you\AppData\Local\Temp\mypaper-tools'
+$toolsDir = 'C:\Users\you\AppData\Local\Temp\glaze-tools'
 $lockDir = Join-Path $toolsDir 'desktop.lock'
-$configPath = Join-Path $env:APPDATA 'mypaper\config.json'
+$configPath = Join-Path $env:APPDATA 'glaze\config.json'
 $tag = 'idle-' + [Guid]::NewGuid().ToString('N')
-$fixtureBase = Join-Path $env:USERPROFILE 'mypaper-index-fixtures'
+$fixtureBase = Join-Path $env:USERPROFILE 'glaze-index-fixtures'
 $fixtureRoot = [IO.Path]::GetFullPath((Join-Path $fixtureBase $tag))
-$cacheBase = 'C:\mypaper-targets\index'
+$cacheBase = 'C:\glaze-targets\index'
 $fixtureCache = [IO.Path]::GetFullPath((Join-Path $cacheBase $tag))
-$ownExe = Join-Path $cacheBase 'service\mypaper-index.exe'
+$ownExe = Join-Path $cacheBase 'service\glaze-index.exe'
 $original = [bool](Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json).experimental.file_index
 $ownsLock = $false
 Add-Type 'public static class IndexIdleConfig { public static void Replace(string s, string d) { System.IO.File.Replace(s,d,null); } }'
@@ -40,7 +40,7 @@ try {
   try {
     Set-Flag $false
     $until = [DateTime]::UtcNow.AddSeconds(15)
-    while (Get-Process mypaper-index -ErrorAction SilentlyContinue) {
+    while (Get-Process glaze-index -ErrorAction SilentlyContinue) {
       if ([DateTime]::UtcNow -ge $until) { throw 'Core-owned helper did not stop' }
       Start-Sleep -Milliseconds 50
     }

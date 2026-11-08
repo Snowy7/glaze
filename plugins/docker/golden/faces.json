@@ -33,7 +33,7 @@
                     "detail": "12% · 192 MiB",
                     "icon": "layers",
                     "kind": "list_row",
-                    "title": "mypaper-web"
+                    "title": "glaze-web"
                   },
                   {
                     "action": "stop:web",
@@ -112,7 +112,7 @@
                     "detail": "12% · 192 MiB",
                     "icon": "layers",
                     "kind": "list_row",
-                    "title": "mypaper-web"
+                    "title": "glaze-web"
                   },
                   {
                     "action": "stop:web",
@@ -203,7 +203,7 @@
                     "detail": "12% · 192 MiB",
                     "icon": "layers",
                     "kind": "list_row",
-                    "title": "mypaper-web"
+                    "title": "glaze-web"
                   },
                   {
                     "action": "stop:web",
@@ -300,7 +300,7 @@
                     "detail": "12% · 192 MiB",
                     "icon": "layers",
                     "kind": "list_row",
-                    "title": "mypaper-web"
+                    "title": "glaze-web"
                   },
                   {
                     "action": "stop:web",
@@ -379,7 +379,7 @@
                     "detail": "12% · 192 MiB",
                     "icon": "layers",
                     "kind": "list_row",
-                    "title": "mypaper-web"
+                    "title": "glaze-web"
                   },
                   {
                     "action": "stop:web",
@@ -470,7 +470,7 @@
                     "detail": "12% · 192 MiB",
                     "icon": "layers",
                     "kind": "list_row",
-                    "title": "mypaper-web"
+                    "title": "glaze-web"
                   },
                   {
                     "action": "stop:web",

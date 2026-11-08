@@ -36,17 +36,17 @@ pub(crate) mod pick_client;
 #[cfg(test)]
 mod tests;
 
-use mypaper_ui::controls::key;
-use mypaper_ui::{Chrome, Rect, Text};
+use glaze_ui::controls::key;
+use glaze_ui::{Chrome, Rect, Text};
 
 use crate::actions::{Action, FieldId};
 use crate::app::App;
 use crate::view::Built;
 
-pub const TITLE: &str = "mypaper Studio · Panel";
+pub const TITLE: &str = "Glaze Studio · Panel";
 
 pub fn enabled() -> bool {
-    std::env::var("MYPAPER_STUDIO_PANEL").is_ok_and(|v| v == "1")
+    std::env::var("GLAZE_STUDIO_PANEL").is_ok_and(|v| v == "1")
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
@@ -169,13 +169,13 @@ pub struct State {
     pub theme_data: std::cell::RefCell<saving::ThemeCache>,
     pub search_match: Option<(Page, String)>,
     pub specimens:
-        std::cell::RefCell<std::collections::HashMap<String, std::sync::Arc<mypaper_ui::Image>>>,
+        std::cell::RefCell<std::collections::HashMap<String, std::sync::Arc<glaze_ui::Image>>>,
     specimen_page: std::cell::Cell<Option<Page>>,
     pub save_doc: std::cell::Cell<Option<crate::docs::DocId>>,
     pub sort_drag: Option<lists::Drag>,
     pub color_drag: Option<colors::Drag>,
-    pub color_overlay: std::cell::RefCell<Vec<mypaper_ui::Op>>,
-    pub color_values: std::cell::RefCell<std::collections::HashMap<mypaper_ui::controls::Key, (String, mypaper_ui::color_row::popover::Hsv)>>,
+    pub color_overlay: std::cell::RefCell<Vec<glaze_ui::Op>>,
+    pub color_values: std::cell::RefCell<std::collections::HashMap<glaze_ui::controls::Key, (String, glaze_ui::color_row::popover::Hsv)>>,
     pub fonts: std::cell::OnceCell<Vec<String>>,
     pub save_errors: std::cell::RefCell<std::collections::HashMap<crate::docs::DocId, saving::Failure>>,
     pub theme_retry: Option<crate::actions::Action>,
@@ -224,7 +224,7 @@ pub enum Command {
     Peek,
     PickColor(crate::actions::Edit),
     PickFont(crate::actions::Edit, String),
-    ColorDrag(crate::actions::Edit, mypaper_ui::color_row::popover::Part, Rect),
+    ColorDrag(crate::actions::Edit, glaze_ui::color_row::popover::Part, Rect),
     SortRow(SortList, usize),
     SortHandle(SortList, usize),
     SortRemove(SortList, usize),
@@ -406,7 +406,7 @@ pub fn run(app: &mut App, command: Command) {
         Command::PickZone(target, city) => pickers::choose_zone(app, &target, city),
         Command::ConnectionModule(id, bar, on) => editors::connection_module(app, &id, bar, on),
         Command::HideConnectionWidget(id) => editors::hide_connection_widget(app, &id),
-        Command::ShowTheme(dir) => crate::system::reveal(&dir.join(mypaper_theme::MANIFEST)),
+        Command::ShowTheme(dir) => crate::system::reveal(&dir.join(glaze_theme::MANIFEST)),
         Command::ResetTheme(dir) => saving::reset_theme(app, &dir),
         Command::ResetPart(doc, path) => saving::reset_part(app, doc, path),
         Command::ShowThemeFolder(dir) => crate::system::open(&dir.to_string_lossy()),
@@ -612,7 +612,7 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
     true
 }
 
-pub fn palette_for(app: &App) -> mypaper_ui::controls::Palette {
+pub fn palette_for(app: &App) -> glaze_ui::controls::Palette {
     if app.panel.is_some() && !app.theme.contrast {
         tokens::palette(app.theme.palette.dark)
     } else {
@@ -705,7 +705,7 @@ pub(crate) fn content(app: &App, b: &mut crate::ui::B, area: Rect, page: Page) -
         };
         controls::save_banner(app, b, &mut c, page);
         if !app.system.running() {
-            controls::notice(b, &mut c, "Changes apply when mypaper starts.");
+            controls::notice(b, &mut c, "Changes apply when Glaze starts.");
         }
         pages::view(app, b, &mut c, page);
         controls::boundaries(b);
@@ -724,7 +724,7 @@ pub(crate) fn content(app: &App, b: &mut crate::ui::B, area: Rect, page: Page) -
 /// Reserve a top-bar band and 96 DIPs for a floating dock, within the primary work area.
 pub fn placement(app: &App) -> (i32, i32, i32, i32) {
     let monitor = app.display();
-    let fallback = mypaper_desktop::Rect {
+    let fallback = glaze_desktop::Rect {
         x: 0,
         y: 0,
         width: 1920,
@@ -754,7 +754,7 @@ pub fn placement(app: &App) -> (i32, i32, i32, i32) {
 
 /// On the first open, prefer the side with less of the foreground work window in it.
 /// Cache that decision so the panel never jumps when focus changes. An explicit side is saved.
-fn first_side(app: &App, work: mypaper_desktop::Rect, right: (i32, i32, i32, i32)) -> bool {
+fn first_side(app: &App, work: glaze_desktop::Rect, right: (i32, i32, i32, i32)) -> bool {
     use windows::Win32::Foundation::RECT;
     use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect};
     let mut foreground = RECT::default();
@@ -777,7 +777,7 @@ fn first_side(app: &App, work: mypaper_desktop::Rect, right: (i32, i32, i32, i32
 }
 
 /// Fit the client to measured page content; retain the desktop bands as the upper limit.
-pub fn fit_height(app: &mut App, surface: &mypaper_ui::Surface, built: &Built) -> bool {
+pub fn fit_height(app: &mut App, surface: &glaze_ui::Surface, built: &Built) -> bool {
     let Some(area) = built.scrolls.last() else {
         return false;
     };
@@ -896,7 +896,7 @@ pub fn end_peek() {
 }
 
 /// List drags are transient until release. This early bridge leaves legacy input intact.
-pub fn event(app: &mut App, event: &mypaper_ui::Event) -> bool {
+pub fn event(app: &mut App, event: &glaze_ui::Event) -> bool {
     if crate::builder::event(app, event) { return true; }
     if app.panel.is_some() { choosers::event(app, event); }
     if editors::widgets::event(app, event) { return true; }
@@ -1229,7 +1229,7 @@ pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
 
 /// `Surface::place` sizes the outer Win32 frame. Compensate for its invisible resize
 /// borders so the opaque client panel itself is exactly 480 (or 360) DIPs wide.
-pub fn fit_client(surface: &mypaper_ui::Surface, bounds: (i32, i32, i32, i32)) {
+pub fn fit_client(surface: &glaze_ui::Surface, bounds: (i32, i32, i32, i32)) {
     use windows::Win32::Foundation::{POINT, RECT};
     use windows::Win32::Graphics::Gdi::ClientToScreen;
     use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
@@ -1253,8 +1253,8 @@ pub fn fit_client(surface: &mypaper_ui::Surface, bounds: (i32, i32, i32, i32)) {
 }
 
 fn bounds(
-    screen: mypaper_desktop::Rect,
-    work: mypaper_desktop::Rect,
+    screen: glaze_desktop::Rect,
+    work: glaze_desktop::Rect,
     scale: f32,
 ) -> (i32, i32, i32, i32) {
     let px = |v: f32| (v * scale).round() as i32;
@@ -1293,7 +1293,7 @@ pub fn round_window(hwnd: windows::Win32::Foundation::HWND) {
 
 /// After a preference edit or Undo, route only the changed connection states to the host.
 pub fn sync_connections(app: &mut App) {
-    use mypaper_widgets::plugin_manager::{Preferences, Request, send};
+    use glaze_widgets::plugin_manager::{Preferences, Request, send};
     let Ok(next) = serde_json::from_value::<Preferences>(
         app.docs.doc(crate::docs::DocId::Plugins).effective.clone(),
     ) else {
@@ -1320,10 +1320,10 @@ pub fn sync_connections(app: &mut App) {
 /// UIA uses the same validation, persistence and undo routes as pointer and keyboard input.
 pub fn accessibility(
     app: &mut App,
-    hit: mypaper_ui::HitId,
-    action: mypaper_ui::AccessibilityAction,
+    hit: glaze_ui::HitId,
+    action: glaze_ui::AccessibilityAction,
 ) {
-    use mypaper_ui::{AccessibilityAction as A, controls::Behavior};
+    use glaze_ui::{AccessibilityAction as A, controls::Behavior};
     let Some(target) = hit
         .checked_sub(1)
         .and_then(|id| app.frame.targets.get(id as usize))
@@ -1371,7 +1371,7 @@ pub fn accessibility(
             if let Some(field) = &app.field
                 && field.field.set_text(&text).is_ok()
             {
-                app.event(mypaper_ui::Event::TextChanged);
+                app.event(glaze_ui::Event::TextChanged);
                 app.blur_field();
             }
         }

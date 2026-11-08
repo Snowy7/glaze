@@ -1,11 +1,11 @@
 //! SDK plugin faces (docs/plugins.md, "Views"): the host draws a plugin's declarative view tree
 //! with the kit, inside the standard integration chrome. Pure: no plugin I/O here. Actions are
 //! numbered in tree order, so a click maps back to its action id with [`action_at`].
-use mypaper_plugin_sdk::{Align as VAlign, Face, Role as VRole, Tone, View};
-use mypaper_ui::chart::{LimitBar, Series, area_chart, compact_limit_bar};
-use mypaper_ui::kit::{Accessory, ButtonKind, Frame, Lead, Row};
-use mypaper_ui::layout::{Align, Insets, SizeClass};
-use mypaper_ui::{HitId, Point, Rect, Rgba, icons::Icon, theme::TextRole};
+use glaze_plugin_sdk::{Align as VAlign, Face, Role as VRole, Tone, View};
+use glaze_ui::chart::{LimitBar, Series, area_chart, compact_limit_bar};
+use glaze_ui::kit::{Accessory, ButtonKind, Frame, Lead, Row};
+use glaze_ui::layout::{Align, Insets, SizeClass};
+use glaze_ui::{HitId, Point, Rect, Rgba, icons::Icon, theme::TextRole};
 
 pub mod animated;
 pub mod canvas;
@@ -30,7 +30,7 @@ pub enum Status<'a> {
 pub enum Hit {
     Action(String),
     Field(String),
-    Select { action: String, options: Vec<mypaper_plugin_sdk::view::SelectOption>, selected: Option<String> },
+    Select { action: String, options: Vec<glaze_plugin_sdk::view::SelectOption>, selected: Option<String> },
 }
 
 /// The plugin action behind hit `hit` in `face`, if any.
@@ -410,7 +410,7 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             let id = take_hit();
             f.field_frame(rect, placeholder, true, f.input.ring(id), None);
             f.focus_ring(id, rect, f.control_radius(rect.height()));
-            f.hit(id, rect, mypaper_ui::Role::TextInput, placeholder, true, None);
+            f.hit(id, rect, glaze_ui::Role::TextInput, placeholder, true, None);
         }
         View::ListRow { title, detail, icon: i, trailing, action } => {
             let id = if action.is_some() { take_hit() } else { 0 };
@@ -458,7 +458,7 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
             let ink = if *enabled { f.theme.color.label } else { f.theme.color.quaternary };
             f.icon(control, icon(name), 16.0, ink);
             f.focus_ring(id, control, radius);
-            f.hit(id, control, mypaper_ui::Role::Button, label, *enabled, None);
+            f.hit(id, control, glaze_ui::Role::Button, label, *enabled, None);
         }
         View::Ring { fraction, label, color } => {
             let radius = rect.height().min(rect.width()) / 2.0 - f.px(3.0);
@@ -611,7 +611,7 @@ fn node(f: &mut Frame<'_>, rect: Rect, view: &View, next: &mut HitId) {
                 (None, Some(t)) => format!("{title}, {t}"),
                 (None, None) => title.clone(),
             };
-            f.hit(id, rect, mypaper_ui::Role::Button, &name, true, None);
+            f.hit(id, rect, glaze_ui::Role::Button, &name, true, None);
         }
         View::Scroll { id, child, on_reach_end } => scroll::draw(f, rect, id, child, on_reach_end.as_ref(), next),
         View::Spacer | View::Unknown => {}
@@ -641,7 +641,7 @@ fn compact_number(v: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mypaper_ui::{Interaction, Op, Scheme, Style, Theme, Ui};
+    use glaze_ui::{Interaction, Op, Scheme, Style, Theme, Ui};
 
     #[test]
     fn starting_faces_fit_short_tiles_without_an_empty_state_icon() {
@@ -714,7 +714,7 @@ mod tests {
         node(&mut f, rect, &field, &mut next);
         assert!(f.list.ops.iter().any(|op| matches!(op, Op::Fill { color, .. } if *color == theme.color.well)));
         assert!(f.list.ops.iter().any(|op| matches!(op, Op::Text { text, color, .. } if text.as_ref() == "What should we build?" && *color == theme.color.tertiary)));
-        assert_eq!(f.list.hits[0].role, mypaper_ui::Role::TextInput);
+        assert_eq!(f.list.hits[0].role, glaze_ui::Role::TextInput);
         assert_eq!(action_at(&field.face(), f.list.hits[0].id), Some(Hit::Field("send".into())));
     }
 
@@ -737,7 +737,7 @@ mod tests {
     /// forecast and denied network permissions, using an isolated runtime data directory.
     #[test]
     fn weather_plugin_faces_render_on_the_kit() {
-        use mypaper_ui::{DisplayList, TextStyle, golden, render};
+        use glaze_ui::{DisplayList, TextStyle, golden, render};
         use std::{path::PathBuf, sync::Arc};
         let faces: serde_json::Value = serde_json::from_str(include_str!("../../../../../plugins/weather/golden/faces.json")).unwrap();
         let mut ui = Ui::new().unwrap();
@@ -759,7 +759,7 @@ mod tests {
             sheet.ops.push(Op::Fill { rect, radius: 22.0, color: Rgba::rgb8([44, 52, 64], 1.0) });
             sheet.ops.push(Op::Image { rect, image: Arc::new(image), opacity: 1.0, source: None });
         }
-        let path = std::env::var_os("MYPAPER_WEATHER_SHEET").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins/weather/golden/sizes.png"));
+        let path = std::env::var_os("GLAZE_WEATHER_SHEET").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins/weather/golden/sizes.png"));
         golden::check(&render(&mut ui, &sheet, 1176, 400).unwrap(), &path).unwrap();
     }
 }

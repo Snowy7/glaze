@@ -1,9 +1,9 @@
 # Read-only full-pipe latency and active residency, against the deployed helper.
-param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\mypaper-index.exe', [switch]$Cold, [int]$Rounds = 100)
+param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\glaze-index.exe', [switch]$Cold, [int]$Rounds = 100)
 $ErrorActionPreference = 'Stop'
-$index = Get-Process mypaper-index -ErrorAction Stop | Where-Object Path -eq $Exe | Select-Object -First 1
+$index = Get-Process glaze-index -ErrorAction Stop | Where-Object Path -eq $Exe | Select-Object -First 1
 if (-not $index) { throw 'No deployed helper' }
-$outputPath = Join-Path $env:TEMP ('mypaper-index-query-' + [Guid]::NewGuid().ToString('N') + '.json')
+$outputPath = Join-Path $env:TEMP ('glaze-index-query-' + [Guid]::NewGuid().ToString('N') + '.json')
 $errorPath = $outputPath + '.err'
 $arguments = if ($Cold) { @('--bench-query','--cold') } else { @('--bench-query',"$Rounds") }
 $cpuBefore = $index.TotalProcessorTime.TotalMilliseconds

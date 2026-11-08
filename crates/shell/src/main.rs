@@ -1,16 +1,16 @@
-//! mypaper-shell: the native shell (docs/ui.md). One UI thread on `mypaper-ui`, whose loop sleeps
+//! glaze-shell: the native shell (docs/ui.md). One UI thread on `glaze-ui`, whose loop sleeps
 //! in `MsgWaitForMultipleObjectsEx` until a message, an input event or its supervisor's exit
 //! wakes it. It hosts the native top bar, dock and desktop right-click menu.
 //!
 //! Core starts it as a supervised child. It exits when core does (it waits on its parent
-//! process), and on `WM_CLOSE` to its inbox window (class `mypaper.shell.inbox`). A second
+//! process), and on `WM_CLOSE` to its inbox window (class `glaze.shell.inbox`). A second
 //! shell started while one runs exits at once.
 
 // No console window in release builds; logs go to a file (see init_logging).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 // The shell's modules are a library (`lib.rs`) so Studio can draw previews with them.
-use mypaper_shell::{bars, desktop_menu, flyouts, inbox, integrations, look, overlay_client, studio_pick, widgets, tiling};
+use glaze_shell::{bars, desktop_menu, flyouts, inbox, integrations, look, overlay_client, studio_pick, widgets, tiling};
 
 mod wakes;
 mod game;
@@ -19,11 +19,11 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
-use mypaper_config::Config;
-use mypaper_desktop::desktop_view::Com;
-use mypaper_desktop::{ConfigWatcher, WM_FACT, startup, watch_config};
-use mypaper_tweaks::palette::{self, PaletteWatcher};
-use mypaper_ui::{Ui, modules, next_event};
+use glaze_config::Config;
+use glaze_desktop::desktop_view::Com;
+use glaze_desktop::{ConfigWatcher, WM_FACT, startup, watch_config};
+use glaze_tweaks::palette::{self, PaletteWatcher};
+use glaze_ui::{Ui, modules, next_event};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_ABANDONED, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
@@ -44,14 +44,14 @@ use crate::inbox::{Inbox, Msg, WM_CONFIG, WM_PALETTE};
 use crate::wakes::{Cause, Wakes};
 
 fn main() -> ExitCode {
-    mypaper_desktop::init_logging();
-    mypaper_desktop::enable_dpi_awareness();
-    mypaper_desktop::quit_on_ctrl_c();
-    // mypaper's window names (Studio, Files and tools find these classes); the engine's glass
+    glaze_desktop::init_logging();
+    glaze_desktop::enable_dpi_awareness();
+    glaze_desktop::quit_on_ctrl_c();
+    // Glaze's window names (Studio, Files and tools find these classes); the engine's glass
     // windows share the desktop band with the widgets.
-    let _ = mypaper_ui::set_identity(mypaper_ui::Identity {
-        prefix: "mypaper.ui",
-        desktop_classes: &["mypaper.wallpaper.glass"],
+    let _ = glaze_ui::set_identity(glaze_ui::Identity {
+        prefix: "glaze.ui",
+        desktop_classes: &["glaze.wallpaper.glass"],
     });
     match run() {
         Ok(()) => ExitCode::SUCCESS,
@@ -65,7 +65,7 @@ fn main() -> ExitCode {
 fn run() -> Result<()> {
     startup::ready("shell", "main_ms");
     if !single_instance()? {
-        log::info!("another mypaper-shell is running; leaving it be");
+        log::info!("another glaze-shell is running; leaving it be");
         return Ok(());
     }
     let parent = parent_process();
@@ -76,7 +76,7 @@ fn run() -> Result<()> {
     let mut ui = Ui::new()?;
     // Window events arrive on a thread of their own; a batch that changed something posts
     // WM_NULL here (a posted message, so it runs the loop's work at once).
-    let mut win_events = Some(mypaper_desktop::win_events::WinEvents::install());
+    let mut win_events = Some(glaze_desktop::win_events::WinEvents::install());
     startup::ready("shell", "factories_ms");
     overlay_client::install();
     let bars = bars::Bars::new(&mut ui, bars_start)?;
@@ -114,7 +114,7 @@ fn run() -> Result<()> {
         game.set_enabled(shell.game_enabled);
         game.refresh();
         if !game.active && win_events.is_none() {
-            win_events = Some(mypaper_desktop::win_events::WinEvents::install());
+            win_events = Some(glaze_desktop::win_events::WinEvents::install());
         }
         shell.set_game_activity(&mut ui, game.active);
         if game.active {
@@ -234,7 +234,7 @@ fn run() -> Result<()> {
                 "bars.tick ms/Mcycles: {}; bar stats (samples, changes, sample_us, all bar repaints) since start: {:?}; WinEvents (hooks, callbacks, subscribers): {:?}; widgets since start: {:?}",
                 bars.join(", "),
                 shell.bars.stats_counts(),
-                win_events.as_ref().map(mypaper_desktop::win_events::WinEvents::counts),
+                win_events.as_ref().map(glaze_desktop::win_events::WinEvents::counts),
                 shell.widgets.as_ref().map(widgets::Widgets::costs)
             )
         }) {
@@ -312,7 +312,7 @@ fn run() -> Result<()> {
 
 /// How long the loop's work may wait after a wake that only ran sent messages (other processes'
 /// messages to the shell's windows). Window events no longer arrive here (see
-/// `mypaper_desktop::win_events`). Posted messages (input), handles and deadlines still run the
+/// `glaze_desktop::win_events`). Posted messages (input), handles and deadlines still run the
 /// work at once.
 const COALESCE: std::time::Duration = std::time::Duration::from_millis(25);
 
@@ -414,8 +414,8 @@ impl Shell {
             } else if let Some((id, event)) = next_event() {
                 if self.studio.active() {
                     let point = match event {
-                        mypaper_ui::Event::Move(p) | mypaper_ui::Event::Press(p, _) => {
-                            Some(mypaper_ui::Point::new(p.screen.0 as f32, p.screen.1 as f32))
+                        glaze_ui::Event::Move(p) | glaze_ui::Event::Press(p, _) => {
+                            Some(glaze_ui::Point::new(p.screen.0 as f32, p.screen.1 as f32))
                         }
                         _ => None,
                     };
@@ -423,7 +423,7 @@ impl Shell {
                         .and_then(|w| w.studio_targets().into_iter().find(|t| t.surface == id))
                         .or_else(|| point.and_then(|p| self.bars.studio_hit(id, p)));
                     let move_surface = match &event {
-                        mypaper_ui::Event::Press(p, mypaper_ui::Button::Left) => self.widgets.as_ref()
+                        glaze_ui::Event::Press(p, glaze_ui::Button::Left) => self.widgets.as_ref()
                             .and_then(|w| w.studio_move_surface(id, p.at)),
                         _ => None,
                     };
@@ -533,7 +533,7 @@ impl Shell {
 fn single_instance() -> Result<bool> {
     // SAFETY: a named mutex held (by never closing it) for the life of the process.
     unsafe {
-        let mutex = CreateMutexW(None, false, w!("Local\\mypaper-shell")).context("mutex")?;
+        let mutex = CreateMutexW(None, false, w!("Local\\glaze-shell")).context("mutex")?;
         let waited = WaitForSingleObject(mutex, 2000);
         Ok(waited == WAIT_OBJECT_0 || waited == WAIT_ABANDONED)
     }

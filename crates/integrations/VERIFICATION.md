@@ -43,18 +43,18 @@ owns a cancellable Rust lane in the host process.
 
 ## Checks and live observations
 
-- `cargo check -p mypaper-integrations` and `cargo check -p mypaper-shell`: passed.
-- `cargo test -p mypaper-integrations`: **10 passed**. Covers real loopback Effect RPC/OBS fixtures,
+- `cargo check -p glaze-integrations` and `cargo check -p glaze-shell`: passed.
+- `cargo test -p glaze-integrations`: **10 passed**. Covers real loopback Effect RPC/OBS fixtures,
   Windows named-pipe HTTP stream fixtures for Docker/Tailscale, reference-counted sharing,
   start/stop/explicit reconnect, cancellation, generation replacement, T3 sequencing/baselines/
   enrichment/attention/completion, Docker failure semantics, configuration bounds, and a separate
   Credential Manager test target which was removed afterwards, plus byte-bounded Unicode toast text.
-- `cargo test -p mypaper-shell`: **37 passed, 1 existing ignored**. The ignored test reads this user's
+- `cargo test -p glaze-shell`: **37 passed, 1 existing ignored**. The ignored test reads this user's
   actual widget layout; it is unrelated to these integration changes. The widget-only fixture also
   compiles with the new shared SMTC adapter.
-- `cargo test -p mypaper-bars config::tests`: **18 passed**, covering the existing module/config contract.
-- `cargo clippy -p mypaper-integrations --all-targets -- -D warnings`: passed.
-- `cargo clippy -p mypaper-shell -- -D warnings`: passed. Strict shell **all-targets** Clippy is
+- `cargo test -p glaze-bars config::tests`: **18 passed**, covering the existing module/config contract.
+- `cargo clippy -p glaze-integrations --all-targets -- -D warnings`: passed.
+- `cargo clippy -p glaze-shell -- -D warnings`: passed. Strict shell **all-targets** Clippy is
   blocked by the existing boolean-literal `assert_eq!` in `src/flyouts/tests.rs:498`; that other
   slice's assertion was not rewritten.
 - New UI: **16 golden PNGs**, including panel scales 1 and 1.5, bar modules, dock notification badge,
@@ -145,7 +145,7 @@ threads and 16 deduplicated run transitions. Notification history is bounded to 
 256-byte UTF-8 text elements each (display names are 128 bytes). Docker lists are bounded to 128 selected containers; event
 delivery invalidates the list instead of reconstructing counters. A reconnect always resnapshots.
 
-`credentials::{write, read, remove}` use `mypaper/integrations/t3`, `.../obs`, and
+`credentials::{write, read, remove}` use `glaze/integrations/t3`, `.../obs`, and
 `.../grok/<routine-id>`. `notifications::request_access()` returns the WinRT operation and must be
 called on the Studio UI thread after a consent click. `launcher::{recent, open, start_routine}` are
 on-demand worker operations. `flyouts::Kind::{Integration(Provider), AppActions, RoutineResult}`
@@ -167,7 +167,7 @@ disconnected, hidden and inactive clocks have no deadline.
 | Widget | Implemented state and controls | Live verification / remaining setup | Reviewed size sheet |
 |---|---|---|---|
 | Discord | Exact configured Windows AUMID filter, retained toast count/cards, Open Discord. Privacy setting still controls text retention. | Real notification snapshot and zero-count desktop state. Voice participants, speaking, self-mute/deafen and exact unread mentions are unavailable through the existing provider; approved Discord RPC access is required. | [Discord](../../docs/media/native/widget-discord.png) |
-| T3 Code | Active thread/provider status, approvals/questions, recent finished threads; copied configured thread links open on click. Native masked Connect prompt exchanges a one-time pairing code for `orchestration:read`. | Real port 3773 is listening; mypaper credential is absent. Pairing, summaries and narrowing pass loopback fixtures. User must pair and supply copied HTTPS entries in `t3.threadLinks`; absent links leave rows disabled. Live subscription remains gated by `liveVerified`. | [T3 Code](../../docs/media/native/widget-t3.png) |
+| T3 Code | Active thread/provider status, approvals/questions, recent finished threads; copied configured thread links open on click. Native masked Connect prompt exchanges a one-time pairing code for `orchestration:read`. | Real port 3773 is listening; Glaze credential is absent. Pairing, summaries and narrowing pass loopback fixtures. User must pair and supply copied HTTPS entries in `t3.threadLinks`; absent links leave rows disabled. Live subscription remains gated by `liveVerified`. | [T3 Code](../../docs/media/native/widget-t3.png) |
 | OBS | Recording/streaming state and clocks, scene switcher, first microphone mute, recording/streaming start/stop. Streaming-only medium layout uses the stream clock. | OBS was not running and port 4455 was not listening. Real obs-websocket fixtures verify initial scenes/mic mute, explicit scene/mute request payloads, sharing, cancellation and no idle requests. User must run OBS with WebSocket enabled and store its password. | [OBS](../../docs/media/native/widget-obs.png) |
 | Docker | Container lifecycle/failure state, start/stop, CPU/memory samples on explicit Refresh. Unknown CPU stays unknown. | Docker Desktop service was stopped; no vendor app or WSL was started. Named-pipe fixtures verify lifecycle/control and one-shot stats requests. User must select the existing local engine pipe. | [Docker](../../docs/media/native/widget-docker.png) |
 | Tailscale | Connection, local address, exit node, bounded online/offline peer snapshot and connect/disconnect. | Real protected local pipe read; connected state and peer names inspected on the desktop. Snapshot mode retained because the earlier IPN idle qualification failed. Peer state updates on explicit refresh; VPN controls were tested only in fixtures. | [Tailscale](../../docs/media/native/widget-tailscale.png) |
@@ -193,13 +193,13 @@ user-session sample, so that sample is not evidence of unchanged-state idle beha
   populated, setup, stale and empty states and were opened and visually reviewed.
 - Strict shell Clippy encountered three `unnecessary_cast` warnings outside this slice, in
   `flyouts/quick.rs` and `widgets/views/toggles.rs`; those paths were left to their owners.
-- `CARGO_TARGET_DIR=C:\mypaper-targets\main cargo build --release --workspace` passed. Deployed
+- `CARGO_TARGET_DIR=C:\glaze-targets\main cargo build --release --workspace` passed. Deployed
   with `scripts/deploy-local.ps1`, which owns the desktop lock. The final desktop check temporarily
   placed all six widgets in free portions of DISPLAY2: **6/6 visible**, inspected over the live
   glass wallpaper. Layout and integration settings were restored in `finally`; no verification
   instances remain. No input was sent to Discord, T3, OBS, Docker, Grok or Tailscale.
-- Local live captures are `%TEMP%\mypaper-integration-widgets-live.png` and
-  `%TEMP%\mypaper-widget-deployment.png`. They include real desktop/network context and are not
+- Local live captures are `%TEMP%\glaze-integration-widgets-live.png` and
+  `%TEMP%\glaze-widget-deployment.png`. They include real desktop/network context and are not
   committed. Committed size sheets use synthetic metadata.
 
 These fresh adapter samples are **one 10-second observation each**, after a one-second disabled
@@ -230,10 +230,10 @@ completion events remain unmeasured/unavailable; the table does not claim those 
   widget submissions. `RoutineState` is `Sending | Accepted | Failed`; completion is not inferred.
 - `t3_auth::ensure()` gets T3 access in the background: when `server-runtime.json` names a live
   port, T3's own CLI (`t3 auth session issue --scope orchestration:read --scope
-  orchestration:operate --scope diagnostics:read --label mypaper --ttl 30d --json`, hidden, 20 s
+  orchestration:operate --scope diagnostics:read --label Glaze --ttl 30d --json`, hidden, 20 s
   timeout) issues a bearer as the same Windows user. Only Credential Manager holds it (`t3`); its
   session id and expiry sit in `t3-session`. It renews 3 days before expiry, re-issues once on a
-  401/403, and revokes the session it replaces plus any other `mypaper`-labelled session. There is
+  401/403, and revokes the session it replaces plus any other `Glaze`-labelled session. There is
   no Windows credential prompt. Fallback, only when the CLI cannot run: the tile shows one
   "Paste pairing code" field and `pairing::t3_blocking(endpoint, code)` makes one bounded loopback
   `/oauth/token` exchange for the same three scopes.
@@ -276,8 +276,8 @@ for diagnosis and become a clean disconnected state with an explicit Retry in wi
 ### Setup, step by step
 
 1. **T3 connects itself.** A T3 widget with T3 Code running needs no setup: the provider issues
-   mypaper's own session through T3's CLI (see `t3_auth`) and switches the integration on.
-   T3 Settings > Connections lists it as `mypaper` with exactly `orchestration:read
+   Glaze's own session through T3's CLI (see `t3_auth`) and switches the integration on.
+   T3 Settings > Connections lists it as `Glaze` with exactly `orchestration:read
    orchestration:operate diagnostics:read`.
 2. Only if T3 Code is closed or its CLI is missing does the tile offer a "Paste pairing code"
    field; the code is exchanged once for the same scopes and never stored.
@@ -324,10 +324,10 @@ one number, state or action; they do not squeeze in a truncated list.
 - Inspected four actual live glass widgets after deployment: Running now, Needs you, Usage's
   permission state, and Grok Prompt. All **4/4** were exposed by WindowFromPoint at their centers.
   Read-only T3 updates and Grok's signed-in marker were present.
-- Local captures: `%TEMP%\mypaper-widget-t3-live-running.png`,
-  `%TEMP%\mypaper-widget-t3-live-attention.png`, `%TEMP%\mypaper-widget-t3-live-usage.png`, and
-  `%TEMP%\mypaper-widget-grok-live-prompt.png`. They contain personal metadata and are not committed.
-  The full local capture is `%TEMP%\mypaper-t3-grok-live.png`.
+- Local captures: `%TEMP%\glaze-widget-t3-live-running.png`,
+  `%TEMP%\glaze-widget-t3-live-attention.png`, `%TEMP%\glaze-widget-t3-live-usage.png`, and
+  `%TEMP%\glaze-widget-grok-live-prompt.png`. They contain personal metadata and are not committed.
+  The full local capture is `%TEMP%\glaze-t3-grok-live.png`.
 - Temporary verification instances were removed in `finally`, retaining any concurrent layout
   edits. No user window was minimized, moved, typed into or closed.
 

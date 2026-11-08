@@ -1,5 +1,5 @@
 // Vendored from liquid-rust (https://github.com/al1h3n/liquid-rust, commit 2073cd9) by al1h3n,
-// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "mypaper:".
+// MIT OR Apache-2.0 (see LICENSE-MIT, LICENSE-APACHE). Local changes are marked "Glaze:".
 //! Scene graph of glass elements: geometry, containers, interaction and animation.
 //!
 //! Units are points; the renderer multiplies by the frame's scale factor.
@@ -124,7 +124,7 @@ pub struct Glass {
     pub container: Option<ContainerId>,
     /// Stacking order when not in a container.
     pub z: i32,
-    /// mypaper: this glass's own colour scheme and transparency slider instead of
+    /// Glaze: this glass's own colour scheme and transparency slider instead of
     /// [`Scene::appearance`], because one engine scene holds glass from several styles.
     pub appearance: Option<crate::Appearance>,
 }
@@ -180,7 +180,7 @@ impl Glass {
         self
     }
 
-    /// mypaper: gives this glass its own appearance (see [`Glass::appearance`]).
+    /// Glaze: gives this glass its own appearance (see [`Glass::appearance`]).
     pub fn appearance(mut self, appearance: crate::Appearance) -> Self {
         self.appearance = Some(appearance);
         self
@@ -539,7 +539,7 @@ impl Scene {
         }
     }
 
-    /// mypaper: replaces one glass's own appearance (instantly); see [`Glass::appearance`].
+    /// Glaze: replaces one glass's own appearance (instantly); see [`Glass::appearance`].
     pub fn set_appearance(&mut self, id: GlassId, appearance: Option<crate::Appearance>) {
         if let Some(node) = self.nodes.get_mut(id) {
             node.glass.appearance = appearance;

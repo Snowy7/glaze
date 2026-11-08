@@ -7,7 +7,7 @@
     "cpu_core_pct": 4.448435259369985,
     "cpu_machine_pct": 0.27802720371062406,
     "visible_screens": 2,
-    "timing_file": "C:\\mypaper-targets\\hillclimb\\results\\final-rain-gpu.run0.jsonl",
+    "timing_file": "C:\\glaze-targets\\hillclimb\\results\\final-rain-gpu.run0.jsonl",
     "sample_started_qpc": 3678643464452,
     "sample_ended_qpc": 3678843675305
   }

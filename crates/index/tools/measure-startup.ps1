@@ -1,10 +1,10 @@
 # Headless, read-only sampling after a restart; -Restart uses core's normal index flag.
 param([switch]$Restart, [int]$Seconds = 180, [string]$Output = 'startup.json')
 $ErrorActionPreference = 'Stop'
-$exe = Join-Path (Resolve-Path "$PSScriptRoot/../../..").Path 'target/release/mypaper-index.exe'
-$configPath = Join-Path $env:APPDATA 'mypaper/config.json'
-$lockPath = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
-$old = Get-Process mypaper-index -ErrorAction SilentlyContinue | Where-Object Path -eq $exe | Select-Object -First 1
+$exe = Join-Path (Resolve-Path "$PSScriptRoot/../../..").Path 'target/release/glaze-index.exe'
+$configPath = Join-Path $env:APPDATA 'glaze/config.json'
+$lockPath = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$old = Get-Process glaze-index -ErrorAction SilentlyContinue | Where-Object Path -eq $exe | Select-Object -First 1
 $oldId = if ($old) { $old.Id } else { 0 }
 $original = [bool](Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json).experimental.file_index
 Add-Type @'
@@ -12,7 +12,7 @@ using System; using System.IO; using System.IO.Pipes; using System.Text;
 public static class IndexStartupProbe {
   public static void Replace(string source, string destination) { File.Replace(source, destination, null); }
   public static string Query() {
-    using (var pipe = new NamedPipeClientStream(".", "mypaper-index", PipeDirection.InOut)) {
+    using (var pipe = new NamedPipeClientStream(".", "glaze-index", PipeDirection.InOut)) {
       pipe.Connect(100); pipe.ReadMode = PipeTransmissionMode.Message;
       byte[] input = Encoding.UTF8.GetBytes("{\"method\":\"search\",\"query\":\"cargo\",\"limit\":1}");
       pipe.Write(input, 0, input.Length);
@@ -35,7 +35,7 @@ try {
     try {
       Set-IndexFlag $false
       $until = [DateTime]::UtcNow.AddSeconds(20)
-      while (Get-Process mypaper-index -ErrorAction SilentlyContinue | Where-Object Path -eq $exe) {
+      while (Get-Process glaze-index -ErrorAction SilentlyContinue | Where-Object Path -eq $exe) {
         if ([DateTime]::UtcNow -ge $until) { throw 'Core did not stop its index' }
         Start-Sleep -Milliseconds 50
       }
@@ -44,7 +44,7 @@ try {
   }
   $until = [DateTime]::UtcNow.AddMinutes(15)
   do {
-    $index = Get-Process mypaper-index -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe -and $_.Id -ne $oldId } | Select-Object -First 1
+    $index = Get-Process glaze-index -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe -and $_.Id -ne $oldId } | Select-Object -First 1
     if ([DateTime]::UtcNow -ge $until) { throw 'No restarted index observed' }
     if (-not $index) { Start-Sleep -Milliseconds 25 }
   } while (-not $index)

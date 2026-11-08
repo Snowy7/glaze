@@ -8,14 +8,14 @@
 
 use std::time::Instant;
 
-use mypaper_bars::audio::Volume;
-use mypaper_bars::flyouts::mixer::{MixerState, Session};
-use mypaper_bars::flyouts::{Done, Watched};
-use mypaper_bars::system;
-use mypaper_bars::wake::Msg;
-use mypaper_ui::icons::Icon;
-use mypaper_ui::layout::{Align, Stack};
-use mypaper_ui::{Accessory, Frame, HitId, Lead, ListRow, Op, Rect, Scroll, TextRole};
+use glaze_bars::audio::Volume;
+use glaze_bars::flyouts::mixer::{MixerState, Session};
+use glaze_bars::flyouts::{Done, Watched};
+use glaze_bars::system;
+use glaze_bars::wake::Msg;
+use glaze_ui::icons::Icon;
+use glaze_ui::layout::{Align, Stack};
+use glaze_ui::{Accessory, Frame, HitId, Lead, ListRow, Op, Rect, Scroll, TextRole};
 
 use super::kit::{Kit, footer, slider_card, slider_card_height, volume_icon};
 use super::{Cx, Effect, LIST, Panel, Reply};
@@ -46,7 +46,7 @@ pub struct Mixer {
     volume: Option<Volume>,
     switchable: bool,
     /// Session icons, decoded.
-    icons: Vec<Option<std::sync::Arc<mypaper_ui::Image>>>,
+    icons: Vec<Option<std::sync::Arc<glaze_ui::Image>>>,
     error: Option<String>,
     dragging: bool,
     pending: Option<MixerState>,

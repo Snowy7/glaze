@@ -1,9 +1,9 @@
 //! Windows' own desktop wallpaper, per monitor (`IDesktopWallpaper`), with an undo journal.
 //!
 //! The static snapshot sets a still of the theme as the Windows wallpaper, so Windows shows the
-//! theme's look before mypaper starts. That replaces whatever the user had, so it is reversible:
+//! theme's look before Glaze starts. That replaces whatever the user had, so it is reversible:
 //! before the first change of a monitor, its original path is written to
-//! `%LOCALAPPDATA%\mypaper\wallpaper.json`, and [`restore`] (feature turned off, mypaper disabled
+//! `%LOCALAPPDATA%\glaze\wallpaper.json`, and [`restore`] (feature turned off, Glaze disabled
 //! or uninstalled, the panic hotkey, a crashed run replayed by core) puts every original back,
 //! deletes the journal and our snapshot files. The logic runs against the [`Backend`] trait, so
 //! it is tested without touching the real wallpaper, like `taskbar.rs` in the bars crate.
@@ -35,7 +35,7 @@ use windows::core::{HSTRING, PCWSTR, PWSTR, w};
 use crate::Rect;
 
 pub const JOURNAL: &str = "wallpaper.json";
-/// Where our stills live, under `%LOCALAPPDATA%\mypaper`.
+/// Where our stills live, under `%LOCALAPPDATA%\glaze`.
 pub const SNAPSHOT_DIR: &str = "snapshot";
 
 /// `DESKTOP_WALLPAPER_POSITION` values we deal with.
@@ -96,7 +96,7 @@ pub struct Wallpapers<B> {
 }
 
 impl Wallpapers<Native> {
-    /// The real wallpaper, journaled under `%LOCALAPPDATA%\mypaper`.
+    /// The real wallpaper, journaled under `%LOCALAPPDATA%\glaze`.
     pub fn native() -> Result<Self> {
         Self::native_in(&local_dir()?)
     }
@@ -276,7 +276,7 @@ pub fn pending() -> bool {
     local_dir().is_ok_and(|base| pending_in(&base))
 }
 
-/// [`pending`] for a journal under `base` instead of `%LOCALAPPDATA%\mypaper`.
+/// [`pending`] for a journal under `base` instead of `%LOCALAPPDATA%\glaze`.
 pub fn pending_in(base: &Path) -> bool {
     base.join(JOURNAL).exists()
 }
@@ -288,7 +288,7 @@ pub fn restore() -> Result<bool> {
     restore_in(&local_dir()?)
 }
 
-/// [`restore`] for a journal under `base` instead of `%LOCALAPPDATA%\mypaper`.
+/// [`restore`] for a journal under `base` instead of `%LOCALAPPDATA%\glaze`.
 pub fn restore_in(base: &Path) -> Result<bool> {
     if !pending_in(base) {
         return Ok(false);
@@ -296,10 +296,10 @@ pub fn restore_in(base: &Path) -> Result<bool> {
     Wallpapers::native_in(base)?.restore()
 }
 
-/// `%LOCALAPPDATA%\mypaper`.
+/// `%LOCALAPPDATA%\glaze`.
 pub fn local_dir() -> Result<PathBuf> {
     let local = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?;
-    Ok(PathBuf::from(local).join("mypaper"))
+    Ok(PathBuf::from(local).join("glaze"))
 }
 
 /// Writes a file atomically (temp file plus rename).
@@ -526,7 +526,7 @@ mod tests {
     /// Two monitors showing the user's own pictures, and a journal location in a fresh folder.
     fn wallpapers(name: &str) -> Wallpapers<Fake> {
         let base =
-            std::env::temp_dir().join(format!("mypaper-wallpaper-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-wallpaper-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(base.join(SNAPSHOT_DIR)).unwrap();
         let fake = Fake {

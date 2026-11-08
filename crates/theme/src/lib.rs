@@ -32,12 +32,12 @@ pub const EXAMPLES_DIR: &str = "examples";
 
 /// Finds a theme folder and returns its absolute path. `name` is a path
 /// (absolute or relative to the current directory) or a bare theme name,
-/// looked up in the user themes folder (`%APPDATA%\mypaper\themes`) and
+/// looked up in the user themes folder (`%APPDATA%\glaze\themes`) and
 /// then in a `themes/` folder beside the executable or any parent, so a
 /// double-clicked `target/debug/*.exe` finds the repo themes just like an
 /// installed copy finds its own.
 pub fn locate(name: Option<&str>) -> Result<PathBuf> {
-    let user = mypaper_config::user_themes_dir().ok();
+    let user = glaze_config::user_themes_dir().ok();
     locate_from(
         name.unwrap_or(DEFAULT_THEME),
         user.as_deref(),
@@ -48,7 +48,7 @@ pub fn locate(name: Option<&str>) -> Result<PathBuf> {
 /// Every folder that holds themes: the user folder (if it exists), then
 /// the bundled `themes/` folder beside the executable or a parent.
 pub fn theme_roots() -> Vec<PathBuf> {
-    let user = mypaper_config::user_themes_dir()
+    let user = glaze_config::user_themes_dir()
         .ok()
         .filter(|dir| dir.is_dir());
     let bundled = std::env::current_exe().ok().and_then(|exe| {
@@ -100,7 +100,7 @@ pub struct Theme {
     pub name: String,
     /// Per-wallpaper renderer preferences; user config overrides this layer.
     #[serde(default)]
-    pub engine: mypaper_config::RenderOptions,
+    pub engine: glaze_config::RenderOptions,
     /// Exclude from discovery while still allowing an existing selection to resolve.
     #[serde(default)]
     pub hidden: bool,
@@ -118,10 +118,10 @@ pub struct Theme {
     /// How the app styler restyles the XAML inside File Explorer and Settings while this theme
     /// is active (experimental; docs/windows-styling.md, "App styler"). `look.apps` layers over it.
     #[serde(default)]
-    pub apps: Option<mypaper_config::AppsStyle>,
+    pub apps: Option<glaze_config::AppsStyle>,
 }
 
-/// A theme's look for a family of mypaper UI (widgets, bars): appearance
+/// A theme's look for a family of Glaze UI (widgets, bars): appearance
 /// values plus an optional style sheet loaded after the built-in styles.
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -285,9 +285,9 @@ impl Appearance {
     }
 }
 
-// Colours and Windows styling live in `mypaper_config` (the user's look layers over a
+// Colours and Windows styling live in `glaze_config` (the user's look layers over a
 // theme's `windows` section, D2); re-exported so themes keep their names.
-pub use mypaper_config::{Backdrop, Color, Corners, Paint, WindowsStyle};
+pub use glaze_config::{Backdrop, Color, Corners, Paint, WindowsStyle};
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
@@ -628,15 +628,15 @@ pub(crate) fn check_scale(scale: f32) -> Result<()> {
 /// yet and the active theme is one of their own with a `windows` section, that section becomes
 /// their layer (`look.windows`). Nothing on screen changes; the theme file is left as it is
 /// (now the layer below). Returns whether `config` changed.
-pub fn migrate_windows(config: &mut mypaper_config::Config) -> bool {
-    match mypaper_config::user_themes_dir() {
+pub fn migrate_windows(config: &mut glaze_config::Config) -> bool {
+    match glaze_config::user_themes_dir() {
         Ok(root) => migrate_windows_in(config, &root),
         Err(_) => false,
     }
 }
 
 /// [`migrate_windows`] with the user themes folder given.
-fn migrate_windows_in(config: &mut mypaper_config::Config, user_root: &Path) -> bool {
+fn migrate_windows_in(config: &mut glaze_config::Config, user_root: &Path) -> bool {
     if !config.look.windows.is_empty() {
         return false;
     }
@@ -650,7 +650,7 @@ fn migrate_windows_in(config: &mut mypaper_config::Config, user_root: &Path) -> 
     }
     match LoadedTheme::load(&dir).map(|t| t.theme.windows) {
         Ok(Some(style)) if style != WindowsStyle::default() => {
-            config.look.windows = mypaper_config::look::WindowsLayer::adopt(&style);
+            config.look.windows = glaze_config::look::WindowsLayer::adopt(&style);
             true
         }
         _ => false,
@@ -942,8 +942,8 @@ mod tests {
             parse(&json).map(|t| t.theme.windows.unwrap().cursors)
         };
         assert_eq!(
-            cursors(r#""mypaper-dark""#).unwrap().as_deref(),
-            Some("mypaper-dark")
+            cursors(r#""glaze-dark""#).unwrap().as_deref(),
+            Some("glaze-dark")
         );
         assert_eq!(
             cursors(r#""cursors\\mine""#).unwrap().as_deref(),
@@ -957,11 +957,11 @@ mod tests {
 
     #[test]
     fn locates_themes_from_a_nested_exe() {
-        let root = std::env::temp_dir().join(format!("mypaper-locate-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("glaze-locate-{}", std::process::id()));
         let theme = root.join("themes").join("aurora");
         std::fs::create_dir_all(&theme).unwrap();
         std::fs::write(theme.join(MANIFEST), "{}").unwrap();
-        let exe = root.join("target").join("debug").join("mypaper-core.exe");
+        let exe = root.join("target").join("debug").join("glaze-core.exe");
 
         let found = locate_from("aurora", None, &exe).unwrap();
         assert_eq!(found, theme);
@@ -1136,7 +1136,7 @@ mod tests {
 
     #[test]
     fn a_user_themes_windows_styling_becomes_the_users_once() {
-        let root = std::env::temp_dir().join(format!("mypaper-theme-d2-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("glaze-theme-d2-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let mine = root.join("mine");
         std::fs::create_dir_all(&mine).unwrap();
@@ -1146,7 +1146,7 @@ mod tests {
                  "windows": { "corners": "square", "dark_mode": true } }"##,
         )
         .unwrap();
-        let mut config = mypaper_config::Config {
+        let mut config = glaze_config::Config {
             theme: mine.display().to_string(),
             ..Default::default()
         };
@@ -1156,7 +1156,7 @@ mod tests {
         assert_eq!(style.dark_mode, Some(true));
         assert!(!migrate_windows_in(&mut config, &root), "only once");
         // A theme outside the user's folder (a built-in) is never adopted.
-        let mut builtin = mypaper_config::Config {
+        let mut builtin = glaze_config::Config {
             theme: mine.display().to_string(),
             ..Default::default()
         };

@@ -75,18 +75,18 @@ impl Drop for Editor {
 /// A resolved package; schema and validation belong to the engine's shared theme crate.
 #[derive(Debug, Clone)]
 pub struct Effect {
-    pub manifest: mypaper_theme::EffectManifest,
+    pub manifest: glaze_theme::EffectManifest,
     pub dir: PathBuf,
 }
 impl std::ops::Deref for Effect {
-    type Target = mypaper_theme::EffectManifest;
+    type Target = glaze_theme::EffectManifest;
     fn deref(&self) -> &Self::Target {
         &self.manifest
     }
 }
 impl Effect {
     pub fn category(&self) -> &str {
-        use mypaper_theme::stack::Category;
+        use glaze_theme::stack::Category;
         match self.manifest.category {
             Category::Weather => "weather",
             Category::Camera => "camera",
@@ -173,7 +173,7 @@ pub fn is_page(page: Page) -> bool {
 
 /// Use the engine's parser before a theme enters document history or Save.
 pub fn validate_theme(text: &str) -> Result<()> {
-    mypaper_theme::LoadedTheme::parse(PathBuf::new(), text)?;
+    glaze_theme::LoadedTheme::parse(PathBuf::new(), text)?;
     Ok(())
 }
 
@@ -190,14 +190,14 @@ fn effects(dir: &Path) -> Vec<Effect> {
         roots.push(parent.join("effects"));
     }
     if let Ok(data) = std::env::var("APPDATA") {
-        roots.push(PathBuf::from(data).join("mypaper/effects"));
+        roots.push(PathBuf::from(data).join("glaze/effects"));
     }
     let mut found = std::collections::BTreeMap::new();
     for root in roots {
         for entry in std::fs::read_dir(root).into_iter().flatten().flatten() {
             let folder = entry.path();
             if let Ok(text) = std::fs::read_to_string(folder.join("effect.json"))
-                && let Ok(manifest) = mypaper_theme::stack::parse_effect(&text)
+                && let Ok(manifest) = glaze_theme::stack::parse_effect(&text)
             {
                 found.insert(
                     manifest.id.clone(),
@@ -231,7 +231,7 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
 }
 
 fn begin(app: &mut App, from: Option<usize>) -> Result<()> {
-    let root = mypaper_config::user_themes_dir()?;
+    let root = glaze_config::user_themes_dir()?;
     std::fs::create_dir_all(&root)?;
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
@@ -271,7 +271,7 @@ fn begin(app: &mut App, from: Option<usize>) -> Result<()> {
             value["hidden"] = json!(true);
         }
         std::fs::create_dir_all(dir.join("media"))?;
-        let stack: mypaper_theme::StackWallpaper =
+        let stack: glaze_theme::StackWallpaper =
             serde_json::from_value(value["wallpaper"].clone())?;
         fill_defaults(&mut value["wallpaper"], &serde_json::to_value(stack)?);
         if !dir.join("credits.json").exists() {
@@ -710,7 +710,7 @@ pub fn set_layers(app: &mut App, layers: Vec<Value>, label: &str) {
 }
 pub fn reorder(app: &mut App, from: usize, to: usize) {
     let mut layers = layers(app);
-    if mypaper_ui::sortable::reorder(&mut layers, from, to) {
+    if glaze_ui::sortable::reorder(&mut layers, from, to) {
         set_layers(app, layers, "Reorder layers");
         state(app).selected = Some(to);
     }
@@ -862,7 +862,7 @@ fn flush_code(app: &mut App) -> Result<()> {
             std::fs::create_dir_all(to.parent().unwrap())?;
             std::fs::copy(effect.dir.join(&pass.source), to)?;
         }
-        let annotations = mypaper_theme::stack::shader_params(&source);
+        let annotations = glaze_theme::stack::shader_params(&source);
         if !annotations.is_empty() {
             manifest.params = annotations;
         }
@@ -1081,7 +1081,7 @@ fn save(app: &mut App, apply: bool) -> Result<()> {
     if active(app).unwrap().pending_code.is_some() {
         flush_code(app)?;
     }
-    let root = mypaper_config::user_themes_dir()?;
+    let root = glaze_config::user_themes_dir()?;
     let target = match active(app).unwrap().origin.clone() {
         Some(dir) => storage::save_in_place(app, &root, &dir)?,
         None => storage::publish(app, &root)?,
@@ -1110,7 +1110,7 @@ fn save(app: &mut App, apply: bool) -> Result<()> {
 pub use view::{page, stage};
 
 pub fn shader_params(source: &str) -> Vec<Value> {
-    mypaper_theme::stack::shader_params(source)
+    glaze_theme::stack::shader_params(source)
         .iter()
         .filter_map(|p| serde_json::to_value(p).ok())
         .collect()
@@ -1129,7 +1129,7 @@ fn same_param(a: &Value, b: &Value) -> bool {
 }
 
 fn validate_code(app: &mut App) {
-    use mypaper_theme::stack;
+    use glaze_theme::stack;
     use std::hash::{Hash, Hasher};
     let Some(editor) = active(app) else {
         return;
@@ -1139,7 +1139,7 @@ fn validate_code(app: &mut App) {
     };
     let errors_path = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
-        .map(|p| p.join("mypaper/stack-errors.json"));
+        .map(|p| p.join("glaze/stack-errors.json"));
     let error_stamp = errors_path
         .as_ref()
         .and_then(|p| std::fs::metadata(p).ok())
@@ -1178,7 +1178,7 @@ fn validate_code(app: &mut App) {
         })
         .collect();
     if let Ok(local) = std::env::var("LOCALAPPDATA")
-        && let Ok(bytes) = std::fs::read(PathBuf::from(local).join("mypaper/stack-errors.json"))
+        && let Ok(bytes) = std::fs::read(PathBuf::from(local).join("glaze/stack-errors.json"))
         && let Ok(value) = serde_json::from_slice::<Value>(&bytes)
     {
         let same_theme = value.get("dir").and_then(Value::as_str).map_or_else(
@@ -1239,7 +1239,7 @@ fn collect_engine_errors(value: &Value, errors: &mut Vec<Diagnostic>) {
 pub fn cost_line(app: &App) -> String {
     let value = raw(app);
     let Ok(stack) =
-        serde_json::from_value::<mypaper_theme::StackWallpaper>(value["wallpaper"].clone())
+        serde_json::from_value::<glaze_theme::StackWallpaper>(value["wallpaper"].clone())
     else {
         return "Cost unavailable".into();
     };
@@ -1255,8 +1255,8 @@ pub fn cost_line(app: &App) -> String {
 /// The cost line for `stack` on a screen of `pixels`: only what runs every frame counts,
 /// split exactly where the engine splits (`stack::per_frame_from`). Still layers before the
 /// first animated one bake once; each effect's `cost` is GPU ms at 1920x1080.
-fn estimate(stack: &mypaper_theme::StackWallpaper, effects: &[Effect], pixels: f64) -> String {
-    use mypaper_theme::Layer;
+fn estimate(stack: &glaze_theme::StackWallpaper, effects: &[Effect], pixels: f64) -> String {
+    use glaze_theme::Layer;
     let find = |id: &str| effects.iter().find(|e| e.id == id);
     let mut moves = Vec::with_capacity(stack.layers.len());
     for layer in &stack.layers {
@@ -1272,7 +1272,7 @@ fn estimate(stack: &mypaper_theme::StackWallpaper, effects: &[Effect], pixels: f
                 },
         );
     }
-    let Some(from) = mypaper_theme::stack::per_frame_from(stack.base.moves(), moves) else {
+    let Some(from) = glaze_theme::stack::per_frame_from(stack.base.moves(), moves) else {
         return "Still: no cost at rest".into();
     };
     let ms: f64 = stack.layers[from..]
@@ -1293,8 +1293,8 @@ fn estimate(stack: &mypaper_theme::StackWallpaper, effects: &[Effect], pixels: f
 }
 
 /// Reordering consumes only events addressed to our own layer handles.
-pub fn event(app: &mut App, event: &mypaper_ui::Event) -> bool {
-    use mypaper_ui::{Button, Event};
+pub fn event(app: &mut App, event: &glaze_ui::Event) -> bool {
+    use glaze_ui::{Button, Event};
     if active(app).is_none() {
         return false;
     }

@@ -38,7 +38,7 @@ and update this file in the same commit.
 - `enabled: false` keeps the layer in the file but skips it.
 - Bases and layers ignore fields they do not know, so a newer Studio can add one without
   breaking an older engine. Layer `id`, `enabled` (true) and `mix` (1) are optional.
-- Rust types: `mypaper_theme::stack` (`StackWallpaper`, `Base`, `Layer`, `EffectManifest`).
+- Rust types: `glaze_theme::stack` (`StackWallpaper`, `Base`, `Layer`, `EffectManifest`).
 - `params` lists only values that differ from the effect's defaults. Unknown params are ignored,
   so an effect can drop a param without breaking older themes.
 
@@ -70,7 +70,7 @@ use it. Any other base gives a flat depth of 1.0.
 
 An effect is a folder. The engine looks for it in three places, in this order:
 
-1. `%APPDATA%\mypaper\effects\<id>/` for user effects;
+1. `%APPDATA%\glaze\effects\<id>/` for user effects;
 2. the built-ins, in `effects/<id>/` next to the exe (the repo's `effects/` folder);
 3. the theme's own `effects/<id>/`.
 
@@ -87,7 +87,7 @@ theme's own custom effects (`custom-…`) are found in its folder.
   "name": "Rain on glass",
   "category": "weather",   // weather | camera | color | motion | stylize | light
   "description": "Drops and streaks running down a window.",
-  "author": "mypaper", "license": "MIT", "url": null,
+  "author": "Glaze", "license": "MIT", "url": null,
   "animated": true,        // false: the result can be baked into a still
   "cost": 1.2,             // measured GPU ms at 1920x1080 on the iGPU, at defaults
   "cost_estimated": false, // true when cost is an estimate rather than a GPU measurement
@@ -135,9 +135,9 @@ prepends `effects/prelude.wgsl`, which provides:
 
 Bindings, all in group 0: `src` 0, `src_sampler` 1, `original` 2, `depth` 3, `params` 4
 (uniform), `layer_input` 5; `paper` is immediate data. `paper.resolution` is the pass's own target size. The
-entry points `mypaper_vs` / `mypaper_fx` are the prelude's, so a pass must not define them.
+entry points `glaze_vs` / `glaze_fx` are the prelude's, so a pass must not define them.
 
-To validate exactly what the engine compiles, use `mypaper_theme::stack::pass_wgsl` (the
+To validate exactly what the engine compiles, use `glaze_theme::stack::pass_wgsl` (the
 prelude, then the generated `struct Params`, then the pass; `first_line` maps errors back to
 the pass file) or, with the crate's `check` feature, `stack::check::pass`, which runs naga and
 reports the pass file's line. `stack::check::glsl` does the same for a Shadertoy base.
@@ -172,7 +172,7 @@ Studio turns these comments in a shader base into sliders, the same way it does 
 // @param style enum drizzle|storm = drizzle "Style"
 ```
 
-`mypaper_theme::stack::shader_params` parses them. The engine appends the generated
+`glaze_theme::stack::shader_params` parses them. The engine appends the generated
 `struct Params` and a `const params = Params(...)` built from the base's `params` values, so the
 shader reads `params.amount` with no binding; a change recompiles the shader.
 
@@ -187,7 +187,7 @@ repeating linear sampler, like Shadertoy's noise inputs, so common imports work 
 ### Errors
 
 An effect that fails to load or compile is skipped and the rest of the stack keeps drawing. The
-engine writes `%LOCALAPPDATA%\mypaper\stack-errors.json` on every load of a stack:
+engine writes `%LOCALAPPDATA%\glaze\stack-errors.json` on every load of a stack:
 `{ "theme": "<folder name>", "errors": [{ "layer": "rain-1", "effect": "rain", "line": 12,
 "message": "..." }] }` (`line` is in the pass file, or `null`; `layer` is `"base"` for the base).
 
@@ -203,7 +203,7 @@ engine writes `%LOCALAPPDATA%\mypaper\stack-errors.json` on every load of a stac
   animated layer) is baked once. Only the rest runs at `fps`, at `scale`.
 - Studio shows the sum of the `cost` of the active layers that run every frame, scaled by
   resolution, fps and scale, as an estimate such as "about 2% GPU at 30 fps". Studio and the
-  engine split at the same layer (`mypaper_theme::stack::per_frame_from`). A layer is active when
+  engine split at the same layer (`glaze_theme::stack::per_frame_from`). A layer is active when
   it is enabled and its `mix` is above 0; the engine skips the others.
 - The engine's resting rules (pause while covered, refresh once when changed) apply unchanged.
 
@@ -224,7 +224,7 @@ wallpapers show Edit disabled, because they draw in child windows.
   - the selected layer's params, generated from its schema.
 - **Shader editor:** WGSL or GLSL text with live reload. Errors from naga are shown on their
   lines, and `@param` comments become sliders.
-- **Saving** writes a theme folder under `%APPDATA%\mypaper\themes\<slug>/`, copying in the
+- **Saving** writes a theme folder under `%APPDATA%\glaze\themes\<slug>/`, copying in the
   media, any custom effects, a `preview.jpg` and a credits entry for imported shaders.
 
 ### Draft preview
@@ -232,7 +232,7 @@ wallpapers show Edit disabled, because they draw in child windows.
 Studio previews a draft without touching the desktop by running a headless child:
 
 ```text
-mypaper-wallpaper --preview <draft dir> --out <file.jpg> [--size 1280x720] [--fps 10]
+glaze-wallpaper --preview <draft dir> --out <file.jpg> [--size 1280x720] [--fps 10]
 ```
 
 It renders the draft offscreen and rewrites `<file.jpg>` atomically (`.tmp`, then rename) at start,

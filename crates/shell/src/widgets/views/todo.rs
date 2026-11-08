@@ -1,8 +1,8 @@
 //! To do: the title and what is left, a track of what is done, the tasks (a round check, the
 //! text, a delete button on hover) and the add field. Short widgets keep only the open tasks.
 use super::{Ctx, DELETE_TASK, EDIT_TASK, ITEM, field};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Align, Op, Rect, Rgba, Role, TextRole};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Align, Op, Rect, Rgba, Role, TextRole};
 
 pub fn draw(c: &mut Ctx, r: Rect) {
     let color = c.color();

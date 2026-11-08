@@ -1,6 +1,6 @@
 //! Temporary panel avoidance. The home comes from Studio; no placement is persisted here.
-use mypaper_desktop::Monitor;
-use mypaper_ui::{Point, Rect};
+use glaze_desktop::Monitor;
+use glaze_ui::{Point, Rect};
 use std::time::{Duration, Instant};
 use windows::Win32::{
     Foundation::{HWND, POINT, RECT},

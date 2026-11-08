@@ -2,8 +2,8 @@
 //! supply the active wallpaper palette and Windows' unmanaged light/dark preference, then
 //! apply the result through the normal DWM/registry undo machinery when an input changes.
 
-use mypaper_config::look::{Apps, Scheme, Style};
-use mypaper_config::{Backdrop, Color, Corners, Look, Paint, WindowsStyle};
+use glaze_config::look::{Apps, Scheme, Style};
+use glaze_config::{Backdrop, Color, Corners, Look, Paint, WindowsStyle};
 
 use crate::{TextTone, Theme};
 

@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("shots", nargs="?", type=Path, default=Path(r"C:\mypaper-targets\studio-window\shots"))
+    parser.add_argument("shots", nargs="?", type=Path, default=Path(r"C:\glaze-targets\studio-window\shots"))
     args = parser.parse_args()
     baseline = Path(__file__).resolve().parents[1] / "crates/studio/tests/golden/window"
     files = [args.shots / path.name for path in sorted(baseline.glob("*.png"))]

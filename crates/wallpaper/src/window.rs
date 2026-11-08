@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use anyhow::{Context, Result};
-use mypaper_desktop::{DesktopHost, EXIT_RESTART, Rect};
+use glaze_desktop::{DesktopHost, EXIT_RESTART, Rect};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -23,15 +23,15 @@ use windows::core::{HSTRING, PCWSTR, w};
 
 /// Posted to the main thread when theme files change.
 pub const WM_RELOAD: u32 = WM_APP + 1;
-/// Posted to the main thread by the [`mypaper_desktop::ControlWindow`] when a
+/// Posted to the main thread by the [`glaze_desktop::ControlWindow`] when a
 /// system condition changes.
-pub use mypaper_desktop::WM_FACT;
+pub use glaze_desktop::WM_FACT;
 /// Posted to the main thread when `config.json` changes.
 pub const WM_CONFIG: u32 = WM_APP + 3;
 
-const CLASS: PCWSTR = w!("mypaper.wallpaper");
-/// The window class of the wallpaper's [`mypaper_desktop::ControlWindow`].
-pub const CONTROL_CLASS: PCWSTR = w!("mypaper.wallpaper.control");
+const CLASS: PCWSTR = w!("glaze.wallpaper");
+/// The window class of the wallpaper's [`glaze_desktop::ControlWindow`].
+pub const CONTROL_CLASS: PCWSTR = w!("glaze.wallpaper.control");
 const DEV_WINDOW: isize = 1;
 
 /// Makes the calling thread a COM single-threaded apartment for the rest of
@@ -82,7 +82,7 @@ impl Window {
             CreateWindowExW(
                 WS_EX_NOACTIVATE,
                 CLASS,
-                w!("mypaper"),
+                w!("Glaze"),
                 WS_CHILD,
                 0,
                 0,

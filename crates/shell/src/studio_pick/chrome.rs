@@ -1,7 +1,7 @@
 //! Physical-pixel geometry for Studio's monochrome desktop chrome.
-use mypaper_bars::config::{BarsConfig, DockPosition};
-use mypaper_desktop::Monitor;
-use mypaper_ui::{Op, Point, Rect, Rgba};
+use glaze_bars::config::{BarsConfig, DockPosition};
+use glaze_desktop::Monitor;
+use glaze_ui::{Op, Point, Rect, Rgba};
 
 pub(super) fn frame(rect: Rect, radius: f32, scale: f32, selected: bool) -> Vec<Op> {
     let radius = radius.max(0.0).min(rect.width().min(rect.height()) / 2.0);
@@ -43,7 +43,7 @@ pub(super) fn frame(rect: Rect, radius: f32, scale: f32, selected: bool) -> Vec<
     ops
 }
 
-/// OS work area intersected with mypaper's actual bar bands. Reserve the reveal dock too.
+/// OS work area intersected with Glaze's actual bar bands. Reserve the reveal dock too.
 pub(super) fn work_area(monitor: &Monitor, bars: &BarsConfig) -> Rect {
     let mut work = crate::widgets::usable_screen(monitor, bars);
     let bars = bars

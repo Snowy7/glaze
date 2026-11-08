@@ -1,0 +1,2 @@
+// Keep resource 101 in sync with main.rs::set_window_icons.
+101 ICON "../../assets/logo/glaze.ico"

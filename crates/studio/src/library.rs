@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use mypaper_theme::{Fit, LoadedTheme, MANIFEST, Wallpaper as Source};
+use glaze_theme::{Fit, LoadedTheme, MANIFEST, Wallpaper as Source};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -63,7 +63,7 @@ impl Kind {
 /// Where a wallpaper comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Origin {
-    /// In `%APPDATA%\mypaper\themes`.
+    /// In `%APPDATA%\glaze\themes`.
     User,
     /// In the bundled `themes/` folder.
     Bundled,
@@ -103,7 +103,7 @@ pub struct Wallpaper {
     pub brings_look: bool,
     pub credit: Option<Credit>,
     /// The engine options the theme itself sets (fps, gpu).
-    pub engine: mypaper_config::RenderOptions,
+    pub engine: glaze_config::RenderOptions,
     pub interactive: Option<bool>,
     pub hidden: bool,
 }
@@ -188,15 +188,15 @@ fn canonical(path: &Path) -> PathBuf {
 impl Library {
     /// Every wallpaper in the theme roots (yours first), with `active` the config's theme.
     pub fn scan(active: Option<&str>) -> Self {
-        let roots = mypaper_theme::theme_roots();
-        let user = mypaper_config::user_themes_dir().ok().map(|d| canonical(&d));
+        let roots = glaze_theme::theme_roots();
+        let user = glaze_config::user_themes_dir().ok().map(|d| canonical(&d));
         Self::scan_in(&roots, user.as_deref(), active)
     }
 
     /// `scan` over given roots (goldens use the repo's `themes/`).
     pub fn scan_in(roots: &[PathBuf], user: Option<&Path>, active: Option<&str>) -> Self {
         let active_dir = active
-            .and_then(|a| mypaper_theme::locate(Some(a)).ok())
+            .and_then(|a| glaze_theme::locate(Some(a)).ok())
             .map(|d| canonical(&d));
         let mut items = Vec::new();
         for root in roots {
@@ -236,7 +236,7 @@ impl Library {
     /// Marks the wallpaper the config now names as on the desktop.
     pub fn set_active(&mut self, theme: Option<&str>) {
         let dir = theme
-            .and_then(|t| mypaper_theme::locate(Some(t)).ok())
+            .and_then(|t| glaze_theme::locate(Some(t)).ok())
             .map(|d| canonical(&d));
         for w in &mut self.items {
             w.active = dir.as_deref() == Some(canonical(&w.dir).as_path());
@@ -280,7 +280,7 @@ fn entry(dir: &Path, origin: Origin, catalog: &Catalog, active: Option<&Path>) -
         .then(|| catalog.themes.iter().find(|t| t.id == folder))
         .flatten();
     let by_name = origin != Origin::External
-        && mypaper_theme::locate(Some(&folder)).is_ok_and(|d| canonical(&d) == canonical(dir));
+        && glaze_theme::locate(Some(&folder)).is_ok_and(|d| canonical(&d) == canonical(dir));
     let ok = loaded.as_ref().ok();
     let video = ok.and_then(|t| match &t.theme.wallpaper {
         Source::Video(v) => Some(t.asset(&v.source)),
@@ -341,7 +341,7 @@ fn preview(dir: &Path, loaded: Option<&LoadedTheme>) -> Option<PathBuf> {
 /// widgets' and the bars' look; `glass/clarity` is stored as the glass's tint, 1 - clarity),
 /// checked by the theme's own parser before it's written.
 pub fn edit_theme(dir: &Path, pointer: &str, value: Option<serde_json::Value>) -> Result<()> {
-    let user = mypaper_config::user_themes_dir()?;
+    let user = glaze_config::user_themes_dir()?;
     if canonical(dir).parent() != Some(canonical(&user).as_path()) {
         bail!("a built-in wallpaper can't be changed: make a copy first");
     }
@@ -423,7 +423,7 @@ pub fn resolve(input: &str) -> Result<(Kind, String)> {
             bail!("{} doesn't exist", path.display());
         }
         let ext = extension(&path).with_context(|| format!("{} has no file extension", path.display()))?;
-        kind_for_extension(&ext).with_context(|| format!("mypaper can't show .{ext} files"))?
+        kind_for_extension(&ext).with_context(|| format!("Glaze can't show .{ext} files"))?
     };
     Ok((kind, path.to_string_lossy().into_owned()))
 }

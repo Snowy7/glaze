@@ -5,7 +5,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
-use mypaper_fswatch::{Event, Watch};
+use glaze_fswatch::{Event, Watch};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 
@@ -13,7 +13,7 @@ struct Dir(PathBuf);
 impl Dir {
     fn new() -> Self {
         let dir = std::env::temp_dir().join(format!(
-            "mypaper-fswatch-{}-{}",
+            "glaze-fswatch-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
@@ -119,7 +119,7 @@ fn named_files_ignore_noise_and_coalesce_atomic_saves() {
 #[test]
 fn deleted_directory_recovers_and_drop_cancels_waiting_for_a_parent_change() {
     let parent = Dir::new();
-    let dir = parent.0.join("mypaper");
+    let dir = parent.0.join("glaze");
     std::fs::create_dir(&dir).unwrap();
     let (tx, rx) = mpsc::channel();
     let watch = Watch::directory(&dir, false, move |event| {
@@ -165,7 +165,7 @@ fn deleted_directory_recovers_and_drop_cancels_waiting_for_a_parent_change() {
 fn named_files_recover_when_their_parent_tree_is_recreated() {
     let parent = Dir::new();
     let tree = parent.0.join("settings");
-    let dir = tree.join("mypaper");
+    let dir = tree.join("glaze");
     std::fs::create_dir_all(&dir).unwrap();
     let (tx, rx) = mpsc::channel();
     let watch = Watch::files(&dir, &["game-activity.json"], move || {

@@ -1,7 +1,7 @@
 //! The startup markers components log (crates/desktop/src/startup.rs):
 //!
 //! ```text
-//! [2026-11-04T10:00:00Z INFO  mypaper_desktop::startup] READY component=wallpaper first_frame_ms=84.2 epoch_us=1793612345678901
+//! [2026-11-04T10:00:00Z INFO  glaze_desktop::startup] READY component=wallpaper first_frame_ms=84.2 epoch_us=1793612345678901
 //! ```
 
 /// One `READY` line.
@@ -54,7 +54,7 @@ mod tests {
 
     #[test]
     fn reads_a_marker_inside_an_env_logger_line() {
-        let line = "[2026-11-04T10:00:00Z INFO  mypaper_desktop::startup] READY \
+        let line = "[2026-11-04T10:00:00Z INFO  glaze_desktop::startup] READY \
                     component=wallpaper first_frame_ms=84.2 epoch_us=1793612345678901";
         assert_eq!(
             parse(line),
@@ -69,7 +69,7 @@ mod tests {
 
     #[test]
     fn ignores_other_lines_and_incomplete_markers() {
-        assert_eq!(parse("[.. INFO mypaper_core] running"), None);
+        assert_eq!(parse("[.. INFO glaze_core] running"), None);
         assert_eq!(parse("READY component=bars first_paint_ms=12"), None);
         assert_eq!(parse("READY first_paint_ms=12 epoch_us=5"), None);
         assert_eq!(

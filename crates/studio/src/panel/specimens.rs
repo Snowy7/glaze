@@ -4,20 +4,20 @@ use super::{
     tokens::{hex, radius},
 };
 use crate::{app::App, docs::DocId, ui::B};
-use mypaper_config::look::Style;
-use mypaper_ui::controls::Align;
-use mypaper_ui::{Image, Rect, Rgba};
+use glaze_config::look::Style;
+use glaze_ui::controls::Align;
+use glaze_ui::{Image, Rect, Rgba};
 use std::sync::Arc;
 
 /// Small immutable kit drawings share source artwork, never native widget models or canvases.
 #[derive(Debug, Clone)]
 pub(super) struct Drawing {
-    pub ops: Arc<[mypaper_ui::Op]>,
+    pub ops: Arc<[glaze_ui::Op]>,
     pub size: (f32, f32),
 }
 
 pub(super) fn draw_picture(b: &mut B, drawing: &Drawing, target: Rect) {
-    b.list.ops.push(mypaper_ui::Op::Clipped {
+    b.list.ops.push(glaze_ui::Op::Clipped {
         rect: target,
         ops: crate::stage::offset(&drawing.ops, target.left, target.top)
             .collect::<Vec<_>>()
@@ -116,7 +116,7 @@ pub fn fit_tiles(
     image: Option<Arc<Image>>,
 ) {
     use super::controls::height;
-    use mypaper_ui::{
+    use glaze_ui::{
         Op, Role,
         controls::{Behavior, key},
     };
@@ -368,19 +368,19 @@ fn softened(app: &App, image: &Arc<Image>, radius: usize, size: (u32, u32)) -> A
 }
 
 /// Native style defaults, shared by the pictures and the widget look projection.
-pub fn style_theme(app: &App, style: Style) -> mypaper_ui::Theme {
-    mypaper_ui::Theme::new(
+pub fn style_theme(app: &App, style: Style) -> glaze_ui::Theme {
+    glaze_ui::Theme::new(
         match style {
-            Style::Liquid => mypaper_ui::Style::Liquid,
-            Style::Oneui => mypaper_ui::Style::OneUi,
-            Style::Fluent => mypaper_ui::Style::Fluent,
-            Style::Solid => mypaper_ui::Style::Solid,
-            Style::Mono => mypaper_ui::Style::Mono,
+            Style::Liquid => glaze_ui::Style::Liquid,
+            Style::Oneui => glaze_ui::Style::OneUi,
+            Style::Fluent => glaze_ui::Style::Fluent,
+            Style::Solid => glaze_ui::Style::Solid,
+            Style::Mono => glaze_ui::Style::Mono,
         },
         if desktop_dark(app) {
-            mypaper_ui::Scheme::Dark
+            glaze_ui::Scheme::Dark
         } else {
-            mypaper_ui::Scheme::Light
+            glaze_ui::Scheme::Light
         },
         wallpaper_color(app).unwrap_or(hex(0x8b9eb7)),
     )
@@ -537,7 +537,7 @@ pub struct MaterialSample {
 impl MaterialSample {
     pub fn defaults(app: &App, style: Style) -> Self {
         let theme = style_theme(app, style);
-        let material = mypaper_ui::theme::material(theme.style, theme.color.surface);
+        let material = glaze_ui::theme::material(theme.style, theme.color.surface);
         Self {
             style,
             clarity: material.map_or(1.0 - theme.color.surface.a, |m| m.clarity),
@@ -587,7 +587,7 @@ pub fn material(app: &App, b: &mut B, r: Rect, style: Style) {
 pub fn highlight_color(app: &App) -> Rgba {
     app.get(DocId::Config, "/look/accent")
         .and_then(serde_json::Value::as_str)
-        .and_then(mypaper_config::Color::parse)
+        .and_then(glaze_config::Color::parse)
         .map(|color| Rgba::rgb8(color.0, 1.0))
         .or_else(|| wallpaper_color(app))
         .unwrap_or(hex(0x8b9eb7))
@@ -738,7 +738,7 @@ pub fn material_sample(
         remember(app, cache_key, &image);
         image
     });
-    b.list.ops.push(mypaper_ui::Op::RoundedImage {
+    b.list.ops.push(glaze_ui::Op::RoundedImage {
         rect: r,
         image,
         opacity: 1.0,
@@ -753,19 +753,19 @@ pub fn material_sample(
     );
     let content_start = b.list.ops.len();
     if let Some(widget) = app.registry.get("weather") {
-        let instance = mypaper_widgets::layout::Instance {
+        let instance = glaze_widgets::layout::Instance {
             instance: "style-weather".into(),
             widget: "weather".into(),
             monitor: String::new(),
             cell: [0, 0],
             size: [3, 2],
             settings: Default::default(),
-            appearance: mypaper_theme::Appearance {
-                surface: Some(mypaper_theme::Surface::None),
+            appearance: glaze_theme::Appearance {
+                surface: Some(glaze_theme::Surface::None),
                 text: Some(if desktop_dark(app) {
-                    mypaper_theme::TextTone::Light
+                    glaze_theme::TextTone::Light
                 } else {
-                    mypaper_theme::TextTone::Dark
+                    glaze_theme::TextTone::Dark
                 }),
                 ..Default::default()
             },
@@ -773,7 +773,7 @@ pub fn material_sample(
         super::editors::widgets::face(app, b, &instance, &widget.manifest, "", "", surface);
     }
     let content = b.list.ops.split_off(content_start);
-    b.list.ops.push(mypaper_ui::Op::Clipped {
+    b.list.ops.push(glaze_ui::Op::Clipped {
         rect: r,
         ops: content.into(),
     });
@@ -886,7 +886,7 @@ fn window_at(app: &App, b: &mut B, r: Rect, look: Option<usize>, thumbnail: bool
                 custom?
                     .get(field)?
                     .as_str()
-                    .and_then(mypaper_config::Color::parse)
+                    .and_then(glaze_config::Color::parse)
             })
             .flatten()
             .map(|color| Rgba::rgb8(color.0, 1.0))
@@ -1007,7 +1007,7 @@ fn window_at(app: &App, b: &mut B, r: Rect, look: Option<usize>, thumbnail: bool
         );
     }
     let content = b.list.ops.split_off(content_start);
-    b.list.ops.push(mypaper_ui::Op::Clipped {
+    b.list.ops.push(glaze_ui::Op::Clipped {
         rect: r,
         ops: content.into(),
     });
@@ -1096,8 +1096,8 @@ fn bars_at(
     size: (u32, u32),
     strip: bool,
 ) {
-    use mypaper_shell::preview::bars as shell;
-    use mypaper_ui::{DisplayList, Op};
+    use glaze_shell::preview::bars as shell;
+    use glaze_ui::{DisplayList, Op};
     let compact = size.0 <= 560;
     let icon_stamp: Vec<_> = raw
         .pointer("/dock/pinned")
@@ -1125,12 +1125,12 @@ fn bars_at(
         if !super::choosers::claim_raster(app) {
             return None;
         }
-        let mut config = mypaper_bars::BarsConfig::parse(&raw.to_string()).ok()?;
+        let mut config = glaze_bars::BarsConfig::parse(&raw.to_string()).ok()?;
         config.resolve(shell::default_pins);
         if compact {
             // Keep the design's native geometry with a small, plausible set of modules.
             // A monitor's entire status area cannot fit in a 200-DIP choice card.
-            use mypaper_bars::config::{Module, ModuleRef};
+            use glaze_bars::config::{Module, ModuleRef};
             config.top.left.retain(|module| {
                 matches!(
                     module,
@@ -1158,11 +1158,11 @@ fn bars_at(
         let mut ui = super::measure::raster_ui(app)?;
         ui.text.clear_cache();
         let mut images = shell::Images::default();
-        let mut system = mypaper_bars::accent::read();
+        let mut system = glaze_bars::accent::read();
         system.scheme = if desktop_dark(app) {
-            mypaper_bars::accent::Scheme::Dark
+            glaze_bars::accent::Scheme::Dark
         } else {
-            mypaper_bars::accent::Scheme::Light
+            glaze_bars::accent::Scheme::Light
         };
         let model = shell::sample_model(
             windows::Win32::Foundation::SYSTEMTIME {
@@ -1229,19 +1229,19 @@ fn bars_at(
         }
         if only != Some(crate::actions::Bar::Top) && config.dock.enabled {
             let tokens = shell::Tokens::resolve(&config.dock.look, &config.appearance, &system);
-            let apps: Vec<mypaper_bars::apps::Item> = config
+            let apps: Vec<glaze_bars::apps::Item> = config
                 .dock
                 .pinned
                 .clone()
                 .unwrap_or_default()
                 .into_iter()
                 .take(if compact { 4 } else { 8 })
-                .map(|pin| mypaper_bars::apps::Item {
-                    key: mypaper_bars::apps::pin_key(&pin.path),
+                .map(|pin| glaze_bars::apps::Item {
+                    key: glaze_bars::apps::pin_key(&pin.path),
                     name: pin
                         .name
                         .clone()
-                        .unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path)),
+                        .unwrap_or_else(|| glaze_bars::apps::file_stem(&pin.path)),
                     icon: None,
                     path: pin.path,
                     pinned: true,
@@ -1314,9 +1314,9 @@ fn bars_at(
 }
 
 /// Replace the shell's missing-icon initials with the panel's existing read-only app artwork.
-fn real_pinned_icons(app: &App, frame: &mut mypaper_shell::preview::bars::Frame) {
-    use mypaper_shell::preview::bars::Target;
-    use mypaper_ui::Op;
+fn real_pinned_icons(app: &App, frame: &mut glaze_shell::preview::bars::Frame) {
+    use glaze_shell::preview::bars::Target;
+    use glaze_ui::Op;
     for (index, target) in frame.targets.iter().enumerate() {
         let Target::Dock(item) = target else {
             continue;
@@ -1538,7 +1538,7 @@ mod tests {
                 .iter()
                 .rev()
                 .find_map(|op| match op {
-                    mypaper_ui::Op::Clipped { rect, ops } if !ops.is_empty() => Some(rect),
+                    glaze_ui::Op::Clipped { rect, ops } if !ops.is_empty() => Some(rect),
                     _ => None,
                 })
                 .unwrap();
@@ -1567,7 +1567,7 @@ mod tests {
         app.panel = Some(super::super::State::default());
         let raw = serde_json::json!({"version":1,"preset":"macos",
             "dock":{"pinned":[{"path":"raster-test-missing.exe","name":"Sample"}]}});
-        let draw = |text: &mut mypaper_ui::Text| {
+        let draw = |text: &mut glaze_ui::Text| {
             let mut b = Builder::new(text, &app.theme.palette, &app.theme.ty, 1.0, &app.input);
             bars(&app, &mut b, Rect::new(0.0, 0.0, 200.0, 112.0), &raw, None);
         };
@@ -1636,7 +1636,7 @@ mod tests {
             ]
         );
     }
-    use mypaper_ui::{Ui, controls::Builder};
+    use glaze_ui::{Ui, controls::Builder};
 
     #[test]
     fn shrinking_averages_fractional_source_coverage() {
@@ -1696,7 +1696,7 @@ mod tests {
                 .ops
                 .into_iter()
                 .find_map(|op| match op {
-                    mypaper_ui::Op::RoundedImage { image, .. } => Some(image),
+                    glaze_ui::Op::RoundedImage { image, .. } => Some(image),
                     _ => None,
                 })
                 .unwrap()

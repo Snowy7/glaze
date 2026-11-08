@@ -1,5 +1,5 @@
 # Round 5: which part of the Settings rules crashes Personalization > Background? Opens Settings
-# on a neutral page, attaches with one rules file (mypaper-styler --attach), then opens the
+# on a neutral page, attaches with one rules file (glaze-styler --attach), then opens the
 # Background page and sees whether Settings survives 8 s.
 #   bisect.ps1 -Log file -Rules file [-Tag name]
 param([Parameter(Mandatory)][string]$Log, [Parameter(Mandatory)][string]$Rules, [string]$Tag = '', [string]$Page = 'ms-settings:personalization-background')
@@ -23,8 +23,8 @@ function Open-Page([string]$uri) {
     }
   }
 }
-$styler = 'C:\mypaper-targets\app-styler\release\mypaper-styler.exe'
-$tapLog = Join-Path $env:LOCALAPPDATA 'mypaper\app-styler\styler.log'
+$styler = 'C:\glaze-targets\app-styler\release\glaze-styler.exe'
+$tapLog = Join-Path $env:LOCALAPPDATA 'glaze\app-styler\styler.log'
 Take-Lock
 try {
   Open-Page 'ms-settings:sound'

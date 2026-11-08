@@ -6,7 +6,7 @@
 //! Rules (plans/native/studio-redesign.md, 5.8 and 6):
 //! - a file that doesn't parse is never written; its pages show a banner and edit nothing until
 //!   the user chooses Start over, which asks first and keeps a timestamped `.bak`;
-//! - a file saved by a newer mypaper isn't broken: it says "Update Studio to edit this" and
+//! - a file saved by a newer Glaze isn't broken: it says "Update Studio to edit this" and
 //!   offers nothing destructive (no Start over);
 //! - a file changed on disk since Studio read it is read again first, and the edit is applied to
 //!   the newer text, so an editor never overwrites a newer file.
@@ -15,11 +15,11 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
-use mypaper_widgets::layout;
+use glaze_widgets::layout;
 use serde_json::{Map, Value};
 
-/// What a file saved by a newer mypaper shows instead of an error.
-pub const NEWER: &str = "Saved by a newer mypaper. Update Studio to edit this.";
+/// What a file saved by a newer Glaze shows instead of an error.
+pub const NEWER: &str = "Saved by a newer glaze. Update Studio to edit this.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReadIssue {
@@ -143,25 +143,25 @@ impl DocId {
             bail!("{NEWER}");
         }
         let effective = match self {
-            DocId::Config => serde_json::to_value(mypaper_config::Config::parse(text)?)?,
+            DocId::Config => serde_json::to_value(glaze_config::Config::parse(text)?)?,
             DocId::Bars => {
                 // The parsed config has every default; the layered JSON adds each bar's look and
                 // motion (which the config doesn't write out).
-                let config = mypaper_bars::BarsConfig::parse(text)?;
+                let config = glaze_bars::BarsConfig::parse(text)?;
                 let mut effective = serde_json::to_value(&config)?;
-                let layered = mypaper_bars::presets::layered(raw.as_object().expect("checked"))?;
-                mypaper_bars::presets::merge(&mut effective, &layered);
+                let layered = glaze_bars::presets::layered(raw.as_object().expect("checked"))?;
+                glaze_bars::presets::merge(&mut effective, &layered);
                 effective
             }
             DocId::Widgets => {
-                mypaper_widgets::layout::Layout::parse(text)?;
+                glaze_widgets::layout::Layout::parse(text)?;
                 raw.clone()
             }
             DocId::Studio => raw.clone(),
             DocId::Theme(_) => {
                 // The owner validates paths and all appearance/glass ranges. Parsing does
                 // not open assets, so no synthetic folder is used for an actual write.
-                mypaper_theme::LoadedTheme::parse(PathBuf::new(), text)?;
+                glaze_theme::LoadedTheme::parse(PathBuf::new(), text)?;
                 raw.clone()
             }
             DocId::Plugins => {
@@ -171,11 +171,11 @@ impl DocId {
                     }
                 }
                 serde_json::to_value(serde_json::from_str::<
-                    mypaper_widgets::plugin_manager::Preferences,
+                    glaze_widgets::plugin_manager::Preferences,
                 >(text)?)?
             }
             DocId::Integrations => {
-                serde_json::to_value(mypaper_integrations::config::Config::parse(text)?)?
+                serde_json::to_value(glaze_integrations::config::Config::parse(text)?)?
             }
         };
         Ok((raw, effective))
@@ -202,7 +202,7 @@ pub struct Doc {
     pub effective: Value,
     /// Why the file on disk can't be read (it's left alone until Start over).
     pub error: Option<String>,
-    /// The file was saved by a newer mypaper (a later layout version): only a restart helps,
+    /// The file was saved by a newer Glaze (a later layout version): only a restart helps,
     /// and Start over is refused.
     pub newer: bool,
     pub issue: Option<ReadIssue>,
@@ -246,7 +246,7 @@ impl Doc {
                     && let Some(path) = &path
                     && let Ok(bytes) = std::fs::read(path)
                 {
-                    let _ = mypaper_widgets::files::backup(path, &bytes);
+                    let _ = glaze_widgets::files::backup(path, &bytes);
                 }
                 let (raw, effective) = id.parse(id.empty()).expect("defaults parse");
                 let message = if newer {
@@ -323,11 +323,11 @@ pub struct Docs {
 
 /// Where the documents live.
 pub fn paths() -> Vec<Option<PathBuf>> {
-    let dir = mypaper_config::dir().ok();
+    let dir = glaze_config::dir().ok();
     vec![
-        mypaper_config::path().ok(),
-        mypaper_bars::config::path().ok(),
-        mypaper_widgets::files::layout().ok(),
+        glaze_config::path().ok(),
+        glaze_bars::config::path().ok(),
+        glaze_widgets::files::layout().ok(),
         dir.as_ref().map(|d| d.join("studio.json")),
         dir.as_ref().map(|d| d.join("integrations.json")),
         dir.map(|d| d.join("plugin-manager.json")),
@@ -398,7 +398,7 @@ impl Docs {
     /// Registers an existing, immediate user-theme child. Built-ins and missing or
     /// unreadable manifests remain read-only; each folder keeps its own undo identity.
     pub fn theme(&mut self, dir: &Path) -> Result<DocId> {
-        self.theme_in(dir, &mypaper_config::user_themes_dir()?)
+        self.theme_in(dir, &glaze_config::user_themes_dir()?)
     }
 
     fn theme_in(&mut self, dir: &Path, user: &Path) -> Result<DocId> {
@@ -409,7 +409,7 @@ impl Docs {
         if dir.parent() != Some(user.as_path()) {
             bail!("a built-in wallpaper can't be changed: make a copy first");
         }
-        let path = dir.join(mypaper_theme::MANIFEST);
+        let path = dir.join(glaze_theme::MANIFEST);
         let source = std::fs::read_to_string(&path).context("reading theme.json")?;
         let index = self
             .docs
@@ -459,7 +459,7 @@ impl Docs {
         self.doc(id).error.as_deref()
     }
 
-    /// Whether `id` was saved by a newer mypaper (restart to update; never start over).
+    /// Whether `id` was saved by a newer Glaze (restart to update; never start over).
     pub fn newer(&self, id: DocId) -> bool {
         self.doc(id).newer
     }
@@ -721,7 +721,7 @@ impl Docs {
 
     /// Start over: `confirm` is asked first (Settings shows a dialog; it gets the backup's
     /// path), then the file is copied to `<name>.<YYYYMMDD-HHMMSS>.bak` (never replacing
-    /// another), and only then replaced by `defaults`. A layout saved by a newer mypaper is
+    /// another), and only then replaced by `defaults`. A layout saved by a newer Glaze is
     /// refused outright: it isn't broken, this Studio is just old.
     pub fn start_over(
         &mut self,
@@ -883,7 +883,7 @@ impl Docs {
                 Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
                     if id == DocId::Widgets && error.kind() == std::io::ErrorKind::InvalidData {
                         if let Ok(bytes) = std::fs::read(path) {
-                            let _ = mypaper_widgets::files::backup(path, &bytes);
+                            let _ = glaze_widgets::files::backup(path, &bytes);
                         }
                     }
                     self.saved = Saved::Failed("Couldn't save".into());
@@ -892,7 +892,7 @@ impl Docs {
                 _ => {}
             }
             let written = if id == DocId::Widgets {
-                mypaper_widgets::layout::Layout::save_value(raw, path)
+                glaze_widgets::layout::Layout::save_value(raw, path)
             } else {
                 write_atomic(path, text.as_bytes())
             };
@@ -1285,7 +1285,7 @@ mod tests {
     #[test]
     fn widget_drag_commit_refuses_and_backs_up_an_external_parse_failure() {
         let root =
-            std::env::temp_dir().join(format!("mypaper-studio-write-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-studio-write-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("widgets.json");
         std::fs::write(&path, "{}").unwrap();
@@ -1307,7 +1307,7 @@ mod tests {
     /// A fresh temp folder for one test.
     fn folder(name: &str) -> PathBuf {
         let temp = std::env::temp_dir().canonicalize().unwrap();
-        let root = temp.join(format!("mypaper-studio-{name}-{}", std::process::id()));
+        let root = temp.join(format!("glaze-studio-{name}-{}", std::process::id()));
         if root.exists() {
             assert_eq!(root.canonicalize().unwrap().parent(), Some(temp.as_path()));
             std::fs::remove_dir_all(&root).unwrap();
@@ -1373,7 +1373,7 @@ mod tests {
         docs.redo().unwrap();
         assert_eq!(docs.doc(id).raw, original);
         // The unchanged owner/older-reader schema accepts every saved document.
-        mypaper_theme::LoadedTheme::load(&dir).unwrap();
+        glaze_theme::LoadedTheme::load(&dir).unwrap();
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1424,7 +1424,7 @@ mod tests {
     }
 
     #[test]
-    fn a_layout_from_a_newer_mypaper_offers_restart_and_nothing_destructive() {
+    fn a_layout_from_a_newer_glaze_offers_restart_and_nothing_destructive() {
         let root = folder("newer-layout");
         let path = root.join("widgets.json");
         let current = r#"{ "version": 2, "instances": [] }"#;
@@ -1432,7 +1432,7 @@ mod tests {
         let mut docs = Docs::fixture(["{}", "{\"version\":1}", current, "{}"]);
         docs.docs[DocId::Widgets.index()].path = Some(path.clone());
         docs.docs[DocId::Widgets.index()].seen = Some(current.into());
-        // A newer mypaper saves its layout while this Studio is open.
+        // A newer Glaze saves its layout while this Studio is open.
         let newer = r#"{ "version": 3, "instances": [{ "instance": "clock-1" }], "future": true }"#;
         std::fs::write(&path, newer).unwrap();
         assert!(docs.reload(DocId::Widgets));
@@ -1528,7 +1528,7 @@ mod tests {
     #[test]
     fn starting_widgets_over_never_replaces_an_earlier_recovery_copy() {
         let root =
-            std::env::temp_dir().join(format!("mypaper-studio-reset-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-studio-reset-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("widgets.json");
         let mut docs = Docs::fixture(["{}", "{\"version\":1}", "{}", "{}"]);

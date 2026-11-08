@@ -1,7 +1,7 @@
 //! The app styler (experimental; docs/windows-styling.md, "App styler"): restyles the XAML
 //! inside File Explorer and Settings through the documented XAML Diagnostics API.
 //!
-//! - The **helper** (`mypaper-styler`, `src/main.rs`) runs only while `experimental.app_styler`
+//! - The **helper** (`glaze-styler`, `src/main.rs`) runs only while `experimental.app_styler`
 //!   is on. It resolves the rules (preset < theme < `look.apps`), writes one rules file per app,
 //!   and attaches to allowlisted processes with `InitializeXamlDiagnosticsEx`.
 //! - The **TAP** (this crate as a DLL, [`tap`]) is what XAML Diagnostics loads into the app. It
@@ -64,12 +64,12 @@ pub struct Attach {
     /// The helper's pid: when it exits, the TAP restores everything and stops.
     pub helper: u32,
     pub framework: Framework,
-    /// The styler's folder (`%LOCALAPPDATA%\mypaper\app-styler`): rules files, the log, dumps.
+    /// The styler's folder (`%LOCALAPPDATA%\glaze\app-styler`): rules files, the log, dumps.
     pub dir: PathBuf,
     /// The app's rules file (the settled `AppRules` as JSON) in `dir`, or a full path; watched
     /// for changes.
     pub rules: String,
-    /// Write the visual tree to `dir\tree-<pid>.txt` once it has settled (`mypaper-styler
+    /// Write the visual tree to `dir\tree-<pid>.txt` once it has settled (`glaze-styler
     /// --dump`), with the properties of the elements the selector in `dir\props.txt` picks.
     pub dump: bool,
 }
@@ -151,7 +151,7 @@ mod tests {
         let attach = Attach {
             helper: 42,
             framework: Framework::WinUi,
-            dir: r"C:\Users\someone-with-a-long-name\AppData\Local\mypaper\app-styler".into(),
+            dir: r"C:\Users\someone-with-a-long-name\AppData\Local\glaze\app-styler".into(),
             rules: "explorer.json".into(),
             dump: true,
         };

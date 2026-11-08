@@ -1,17 +1,17 @@
 # Web and app wallpapers
 
-Two wallpaper kinds draw with something other than mypaper's own renderer: `web` (a page in
+Two wallpaper kinds draw with something other than Glaze's own renderer: `web` (a page in
 WebView2) and `app` (an external program, such as a Unity player build). Both draw with child
-windows of the desktop windows mypaper already creates, so the engine neither draws nor presents
+windows of the desktop windows Glaze already creates, so the engine neither draws nor presents
 frames for them. What it still does is decide *when they are visible*, and suspend them when they
 are not. That is what keeps them cheap.
 
 | | `web` | `app` |
 |---|---|---|
-| Runs as | WebView2 (Edge) processes, started by mypaper | One process you provide |
+| Runs as | WebView2 (Edge) processes, started by Glaze | One process you provide |
 | Monitors | One WebView per monitor | Monitor 0 only |
 | Hidden means | page hidden and **suspended** (`TrySuspend`) | process **suspended** (`NtSuspendProcess`) |
-| Dies when | the theme changes or mypaper exits | the theme changes or mypaper exits (Job object) |
+| Dies when | the theme changes or Glaze exits | the theme changes or Glaze exits (Job object) |
 | Example | [`themes/webdemo`](../themes/webdemo) | [`themes/app-example`](../themes/app-example) (a Unity how-to) |
 
 ## `web`
@@ -23,7 +23,7 @@ are not. That is what keeps them cheap.
 `url` is either an `http://` / `https://` address, or a path to a local `.html` file: relative to
 the theme folder, or absolute. Relative paths may not use `..`, like every other theme asset.
 
-**Local pages** are served from a virtual host, `https://mypaper.theme/`, mapped to a folder
+**Local pages** are served from a virtual host, `https://glaze.theme/`, mapped to a folder
 (`SetVirtualHostNameToFolderMapping`), not loaded from `file://`. The page gets a real origin, so
 `fetch`, ES modules, workers and relative asset paths work. The folder is the theme folder when the
 page is inside it (so subfolders such as `js/` and `img/` work), otherwise the page's own folder. A
@@ -31,7 +31,7 @@ missing file makes the theme fail to load with a clear error (the red "broken" s
 showing a blank page.
 
 **One environment, one WebView per screen.** A single WebView2 environment is shared by all screens,
-with its profile in `%LOCALAPPDATA%\mypaper\webview2`. Each screen gets its own controller as a child
+with its profile in `%LOCALAPPDATA%\glaze\webview2`. Each screen gets its own controller as a child
 of that screen's window, filling its client area, so the browser processes are shared and you pay for
 one renderer per page, not one browser per monitor.
 
@@ -45,7 +45,7 @@ swipe navigation and browser accelerator keys. The page background is black unti
 ### Staying light
 
 When a screen is hidden (covered by a maximized window, a fullscreen game, battery, lock, display
-off, or paused from the tray or Studio), mypaper calls `put_IsVisible(false)` and then
+off, or paused from the tray or Studio), Glaze calls `put_IsVisible(false)` and then
 `ICoreWebView2_3::TrySuspend` on its WebView. A suspended page runs no script, timers or rendering, so
 its processes use no CPU at all (it does not give memory back, see [Measurements](#measurements)).
 When the screen is visible again it calls `Resume` and
@@ -54,7 +54,7 @@ it is hidden is suspended as soon as its first navigation completes.
 
 A page that animates should still cap itself: the demo throttles `requestAnimationFrame` to 30 fps
 and draws at 1/8 of the screen's resolution. WebView2 composites and presents on its own, so
-mypaper cannot pace a page for you. A visible web page is the heaviest wallpaper type (see
+Glaze cannot pace a page for you. A visible web page is the heaviest wallpaper type (see
 [Measurements](#measurements)), so prefer low frame rates and mostly static content.
 
 ### What a page can't do
@@ -91,24 +91,24 @@ decimal handle of **screen 0's window** (the first monitor), wherever it occurs 
 is the form Unity's `-parentHWND <handle> delayed` expects. See
 [`themes/app-example`](../themes/app-example/README.md) for the Unity setup.
 
-**Starting.** mypaper creates the process suspended, puts it in a Job object, and only then lets it
+**Starting.** Glaze creates the process suspended, puts it in a Job object, and only then lets it
 run, with a window event hook already watching its process id. It is started with
-`STARTF_USESHOWWINDOW` and `SW_SHOWNOACTIVATE`, and mypaper never calls `SetForegroundWindow`, so the app
+`STARTF_USESHOWWINDOW` and `SW_SHOWNOACTIVATE`, and Glaze never calls `SetForegroundWindow`, so the app
 does not take focus. (An app that insists on activating its own window cannot be stopped from
 outside; Unity's embedded player does not.)
 
-**The Job object** has `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. When the theme changes, mypaper exits or
-mypaper is killed, Windows closes the last handle to the job and terminates the app. It cannot outlive
-mypaper.
+**The Job object** has `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. When the theme changes, Glaze exits or
+Glaze is killed, Windows closes the last handle to the job and terminates the app. It cannot outlive
+glaze.
 
 **Finding the window.** Apps that honor the parent argument (Unity) create their window as a child of
-the screen window: mypaper just sizes it to fill. Apps that make their own top-level window instead
-are adopted: for up to 5 seconds mypaper listens for window creation and show events from that
+the screen window: Glaze just sizes it to fill. Apps that make their own top-level window instead
+are adopted: for up to 5 seconds Glaze listens for window creation and show events from that
 process (a WinEvent hook, delivered through the engine's message loop, so nothing polls and nothing
 blocks). The first window that is visible, unowned, top-level and not a tool window is reparented:
 caption, borders and system menu are stripped, `WS_CHILD` is set, `SetParent` moves it into the screen
 window and it is sized to fill. Hidden helper windows that every GUI thread creates (IME, tooltips)
-are skipped. If no window shows up in 5 seconds, mypaper assumes the app draws straight into the
+are skipped. If no window shows up in 5 seconds, Glaze assumes the app draws straight into the
 screen window and stops looking (the log says so).
 
 ### Staying light
@@ -117,13 +117,13 @@ While screen 0 is hidden, the whole process is **suspended** (`NtSuspendProcess`
 is trimmed (`EmptyWorkingSet`). It resumes when the screen is visible again.
 
 Why suspend rather than hide the window: hiding a window does not stop a Unity player. It keeps
-simulating and rendering to a window nobody sees, which is exactly the cost mypaper exists to avoid.
+simulating and rendering to a window nobody sees, which is exactly the cost Glaze exists to avoid.
 Suspending costs the app nothing (0% CPU and GPU) and needs no cooperation from it. It has two
 trade-offs:
 
 - Anything the app does in the background stops too: audio, network, timers. A suspended game looks
   frozen for the instant after resume, and its clocks jump (Unity clamps `Time.deltaTime`).
-- A suspended process can't answer window messages, so mypaper never sends it any while it is
+- A suspended process can't answer window messages, so Glaze never sends it any while it is
   suspended (resizing waits until it is running again) and uses asynchronous window positioning, so a
   busy app can't block the engine. Because the app's window is a *child* of a desktop window, Windows
   does not show a "not responding" ghost for it.
@@ -138,7 +138,7 @@ starter is not frozen mid-start.
   would need one instance per screen, or an app that spans the virtual desktop.
 - No restart if the app exits or crashes: the wallpaper area stays blank. Switch theme or restart the
   wallpaper from the tray.
-- Only the process mypaper starts is watched. If it launches another process that makes the window
+- Only the process Glaze starts is watched. If it launches another process that makes the window
   (a launcher stub), nothing is embedded. Point `command` at the real executable.
 - No input: like every wallpaper, the app sits behind the icons and gets no clicks.
 
@@ -208,7 +208,7 @@ WebView2 processes (the engine's children), as a share of one core / of the whol
 | embedded (child window or reparented top-level window) | fills the 2560x1440 screen window |
 | suspended | threads all `Suspended`, 0.00% CPU, working set trimmed from ~7 MB to ~0.1 MB |
 | resumed | animates again (the test app logs a heartbeat that stalls exactly while suspended) |
-| theme switched, or mypaper hard-killed | the app process is gone within a second |
+| theme switched, or Glaze hard-killed | the app process is gone within a second |
 | focus | the foreground window never changed |
 
 No Unity build was available. Embedding was tested with a purpose-built Win32 renderer in both

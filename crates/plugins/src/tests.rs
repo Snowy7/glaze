@@ -6,9 +6,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use mypaper_plugin_api::SizeClass;
-use mypaper_plugin_api::wire::{self, HelperMsg, HostMsg, Status};
-use mypaper_plugin_sdk::view::Face;
+use glaze_plugin_api::SizeClass;
+use glaze_plugin_api::wire::{self, HelperMsg, HostMsg, Status};
+use glaze_plugin_sdk::view::Face;
 
 use crate::host::{Host, Input};
 use crate::runtime::{Manifest, Runtime};
@@ -21,7 +21,7 @@ fn hello_wasm() -> PathBuf {
 
 /// A temp root with `hello` installed under each id, plus the host's cache and data dirs.
 fn root(name: &str, ids: &[&str]) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("mypaper-plugins-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("glaze-plugins-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let manifest = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/hello/plugin.json")).unwrap();
     for id in ids {
@@ -98,8 +98,8 @@ fn manifests_that_ask_for_too_much_are_refused() {
         let error = format!("{:#}", Manifest::load(&dir).unwrap_err());
         assert!(error.contains(want), "{error} should mention {want}");
     };
-    refused(&original.replace("\"api\": \"0.1\"", "\"api\": \"1.0\""), "newer mypaper");
-    refused(&original.replace("\"api\": \"0.1\"", "\"api\": \"0.9\""), "newer mypaper");
+    refused(&original.replace("\"api\": \"0.1\"", "\"api\": \"1.0\""), "newer Glaze");
+    refused(&original.replace("\"api\": \"0.1\"", "\"api\": \"0.9\""), "newer Glaze");
     refused(&original.replace("network:https://api.open-meteo.com", "filesystem"), "unknown or malformed permission");
     refused(&original.replace("network:https://api.open-meteo.com", "network:ftp://x"), "unknown or malformed permission");
     refused(&original.replace("\"top-bar\"", "\"explorer\""), "unknown style surface");
@@ -406,7 +406,7 @@ fn game_pause_preserves_an_independent_desktop_hold() {
     assert_eq!(host.topics(), vec!["windows"]);
 }
 
-/// `cargo test --release -p mypaper-plugins live_t3_event_costs -- --ignored --nocapture`, with
+/// `cargo test --release -p glaze-plugins live_t3_event_costs -- --ignored --nocapture`, with
 /// T3 Code running: the real `plugins/t3` against the local server (read-only: it subscribes and
 /// redraws), printing what each event cost, the baseline decode included, and a click-style
 /// action (a project pick, which only redraws) after it. Nothing is launched.
@@ -414,7 +414,7 @@ fn game_pause_preserves_an_independent_desktop_hold() {
 #[ignore]
 fn live_t3_event_costs() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/t3");
-    let scratch = std::env::temp_dir().join(format!("mypaper-plugins-live-t3-{}", std::process::id()));
+    let scratch = std::env::temp_dir().join(format!("glaze-plugins-live-t3-{}", std::process::id()));
     let rt = Runtime::new(scratch.join("cache"), scratch.join("data")).unwrap();
     let (tx, rx) = mpsc::channel::<Input>();
     let mut host = Host::new(rt, Vec::new(), tx);
@@ -424,7 +424,7 @@ fn live_t3_event_costs() {
     let until = Instant::now() + Duration::from_secs(20);
     while let Ok(input) = rx.recv_timeout(until.saturating_duration_since(Instant::now())) {
         let kind = match &input {
-            Input::Socket { event: crate::runtime::mypaper::plugin::websocket::SocketEvent::Message((_, m)), .. } => format!("socket message {} KiB", match m { crate::runtime::mypaper::plugin::websocket::Message::Text(t) => t.len(), crate::runtime::mypaper::plugin::websocket::Message::Binary(b) => b.len() } / 1024),
+            Input::Socket { event: crate::runtime::glaze::plugin::websocket::SocketEvent::Message((_, m)), .. } => format!("socket message {} KiB", match m { crate::runtime::glaze::plugin::websocket::Message::Text(t) => t.len(), crate::runtime::glaze::plugin::websocket::Message::Binary(b) => b.len() } / 1024),
             Input::Socket { .. } => "socket open/close".into(),
             Input::Http { .. } | Input::PipeHttp { .. } => "http/process reply".into(),
             _ => "other".into(),

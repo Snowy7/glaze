@@ -3,14 +3,14 @@
 //! password goes to Windows' own prompt, never a field of ours. Windows 11 24H2+ lists
 //! networks to desktop apps only with location access on: then it says so and links there.
 
-use mypaper_bars::flyouts::quick::RadioKind;
-use mypaper_bars::flyouts::wifi::{Network, Security, WifiError, WifiState};
-use mypaper_bars::flyouts::{Done, Watched};
-use mypaper_bars::system;
-use mypaper_bars::wake::Msg;
-use mypaper_ui::icons::Icon;
-use mypaper_ui::layout::{Align, Stack};
-use mypaper_ui::{Accessory, ButtonKind, Frame, HitId, Lead, ListRow, Rect, Scroll, TextRole};
+use glaze_bars::flyouts::quick::RadioKind;
+use glaze_bars::flyouts::wifi::{Network, Security, WifiError, WifiState};
+use glaze_bars::flyouts::{Done, Watched};
+use glaze_bars::system;
+use glaze_bars::wake::Msg;
+use glaze_ui::icons::Icon;
+use glaze_ui::layout::{Align, Stack};
+use glaze_ui::{Accessory, ButtonKind, Frame, HitId, Lead, ListRow, Rect, Scroll, TextRole};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 

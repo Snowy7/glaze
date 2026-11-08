@@ -5,7 +5,7 @@
 //! engine shrinks its kept frame (the wallpaper as drawn, never with glass) on the
 //! GPU through a bilinear pyramid (1/2 .. 1/64) and back up to 1/8, reads that back (without
 //! waiting, for an animated source: a later frame collects it), and
-//! writes it to `%LOCALAPPDATA%\mypaper\backdrop\<NAME>.bmp` (`NAME` is the
+//! writes it to `%LOCALAPPDATA%\glaze\backdrop\<NAME>.bmp` (`NAME` is the
 //! device name without `\\.\`, e.g. `DISPLAY1`; `dev` in `--windowed` mode).
 //! The file is an uncompressed top-down 24-bit BMP of `round(w/8) x round(h/8)`
 //! pixels with the swapchain format's bytes as-is, written via `.bmp.tmp` + rename.
@@ -29,8 +29,8 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use mypaper_desktop::{Rect, monitor_infos};
-use mypaper_theme::Fit;
+use glaze_desktop::{Rect, monitor_infos};
+use glaze_theme::Fit;
 
 use crate::gpu::{Gpu, KeptFrame};
 use crate::sources::{self, blit::BlitQuad};
@@ -66,7 +66,7 @@ const BMP_HEADERS: usize = 54;
 
 /// Publishes every screen's backdrop; owned by the engine.
 pub struct Backdrop {
-    /// `%LOCALAPPDATA%\mypaper\backdrop`; `None` if that cannot be resolved.
+    /// `%LOCALAPPDATA%\glaze\backdrop`; `None` if that cannot be resolved.
     dir: Option<PathBuf>,
     /// Indexed like the engine's screens.
     screens: Vec<ScreenState>,
@@ -126,7 +126,7 @@ impl Backdrop {
                     .collect()
             }
         };
-        let dir = match mypaper_tweaks::palette::local_dir() {
+        let dir = match glaze_tweaks::palette::local_dir() {
             Ok(local) => Some(local.join("backdrop")),
             Err(e) => {
                 log::warn!("no backdrop: {e:#}");
@@ -776,7 +776,7 @@ mod tests {
     #[test]
     fn widget_snapshots_work_without_bars_and_keep_the_shortest_request() {
         let dir =
-            std::env::temp_dir().join(format!("mypaper-backdrop-requests-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-backdrop-requests-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let bars = dir.join(REQUEST_FILE);
         let widgets = dir.join("widgets-request.json");
@@ -851,7 +851,7 @@ mod tests {
     #[test]
     fn reset_deletes_only_native_screens_stale_images() {
         let dir =
-            std::env::temp_dir().join(format!("mypaper-backdrop-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-backdrop-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         for name in ["DISPLAY1", "DISPLAY2"] {
             std::fs::write(image_path(&dir, name), b"old").unwrap();
@@ -867,7 +867,7 @@ mod tests {
     #[test]
     fn writing_replaces_the_image_and_leaves_no_temp_file() {
         let dir =
-            std::env::temp_dir().join(format!("mypaper-backdrop-write-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-backdrop-write-{}", std::process::id()));
         let path = image_path(&dir, "DISPLAY1");
         write_atomic(&path, b"first").unwrap();
         write_atomic(&path, b"second").unwrap();
@@ -893,7 +893,7 @@ mod tests {
             return;
         };
         let dir =
-            std::env::temp_dir().join(format!("mypaper-backdrop-share-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-backdrop-share-{}", std::process::id()));
         let names = vec![Some("DISPLAY1".to_owned()), Some("DISPLAY2".to_owned())];
         let mut backdrop = Backdrop::with(Some(dir.clone()), names, |_| false);
         let kept = KeptFrame::new(&gpu, (1664, 936));

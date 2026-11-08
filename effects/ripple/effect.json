@@ -1,6 +1,6 @@
 {
   "animated": true,
-  "author": "mypaper",
+  "author": "Glaze",
   "category": "motion",
   "cost": 0.546,
   "cost_estimated": false,
@@ -52,5 +52,5 @@
       "source": "ripple.wgsl"
     }
   ],
-  "url": "https://github.com/Snowy7/mypaper"
+  "url": "https://github.com/Snowy7/glaze"
 }

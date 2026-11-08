@@ -19,7 +19,7 @@ per big volume under load.
    `__pycache__`, `.venv`/`venv`, `.gradle`, `obj`/`bin` under a `.csproj` folder, `$Recycle.Bin`,
    `System Volume Information`, `Windows\WinSxS`, `Windows\Installer`, `AppData\Local\Temp`,
    browser/package caches (`AppData\Local\**\Cache*`, `npm-cache`, `pnpm-store`, `.cargo\registry`,
-   `.rustup\toolchains`), `C:\mypaper-targets`. Make it `index.exclude` / `index.include` in
+   `.rustup\toolchains`), `C:\glaze-targets`. Make it `index.exclude` / `index.include` in
    `config.json` (globs; defaults built in; the user's list layers on top), and apply it during scan
    and to live changes. Folder sizes must still be right: excluded subtrees count toward their
    parent's size as one aggregate (scan their size cheaply or mark them "excluded, size unknown";
@@ -36,5 +36,5 @@ per big volume under load.
 As round 1: tests for the pure parts (exclude matching, size aggregation, prefilter correctness:
 it may never drop a true match), live measurements with the deployed build, desktop lock one action
 at a time. If the user's foreground app (T3 Code) blocks guarded launcher captures, use the pipe CLI
-for evidence and say so. `CARGO_TARGET_DIR=C:\mypaper-targets\index`. Stop when the targets are met or
+for evidence and say so. `CARGO_TARGET_DIR=C:\glaze-targets\index`. Stop when the targets are met or
 after 3 hours. Report: numbers before/after, the exclude list, commits.

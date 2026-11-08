@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use mypaper_fswatch::{Event, Watch};
+use glaze_fswatch::{Event, Watch};
 
 /// Keeps a file watch alive; dropping it stops the watch.
 pub struct ConfigWatcher {
@@ -12,7 +12,7 @@ pub struct ConfigWatcher {
 /// Calls `on_change` (on the watcher's thread) whenever `config.json` is
 /// written, replaced or removed. See [`watch_file`].
 pub fn watch_config(on_change: impl Fn() + Send + 'static) -> Result<ConfigWatcher> {
-    watch_file(&mypaper_config::path()?, on_change)
+    watch_file(&glaze_config::path()?, on_change)
 }
 
 /// Calls `on_change` (on the watcher's thread) whenever the file at `path`

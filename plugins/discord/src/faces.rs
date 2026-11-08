@@ -1,5 +1,5 @@
 use crate::model::{Call, Choice, Message};
-use mypaper_plugin_sdk::{Face, Role, Tone, View, view::SelectOption};
+use glaze_plugin_sdk::{Face, Role, Tone, View, view::SelectOption};
 
 pub struct Context<'a> {
     pub choice: &'a Choice,

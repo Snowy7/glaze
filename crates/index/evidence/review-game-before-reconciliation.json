@@ -2,7 +2,7 @@
   "note": "Fresh volume scan scratch after a 20,000-file paused burst, with initial reconciliation complete before the fixture. A raw native buffer overflow is the remaining pre-fix trigger for this scan.",
   "scans": [
     {
-      "path": "C:\\Users\\you\\AppData\\Local\\mypaper\\index\\scan\\scan-67152-1793950545091691000.names",
+      "path": "C:\\Users\\you\\AppData\\Local\\glaze\\index\\scan\\scan-67152-1793950545091691000.names",
       "created_utc": "2026-11-06T07:35:45.170578+00:00",
       "prefix_utf8": "C:c:$Recycle.Bin$recycle.bin.GamingRoot.gamingrootappverifUI.dllappverifui.dllAr"
     }

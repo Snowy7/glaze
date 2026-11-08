@@ -4,7 +4,7 @@ use crate::{
     docker::{Container, Usage},
     faces,
 };
-use mypaper_plugin_sdk::SizeClass;
+use glaze_plugin_sdk::SizeClass;
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
@@ -13,7 +13,7 @@ pub fn fixture() -> Snapshot {
         availability: Availability::Live,
         data: Some(Data::Docker(crate::docker::Snapshot {
             containers: [
-                ("web", "mypaper-web", "running", false),
+                ("web", "glaze-web", "running", false),
                 ("db", "development-postgres", "running", false),
                 ("worker", "background-worker", "exited", true),
             ]
@@ -85,7 +85,7 @@ pub fn views() -> Value {
 fn view_golden() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("golden/faces.json");
     let actual = serde_json::to_string_pretty(&views()).unwrap() + "\n";
-    if std::env::var_os("MYPAPER_BLESS").is_some() {
+    if std::env::var_os("GLAZE_BLESS").is_some() {
         std::fs::write(&path, &actual).unwrap();
     }
     assert_eq!(

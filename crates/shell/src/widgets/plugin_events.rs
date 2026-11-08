@@ -9,16 +9,16 @@
 //! - **Commands.** Desktop-menu items and global shortcuts queue `(plugin, command)` here
 //!   ([`invoke`]); the widgets host sends them on its next pass ([`Plugins::command`]).
 //! - **Shortcuts.** `commands[].shortcut` of plugins holding `shortcuts`, registered with
-//!   `RegisterHotKey` on the shell thread. A combination another program (or mypaper) already
+//!   `RegisterHotKey` on the shell thread. A combination another program (or Glaze) already
 //!   holds is refused with a log line.
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use mypaper_desktop::win_events::{Event, Subscription};
-use mypaper_integrations::{Data, Lease, Provider};
-use mypaper_plugin_api::wire::{SystemEvent, WindowChange};
-use mypaper_widgets::manifest::PluginManifest;
-use mypaper_widgets::plugins::Plugins;
+use glaze_desktop::win_events::{Event, Subscription};
+use glaze_integrations::{Data, Lease, Provider};
+use glaze_plugin_api::wire::{SystemEvent, WindowChange};
+use glaze_widgets::manifest::PluginManifest;
+use glaze_widgets::plugins::Plugins;
 use serde_json::{Value, json};
 use windows::Win32::UI::Input::KeyboardAndMouse::{HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN, RegisterHotKey, UnregisterHotKey};
 use windows::Win32::UI::WindowsAndMessaging::{MSG, WM_HOTKEY};
@@ -63,7 +63,7 @@ pub fn contributions_of(manifest: &PluginManifest, menu: bool) -> Vec<Contributi
 /// Every installed component plugin's (user folder first, then bundled; one per id).
 fn installed() -> Vec<(PluginManifest, PathBuf)> {
     let mut seen = std::collections::BTreeSet::new();
-    mypaper_widgets::registry::plugin_roots()
+    glaze_widgets::registry::plugin_roots()
         .into_iter()
         .flat_map(|root| std::fs::read_dir(root).into_iter().flatten().flatten())
         .filter_map(|entry| PluginManifest::load(&entry.path()).ok().map(|m| (m, entry.path())))
@@ -213,9 +213,9 @@ impl Events {
             return;
         }
         let event = match msg.message {
-            mypaper_bars::events::DISPLAY => SystemEvent::Monitors,
-            mypaper_bars::events::POWER => SystemEvent::Power,
-            mypaper_bars::events::SETTINGS => SystemEvent::Theme,
+            glaze_bars::events::DISPLAY => SystemEvent::Monitors,
+            glaze_bars::events::POWER => SystemEvent::Power,
+            glaze_bars::events::SETTINGS => SystemEvent::Theme,
             _ => return,
         };
         self.queue.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(event);
@@ -240,7 +240,7 @@ impl Events {
                     let event = window_event(event, &mut known.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
                     if let Some(event) = event {
                         queue.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(event);
-                        mypaper_desktop::win_events::notify();
+                        glaze_desktop::win_events::notify();
                     }
                 }));
             }

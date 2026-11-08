@@ -1,4 +1,4 @@
-//! The two built-in cursor sets (`mypaper-dark`, `mypaper-light`), drawn in
+//! The two built-in cursor sets (`glaze-dark`, `glaze-light`), drawn in
 //! code: simple monochrome shapes with a thin contrasting edge, rasterized
 //! from signed distance fields so they are crisp (anti-aliased) at every size.
 //! There are no third-party assets: every `.cur` and `.ani` is generated here.
@@ -21,8 +21,8 @@ impl Look {
     /// The set's name, as used in `windows.cursors`.
     pub const fn name(self) -> &'static str {
         match self {
-            Self::Dark => "mypaper-dark",
-            Self::Light => "mypaper-light",
+            Self::Dark => "glaze-dark",
+            Self::Light => "glaze-light",
         }
     }
 
@@ -630,9 +630,9 @@ mod tests {
 
     #[test]
     fn set_names_round_trip_case_insensitively() {
-        assert_eq!(Look::from_name("MyPaper-Dark"), Some(Look::Dark));
+        assert_eq!(Look::from_name("Glaze-Dark"), Some(Look::Dark));
         assert_eq!(Look::from_name(Look::Light.name()), Some(Look::Light));
-        assert_eq!(Look::from_name("mypaper"), None);
+        assert_eq!(Look::from_name("Glaze"), None);
     }
 
     #[test]

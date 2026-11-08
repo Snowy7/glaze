@@ -1,11 +1,11 @@
 //! A flyout's display list being built, and the few blocks several flyouts share. Panels draw
-//! with the UI kit (`mypaper_ui::kit`, docs/ui.md "The kit") through [`Kit::frame`]; this keeps
+//! with the UI kit (`glaze_ui::kit`, docs/ui.md "The kit") through [`Kit::frame`]; this keeps
 //! where the next block goes, the room the screen leaves, and the input state the controller
 //! passes in. Lengths are device pixels: design pixels times the surface's scale `s`.
 
-use mypaper_ui::interact::Interaction;
-use mypaper_ui::kit::Frame;
-use mypaper_ui::{DisplayList, HitId, Op, Rect, Rgba, Text, Theme};
+use glaze_ui::interact::Interaction;
+use glaze_ui::kit::Frame;
+use glaze_ui::{DisplayList, HitId, Op, Rect, Rgba, Text, Theme};
 
 use super::look::Look;
 
@@ -29,7 +29,7 @@ pub struct Kit<'a> {
     pub pressed: Option<HitId>,
     /// Keyboard focus, drawn as a ring.
     pub focus: Option<HitId>,
-    pub motion: Option<&'a mypaper_ui::interact::motion::InteractionMotion>,
+    pub motion: Option<&'a glaze_ui::interact::motion::InteractionMotion>,
 }
 
 impl<'a> Kit<'a> {
@@ -119,20 +119,20 @@ impl<'a> Kit<'a> {
 
 /// A flyout's last row, from `column`: a separator, then `label` with a chevron (it opens
 /// Settings or another flyout).
-pub fn footer(f: &mut Frame, column: &mut mypaper_ui::Stack, id: HitId, label: &str) {
+pub fn footer(f: &mut Frame, column: &mut glaze_ui::Stack, id: HitId, label: &str) {
     let line = column.next(f.px(9.0));
     f.separator(line.left, line.right, line.top + f.px(4.0));
     link(f, column, id, label);
 }
 
 /// A row from `column` with `label` and a chevron: a link to Settings or another flyout.
-pub fn link(f: &mut Frame, column: &mut mypaper_ui::Stack, id: HitId, label: &str) {
-    let row = mypaper_ui::ListRow {
+pub fn link(f: &mut Frame, column: &mut glaze_ui::Stack, id: HitId, label: &str) {
+    let row = glaze_ui::ListRow {
         id,
-        lead: mypaper_ui::Lead::None,
+        lead: glaze_ui::Lead::None,
         title: label,
         subtitle: None,
-        accessory: mypaper_ui::Accessory::Chevron,
+        accessory: glaze_ui::Accessory::Chevron,
         selected: false,
         enabled: true,
     };
@@ -146,8 +146,8 @@ pub fn slider_card(
     f: &mut Frame,
     rect: Rect,
     title: &str,
-    buttons: &[(HitId, mypaper_ui::icons::Icon, &str)],
-    slider: (HitId, f32, &str, mypaper_ui::icons::Icon),
+    buttons: &[(HitId, glaze_ui::icons::Icon, &str)],
+    slider: (HitId, f32, &str, glaze_ui::icons::Icon),
 ) {
     let c = f.theme.color;
     let inner = f.card(rect);
@@ -161,9 +161,9 @@ pub fn slider_card(
     f.text_in(
         label,
         title,
-        mypaper_ui::TextRole::Headline,
+        glaze_ui::TextRole::Headline,
         c.label,
-        mypaper_ui::Align::Start,
+        glaze_ui::Align::Start,
     );
     let (id, value, name, icon) = slider;
     f.slider(id, rest, value, name, Some(icon));
@@ -175,8 +175,8 @@ pub fn slider_card_height(f: &Frame) -> f32 {
 }
 
 /// The volume glyph for `level` (0..=1), or muted.
-pub fn volume_icon(level: f32, muted: bool) -> mypaper_ui::icons::Icon {
-    use mypaper_ui::icons::Icon;
+pub fn volume_icon(level: f32, muted: bool) -> glaze_ui::icons::Icon {
+    use glaze_ui::icons::Icon;
     if muted || level == 0.0 {
         Icon::Mute
     } else {

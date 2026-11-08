@@ -2,8 +2,8 @@
 //! wasm32-wasip2 and install it with the permissions each test needs). Every action exercises
 //! one capability (`value` is its argument), and every result or event is appended to the face
 //! as a line, which the tests read back.
-use mypaper_plugin_sdk::guest::{Error, Event, Plugin, events, http, native, notify, pipes, system, ui, websocket};
-use mypaper_plugin_sdk::{Role, View};
+use glaze_plugin_sdk::guest::{Error, Event, Plugin, events, http, native, notify, pipes, system, ui, websocket};
+use glaze_plugin_sdk::{Role, View};
 
 #[derive(Default)]
 struct Probe {
@@ -121,4 +121,4 @@ impl Plugin for Probe {
     }
 }
 
-mypaper_plugin_sdk::export!(Probe);
+glaze_plugin_sdk::export!(Probe);

@@ -400,16 +400,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09ec2f926cc3060f09db9ebc5b52823d85268d24bb917e472c0c4bea35780a7d"
 dependencies = [
- "bit-vec 0.9.1",
-]
-
-[[package]]
-name = "bit-set"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56d87354e4229f54a44f7bf2435906a4656dba36026ab6eaca629a2c436a691c"
-dependencies = [
- "bit-vec 0.10.1",
+ "bit-vec",
 ]
 
 [[package]]
@@ -417,16 +408,6 @@ name = "bit-vec"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b71798fca2c1fe1086445a7258a4bc81e6e49dcd24c8d0dd9a1e57395b603f51"
-
-[[package]]
-name = "bit-vec"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5727b15fa97d4f4fee0a3b7c3d550ed0269f54329207b86388de918604e31269"
-dependencies = [
- "borsh",
- "serde",
-]
 
 [[package]]
 name = "bitflags"
@@ -478,30 +459,6 @@ dependencies = [
  "futures-io",
  "futures-lite",
  "piper",
-]
-
-[[package]]
-name = "borsh"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "553c5d846a6ba5150c65e3b1b8ec073bcf1abc20f9b7220de384a4443ea4e20a"
-dependencies = [
- "borsh-derive",
- "bytes",
- "cfg_aliases",
-]
-
-[[package]]
-name = "borsh-derive"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12cdfe656708a01f89b451a7d36466e6fe6c414de0aa18fc54f864f6f9ca9f56"
-dependencies = [
- "once_cell",
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn 3.0.9",
 ]
 
 [[package]]
@@ -1561,6 +1518,355 @@ dependencies = [
 ]
 
 [[package]]
+name = "glaze-app-styler"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-inject",
+ "glaze-theme",
+ "glaze-tweaks",
+ "log",
+ "serde",
+ "serde_json",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
+name = "glaze-bars"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-theme",
+ "log",
+ "serde",
+ "serde_json",
+ "windows",
+ "windows-core",
+ "windows-numerics",
+]
+
+[[package]]
+name = "glaze-config"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "glaze-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-bars",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-theme",
+ "glaze-tweaks",
+ "log",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "glaze-desktop"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "env_logger",
+ "glaze-config",
+ "glaze-fswatch",
+ "log",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "glaze-files"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "env_logger",
+ "glaze-bars",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-index",
+ "glaze-theme",
+ "glaze-tweaks",
+ "log",
+ "serde",
+ "serde_json",
+ "stillkit",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
+name = "glaze-fswatch"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "windows",
+]
+
+[[package]]
+name = "glaze-glass-ipc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "windows",
+]
+
+[[package]]
+name = "glaze-index"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "glaze-config",
+ "glaze-fswatch",
+ "glaze-tweaks",
+ "globset",
+ "memchr",
+ "memmap2",
+ "rayon",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "glaze-inject"
+version = "0.1.0"
+dependencies = [
+ "windows",
+]
+
+[[package]]
+name = "glaze-integrations"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "chrono",
+ "hyper",
+ "log",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "windows",
+ "windows-future",
+]
+
+[[package]]
+name = "glaze-native-host"
+version = "0.1.0"
+
+[[package]]
+name = "glaze-perf"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-bars",
+ "glaze-desktop",
+ "serde",
+ "serde_json",
+ "toml",
+ "windows",
+]
+
+[[package]]
+name = "glaze-plugin-api"
+version = "0.1.0"
+dependencies = [
+ "glaze-plugin-sdk",
+ "postcard",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "glaze-plugin-rss"
+version = "0.1.0"
+dependencies = [
+ "quick-xml 0.42.0",
+ "serde",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
+name = "glaze-plugin-sdk"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "glaze-plugin-weather"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "glaze-plugins"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "env_logger",
+ "glaze-native-host",
+ "glaze-plugin-api",
+ "glaze-plugin-sdk",
+ "log",
+ "serde",
+ "serde_json",
+ "url",
+ "wasmtime",
+ "wasmtime-wasi",
+ "windows",
+]
+
+[[package]]
+name = "glaze-shell"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "bytemuck",
+ "glaze-bars",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-fswatch",
+ "glaze-glass-ipc",
+ "glaze-index",
+ "glaze-integrations",
+ "glaze-plugin-api",
+ "glaze-plugin-sdk",
+ "glaze-plugin-weather",
+ "glaze-theme",
+ "glaze-tweaks",
+ "glaze-widgets",
+ "log",
+ "resvg",
+ "serde",
+ "serde_json",
+ "stillkit",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
+name = "glaze-studio"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-bars",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-integrations",
+ "glaze-plugin-weather",
+ "glaze-shell",
+ "glaze-theme",
+ "glaze-widgets",
+ "log",
+ "notify",
+ "serde",
+ "serde_json",
+ "stillkit",
+ "windows",
+]
+
+[[package]]
+name = "glaze-theme"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-config",
+ "naga",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "glaze-tweaks"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-config",
+ "glaze-fswatch",
+ "glaze-inject",
+ "glaze-theme",
+ "log",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "glaze-wallpaper"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "dioxus-devtools",
+ "glam",
+ "glaze-config",
+ "glaze-desktop",
+ "glaze-fswatch",
+ "glaze-glass-ipc",
+ "glaze-theme",
+ "glaze-tweaks",
+ "gltf",
+ "liquid-rust",
+ "log",
+ "pollster",
+ "raw-window-handle",
+ "serde_json",
+ "subsecond",
+ "webview2-com",
+ "wgpu",
+ "windows",
+ "windows-collections",
+ "windows-core",
+ "windows-future",
+]
+
+[[package]]
+name = "glaze-widgets"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glaze-config",
+ "glaze-integrations",
+ "glaze-plugin-api",
+ "glaze-plugin-sdk",
+ "glaze-theme",
+ "log",
+ "png 0.18.1",
+ "quick-xml 0.42.0",
+ "serde",
+ "serde_json",
+ "windows",
+ "zip",
+]
+
+[[package]]
 name = "glifo"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2257,377 +2563,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
-name = "mypaper-app-styler"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-inject",
- "mypaper-theme",
- "mypaper-tweaks",
- "serde",
- "serde_json",
- "windows",
- "windows-core",
-]
-
-[[package]]
-name = "mypaper-bars"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-theme",
- "mypaper-tiling",
- "serde",
- "serde_json",
- "windows",
- "windows-core",
- "windows-numerics",
-]
-
-[[package]]
-name = "mypaper-config"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "mypaper-tiling",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mypaper-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "mypaper-bars",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-theme",
- "mypaper-tweaks",
- "serde",
- "serde_json",
- "windows",
-]
-
-[[package]]
-name = "mypaper-desktop"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "env_logger",
- "log",
- "mypaper-config",
- "mypaper-fswatch",
- "serde",
- "serde_json",
- "windows",
-]
-
-[[package]]
-name = "mypaper-files"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "env_logger",
- "log",
- "mypaper-bars",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-index",
- "mypaper-theme",
- "mypaper-tweaks",
- "serde",
- "serde_json",
- "stillkit",
- "windows",
- "windows-core",
-]
-
-[[package]]
-name = "mypaper-fswatch"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "windows",
-]
-
-[[package]]
-name = "mypaper-glass-ipc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "windows",
-]
-
-[[package]]
-name = "mypaper-index"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "globset",
- "memchr",
- "memmap2",
- "mypaper-config",
- "mypaper-fswatch",
- "mypaper-tweaks",
- "rayon",
- "serde",
- "serde_json",
- "windows",
-]
-
-[[package]]
-name = "mypaper-inject"
-version = "0.1.0"
-dependencies = [
- "windows",
-]
-
-[[package]]
-name = "mypaper-integrations"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "chrono",
- "hyper",
- "log",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "windows",
- "windows-future",
-]
-
-[[package]]
-name = "mypaper-native-host"
-version = "0.1.0"
-
-[[package]]
-name = "mypaper-perf"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "mypaper-bars",
- "mypaper-desktop",
- "serde",
- "serde_json",
- "toml",
- "windows",
-]
-
-[[package]]
-name = "mypaper-plugin-api"
-version = "0.1.0"
-dependencies = [
- "mypaper-plugin-sdk",
- "postcard",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mypaper-plugin-rss"
-version = "0.1.0"
-dependencies = [
- "quick-xml 0.42.0",
- "serde",
- "serde_json",
- "ureq",
-]
-
-[[package]]
-name = "mypaper-plugin-sdk"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "wit-bindgen",
-]
-
-[[package]]
-name = "mypaper-plugin-weather"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "windows",
-]
-
-[[package]]
-name = "mypaper-plugins"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "env_logger",
- "log",
- "mypaper-native-host",
- "mypaper-plugin-api",
- "mypaper-plugin-sdk",
- "serde",
- "serde_json",
- "url",
- "wasmtime",
- "wasmtime-wasi",
- "windows",
-]
-
-[[package]]
-name = "mypaper-shell"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "bytemuck",
- "env_logger",
- "log",
- "mypaper-bars",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-fswatch",
- "mypaper-glass-ipc",
- "mypaper-index",
- "mypaper-integrations",
- "mypaper-plugin-api",
- "mypaper-plugin-sdk",
- "mypaper-plugin-weather",
- "mypaper-theme",
- "mypaper-tiling",
- "mypaper-tweaks",
- "mypaper-widgets",
- "png 0.18.1",
- "regex",
- "resvg",
- "serde",
- "serde_json",
- "stillkit",
- "windows",
- "windows-core",
-]
-
-[[package]]
-name = "mypaper-studio"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "mypaper-bars",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-integrations",
- "mypaper-plugin-weather",
- "mypaper-shell",
- "mypaper-theme",
- "mypaper-widgets",
- "notify",
- "serde",
- "serde_json",
- "stillkit",
- "windows",
-]
-
-[[package]]
-name = "mypaper-theme"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "mypaper-config",
- "naga",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mypaper-tiling"
-version = "0.1.0"
-dependencies = [
- "proptest",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mypaper-tweaks"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "mypaper-config",
- "mypaper-fswatch",
- "mypaper-inject",
- "mypaper-theme",
- "serde",
- "serde_json",
- "windows",
-]
-
-[[package]]
-name = "mypaper-wallpaper"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "dioxus-devtools",
- "glam",
- "gltf",
- "liquid-rust",
- "log",
- "mypaper-config",
- "mypaper-desktop",
- "mypaper-fswatch",
- "mypaper-glass-ipc",
- "mypaper-theme",
- "mypaper-tweaks",
- "pollster",
- "raw-window-handle",
- "serde_json",
- "subsecond",
- "webview2-com",
- "wgpu",
- "windows",
- "windows-collections",
- "windows-core",
- "windows-future",
-]
-
-[[package]]
-name = "mypaper-widgets"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "mypaper-config",
- "mypaper-integrations",
- "mypaper-plugin-api",
- "mypaper-plugin-sdk",
- "mypaper-theme",
- "png 0.18.1",
- "quick-xml 0.42.0",
- "serde",
- "serde_json",
- "windows",
- "zip",
-]
-
-[[package]]
 name = "naga"
 version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a616d2fb8c89516ac2723a581f69d6c18576046bed761bd6b305e5618e6ae130"
 dependencies = [
  "arrayvec",
- "bit-set 0.10.0",
+ "bit-set",
  "bitflags 2.13.2",
  "cfg-if",
  "cfg_aliases",
@@ -3332,26 +3274,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
-name = "proptest"
-version = "1.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8530004ccb15eae51c7e40009fbe317f341f804db54dc033eec1c50be28cfa0"
-dependencies = [
- "bit-set 0.11.1",
- "bit-vec 0.10.1",
- "bitflags 2.13.2",
- "chacha20",
- "core_detect",
- "num-traits",
- "rand 0.10.3",
- "rand_xorshift",
- "regex-syntax",
- "rusty-fork",
- "tempfile",
- "unarray",
-]
-
-[[package]]
 name = "pulley-interpreter"
 version = "50.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3379,12 +3301,6 @@ name = "pxfm"
 version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
-
-[[package]]
-name = "quick-error"
-version = "1.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quick-xml"
@@ -3470,15 +3386,6 @@ name = "rand_core"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
-
-[[package]]
-name = "rand_xorshift"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60aa6af80be32871323012e02e6e65f8a7cc7890931ae421d217ad8fe0df2ccf"
-dependencies = [
- "rand_core 0.10.1",
-]
 
 [[package]]
 name = "range-alloc"
@@ -3723,18 +3630,6 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
-
-[[package]]
-name = "rusty-fork"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc6bf79ff24e648f6da1f8d1f011e9cac26491b619e6b9280f2b47f1774e6ee2"
-dependencies = [
- "fnv",
- "quick-error",
- "tempfile",
- "wait-timeout",
-]
 
 [[package]]
 name = "same-file"
@@ -4134,10 +4029,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4400,12 +4295,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "unarray"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
-
-[[package]]
 name = "unicode-bidi"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4600,15 +4489,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "wait-timeout"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "walkdir"
@@ -5198,8 +5078,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c018fce9b6270aa203c2fdd56f3cce996713534bd757e4ea58c8560b121f14"
 dependencies = [
  "arrayvec",
- "bit-set 0.10.0",
- "bit-vec 0.9.1",
+ "bit-set",
+ "bit-vec",
  "bitflags 2.13.2",
  "bytemuck",
  "cfg_aliases",
@@ -5239,7 +5119,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6b7fb58561a792bc237628ba0792e332de418fefe145f13b5ed8201e6d52f58"
 dependencies = [
  "arrayvec",
- "bit-set 0.10.0",
+ "bit-set",
  "bitflags 2.13.2",
  "bytemuck",
  "cfg-if",

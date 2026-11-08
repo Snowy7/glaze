@@ -6,7 +6,7 @@ param(
 )
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Drawing,System.Windows.Forms
-if(-not ('MypaperCapture' -as [type])) {
+if(-not ('GlazeCapture' -as [type])) {
 Add-Type -ReferencedAssemblies System.Drawing.dll,System.Windows.Forms.dll -TypeDefinition @'
 using System;
 using System.Collections.Generic;
@@ -16,16 +16,16 @@ using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
-public static class MypaperCapture {
+public static class GlazeCapture {
     [StructLayout(LayoutKind.Sequential)] public struct Rect {public int Left,Top,Right,Bottom;}
     [StructLayout(LayoutKind.Sequential)] struct Point {public int X,Y;}
     public sealed class Window {
         public long Handle; public uint Pid; public int Z; public Rect Bounds;
-        public bool Mypaper,OpaquePanel,InvisibleAlpha,DesktopBackground; public Rect Client;
+        public bool Glaze,OpaquePanel,InvisibleAlpha,DesktopBackground; public Rect Client;
     }
     public sealed class Report {
         public Rect Desktop; public Window[] Before,After; public DateTime CapturedUtc;
-        public string Policy="Grey external rectangles; only higher opaque Studio client areas occlude them. Transparent mypaper surfaces never exempt external content.";
+        public string Policy="Grey external rectangles; only higher opaque Studio client areas occlude them. Transparent Glaze surfaces never exempt external content.";
     }
     delegate bool EnumProc(IntPtr hwnd,IntPtr state);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc callback,IntPtr state);
@@ -55,13 +55,13 @@ public static class MypaperCapture {
             if(!R(bounds).IntersectsWith(desktop))return true;
             uint pid;GetWindowThreadProcessId(h,out pid);
             string name="";try{using(var p=Process.GetProcessById((int)pid)){name=p.ProcessName;}}catch{}
-            bool ours=name=="mypaper-shell"||name=="mypaper-studio"||name=="mypaper-wallpaper"||name=="mypaper-core";
-            var window=new Window{Handle=h.ToInt64(),Pid=pid,Z=order,Bounds=bounds,Mypaper=ours};
+            bool ours=name=="glaze-shell"||name=="glaze-studio"||name=="glaze-wallpaper"||name=="glaze-core";
+            var window=new Window{Handle=h.ToInt64(),Pid=pid,Z=order,Bounds=bounds,Glaze=ours};
             // Record Explorer's desktop too, while keeping it distinct from app content.
             window.DesktopBackground=cls.ToString()=="Progman"||cls.ToString()=="WorkerW";
             uint key,flags;byte alpha;
             window.InvisibleAlpha=GetLayeredWindowAttributes(h,out key,out alpha,out flags) && (flags&2)!=0 && alpha==0;
-            if(name=="mypaper-studio" && cls.ToString()=="mypaper.ui.app") {
+            if(name=="glaze-studio" && cls.ToString()=="glaze.ui.app") {
                 Rect client;var origin=new Point();
                 if(GetClientRect(h,out client)&&ClientToScreen(h,ref origin)) {
                     window.OpaquePanel=true;
@@ -80,7 +80,7 @@ public static class MypaperCapture {
     }
     static void Redact(Graphics g,Window[] windows,Rectangle desktop) {
         foreach(var window in windows) {
-            if(window.Mypaper||window.InvisibleAlpha||window.DesktopBackground)continue;
+            if(window.Glaze||window.InvisibleAlpha||window.DesktopBackground)continue;
             using(var region=new Region(Rectangle.Intersect(R(window.Bounds),desktop))) {
                 foreach(var above in windows) {
                     if(above.Z>=window.Z)break;
@@ -113,6 +113,6 @@ public static class MypaperCapture {
 foreach($path in @($Original,$Redacted,$Metadata)) {
     [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($path)))
 }
-$report=[MypaperCapture]::Capture($Original,$Redacted)
+$report=[GlazeCapture]::Capture($Original,$Redacted)
 $report|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $Metadata
-@{candidate=$Redacted;metadata=$Metadata;externalWindows=@($report.Before|Where-Object {-not $_.Mypaper}).Count}
+@{candidate=$Redacted;metadata=$Metadata;externalWindows=@($report.Before|Where-Object {-not $_.Glaze}).Count}

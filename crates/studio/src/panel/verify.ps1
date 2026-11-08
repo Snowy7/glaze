@@ -1,6 +1,6 @@
 param(
-    [string]$Exe = 'C:\mypaper-targets\studio-panel\target\debug\mypaper-studio.exe',
-    [string]$Shots = 'C:\mypaper-targets\studio-panel\shots',
+    [string]$Exe = 'C:\glaze-targets\studio-panel\target\debug\glaze-studio.exe',
+    [string]$Shots = 'C:\glaze-targets\studio-panel\shots',
     [switch]$Fixture
 )
 $ErrorActionPreference = 'Stop'
@@ -73,18 +73,18 @@ function SearchNavigation([string]$Query,[string]$Result) {
 }
 
 $before=SettingsHashes
-$existing=@(Get-Process -Name 'mypaper-studio' -ErrorAction SilentlyContinue | Select-Object Id,Path,MainWindowTitle)
+$existing=@(Get-Process -Name 'glaze-studio' -ErrorAction SilentlyContinue | Select-Object Id,Path,MainWindowTitle)
 if($existing|Where-Object{$_.MainWindowTitle -like '*Panel*'}){throw 'Another panel is running; it was not touched.'}
 $script:visited=@();$script:memory=@();$captures=@();$uia=@{};$script:process=$null
 $success=$false
 $prefix=if($Fixture){'fixture'}else{'live'}
 $start=New-Object System.Diagnostics.ProcessStartInfo
 $start.FileName=$Exe;$start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardError=$true;$start.RedirectStandardOutput=$true
-$start.EnvironmentVariables['MYPAPER_STUDIO_PANEL']='1'
+$start.EnvironmentVariables['GLAZE_STUDIO_PANEL']='1'
 $fixtureRoot=$null
 if($Fixture){
     $fixtureRoot=Join-Path $Shots ('uia-fixture-'+[guid]::NewGuid().ToString('N'))
-    $settings=Join-Path $fixtureRoot 'mypaper'
+    $settings=Join-Path $fixtureRoot 'Glaze'
     [void][System.IO.Directory]::CreateDirectory($settings)
     [System.IO.File]::WriteAllText((Join-Path $settings 'config.json'),'{"look":{"style":"liquid","material":{"clarity":0.55}},"desktop_menu":{"items":["view","sort","refresh"]}}')
     [System.IO.File]::WriteAllText((Join-Path $settings 'bars.json'),'{"version":1,"top":{"left":["start"],"right":["clock"]}}')

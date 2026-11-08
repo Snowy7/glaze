@@ -2,7 +2,7 @@
   "when": "2026-11-04 04:51",
   "label": "after3",
   "machine": "16 logical CPUs, screens 2560x1440 + 2560x1440",
-  "build": "C:\\mypaper-targets\\perf\\after3",
+  "build": "C:\\glaze-targets\\perf\\after3",
   "plan": "4 starts per scenario (1 cold, then warm), CPU windows of 10 s after 5 s settling",
   "scenarios": [
     {
@@ -209,14 +209,14 @@
       "processes": [
         {
           "pid": 44160,
-          "name": "mypaper-core.exe",
+          "name": "glaze-core.exe",
           "group": "core",
           "private_mb": 2.03125,
           "working_set_mb": 12.24609375
         },
         {
           "pid": 4148,
-          "name": "mypaper-wallpaper.exe",
+          "name": "glaze-wallpaper.exe",
           "group": "wallpaper",
           "private_mb": 258.43359375,
           "working_set_mb": 17.49609375
@@ -430,14 +430,14 @@
       "processes": [
         {
           "pid": 64424,
-          "name": "mypaper-core.exe",
+          "name": "glaze-core.exe",
           "group": "core",
           "private_mb": 2.03515625,
           "working_set_mb": 12.24609375
         },
         {
           "pid": 52428,
-          "name": "mypaper-wallpaper.exe",
+          "name": "glaze-wallpaper.exe",
           "group": "wallpaper",
           "private_mb": 251.90625,
           "working_set_mb": 9.12109375
@@ -651,14 +651,14 @@
       "processes": [
         {
           "pid": 57116,
-          "name": "mypaper-core.exe",
+          "name": "glaze-core.exe",
           "group": "core",
           "private_mb": 2.03515625,
           "working_set_mb": 12.24609375
         },
         {
           "pid": 57096,
-          "name": "mypaper-wallpaper.exe",
+          "name": "glaze-wallpaper.exe",
           "group": "wallpaper",
           "private_mb": 288.0703125,
           "working_set_mb": 10.4609375
@@ -872,14 +872,14 @@
       "processes": [
         {
           "pid": 61020,
-          "name": "mypaper-core.exe",
+          "name": "glaze-core.exe",
           "group": "core",
           "private_mb": 2.0234375,
           "working_set_mb": 12.2421875
         },
         {
           "pid": 31472,
-          "name": "mypaper-wallpaper.exe",
+          "name": "glaze-wallpaper.exe",
           "group": "wallpaper",
           "private_mb": 355.69921875,
           "working_set_mb": 44.41015625
@@ -1093,14 +1093,14 @@
       "processes": [
         {
           "pid": 51120,
-          "name": "mypaper-core.exe",
+          "name": "glaze-core.exe",
           "group": "core",
           "private_mb": 2.03515625,
           "working_set_mb": 12.26171875
         },
         {
           "pid": 59908,
-          "name": "mypaper-wallpaper.exe",
+          "name": "glaze-wallpaper.exe",
           "group": "wallpaper",
           "private_mb": 383.1328125,
           "working_set_mb": 18.21484375
@@ -1314,14 +1314,14 @@
       "processes": [
         {
           "pid": 44208,
-          "name": "mypaper-core.exe",
+          "name": "glaze-core.exe",
           "group": "core",
           "private_mb": 2.02734375,
           "working_set_mb": 12.2265625
         },
         {
           "pid": 3736,
-          "name": "mypaper-wallpaper.exe",
+          "name": "glaze-wallpaper.exe",
           "group": "wallpaper",
           "private_mb": 147.01171875,
           "working_set_mb": 4.74609375
@@ -1621,21 +1621,21 @@
       "processes": [
         {
           "pid": 49484,
-          "name": "mypaper-core.exe",
+          "name": "glaze-core.exe",
           "group": "core",
           "private_mb": 2.0390625,
           "working_set_mb": 12.2421875
         },
         {
           "pid": 62404,
-          "name": "mypaper-wallpaper.exe",
+          "name": "glaze-wallpaper.exe",
           "group": "wallpaper",
           "private_mb": 252.296875,
           "working_set_mb": 9.0234375
         },
         {
           "pid": 39276,
-          "name": "mypaper-widgets.exe",
+          "name": "glaze-widgets.exe",
           "group": "widgets",
           "private_mb": 9.7421875,
           "working_set_mb": 34.12890625
@@ -1952,21 +1952,21 @@
       "processes": [
         {
           "pid": 64944,
-          "name": "mypaper-core.exe",
+          "name": "glaze-core.exe",
           "group": "core",
           "private_mb": 2.03515625,
           "working_set_mb": 12.3046875
         },
         {
           "pid": 63864,
-          "name": "mypaper-wallpaper.exe",
+          "name": "glaze-wallpaper.exe",
           "group": "wallpaper",
           "private_mb": 252.6328125,
           "working_set_mb": 9.6875
         },
         {
           "pid": 62768,
-          "name": "mypaper-bars.exe",
+          "name": "glaze-bars.exe",
           "group": "bars",
           "private_mb": 6.81640625,
           "working_set_mb": 38.8359375
@@ -2311,21 +2311,21 @@
       "processes": [
         {
           "pid": 53572,
-          "name": "mypaper-core.exe",
+          "name": "glaze-core.exe",
           "group": "core",
           "private_mb": 2.03125,
           "working_set_mb": 12.47265625
         },
         {
           "pid": 45684,
-          "name": "mypaper-wallpaper.exe",
+          "name": "glaze-wallpaper.exe",
           "group": "wallpaper",
           "private_mb": 255.36328125,
           "working_set_mb": 9.36328125
         },
         {
           "pid": 64680,
-          "name": "mypaper-bars.exe",
+          "name": "glaze-bars.exe",
           "group": "bars",
           "private_mb": 6.7421875,
           "working_set_mb": 38.88671875
@@ -2676,28 +2676,28 @@
       "processes": [
         {
           "pid": 52216,
-          "name": "mypaper-core.exe",
+          "name": "glaze-core.exe",
           "group": "core",
           "private_mb": 2.02734375,
           "working_set_mb": 12.30078125
         },
         {
           "pid": 7516,
-          "name": "mypaper-wallpaper.exe",
+          "name": "glaze-wallpaper.exe",
           "group": "wallpaper",
           "private_mb": 254.8671875,
           "working_set_mb": 18.21875
         },
         {
           "pid": 3600,
-          "name": "mypaper-widgets.exe",
+          "name": "glaze-widgets.exe",
           "group": "widgets",
           "private_mb": 10.12890625,
           "working_set_mb": 34.48046875
         },
         {
           "pid": 58648,
-          "name": "mypaper-bars.exe",
+          "name": "glaze-bars.exe",
           "group": "bars",
           "private_mb": 6.734375,
           "working_set_mb": 38.85546875

@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 
 // The input's tonal range from a 3x3 sample: (low, high) luma. Dots then span the picture's own
 // range, so a low-key photo keeps its shapes instead of turning into solid ink.

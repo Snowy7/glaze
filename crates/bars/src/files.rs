@@ -5,10 +5,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-/// `%LOCALAPPDATA%\mypaper\<name>`.
+/// `%LOCALAPPDATA%\glaze\<name>`.
 pub fn local(name: &str) -> Result<PathBuf> {
     let local = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?;
-    Ok(PathBuf::from(local).join("mypaper").join(name))
+    Ok(PathBuf::from(local).join("glaze").join(name))
 }
 
 /// Writes a file atomically (temp file plus rename), so readers and watchers never see it
@@ -24,7 +24,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 pub(crate) fn temp_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("mypaper-bars-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("glaze-bars-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir

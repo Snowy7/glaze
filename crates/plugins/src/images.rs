@@ -1,5 +1,5 @@
 //! `ui.put-image` (docs/plugins.md › "Images"): each image is a named, read-only-to-the-shell
-//! file mapping `Local\mypaper-image-<helper pid>-<id>` holding a 16-byte header (`MPI1`, then
+//! file mapping `Local\glaze-image-<helper pid>-<id>` holding a 16-byte header (`MPI1`, then
 //! width, height and stride as `u32` LE) followed by BGRA8 premultiplied rows. Ids are unique in
 //! the helper process. The mapping lives until the plugin drops the image or unloads; the shell
 //! opens it by name when a canvas names the id and keeps its own handle while it draws it.
@@ -19,7 +19,7 @@ pub const MAX_IMAGES: usize = 64;
 
 /// The mapping name the shell opens for image `id` of the helper `pid`.
 pub fn name(pid: u32, id: u32) -> String {
-    format!(r"Local\mypaper-image-{pid}-{id}")
+    format!(r"Local\glaze-image-{pid}-{id}")
 }
 
 struct Mapping(HANDLE);

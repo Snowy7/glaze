@@ -1,8 +1,8 @@
 //! The OBS plugin's faces drawn by the host, laid out like the native `obs-sizes.png` so the two
 //! sheets compare side by side. Input is the plugin's own view golden (`plugins/obs/golden`).
 use crate::widgets::{model::{Model, Widget}, time::Stamp, views};
-use mypaper_ui::{DisplayList, Op, Rect, Rgba, TextStyle, Tokens, Ui, golden, render};
-use mypaper_widgets::{layout::Placed, storage::Storage};
+use glaze_ui::{DisplayList, Op, Rect, Rgba, TextStyle, Tokens, Ui, golden, render};
+use glaze_widgets::{layout::Placed, storage::Storage};
 use serde_json::{Map, Value, json};
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
@@ -18,7 +18,7 @@ fn model(face: &Value, title: &str) -> Model {
         appearance: Map::new(),
         own: Map::new(),
     };
-    let storage = &mut Storage::new(std::env::temp_dir().join("mypaper-plugin-fixture"));
+    let storage = &mut Storage::new(std::env::temp_dir().join("glaze-plugin-fixture"));
     let mut m = Model::new(placed, storage, Stamp::at(NOW)).unwrap();
     m.kind = Widget::Plugin;
     m.visible = true;

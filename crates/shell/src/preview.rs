@@ -9,7 +9,7 @@ pub mod bars {
     pub use crate::bars::services::{Model, default_pins};
     pub use crate::bars::view::{Frame, Target, dock, top};
 
-    use mypaper_bars::{audio::Volume, custom::Custom, desktops::Workspaces, wake::Waker};
+    use glaze_bars::{audio::Volume, custom::Custom, desktops::Workspaces, wake::Waker};
     use windows::Win32::Foundation::SYSTEMTIME;
 
     /// A calm, plausible model for previews: a few workspaces, the given clock, volume at half,
@@ -49,7 +49,7 @@ pub mod widgets {
     pub use crate::widgets::view::{Frame, view};
 
     /// The widgets' tokens from a merged appearance map (what the live host uses).
-    pub fn tokens(appearance: &serde_json::Map<String, serde_json::Value>) -> mypaper_ui::Tokens {
+    pub fn tokens(appearance: &serde_json::Map<String, serde_json::Value>) -> glaze_ui::Tokens {
         crate::widgets::tokens(appearance)
     }
 }
@@ -64,7 +64,7 @@ pub mod menu {
     pub use crate::desktop_menu::items::{Command, Item, ViewState, build};
 
     /// The menu's tokens for a theme (name or folder), as the live menu resolves them.
-    pub fn tokens(theme: &str, text: &mypaper_ui::Text) -> mypaper_ui::Tokens {
+    pub fn tokens(theme: &str, text: &glaze_ui::Text) -> glaze_ui::Tokens {
         crate::look::tokens(theme, text)
     }
 }

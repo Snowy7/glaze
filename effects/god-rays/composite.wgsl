@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let base = sample_layer_input(uv);
     // Diffuse the low-resolution light field, preserving the sharp wallpaper underneath.

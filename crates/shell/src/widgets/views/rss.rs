@@ -1,8 +1,8 @@
 //! Headlines: each a headline over its source and age, as rows or cards, scrolling; a quiet
 //! header and a footer when feeds fail.
 use super::{Ctx, ITEM, relative_age};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Align, Rect, Role, TextRole};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Align, Rect, Role, TextRole};
 use serde_json::Value;
 
 pub fn draw(c: &mut Ctx, r: Rect) {
@@ -58,7 +58,7 @@ pub fn draw(c: &mut Ctx, r: Rect) {
                 c.f.fill(rect, radius, color.card);
             }
             c.control(ITEM + i as u32, rect, radius, Role::Link, title, None);
-            let inner = rect.inset(mypaper_ui::Insets::xy(inset, pad_y));
+            let inner = rect.inset(glaze_ui::Insets::xy(inset, pad_y));
             let used = c.f.paragraph(inner.left, inner.top, inner.width(), title, title_role, color.label, 2);
             let mut meta = Vec::new();
             if m.flag("showSource", true)

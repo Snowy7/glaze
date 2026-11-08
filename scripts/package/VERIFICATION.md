@@ -12,16 +12,16 @@ The same registration probe, using the real Windows API and MTA initialization, 
 | Context | `GetAccessStatus` | `NotificationChanged` |
 |---|---|---|
 | Unpackaged | Allowed (1) | `0x80070490`, Element not found |
-| `mypaper.Desktop` identity | Allowed (1) | Registered successfully |
+| `glaze.Desktop` identity | Allowed (1) | Registered successfully |
 
 Raw results: [unpackaged](evidence/unpackaged-registration.jsonl),
 [packaged](evidence/packaged-registration.jsonl).
 
 Both actual exes were inspected through `GetPackageFullName`: core and shell had
-`mypaper.Desktop_0.1.0.0_neutral__21v47vsar82ra`. The engine remained unpackaged (`15700`,
+`glaze.Desktop_0.1.0.0_neutral__21v47vsar82ra`. The engine remained unpackaged (`15700`,
 `APPMODEL_ERROR_NO_PACKAGE`), retaining its existing borderless-capture flow. The external location
 is this worktree's `target\release`, populated from its own build at
-`C:\mypaper-targets\notification-identity\release`.
+`C:\glaze-targets\notification-identity\release`.
 
 Windows already reported notification access Allowed, including immediately after the first
 package registration. No consent prompt or privacy-setting change was needed. The newly added
@@ -81,14 +81,14 @@ Visually inspected:
 
 ### Full desktop sample — not full-product qualification
 
-The required `mypaper-tools\measure.ps1 -Label notification-identity -Seconds 60` was also run.
+The required `glaze-tools\measure.ps1 -Label notification-identity -Seconds 60` was also run.
 It measured the current user layout, active media and rain-city, not the plan's paused-media,
 six-widget, median-of-three comparison. Its real values must not be confused with the isolated
 notification provider's zero idle CPU:
 
 | Current desktop, single 60-second sample | Measured | Native-plan gate | Result |
 |---|---:|---:|---|
-| Steady mypaper processes | 3 | 3 | Pass |
+| Steady Glaze processes | 3 | 3 | Pass |
 | Core CPU / private memory | 0.00% / 2 MiB | ~0% / ≤8 MiB | Pass in this sample |
 | Shell CPU / private memory | 3.26% / 31 MiB | ≤0.1% / ≤40 MiB | CPU fails; memory passes |
 | Engine CPU / private memory | 4.30% / 311 MiB | ≤4% / ≤272.4 MiB | Fails |
@@ -115,9 +115,9 @@ DWM-baseline claim is made. Raw full-desktop metadata is in `evidence/full-deskt
 
 ## Checks and handoff
 
-- `cargo check -p mypaper-integrations -p mypaper-shell -p mypaper-core`: passed.
-- `cargo test -p mypaper-integrations`: **10 passed**.
-- `cargo test -p mypaper-shell`: **45 passed, 1 existing ignored** (user widget-layout fixture).
+- `cargo check -p glaze-integrations -p glaze-shell -p glaze-core`: passed.
+- `cargo test -p glaze-integrations`: **10 passed**.
+- `cargo test -p glaze-shell`: **45 passed, 1 existing ignored** (user widget-layout fixture).
 - Strict Clippy passed for integrations (including all targets), shell and core.
 - Windows SDK MakeAppx/SignTool, PowerShell parsing, actual registration/no-op/unregistration,
   packaged/unpackaged API probes, live UI and provider latency/idle checks passed as described above.

@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let radius = clamp(params.radius, 1.0, 80.0) * paper.resolution.y / 1080.0;
     let px = vec2f(0.0, radius / max(paper.resolution.y, 1.0) / 3.230769);

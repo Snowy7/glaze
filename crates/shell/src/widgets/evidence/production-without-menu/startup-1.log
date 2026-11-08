@@ -1,21 +1,21 @@
-[2026-11-05T06:02:08Z INFO  mypaper_desktop::startup] READY component=shell main_ms=47.9 epoch_us=1793858528871618
-[2026-11-05T06:02:08Z WARN  mypaper_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
-[2026-11-05T06:02:08Z INFO  mypaper_desktop::startup] READY component=shell config_ms=59.5 epoch_us=1793858528883185
-[2026-11-05T06:02:08Z INFO  mypaper_desktop::startup] READY component=shell prepared_ms=59.5 epoch_us=1793858528883191
-[2026-11-05T06:02:08Z INFO  mypaper_desktop::startup] READY component=shell factories_ms=103.9 epoch_us=1793858528927611
-[2026-11-05T06:02:08Z INFO  mypaper_desktop::startup] READY component=shell services_ms=104.0 epoch_us=1793858528927678
-[2026-11-05T06:02:08Z INFO  mypaper_desktop::startup] READY component=shell theme_ms=106.9 epoch_us=1793858528930600
-[2026-11-05T06:02:08Z INFO  mypaper_desktop::startup] READY component=shell monitors_ms=107.5 epoch_us=1793858528931197
-[2026-11-05T06:02:09Z INFO  mypaper_desktop::startup] READY component=shell first_paint_ms=230.6 epoch_us=1793858529054253
-[2026-11-05T06:02:09Z INFO  mypaper_desktop::startup] READY component=shell surfaces_ms=361.5 epoch_us=1793858529185160
-[2026-11-05T06:02:09Z INFO  mypaper_desktop::startup] READY component=shell bars_painted_ms=361.6 epoch_us=1793858529185258
-[2026-11-05T06:02:09Z INFO  mypaper_desktop::startup] READY component=shell replayed_ms=573.0 epoch_us=1793858529396704
-[2026-11-05T06:02:09Z INFO  mypaper_bars::network] no Wi-Fi notifications (5)
-[2026-11-05T06:02:09Z INFO  mypaper_bars::tray_host] tray: hosting the notification area
-[2026-11-05T06:02:09Z INFO  mypaper_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
-[2026-11-05T06:02:09Z INFO  mypaper_bars::flyouts::winkey] launcher: the Windows key opens the launcher
-[2026-11-05T06:02:09Z INFO  mypaper_bars::tray_host] tray: WM_COPYDATA 0 took 108.2668ms
-[2026-11-05T06:02:10Z INFO  mypaper_desktop::startup] READY component=shell ready_ms=1244.5 epoch_us=1793858530068209
-[2026-11-05T06:02:10Z INFO  mypaper_shell] running
-[2026-11-05T06:02:10Z INFO  mypaper_desktop::startup] READY component=shell widgets_init_ms=1379.3 epoch_us=1793858530202954
-[2026-11-05T06:02:10Z INFO  mypaper_desktop::startup] READY component=shell widgets_ready_ms=2050.4 epoch_us=1793858530874115
+[2026-11-05T06:02:08Z INFO  glaze_desktop::startup] READY component=shell main_ms=47.9 epoch_us=1793858528871618
+[2026-11-05T06:02:08Z WARN  glaze_shell::bars::look] native bars ignore CSS, gradient/image fills, noise, glow, neon and shaped corners
+[2026-11-05T06:02:08Z INFO  glaze_desktop::startup] READY component=shell config_ms=59.5 epoch_us=1793858528883185
+[2026-11-05T06:02:08Z INFO  glaze_desktop::startup] READY component=shell prepared_ms=59.5 epoch_us=1793858528883191
+[2026-11-05T06:02:08Z INFO  glaze_desktop::startup] READY component=shell factories_ms=103.9 epoch_us=1793858528927611
+[2026-11-05T06:02:08Z INFO  glaze_desktop::startup] READY component=shell services_ms=104.0 epoch_us=1793858528927678
+[2026-11-05T06:02:08Z INFO  glaze_desktop::startup] READY component=shell theme_ms=106.9 epoch_us=1793858528930600
+[2026-11-05T06:02:08Z INFO  glaze_desktop::startup] READY component=shell monitors_ms=107.5 epoch_us=1793858528931197
+[2026-11-05T06:02:09Z INFO  glaze_desktop::startup] READY component=shell first_paint_ms=230.6 epoch_us=1793858529054253
+[2026-11-05T06:02:09Z INFO  glaze_desktop::startup] READY component=shell surfaces_ms=361.5 epoch_us=1793858529185160
+[2026-11-05T06:02:09Z INFO  glaze_desktop::startup] READY component=shell bars_painted_ms=361.6 epoch_us=1793858529185258
+[2026-11-05T06:02:09Z INFO  glaze_desktop::startup] READY component=shell replayed_ms=573.0 epoch_us=1793858529396704
+[2026-11-05T06:02:09Z INFO  glaze_bars::network] no Wi-Fi notifications (5)
+[2026-11-05T06:02:09Z INFO  glaze_bars::tray_host] tray: hosting the notification area
+[2026-11-05T06:02:09Z INFO  glaze_bars::tray_host] tray: Shell_TrayWnd up; asked apps to add their icons
+[2026-11-05T06:02:09Z INFO  glaze_bars::flyouts::winkey] launcher: the Windows key opens the launcher
+[2026-11-05T06:02:09Z INFO  glaze_bars::tray_host] tray: WM_COPYDATA 0 took 108.2668ms
+[2026-11-05T06:02:10Z INFO  glaze_desktop::startup] READY component=shell ready_ms=1244.5 epoch_us=1793858530068209
+[2026-11-05T06:02:10Z INFO  glaze_shell] running
+[2026-11-05T06:02:10Z INFO  glaze_desktop::startup] READY component=shell widgets_init_ms=1379.3 epoch_us=1793858530202954
+[2026-11-05T06:02:10Z INFO  glaze_desktop::startup] READY component=shell widgets_ready_ms=2050.4 epoch_us=1793858530874115

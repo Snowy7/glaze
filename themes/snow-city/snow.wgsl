@@ -2,7 +2,7 @@ fn Sin(x: f32) -> f32 { return sin(x-floor(x/6.28318530718+0.5)*6.28318530718); 
 // Andrew Baldwin (2013), https://www.shadertoy.com/view/ldsGDn
 // Rocksdanister photo adaptation. CC BY-NC-SA 3.0.
 // https://creativecommons.org/licenses/by-nc-sa/3.0/
-// WGSL port by mypaper contributors. Original GLSL in shaders/snow.frag.
+// WGSL port by Glaze contributors. Original GLSL in shaders/snow.frag.
 @group(0) @binding(1) var photo: texture_2d<f32>;
 @group(0) @binding(2) var photo_sampler: sampler;
 fn rand(co: vec2f) -> f32 { return fract(Sin(dot(co,vec2f(12.9898,78.233)))*43758.5453); }

@@ -3,7 +3,7 @@
   "name": "Now playing pill",
   "category": "Media",
   "version": "1.0.0",
-  "author": "mypaper",
+  "author": "Glaze",
   "description": "A slim always-on-top capsule with the current track, artwork, transport buttons and a progress hairline.",
   "size": {
     "default": [6, 2],

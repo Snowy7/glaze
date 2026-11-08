@@ -19,7 +19,7 @@ pub(crate) mod views;
 pub(crate) use views as view;
 
 use crate::glass::{self, Material, Plate};
-use mypaper_ui::theme::Knobs;
+use glaze_ui::theme::Knobs;
 use crate::inbox;
 use crate::integrations::media::WidgetMedia as Media;
 use anyhow::Result;
@@ -28,16 +28,16 @@ use coverage::WindowEvents;
 #[cfg(test)]
 use model::Timer;
 use model::{Model, Task, Widget};
-use mypaper_bars::config::{self as bars_config, BarsConfig};
-use mypaper_config::Config;
-use mypaper_desktop::hold::{Fact, Holds, Reason};
-use mypaper_desktop::{DesktopEvents, DesktopHost, Monitor, covered_monitors, monitor_infos};
-use mypaper_theme::{Color, Paint, TextTone};
-use mypaper_ui::{
+use glaze_bars::config::{self as bars_config, BarsConfig};
+use glaze_config::Config;
+use glaze_desktop::hold::{Fact, Holds, Reason};
+use glaze_desktop::{DesktopEvents, DesktopHost, Monitor, covered_monitors, monitor_infos};
+use glaze_theme::{Color, Paint, TextTone};
+use glaze_ui::{
     Button, Colors, Event, FileWatch, HitId, Kind, Rect, Rgba, Role, Surface, SurfaceId, TextField,
     TextStyle, Ticker, Tokens, Ui,
 };
-use mypaper_widgets::{
+use glaze_widgets::{
     appicon::Icons,
     audio::{Audio, Wasapi},
     bridge::{MediaAction, Out, Target},
@@ -122,7 +122,7 @@ struct EditSurface {
     surface: Surface,
     monitor: usize,
     /// Hover and press over the pill's buttons (unused on grids).
-    hot: mypaper_ui::Interaction,
+    hot: glaze_ui::Interaction,
 }
 /// The widget picker popover: where it adds (a monitor, and the cell that was right-clicked),
 /// its search field and its list.
@@ -130,8 +130,8 @@ struct Picker {
     surface: Surface,
     monitor: usize,
     at: Option<[u32; 2]>,
-    hot: mypaper_ui::Interaction,
-    scroll: mypaper_ui::Scroll,
+    hot: glaze_ui::Interaction,
+    scroll: glaze_ui::Scroll,
     field: Option<TextField>,
     query: String,
     /// Index into the filtered choices: the previewed widget.
@@ -156,7 +156,7 @@ pub struct Probe {
 /// Owned by the shell's UI thread. Call `poll` after dispatch, route queued UI events with
 /// `on_event`, and include `timeout_ms` in the message wait. All methods are non-reentrant.
 pub struct Widgets {
-    desktop_look: mypaper_config::Look,
+    desktop_look: glaze_config::Look,
     look_chrome_dirty: bool,
     layout: Layout,
     layout_error: Option<String>,
@@ -208,9 +208,9 @@ pub struct Widgets {
     plugins: Plugins,
     plugin_notifications: plugin_notifications::Notifications,
     plugin_events: plugin_events::Events,
-    plugin_menu: Option<mypaper_ui::menu::Menu<(String, String, String)>>,
+    plugin_menu: Option<glaze_ui::menu::Menu<(String, String, String)>>,
     /// A plugin widget's right-click "Options…" (`plugin_options`).
-    options_menu: Option<mypaper_ui::menu::Menu<plugin_options::Choice>>,
+    options_menu: Option<glaze_ui::menu::Menu<plugin_options::Choice>>,
     worker: data::Worker,
     holds: Holds,
     held: bool,
@@ -298,7 +298,7 @@ impl Widgets {
         apply_style(&config);
         let mut holds = Holds::default();
         holds.apply(&config);
-        holds.set(Fact::OnBattery, mypaper_desktop::on_battery());
+        holds.set(Fact::OnBattery, glaze_desktop::on_battery());
         let skin = load_skin(&config);
         let mut widgets = Self {
             studio_active: false,
@@ -308,7 +308,7 @@ impl Widgets {
             studio_skin: None,
             studio_bars: None,
             studio_raw: studio_raw(&path),
-            studio_config_raw: mypaper_config::path().ok().map_or_else(|| serde_json::json!({}), |p| studio_raw(&p)),
+            studio_config_raw: glaze_config::path().ok().map_or_else(|| serde_json::json!({}), |p| studio_raw(&p)),
             studio_stamp: (None, None, 0, 0),
             studio_applied: Instant::now(),
             studio_pending: false,
@@ -425,12 +425,12 @@ impl Widgets {
                 self.reconcile_needed = true;
             }
             WM_LAYOUT => match Layout::load_upgrading(&self.path) {
-                // An older mypaper (an old Studio's Start over) wrote an older layout version
+                // An older Glaze (an old Studio's Start over) wrote an older layout version
                 // over the one this shell already upgraded. That file is kept beside it
                 // (widgets.json.v1...) and the shell's layout goes back: never adopt a downgrade.
                 Ok((_, true)) if self.layout_error.is_none() => {
                     log::warn!(
-                        "widgets.json: an older mypaper wrote an older layout version over version {}; kept it beside and restored the current layout",
+                        "widgets.json: an older Glaze wrote an older layout version over version {}; kept it beside and restored the current layout",
                         layout::VERSION
                     );
                     if let Err(e) = self.layout.save(&self.path) {
@@ -488,7 +488,7 @@ impl Widgets {
     fn follow_config(&mut self) {
         if let Ok(config) = Config::load() {
             self.studio_stamp.0 = None;
-            if let Ok(path) = mypaper_config::path() { self.studio_config_raw = studio_raw(&path); }
+            if let Ok(path) = glaze_config::path() { self.studio_config_raw = studio_raw(&path); }
             if self.desktop_look != config.look {
                 self.look_chrome_dirty = true;
                 self.desktop_look = config.look.clone();
@@ -513,7 +513,7 @@ impl Widgets {
             }
             self.skin = load_skin(&config);
             self.accent = palette_accent(&config);
-            let path = mypaper_theme::locate(Some(&config.theme))
+            let path = glaze_theme::locate(Some(&config.theme))
                 .ok()
                 .map(|d| d.join("theme.json"));
             if path != self.theme_path {
@@ -559,7 +559,7 @@ impl Widgets {
         let widgets = preview.effective(Document::Widgets, widget_revision);
         let stamp = (config.as_ref().map(|v| v.0), widgets.map(|v| v.0), config_revision, widget_revision);
         if self.studio_stamp == stamp && self.studio_resize.as_ref() == resize && !warm { return; }
-        if !warm && self.studio_applied.elapsed() < mypaper_ui::display_frame() {
+        if !warm && self.studio_applied.elapsed() < glaze_ui::display_frame() {
             self.studio_pending = true;
             self.ticker.schedule(true);
             return;
@@ -643,7 +643,7 @@ impl Widgets {
     }
 
     /// The selected face can move from its empty area; its own buttons and fields keep input.
-    pub fn studio_move_surface(&self, surface: SurfaceId, point: mypaper_ui::Point) -> Option<&Surface> {
+    pub fn studio_move_surface(&self, surface: SurfaceId, point: glaze_ui::Point) -> Option<&Surface> {
         let entry = self.entries.values().find(|e| e.surface.id() == surface)?;
         entry.surface.shown().hit_at(point)
             .is_none_or(|hit| hit.id == view::BODY)
@@ -685,7 +685,7 @@ impl Widgets {
     fn subscribe_stats(&mut self, now: Instant) {
         let regions: Vec<_> = self.entries.values()
             .filter(|e| matches!(e.model.kind, Widget::System | Widget::QuickToggles))
-            .map(|e| mypaper_desktop::Rect {
+            .map(|e| glaze_desktop::Rect {
                 x: e.rect.left.floor() as i32,
                 y: e.rect.top.floor() as i32,
                 width: e.rect.width().ceil() as i32,
@@ -696,11 +696,11 @@ impl Widgets {
             return;
         }
         let covered = if self.editing
-            || std::env::var_os("MYPAPER_WIDGETS_IGNORE_COVERED").is_some_and(|v| v == "1")
+            || std::env::var_os("GLAZE_WIDGETS_IGNORE_COVERED").is_some_and(|v| v == "1")
         {
             vec![false; regions.len()]
         } else {
-            mypaper_desktop::WindowEvents::covered_regions(&regions)
+            glaze_desktop::WindowEvents::covered_regions(&regions)
         };
         for (entry, covered) in self.entries.values_mut()
             .filter(|e| matches!(e.model.kind, Widget::System | Widget::QuickToggles))
@@ -723,7 +723,7 @@ impl Widgets {
                     "system",
                     if quick { Duration::from_secs(5) } else { m.stats_interval() },
                     now,
-                    mypaper_widgets::stats::SampleFields {
+                    glaze_widgets::stats::SampleFields {
                         gpu: !quick && m.flag("gpu", true),
                         disks: !quick && m.flag("disk", false),
                         net: !quick && m.flag("net", true),
@@ -797,7 +797,7 @@ impl Widgets {
                             .registry
                             .get(&entry.model.placed.widget)
                             .is_some_and(|widget| {
-                                widget.manifest.preset != mypaper_widgets::manifest::Preset::Overlay
+                                widget.manifest.preset != glaze_widgets::manifest::Preset::Overlay
                             })
                 })
                 .is_some_and(|entry| !entry.surface.desktop_order_valid())
@@ -806,7 +806,7 @@ impl Widgets {
                     .get_or_insert(instant + Duration::from_millis(50));
             }
             let covered =
-                if std::env::var_os("MYPAPER_WIDGETS_IGNORE_COVERED").is_some_and(|v| v == "1") {
+                if std::env::var_os("GLAZE_WIDGETS_IGNORE_COVERED").is_some_and(|v| v == "1") {
                     vec![false; self.monitors.len()]
                 } else {
                     covered_monitors(&self.monitors.iter().map(|m| m.rect).collect::<Vec<_>>())
@@ -909,7 +909,7 @@ impl Widgets {
                     && entry.model.stats.as_ref().is_none_or(|old| {
                         (old.uptime / 60.0) as u64 != (stats.uptime / 60.0) as u64
                     });
-                let shown_network = |network: &Option<mypaper_widgets::stats::Network>| {
+                let shown_network = |network: &Option<glaze_widgets::stats::Network>| {
                     network.as_ref().map(|n| {
                         (n.kind, n.name.clone(), (n.signal.unwrap_or(0) / 26).min(3))
                     })
@@ -960,7 +960,7 @@ impl Widgets {
         // Plugin bar modules: open what the bars placed, hand their views over, route clicks.
         let modules = crate::bars::plugin_modules::sync(|instance| self.plugins.face_view(instance).cloned());
         for (instance, plugin, bar) in modules.open {
-            if let Err(e) = self.plugins.open_face(&instance, &plugin, &bar, mypaper_plugin_sdk::SizeClass::Small, json!({}), instant) {
+            if let Err(e) = self.plugins.open_face(&instance, &plugin, &bar, glaze_plugin_sdk::SizeClass::Small, json!({}), instant) {
                 log::warn!("bar module {instance}: {e:?}");
             }
         }
@@ -973,7 +973,7 @@ impl Widgets {
         // Plugin panels on screen as flyouts: the same, as `panel:<plugin>--<panel>` instances.
         let (panels, _) = crate::bars::plugin_modules::sync_panels(|instance| self.plugins.face_view(instance).cloned());
         for (instance, plugin, panel) in panels.open {
-            if let Err(e) = self.plugins.open_face(&instance, &plugin, &panel, mypaper_plugin_sdk::SizeClass::Large, json!({}), instant) {
+            if let Err(e) = self.plugins.open_face(&instance, &plugin, &panel, glaze_plugin_sdk::SizeClass::Large, json!({}), instant) {
                 log::warn!("plugin panel {instance}: {e:?}");
             }
         }
@@ -1170,7 +1170,7 @@ impl Widgets {
             self.forget(&id);
             self.entries.remove(&id);
         }
-        let system = mypaper_bars::accent::read();
+        let system = glaze_bars::accent::read();
         for instance in &shown {
             let Some(manifest) = self.registry.get(&instance.widget).map(|i| &i.manifest) else {
                 continue;
@@ -1184,20 +1184,20 @@ impl Widgets {
             let base = effective
                 .appearance
                 .over(&look::base(self.studio_skin.as_ref().unwrap_or(&self.skin)));
-            let bare = instance.appearance.surface.or(base.surface) == Some(mypaper_theme::Surface::None);
+            let bare = instance.appearance.surface.or(base.surface) == Some(glaze_theme::Surface::None);
             let mut global = crate::look::settings::appearance(&self.desktop_look, glass::Family::Widgets, &base, bare, &system);
             if let Some(font) = global.font.as_mut() {
                 *font = crate::look::settings::font(font, |f| ui.text.has_family(f));
             }
             let appearance = look::resolve(
                 &instance.appearance,
-                &mypaper_theme::Appearance::default(),
+                &glaze_theme::Appearance::default(),
                 &global,
                 self.accent,
             );
             let placed = layout::place(instance, manifest, &grid, &appearance);
             let rect = screen_rect(&grid, placed.cell, placed.size, screen);
-            let overlay = manifest.preset == mypaper_widgets::manifest::Preset::Overlay;
+            let overlay = manifest.preset == glaze_widgets::manifest::Preset::Overlay;
             let lifted = self.studio_active && self.studio_lift.contains(&instance.instance);
             let topmost = (overlay && !self.editing) || lifted;
             let visible = manifest
@@ -1588,7 +1588,7 @@ impl Widgets {
         }
         m.photo.index %= paths.len();
         let value = &paths[m.photo.index];
-        let path = if let Some(url) = mypaper_widgets::pick::parse_data_url(value) {
+        let path = if let Some(url) = glaze_widgets::pick::parse_data_url(value) {
             if url.instance != id {
                 m.error = Some("Photo belongs to another instance".into());
                 m.photo.change = Some(Instant::now() + Duration::from_secs(5));
@@ -1687,7 +1687,7 @@ impl Widgets {
                     continue;
                 }
                 for (day, value) in data.as_object().into_iter().flatten() {
-                    if mypaper_ui::calendar::Date::parse(day).is_some()
+                    if glaze_ui::calendar::Date::parse(day).is_some()
                         && let Some(n) = value.as_u64()
                     {
                         let count = counts.entry(day.clone()).or_insert(0u32);
@@ -1706,7 +1706,7 @@ impl Widgets {
         if let Some(menu) = &mut self.options_menu
             && menu.owns(surface)
         {
-            if let Some(mypaper_ui::menu::Outcome::Chosen(choice)) = menu.handle(ui, surface, event) {
+            if let Some(glaze_ui::menu::Outcome::Chosen(choice)) = menu.handle(ui, surface, event) {
                 self.set_plugin_option(choice);
             }
             return;
@@ -1714,7 +1714,7 @@ impl Widgets {
         if let Some(menu) = &mut self.plugin_menu
             && menu.owns(surface)
         {
-            if let Some(mypaper_ui::menu::Outcome::Chosen((instance, action, value))) = menu.handle(ui, surface, event) {
+            if let Some(glaze_ui::menu::Outcome::Chosen((instance, action, value))) = menu.handle(ui, surface, event) {
                 self.plugins.face_action(&instance, &action, Some(value));
             }
             return;
@@ -1763,11 +1763,11 @@ impl Widgets {
             }
             let palette = self.palette.as_mut().unwrap();
             let response = palette.hot.handle(palette.surface.shown(), event);
-            if response != mypaper_ui::interact::Response::Unchanged {
+            if response != glaze_ui::interact::Response::Unchanged {
                 self.repaint_palette(ui);
             }
             match response {
-                mypaper_ui::interact::Response::Activate(edit::PILL_ADD) => {
+                glaze_ui::interact::Response::Activate(edit::PILL_ADD) => {
                     if self.picker.take().is_none() {
                         let monitor = self.palette.as_ref().map_or(0, |p| p.monitor);
                         let anchor = self.palette.as_ref().map(|p| {
@@ -1779,7 +1779,7 @@ impl Widgets {
                         self.open_picker(ui, monitor, None, anchor);
                     }
                 }
-                mypaper_ui::interact::Response::Activate(edit::PILL_DONE) => {
+                glaze_ui::interact::Response::Activate(edit::PILL_DONE) => {
                     self.set_editing(ui, false)
                 }
                 _ => {}
@@ -2022,7 +2022,7 @@ impl Widgets {
                     .filter(|h| h.role != Role::Pane)
                     .cloned()
                     .collect();
-                entry.model.focus = mypaper_ui::focus::step(
+                entry.model.focus = glaze_ui::focus::step(
                     &hits,
                     entry.model.focus,
                     if shift_down() { -1 } else { 1 },
@@ -2187,7 +2187,7 @@ impl Widgets {
                             m.selected = day;
                         }
                     } else {
-                        m.selected = mypaper_ui::calendar::Date {
+                        m.selected = glaze_ui::calendar::Date {
                             day: hit - view::ITEM,
                             ..m.month
                         };
@@ -2303,7 +2303,7 @@ impl Widgets {
                 {
                     self.worker.send(data::Work::Launch(format!(
                         "https://www.coingecko.com/en/coins/{}",
-                        mypaper_plugin_weather::http::encode(coin)
+                        glaze_plugin_weather::http::encode(coin)
                     )));
                 }
             }
@@ -2320,7 +2320,7 @@ impl Widgets {
                     .unwrap_or("weather");
                 self.worker.send(data::Work::Launch(format!(
                     "https://www.msn.com/en-us/weather/forecast/in-{}",
-                    mypaper_plugin_weather::http::encode(location)
+                    glaze_plugin_weather::http::encode(location)
                 )));
             }
             Widget::Quote if hit == view::PRIMARY => {
@@ -2358,7 +2358,7 @@ impl Widgets {
         } else {
             view::theme(m, &entry.tokens)
                 .font
-                .style(mypaper_ui::TextRole::Body, scale)
+                .style(glaze_ui::TextRole::Body, scale)
                 .size
         };
         let result = TextField::new(
@@ -2736,7 +2736,7 @@ impl Widgets {
             surface.hwnd(),
             Rect::new(0.0, 0.0, 10.0, 10.0),
             false,
-            theme.font.style(mypaper_ui::TextRole::Body, s).size,
+            theme.font.style(glaze_ui::TextRole::Body, s).size,
             theme.color.label,
         )
         .inspect_err(|e| log::warn!("widget picker search: {e:#}"))
@@ -2747,7 +2747,7 @@ impl Widgets {
             monitor,
             at,
             hot: Default::default(),
-            scroll: mypaper_ui::Scroll::new(&theme.motion),
+            scroll: glaze_ui::Scroll::new(&theme.motion),
             field,
             query: String::new(),
             selected: 0,
@@ -2770,7 +2770,7 @@ impl Widgets {
         ui: &mut Ui,
         widget: &str,
         s: f32,
-    ) -> Option<(mypaper_ui::DisplayList, f32, f32)> {
+    ) -> Option<(glaze_ui::DisplayList, f32, f32)> {
         let manifest = &self.registry.get(widget)?.manifest;
         // Nominal fine cells: 44 DIPs and an 8 DIP gap (half a 96 DIP icon cell).
         let grid = Grid {
@@ -2790,7 +2790,7 @@ impl Widgets {
             appearance: Default::default(),
         };
         let base = self.layout.appearance.over(&look::base(&self.skin));
-        let mut global = crate::look::settings::appearance(&self.desktop_look, glass::Family::Widgets, &base, base.surface == Some(mypaper_theme::Surface::None), &mypaper_bars::accent::read());
+        let mut global = crate::look::settings::appearance(&self.desktop_look, glass::Family::Widgets, &base, base.surface == Some(glaze_theme::Surface::None), &glaze_bars::accent::read());
         if let Some(font) = global.font.as_mut() { *font = crate::look::settings::font(font, |f| ui.text.has_family(f)); }
         let appearance = look::resolve(&instance.appearance, &Default::default(), &global, self.accent);
         let placed = layout::place(&instance, manifest, &grid, &appearance);
@@ -2824,8 +2824,8 @@ impl Widgets {
         );
         // The widget's plate stands in for its glass.
         let radius = view::plate_radius(&model, Rect::new(0.0, 0.0, w, h), k);
-        let mut list = mypaper_ui::DisplayList::default();
-        list.ops.push(mypaper_ui::Op::Fill {
+        let mut list = glaze_ui::DisplayList::default();
+        list.ops.push(glaze_ui::Op::Fill {
             rect: Rect::new(0.0, 0.0, w, h),
             radius,
             color: Rgba::rgb8([44, 44, 48], 0.92),
@@ -2934,13 +2934,13 @@ impl Widgets {
             redraw = true;
         }
         match response {
-            mypaper_ui::interact::Response::Activate(edit::PICK_ADD) => {
+            glaze_ui::interact::Response::Activate(edit::PICK_ADD) => {
                 return self.pick(ui, None);
             }
-            mypaper_ui::interact::Response::Activate(hit) if hit >= edit::PICK_ROW => {
+            glaze_ui::interact::Response::Activate(hit) if hit >= edit::PICK_ROW => {
                 return self.pick(ui, Some((hit - edit::PICK_ROW) as usize));
             }
-            mypaper_ui::interact::Response::Unchanged => {}
+            glaze_ui::interact::Response::Unchanged => {}
             _ => redraw = true,
         }
         if redraw {
@@ -2979,7 +2979,7 @@ impl Widgets {
                     finish_field(&mut entry, &mut self.storage);
                 }
                 if let Ok(root) = files::user("widget-data") {
-                    mypaper_widgets::pick::remove_instance(&root, id);
+                    glaze_widgets::pick::remove_instance(&root, id);
                     let _ = self.storage.remove(id);
                 }
                 self.reconcile_needed = true;
@@ -3017,8 +3017,8 @@ impl Widgets {
             let copied = files::user("widget-data").and_then(|root| {
                 anyhow::ensure!(!root.join(&copy).exists(), "duplicate files already exist");
                 self.storage.duplicate(id, &copy)?;
-                if let Err(error) = mypaper_widgets::pick::copy_instance_checked(&root, id, &copy) {
-                    mypaper_widgets::pick::remove_instance(&root, &copy);
+                if let Err(error) = glaze_widgets::pick::copy_instance_checked(&root, id, &copy) {
+                    glaze_widgets::pick::remove_instance(&root, &copy);
                     let _ = self.storage.remove(&copy);
                     return Err(error);
                 }
@@ -3031,7 +3031,7 @@ impl Widgets {
             if self.commit_layout(next) {
                 self.reconcile_needed = true;
             } else if let Ok(root) = files::user("widget-data") {
-                mypaper_widgets::pick::remove_instance(&root, &copy);
+                glaze_widgets::pick::remove_instance(&root, &copy);
                 let _ = self.storage.remove(&copy);
             }
         }
@@ -3377,7 +3377,7 @@ impl Widgets {
             let k = if done {
                 1.0
             } else {
-                mypaper_ui::Spring::new(1.0, 1600.0, 80.0)
+                glaze_ui::Spring::new(1.0, 1600.0, 80.0)
                     .at(t)
                     .clamp(0.0, 1.0)
             };
@@ -3440,7 +3440,7 @@ impl Widgets {
     /// resets and some reboots. `displays.json` remembers which name each monitor had;
     /// widgets saved under a name that moved follow their monitor to its new one.
     fn follow_display_names(&mut self) {
-        let now = mypaper_desktop::display_paths();
+        let now = glaze_desktop::display_paths();
         if now.is_empty() {
             return;
         }
@@ -3503,7 +3503,7 @@ impl Widgets {
                     // Lifted widgets use the same popup backdrop channel as bars and flyouts.
                     // The desktop publisher keeps the HWND id, so the engine excludes doubles.
                     e.surface.set_glass(if e.topmost {
-                        material.map(|material| mypaper_ui::Glass {
+                        material.map(|material| glaze_ui::Glass {
                             body: Rect::new(0.0, 0.0, e.rect.width(), e.rect.height()),
                             radius: view::plate_radius(&e.model, e.rect, e.dpi_scale * e.tokens.scale),
                             material,
@@ -3575,7 +3575,7 @@ fn widget_surface(topmost: bool, parent: HWND, instance: &str) -> Result<Surface
         } else {
             Kind::DesktopChild { parent }
         },
-        &format!("mypaper widget {instance}"),
+        &format!("Glaze widget {instance}"),
         Role::Pane,
     )
 }
@@ -3653,7 +3653,7 @@ fn widget_scale(m: &Model, dpi: f32) -> f32 {
 /// A photo as its frame draws it: filling the widget's padded body (**bleed**, covering), it is
 /// cropped to the body's shape and its corners rounded concentric with the plate, so it never
 /// shows square corners inside rounded glass. Mounts, prints and `contain` keep it as is.
-fn photo_bitmap(m: &Model, rect: Rect, dpi: f32, image: mypaper_ui::Image) -> mypaper_ui::Image {
+fn photo_bitmap(m: &Model, rect: Rect, dpi: f32, image: glaze_ui::Image) -> glaze_ui::Image {
     if m.str("variant", "bleed") != "bleed" || m.str("fit", "cover") == "contain" {
         return image;
     }
@@ -3673,7 +3673,7 @@ fn photo_bitmap(m: &Model, rect: Rect, dpi: f32, image: mypaper_ui::Image) -> my
 
 /// A centred square crop of `image` with its corners cut round (radius = `radius` × side).
 /// Covers are drawn rounded this way.
-fn rounded_square(image: &mypaper_ui::Image, radius: f32) -> mypaper_ui::Image {
+fn rounded_square(image: &glaze_ui::Image, radius: f32) -> glaze_ui::Image {
     let mut square = crop_to(image, 1.0);
     let r = square.width as f32 * radius;
     round_corners(&mut square, r);
@@ -3681,7 +3681,7 @@ fn rounded_square(image: &mypaper_ui::Image, radius: f32) -> mypaper_ui::Image {
 }
 
 /// The centred crop of `image` with `aspect` (width / height).
-fn crop_to(image: &mypaper_ui::Image, aspect: f32) -> mypaper_ui::Image {
+fn crop_to(image: &glaze_ui::Image, aspect: f32) -> glaze_ui::Image {
     let (iw, ih) = (image.width, image.height);
     let (w, h) = if iw as f32 / ih.max(1) as f32 > aspect {
         (((ih as f32 * aspect).round() as u32).clamp(1, iw), ih)
@@ -3694,7 +3694,7 @@ fn crop_to(image: &mypaper_ui::Image, aspect: f32) -> mypaper_ui::Image {
         let start = (((y0 + y) * iw + x0) * 4) as usize;
         pixels.extend_from_slice(&image.pixels[start..start + w as usize * 4]);
     }
-    mypaper_ui::Image {
+    glaze_ui::Image {
         width: w,
         height: h,
         pixels,
@@ -3704,7 +3704,7 @@ fn crop_to(image: &mypaper_ui::Image, aspect: f32) -> mypaper_ui::Image {
 /// Cuts `image`'s corners round to transparent (radius `r` pixels), antialiased over one
 /// pixel. A layered window's bitmap op has no clip shape, and this runs once per picture, not
 /// per frame.
-fn round_corners(image: &mut mypaper_ui::Image, r: f32) {
+fn round_corners(image: &mut glaze_ui::Image, r: f32) {
     let (w, h) = (image.width, image.height);
     let r = r.min(w.min(h) as f32 / 2.0).max(0.0);
     let (ew, eh) = (w as f32, h as f32);
@@ -3728,7 +3728,7 @@ fn round_corners(image: &mut mypaper_ui::Image, r: f32) {
 
 /// `image` stretched bilinearly to cover `w` × `h` (centred, never distorted): a tiny blurred
 /// backdrop made big enough to round smoothly.
-fn resample(image: &mypaper_ui::Image, w: u32, h: u32) -> mypaper_ui::Image {
+fn resample(image: &glaze_ui::Image, w: u32, h: u32) -> glaze_ui::Image {
     let (iw, ih) = (image.width as f32, image.height as f32);
     let scale = (w as f32 / iw).max(h as f32 / ih);
     let (ox, oy) = ((iw - w as f32 / scale) / 2.0, (ih - h as f32 / scale) / 2.0);
@@ -3751,7 +3751,7 @@ fn resample(image: &mypaper_ui::Image, w: u32, h: u32) -> mypaper_ui::Image {
             }
         }
     }
-    mypaper_ui::Image {
+    glaze_ui::Image {
         width: w,
         height: h,
         pixels,
@@ -3857,7 +3857,7 @@ fn studio_raw(path: &std::path::Path) -> Value {
 /// `look`) by the kit's one rule (`GlassMaterial::tuned`), as the bars and flyouts. A widget's
 /// own `blur` or `opacity` (its `appearance` in `widgets.json`) overrides the look for it alone.
 fn plate_material(
-    placed: &mypaper_widgets::layout::Placed,
+    placed: &glaze_widgets::layout::Placed,
     skin: &look::Skin,
     knobs: &Knobs,
     scale: f32,
@@ -3872,9 +3872,9 @@ fn plate_material(
         .and_then(Color::parse)
         .unwrap_or(look::DEFAULT_TINT);
     let opacity = number(a, "opacity").unwrap_or(0.46);
-    let style = mypaper_ui::theme::active();
-    let base = mypaper_ui::theme::material(style, Rgba::rgb8(tint.0, opacity))?;
-    let base = if mypaper_ui::theme::lensed(style) {
+    let style = glaze_ui::theme::active();
+    let base = glaze_ui::theme::material(style, Rgba::rgb8(tint.0, opacity))?;
+    let base = if glaze_ui::theme::lensed(style) {
         let defaults = crate::glass::liquid_material(tint);
         let liquid = &skin.glass;
         let intensity = liquid.intensity.unwrap_or(1.0);
@@ -3904,7 +3904,7 @@ fn plate_material(
 /// Makes the user's style (`look.widgets.style`, else `look.style`) the kit's active one, which
 /// widgets draw in; `true` when it changed.
 fn apply_style(config: &Config) -> bool {
-    use mypaper_config::look::Style as Look;
+    use glaze_config::look::Style as Look;
     let style = match config
         .look
         .widgets
@@ -3913,29 +3913,29 @@ fn apply_style(config: &Config) -> bool {
         .or(config.look.style)
         .unwrap_or_default()
     {
-        Look::Liquid => mypaper_ui::Style::Liquid,
-        Look::Oneui => mypaper_ui::Style::OneUi,
-        Look::Fluent => mypaper_ui::Style::Fluent,
-        Look::Solid => mypaper_ui::Style::Solid,
-        Look::Mono => mypaper_ui::Style::Mono,
+        Look::Liquid => glaze_ui::Style::Liquid,
+        Look::Oneui => glaze_ui::Style::OneUi,
+        Look::Fluent => glaze_ui::Style::Fluent,
+        Look::Solid => glaze_ui::Style::Solid,
+        Look::Mono => glaze_ui::Style::Mono,
     };
-    let changed = mypaper_ui::theme::active() != style;
-    mypaper_ui::theme::set_active(style);
+    let changed = glaze_ui::theme::active() != style;
+    glaze_ui::theme::set_active(style);
     changed
 }
 fn palette_accent(config: &Config) -> Color {
-    mypaper_theme::locate(Some(&config.theme))
+    glaze_theme::locate(Some(&config.theme))
         .ok()
-        .and_then(|dir| mypaper_tweaks::palette::read().filter(|p| p.is_for(&dir)))
+        .and_then(|dir| glaze_tweaks::palette::read().filter(|p| p.is_for(&dir)))
         .map_or_else(|| look::accent(None), |p| p.palette.accent)
 }
 fn load_skin(config: &Config) -> look::Skin {
-    let dir = mypaper_theme::locate(Some(&config.theme)).ok();
+    let dir = glaze_theme::locate(Some(&config.theme)).ok();
     look::load_skin(dir.as_deref())
 }
 pub(crate) fn tokens(appearance: &serde_json::Map<String, Value>) -> Tokens {
     let layer =
-        serde_json::from_value::<mypaper_theme::Appearance>(Value::Object(appearance.clone()))
+        serde_json::from_value::<glaze_theme::Appearance>(Value::Object(appearance.clone()))
             .unwrap_or_default();
     let dark = layer.text != Some(TextTone::Dark);
     let accent = match layer.accent {
@@ -3945,7 +3945,7 @@ pub(crate) fn tokens(appearance: &serde_json::Map<String, Value>) -> Tokens {
     Tokens {
         font: TextStyle::new(layer.font.as_deref().unwrap_or(view::DEFAULT_FAMILY), 14.0),
         colors: Colors { text_dim: Colors::new(dark, accent).text.with_alpha(0.78), ..Colors::new(dark, accent) },
-        material: mypaper_ui::Material {
+        material: glaze_ui::Material {
             tint: Rgba::rgb8(
                 layer.tint.unwrap_or(look::DEFAULT_TINT).0,
                 layer.opacity.unwrap_or(0.46),
@@ -3959,13 +3959,13 @@ pub(crate) fn tokens(appearance: &serde_json::Map<String, Value>) -> Tokens {
 }
 
 /// Resolve ink from the same material sent to the wallpaper engine, over this widget's backdrop.
-fn surface_tokens(placed: &mypaper_widgets::layout::Placed, skin: &look::Skin, knobs: &Knobs, scale: f32, rect: Rect) -> Tokens {
+fn surface_tokens(placed: &glaze_widgets::layout::Placed, skin: &look::Skin, knobs: &Knobs, scale: f32, rect: Rect) -> Tokens {
     let mut tokens = tokens(&placed.appearance);
     if placed.appearance.get("surface").and_then(Value::as_str) == Some("none") { return tokens; }
     let under = crate::glass::tone::backdrop(Some(rect), tokens.colors.text.r > 0.5);
     let material = (placed.appearance.get("surface").and_then(Value::as_str) != Some("solid"))
         .then(|| plate_material(placed, skin, knobs, scale)).flatten();
-    let surface = material.map_or_else(|| mypaper_ui::theme::over(tokens.material.tint, under), |m| crate::glass::tone::face(&m, under, rect.width().min(rect.height()) / scale));
+    let surface = material.map_or_else(|| glaze_ui::theme::over(tokens.material.tint, under), |m| crate::glass::tone::face(&m, under, rect.width().min(rect.height()) / scale));
     tokens.colors.text = crate::glass::tone::ink(surface, 4.5, 0.88);
     tokens.colors.text_dim = crate::glass::tone::ink(surface, 3.0, 0.72);
     tokens.glass = material;
@@ -4024,7 +4024,7 @@ fn mode(value: isize, current: bool) -> bool {
         _ => !current,
     }
 }
-fn decode_url(ui: &Ui, value: &Value, size: (u32, u32)) -> Option<Arc<mypaper_ui::Image>> {
+fn decode_url(ui: &Ui, value: &Value, size: (u32, u32)) -> Option<Arc<glaze_ui::Image>> {
     let data = value.as_str()?.split_once(",")?.1;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data)
@@ -4084,7 +4084,7 @@ fn search_url(query: &str, settings: &serde_json::Map<String, Value>) -> Option<
     };
     (template.contains("{q}")
         && (template.starts_with("https://") || template.starts_with("http://")))
-    .then(|| template.replace("{q}", &mypaper_plugin_weather::http::encode(query)))
+    .then(|| template.replace("{q}", &glaze_plugin_weather::http::encode(query)))
 }
 
 fn shift_down() -> bool {
@@ -4106,7 +4106,7 @@ fn media_time(seconds: f64) -> String {
 }
 
 /// A tiny box-filtered artwork backdrop and average tint, computed only when artwork changes.
-fn artwork_material(image: &mypaper_ui::Image) -> (Option<Arc<mypaper_ui::Image>>, Option<Rgba>) {
+fn artwork_material(image: &glaze_ui::Image) -> (Option<Arc<glaze_ui::Image>>, Option<Rgba>) {
     if image.width == 0 || image.height == 0 {
         return (None, None);
     }
@@ -4140,7 +4140,7 @@ fn artwork_material(image: &mypaper_ui::Image) -> (Option<Arc<mypaper_ui::Image>
         1.0,
     );
     (
-        Some(Arc::new(mypaper_ui::Image {
+        Some(Arc::new(glaze_ui::Image {
             width,
             height,
             pixels,
@@ -4156,10 +4156,10 @@ fn grid_for(layout: &Layout, monitor: &Monitor) -> Grid {
     grid_for_bars(layout, monitor, &bars)
 }
 
-/// Moves built-in integration widgets onto their plugin faces (`mypaper_widgets::faces`), keeping
+/// Moves built-in integration widgets onto their plugin faces (`glaze_widgets::faces`), keeping
 /// the file as it was beside it (`widgets.json.faces`) before the first moved write.
 fn moved_faces(layout: &mut Layout, path: &std::path::Path) -> bool {
-    use mypaper_widgets::faces;
+    use glaze_widgets::faces;
     let moved = discord_migration::migrate(layout) | faces::migrate(layout, faces::MOVED, faces::face_installed);
     if moved && let Ok(bytes) = std::fs::read(path) {
         let _ = files::backup_tagged(path, "faces", &bytes);
@@ -4170,7 +4170,7 @@ fn moved_faces(layout: &mut Layout, path: &std::path::Path) -> bool {
 #[cfg(test)]
 mod left_button_tests {
     use super::left_button;
-    use mypaper_ui::{Button, Event, HitId, Point, Pointer};
+    use glaze_ui::{Button, Event, HitId, Point, Pointer};
 
     /// Runs `events` over hit `row` and counts the clicks that fire.
     fn clicks(events: &[Event], single: bool) -> usize {

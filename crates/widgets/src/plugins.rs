@@ -31,9 +31,9 @@ use crate::bridge::{ErrorCode, Out, Target, WidgetError};
 use crate::manifest::PluginManifest;
 use crate::rpc::{self, Incoming, Pending, RpcError};
 use crate::wake::{Msg, Waker};
-use mypaper_plugin_api::wire;
-use mypaper_plugin_sdk::protocol::{self as sdk, FromPlugin, HostMessage, HostRequest};
-use mypaper_plugin_sdk::{Face, SizeClass};
+use glaze_plugin_api::wire;
+use glaze_plugin_sdk::protocol::{self as sdk, FromPlugin, HostMessage, HostRequest};
+use glaze_plugin_sdk::{Face, SizeClass};
 
 const INIT_TIMEOUT: Duration = Duration::from_secs(10);
 const CALL_TIMEOUT: Duration = Duration::from_secs(30);
@@ -181,10 +181,10 @@ struct Slot {
     component: Option<std::path::PathBuf>,
 }
 
-/// The `Msg::Plugin` id of the shared WebAssembly runtime (`mypaper-plugins`); never a plugin id.
-pub const HELPER: &str = "\0mypaper-plugins";
+/// The `Msg::Plugin` id of the shared WebAssembly runtime (`glaze-plugins`); never a plugin id.
+pub const HELPER: &str = "\0glaze-plugins";
 
-/// The one `mypaper-plugins` process that runs every component plugin (docs/plugins.md, "Shell ↔
+/// The one `glaze-plugins` process that runs every component plugin (docs/plugins.md, "Shell ↔
 /// helper protocol"). Frames are decoded on its reader thread into `inbox`; the main loop is
 /// woken through `Msg::Plugin { id: HELPER, line: Some("") }` and drains it.
 struct Helper {
@@ -204,9 +204,9 @@ fn component_open(instance: &str, slot: &Slot) -> wire::HostMsg {
     wire::HostMsg::Open { plugin: slot.plugin.clone(), dir, instance: instance.into(), face: slot.face.clone(), size: slot.size, settings: slot.settings.to_string() }
 }
 
-/// `mypaper-plugins.exe` beside the running exe.
+/// `glaze-plugins.exe` beside the running exe.
 fn helper_exe() -> Option<std::path::PathBuf> {
-    let exe = std::env::current_exe().ok()?.with_file_name("mypaper-plugins.exe");
+    let exe = std::env::current_exe().ok()?.with_file_name("glaze-plugins.exe");
     exe.is_file().then_some(exe)
 }
 
@@ -223,7 +223,7 @@ pub enum FaceStatus {
 /// Whether `permissions` let a plugin make `request` (docs/plugins.md, "Permissions").
 pub fn authorize(permissions: &[String], request: &HostRequest) -> Result<(), String> {
     let wanted = request.permission();
-    if mypaper_plugin_sdk::allows(permissions, &wanted) {
+    if glaze_plugin_sdk::allows(permissions, &wanted) {
         Ok(())
     } else {
         Err(format!("the plugin didn't declare {wanted:?}"))
@@ -231,9 +231,9 @@ pub fn authorize(permissions: &[String], request: &HostRequest) -> Result<(), St
 }
 
 /// Answers a plugin's host request after checking its manifest: secrets live in Credential
-/// Manager under `mypaper/integrations/plugin/<id>/<key>`.
+/// Manager under `glaze/integrations/plugin/<id>/<key>`.
 fn serve(manifest: &PluginManifest, id: &Value, request: HostRequest) -> String {
-    use mypaper_integrations::credentials;
+    use glaze_integrations::credentials;
     if let Err(why) = authorize(&manifest.permissions, &request) {
         log::warn!("plugin {}: refused {request:?}: {why}", manifest.id);
         return sdk::error(id, sdk::PERMISSION_DENIED, &why, "PermissionDenied");
@@ -252,8 +252,8 @@ fn serve(manifest: &PluginManifest, id: &Value, request: HostRequest) -> String 
             Ok(Value::Null)
         }
         HostRequest::Launch { target } => {
-            let item = mypaper_integrations::launcher::Recent { title: String::new(), target, arguments: String::new() };
-            mypaper_integrations::launcher::open(&item).map(|()| Value::Null)
+            let item = glaze_integrations::launcher::Recent { title: String::new(), target, arguments: String::new() };
+            glaze_integrations::launcher::open(&item).map(|()| Value::Null)
         }
         HostRequest::Notify { .. } => Err(anyhow::anyhow!("notifications aren't wired in this host yet")),
     };
@@ -521,14 +521,14 @@ impl Plugins {
 
     fn start_helper(&mut self) -> Result<()> {
         use std::sync::{Arc, Mutex};
-        let exe = helper_exe().context("mypaper-plugins.exe isn't installed beside the shell")?;
+        let exe = helper_exe().context("glaze-plugins.exe isn't installed beside the shell")?;
         let mut child = Command::new(exe)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .creation_flags(CREATE_NO_WINDOW.0)
             .spawn()
-            .context("running mypaper-plugins")?;
+            .context("running glaze-plugins")?;
         if self.job.is_none() {
             self.job = Job::new().inspect_err(|e| log::warn!("no job object for plugins: {e:#}")).ok();
         }
@@ -999,7 +999,7 @@ impl Plugins {
 
         // Data plugins (no `sdk`) keep the protocol they were written for.
         let protocol = if manifest.sdk.is_some() { sdk::PROTOCOL } else { 1 };
-        let params = json!({ "protocol": protocol, "sdk": format!("{}.{}", mypaper_plugin_sdk::SDK_MAJOR, mypaper_plugin_sdk::SDK_MINOR),
+        let params = json!({ "protocol": protocol, "sdk": format!("{}.{}", glaze_plugin_sdk::SDK_MAJOR, glaze_plugin_sdk::SDK_MINOR),
                              "plugin": id, "dataDir": crate::files::plain(&data_dir), "settings": plugin_settings(&id) });
         let _ = tx.send(rpc::request(rpc::INIT_ID, "initialize", Some(&params)));
         Ok(Process {
@@ -1578,7 +1578,7 @@ mod tests {
     /// starts it again after the backoff, never panicking.
     #[test]
     fn a_crashing_plugin_is_restarted_with_its_faces() {
-        let root = std::env::temp_dir().join(format!("mypaper-crashy-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("glaze-crashy-{}", std::process::id()));
         let folder = root.join("crashy");
         std::fs::create_dir_all(&folder).unwrap();
         let manifest = r#"{ "id": "crashy", "name": "Crashy", "sdk": "1.0", "command": "cmd", "args": ["/c", "exit", "3"],

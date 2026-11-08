@@ -1,13 +1,13 @@
-//! T3's background key: the local `t3` CLI issues mypaper a scoped bearer as the same Windows
+//! T3's background key: the local `t3` CLI issues Glaze a scoped bearer as the same Windows
 //! user, with no prompt (`process.run`). The token lives only in the secrets broker (`t3`); its
 //! session id and expiry sit beside it (`t3-session`), so it is renewed early and the replaced
-//! session, and any other `mypaper` session, is revoked.
-use mypaper_plugin_sdk::guest::{self, files, process, secrets};
+//! session, and any other `Glaze` session, is revoked.
+use glaze_plugin_sdk::guest::{self, files, process, secrets};
 use serde::{Deserialize, Serialize};
 
 /// Exactly what the faces use: thread status, usage and limits, and thread controls.
 const SCOPES: [&str; 3] = ["orchestration:read", "orchestration:operate", "diagnostics:read"];
-const LABEL: &str = "mypaper";
+const LABEL: &str = "Glaze";
 /// Renew once less than this is left of the 30-day grant.
 const RENEW_BEFORE_DAYS: i64 = 3;
 
@@ -96,7 +96,7 @@ impl Auth {
         if let Some(at) = self.revoking.iter().position(|&r| r == id) {
             self.revoking.swap_remove(at);
             if !matches!(outcome, Ok((0, _))) {
-                guest::log("T3: a stale mypaper session could not be revoked");
+                guest::log("T3: a stale Glaze session could not be revoked");
             }
             return Outcome::Pending;
         }
@@ -135,14 +135,14 @@ impl Auth {
         if let Err(e) = secrets::set("t3", &token).and_then(|()| secrets::set("t3-session", &record)) {
             return Outcome::Failed(format!("Couldn't keep T3's key ({e:?})"));
         }
-        guest::log(&format!("T3: issued mypaper access session {session_id}"));
+        guest::log(&format!("T3: issued Glaze access session {session_id}"));
         if let Ok(id) = run(&["auth", "session", "list", "--json"]) {
             self.step = Step::Listing(id, session_id, previous);
         }
         Outcome::Ready(token)
     }
 
-    /// Keeps T3's connections list clean: the replaced session, and any other `mypaper` one.
+    /// Keeps T3's connections list clean: the replaced session, and any other `Glaze` one.
     fn revoke(&mut self, outcome: &Result<(u16, Vec<u8>), String>, current: &str, previous: Option<String>) {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]

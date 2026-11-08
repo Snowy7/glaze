@@ -1,6 +1,6 @@
 # Performance
 
-mypaper promises to be light and to be there the moment you sign in. This page says what that
+Glaze promises to be light and to be there the moment you sign in. This page says what that
 promise is in numbers (`perf/budget.toml`), how the numbers are taken (`tools/perf`), and what
 was done to meet them. Every optimization below has a before and an after from the same machine.
 
@@ -20,14 +20,14 @@ memory or whole-product measurement.
 Build only the needed release binaries and plate example, then run:
 
 ```powershell
-$env:CARGO_TARGET_DIR = 'C:/mypaper-targets/native-engine'
-cargo build --release -p mypaper-wallpaper -p mypaper-perf --example plates --bin mypaper-wallpaper --bin mypaper-perf
-$build = 'C:/mypaper-targets/native-engine/release'
-& "$build/mypaper-perf.exe" --native --build $build --content $pwd.Path --seconds 60 --runs 3 real-look
-& "$build/mypaper-perf.exe" --native --build $build --content $pwd.Path --seconds 60 --runs 3 engine-aurora
-& "$build/mypaper-perf.exe" --native --build $build --content $pwd.Path --seconds 30 --runs 1 --timestamps real-look
-& "$build/mypaper-perf.exe" --native --build $build --content $pwd.Path --seconds 20 --runs 1 --timestamps --composition glass-motion
-& "$build/mypaper-perf.exe" --native --build $build --content $pwd.Path --seconds 20 --runs 1 --timestamps still-plates
+$env:CARGO_TARGET_DIR = 'C:/glaze-targets/native-engine'
+cargo build --release -p glaze-wallpaper -p glaze-perf --example plates --bin glaze-wallpaper --bin glaze-perf
+$build = 'C:/glaze-targets/native-engine/release'
+& "$build/glaze-perf.exe" --native --build $build --content $pwd.Path --seconds 60 --runs 3 real-look
+& "$build/glaze-perf.exe" --native --build $build --content $pwd.Path --seconds 60 --runs 3 engine-aurora
+& "$build/glaze-perf.exe" --native --build $build --content $pwd.Path --seconds 30 --runs 1 --timestamps real-look
+& "$build/glaze-perf.exe" --native --build $build --content $pwd.Path --seconds 20 --runs 1 --timestamps --composition glass-motion
+& "$build/glaze-perf.exe" --native --build $build --content $pwd.Path --seconds 20 --runs 1 --timestamps still-plates
 py -3 tools/perf/summarize-gpu.py "$build/real-look.run0.jsonl" --window "$build/real-look.json"
 ```
 
@@ -66,8 +66,8 @@ sample if all are still mapping, and no timestamp work runs when telemetry is di
 On the user's live desktop (two 2560x1440 screens, the left one with bars, dock and widgets, the
 right one covered by a maximized app; a seconds desk clock, a stats module and a now-playing
 widget visible), with other agents building and deploying throughout, so whole-process samples
-swing. The wake report is the measure: create `%LOCALAPPDATA%\mypaper\wakes.on` (or deploy with
-`MYPAPER_WAKES=1`) and every minute `mypaper.log` gets a `wakes in 60 s:` line with causes, each loop
+swing. The wake report is the measure: create `%LOCALAPPDATA%\glaze\wakes.on` (or deploy with
+`GLAZE_WAKES=1`) and every minute `glaze.log` gets a `wakes in 60 s:` line with causes, each loop
 part's wall time and CPU cycles (`cpu Mcycles`, about 4.5 per ms here), and `bars.tick ms/Mcycles`
 by part. Delete the file to stop it; reading the switch costs one file check a minute.
 
@@ -144,7 +144,7 @@ submit and one present per frame, the minimum for this design. GPU: 0.2 ms per f
   engine that restarted mid-request (its done event never comes); the engine now copes with
   both, but Studio should stop re-asking an unchanged refused request and time out a request.
 
-Tools (`C:\mypaper-targets\engine-perf\tools`): per-thread CPU and wakes, the preview request
+Tools (`C:\glaze-targets\engine-perf\tools`): per-thread CPU and wakes, the preview request
 rate and round trip, plate publication rate, cursor-motion and covered-screen probes, and an
 engine A/B swapper (`swap-engine.ps1`) that puts another exe live and restarts only the engine.
 
@@ -244,7 +244,7 @@ after is the same desktop on the 08:36 build, three minutes apart.
 
 | Commit | Change |
 |---|---|
-| `c500fc3` | `mypaper_desktop::dir_watch::DirWatch`: one thread per watched folder blocks in an overlapped `ReadDirectoryChangesW` (plus a stop event), so it wakes only when the folder changes. notify 8's Windows backend waits with a 100 ms timeout forever (`WaitForSingleObjectEx(wakeup_sem, 100, TRUE)`): 9.2-9.4 wakes a second per watch, in every state. `watch_file` (the engine's, core's and the styler's config watches) and the engine's theme watch use it; the engine no longer depends on notify. |
+| `c500fc3` | `glaze_desktop::dir_watch::DirWatch`: one thread per watched folder blocks in an overlapped `ReadDirectoryChangesW` (plus a stop event), so it wakes only when the folder changes. notify 8's Windows backend waits with a 100 ms timeout forever (`WaitForSingleObjectEx(wakeup_sem, 100, TRUE)`): 9.2-9.4 wakes a second per watch, in every state. `watch_file` (the engine's, core's and the styler's config watches) and the engine's theme watch use it; the engine no longer depends on notify. |
 | `fd33733` | `DesktopEvents` (Explorer restart detection, on the engine's and the widgets' main thread) hooked window creation, destruction and showing in *every* process: 1.1-2.4 callbacks a second on a quiet desktop (agents' consoles, headless browsers). It now hooks only the desktop's Explorer while one is known, and every process again once it is lost. |
 | `d35f6ff` | The coverage hook woke its consumers for every window destroyed anywhere (a destroyed window can't be classified): 1.25 of 1.4 coverage wakes a second on a quiet desktop. Coverage is always one window's, so each scan now records the windows that covered something, and only those closing wake anyone. |
 
@@ -265,9 +265,9 @@ covering windows' processes (as the shell's `win_events` does) would cut it furt
 as a follow-up.
 
 The other processes' notify watches (each a 10 Hz thread; then shell 5, index 2,
-core 1 via tweaks, Studio 1) moved to `mypaper_fswatch` later the same morning (`3a3a29e` and
+core 1 via tweaks, Studio 1) moved to `glaze_fswatch` later the same morning (`3a3a29e` and
 the commits after it). `31b51d2` then consolidated `watch_file` and the engine's theme watch
-onto that same crate and removed `mypaper_desktop::dir_watch`. It blocks on overlapped directory
+onto that same crate and removed `glaze_desktop::dir_watch`. It blocks on overlapped directory
 I/O while idle, debounces only actual changes, and rearms replaced directories. The table above
 records the earlier build, not a new measurement of the consolidated watcher.
 
@@ -423,7 +423,7 @@ Measured wins, each in its own commit (live: 15-30 s probe runs; offline: `src/l
 | 16k view descriptors instead of 1M | 361.7 -> 276.0 MiB |
 | One backdrop readback for screens sharing a kept frame | 276.0 -> 257.7 MiB |
 
-**Quality proof.** `cargo test -p mypaper-wallpaper lab::lab -- --ignored --exact` renders
+**Quality proof.** `cargo test -p glaze-wallpaper lab::lab -- --ignored --exact` renders
 one screen of the engine's real path (wallpaper into the kept frame, restore, the fixture's
 eight plates) offscreen on the iGPU and dumps raw frames; `tools/perf/diff-frames.py` compares
 two captures. Frames at 3, 12 and 30 s from the original engine against the final one, final
@@ -560,7 +560,7 @@ final-quality measurements and do not justify a policy change. Users can explici
 
 Raw CPU/RAM samples and GPU/lag summaries are committed under
 [`tools/perf/results/native-2026-11-04`](../tools/perf/results/native-2026-11-04).
-Full JSONL traces and fixed-time images remain in `C:/mypaper-targets/native-engine/`.
+Full JSONL traces and fixed-time images remain in `C:/glaze-targets/native-engine/`.
 The five `visuals/<theme>-web.png` / `-native.png` pairs and `visuals/weather-comparison.png`
 were inspected for photo/crop, preset colour, weather density and blur. WebGL/WGSL hash
 rounding changes individual rain/snow locations; the port is not pixel-identical to WebGL.
@@ -579,11 +579,11 @@ counter sample is excluded from N0.3 gates; its raw output is `restored-product-
 
 Cleanup limitation: automatic approval review rejected removal of the stopped test WebView
 profile, returning only "blocked by policy". No test WebView processes remain, but
-`C:/mypaper-targets/native-engine/release/native-stage/env-0/local/mypaper/webview2` was left
+`C:/glaze-targets/native-engine/release/native-stage/env-0/local/glaze/webview2` was left
 on disk. No user browser profile was targeted.
 
 Desktop cleanup stopped all fixture engines/writers and restarted the original
-`D:/Coding/projects/desktop/wallpaper/target/release/mypaper-core.exe`. The existing user's
+`D:/Coding/projects/desktop/wallpaper/target/release/glaze-core.exe`. The existing user's
 `bars.json` has `taskbar.mode: "hide"`: a final show request left the primary taskbar hidden
 and the secondary visible. That user setting was not changed. Another agent subsequently
 acquired the desktop lock for its own session; its processes/lock were left alone.
@@ -619,7 +619,7 @@ breaks 23.
 
 ## Results
 
-`mypaper-perf` before (`2026-11-04-0403-baseline`; the shell scenarios from `-0418-baseline-shell`
+`glaze-perf` before (`2026-11-04-0403-baseline`; the shell scenarios from `-0418-baseline-shell`
 and `-0424-baseline-widgets`, re-run after two harness fixes) and after (`2026-11-04-0502-final`;
 `-0451-after3` is an earlier run of the same build). Startup in ms from core's creation, warm;
 CPU percent of the whole machine with one screen visible; memory private MB, every process of
@@ -692,7 +692,7 @@ nothing.
 
 **5. One WebView2 browser process for the widget host and the bars (kept).** Both hosts now
 create their environment through one helper (`crates/desktop/src/webview_env.rs`) with the same
-user data folder (`%LOCALAPPDATA%\mypaper\webview2-shell`) and the same options, so WebView2 runs
+user data folder (`%LOCALAPPDATA%\glaze\webview2-shell`) and the same options, so WebView2 runs
 one browser process (and one GPU and utility set) for both. Their pages have different origins,
 so their storage stays apart. `full`, everything running: **797 / 1009 → 658–692 / 734–745 MB**
 (private / working set, three runs): about **140 MB private and 275 MB working set** less. A host
@@ -720,7 +720,7 @@ laid out and set the window's region, about 1.4 s after core starts, most of it 
 starting. Each bar now remembers where its page drew (`bars-first-paint.json`), and on the next
 start a layered window paints those parts in the bar's current look (the page's own background:
 the tint at its opacity, rounded like the page) over the wallpaper backdrop
-(`%LOCALAPPDATA%\mypaper\backdrop\<DISPLAYn>.bmp`) when one exists. It goes up as soon as the host
+(`%LOCALAPPDATA%\glaze\backdrop\<DISPLAYn>.bmp`) when one exists. It goes up as soon as the host
 knows the look, before the bars reserve their space, and goes away once the page has painted
 (the paint probe) and set its region, or after 15 s. Paint and layout are tracked separately for
 each bar on each monitor, in either arrival order. An empty region is a completed layout too:
@@ -739,7 +739,7 @@ to Explorer): 740 ms; moving them first gave the numbers above.
     timing of its own.
 
 **7. Static snapshot (kept, default on).** See [Static snapshot](#static-snapshot): from the
-second sign-in on, Windows shows the theme's still before mypaper starts. About 10 ms of the
+second sign-in on, Windows shows the theme's still before Glaze starts. About 10 ms of the
 engine thread once per theme load, after the first frame.
 
 **8. Release profile (checked, unchanged).** `lto = "thin"`, `codegen-units = 1`,
@@ -771,7 +771,7 @@ sign-in, which a background agent can't do.
 
 ## The budget
 
-`perf/budget.toml` holds the limits; `mypaper-perf` exits with 1 and lists every one a run breaks.
+`perf/budget.toml` holds the limits; `glaze-perf` exits with 1 and lists every one a run breaks.
 A key is `<component>.<measure>` and binds a scenario only when that component runs in it.
 `[default]` applies everywhere, `[scenario.<name>]` adds or overrides.
 
@@ -789,10 +789,10 @@ A key is `<component>.<measure>` and binds a scenario only when that component r
 
 The limits were set from the measurements below, with room for the noise of a busy machine.
 Tighten one when a change makes it faster; never loosen one to make a change pass.
-`mypaper-perf --check perf/results/<report>.json` evaluates a saved run against the current
+`glaze-perf --check perf/results/<report>.json` evaluates a saved run against the current
 budget without running anything (the baseline breaks 23 of the 102 limits; the final run, none).
 
-## The harness: `mypaper-perf`
+## The harness: `glaze-perf`
 
 `tools/perf` is a workspace binary that measures a release build and checks it against
 `perf/budget.toml`:
@@ -800,16 +800,16 @@ budget without running anything (the baseline breaks 23 of the 102 limits; the f
 ```text
 cargo build --release                                  # the build to measure
 pnpm -C widgets/shell build && pnpm -C bars/shell build
-target\release\mypaper-perf.exe                         # every scenario, writes perf/latest.md
-target\release\mypaper-perf.exe --build DIR --label after full bars   # some scenarios, another build
-target\release\mypaper-perf.exe --check perf\results\2026-11-04-0502-final.json   # no run
-target\release\mypaper-perf.exe --list
+target\release\glaze-perf.exe                         # every scenario, writes perf/latest.md
+target\release\glaze-perf.exe --build DIR --label after full bars   # some scenarios, another build
+target\release\glaze-perf.exe --check perf\results\2026-11-04-0502-final.json   # no run
+target\release\glaze-perf.exe --list
 ```
 
 Run it from the repo root (it reads `perf/budget.toml` and the content from the current folder).
 A full run takes about 15 minutes, in sessions of up to 4 minutes.
 
-Options: `--build DIR` (the folder with the `mypaper-*.exe`, default the harness's own folder),
+Options: `--build DIR` (the folder with the `glaze-*.exe`, default the harness's own folder),
 `--content DIR` (the repo: themes, widgets, shell pages, `perf/`; default the current folder),
 `--runs N` (starts per scenario, default 4: 1 cold + 3 warm), `--seconds N` (each steady CPU
 window, default 10; the held window is twice as long), `--label TEXT`, `--restart EXE` (the core
@@ -821,15 +821,15 @@ exits with **1 when any limit is broken**, listing every one, and 2 when it coul
 
 ### What a run does
 
-1. **Takes the desktop lock** (`%LOCALAPPDATA%\Temp\mypaper-tools\desktop.lock`, an atomic
+1. **Takes the desktop lock** (`%LOCALAPPDATA%\Temp\glaze-tools\desktop.lock`, an atomic
    `mkdir`, retried every 5 s, removed when older than 5 minutes), shared with every other tool
-   that stops the user's mypaper.
-2. **Stops the user's mypaper**: `WM_QUIT` to every thread of `mypaper-core`, then waits until
-   no `mypaper-core`/`-wallpaper`/`-widgets`/`-bars` process is left. It records the core's path.
+   that stops the user's glaze.
+2. **Stops the user's Glaze**: `WM_QUIT` to every thread of `glaze-core`, then waits until
+   no `glaze-core`/`-wallpaper`/`-widgets`/`-bars` process is left. It records the core's path.
 3. **Runs the scenarios**, each in a fresh temporary `%APPDATA%` and `%LOCALAPPDATA%`
-   (`%TEMP%\mypaper-perf\<scenario>`), so a run never reads or writes the user's settings. The
+   (`%TEMP%\glaze-perf\<scenario>`), so a run never reads or writes the user's settings. The
    executables are copied to `target\perf-stage\run-<scenario>\` (a scenario without widgets or
-   bars simply has no `mypaper-widgets.exe` / `mypaper-bars.exe` there, which core reads as
+   bars simply has no `glaze-widgets.exe` / `glaze-bars.exe` there, which core reads as
    "off"), from where they find the repo's themes, widgets and shell pages. Each copy is run
    once with an argument that only prints (`--help`), so the antivirus scan of a new executable
    doesn't land in the first start. Between starts the harness waits (up to 15 s) until every
@@ -837,9 +837,9 @@ exits with **1 when any limit is broken**, listing every one, and 2 when it coul
 4. **Always puts everything back**, also after an error, a panic (the release profile aborts,
    so this runs from a panic hook) or Ctrl+C: stops leftover test processes (only ones running
    from the stage folder), replays any test taskbar journal, puts the Windows wallpaper back if
-   it changed, restarts the user's mypaper from its own folder, releases the lock.
+   it changed, restarts the user's Glaze from its own folder, releases the lock.
 5. **Splits itself into sessions** of at most 4 minutes (estimated per scenario), each with its
-   own lock, stop and restart, so the user's mypaper is never down for more than 5 minutes.
+   own lock, stop and restart, so the user's Glaze is never down for more than 5 minutes.
 
 ### The scenarios
 
@@ -902,7 +902,7 @@ The native taskbar's disappearance (`bars-hide`) is timed by the harness itself:
 **Steady state.** After the last start settles (5 s: theme load, the 2 s working-set trim,
 page loads), the harness samples kernel+user CPU time of every process in core's tree, twice,
 10 s apart, and reports percent of the whole machine (what Task Manager shows) and of one core.
-Then it pauses mypaper the way the tray does (`paused: true` in `config.json`), waits 3 s, and
+Then it pauses Glaze the way the tray does (`paused: true` in `config.json`), waits 3 s, and
 samples for twice as long (process times move in 15.6 ms ticks, so a 20 s window resolves about
 0.005% of this machine): the **held** cost.
 
@@ -912,7 +912,7 @@ the steady window.
 **Attribution.** The tree is core and everything it started, parents before children, a process
 only counting as a child when it was created after its parent (Windows keeps dead parents' ids
 and reuses them: without that check a Spotify started long ago showed up as a child of a
-WebView2 process). mypaper's own processes are themselves. A `msedgewebview2.exe` belongs to the
+WebView2 process). Glaze's own processes are themselves. A `msedgewebview2.exe` belongs to the
 host whose **user data folder** its command line names (`--user-data-dir`, read with
 `NtQueryInformationProcess`): `webview2-widgets`, `webview2-bars`, `webview2` (web wallpapers),
 or, for the folder both shell hosts share, **shared WebView2**. A WebView2 process whose command
@@ -936,18 +936,18 @@ medians), budget evaluation (`budget.rs`), the process tree and user-data-folder
 
 `static_snapshot` in `config.json` (default **on**): after each theme load, the engine renders the
 theme's first frame once more per screen at full size, and a background thread encodes it as a
-JPEG under `%LOCALAPPDATA%\mypaper\snapshot\` and sets it as **that monitor's Windows wallpaper**
-(`IDesktopWallpaper::SetWallpaper`). So from the next sign-in on, before mypaper has even
+JPEG under `%LOCALAPPDATA%\glaze\snapshot\` and sets it as **that monitor's Windows wallpaper**
+(`IDesktopWallpaper::SetWallpaper`). So from the next sign-in on, before Glaze has even
 started, Windows itself shows the theme's look instead of the stock wallpaper, and the live
 wallpaper takes over from an identical still.
 
 - **Reversible.** Before the first change, each monitor's original wallpaper (and the global fit
-  mode, if it was *span*) goes into `%LOCALAPPDATA%\mypaper\wallpaper.json`. A wallpaper the user
-  picks themselves while mypaper runs becomes the new original. The originals come back when
+  mode, if it was *span*) goes into `%LOCALAPPDATA%\glaze\wallpaper.json`. A wallpaper the user
+  picks themselves while Glaze runs becomes the new original. The originals come back when
   `static_snapshot` is turned off (live), on the **panic hotkey**, and on
-  **`mypaper-core --autostart off`** (Studio's "Start with Windows" off: mypaper won't run at
+  **`glaze-core --autostart off`** (Studio's "Start with Windows" off: Glaze won't run at
   sign-in, so Windows shouldn't show its still). A normal quit keeps the still: that's what Windows
-  shows until mypaper starts again. The API is `mypaper_desktop::desktop_wallpaper::restore()`.
+  shows until Glaze starts again. The API is `glaze_desktop::desktop_wallpaper::restore()`.
 - **Cheap.** About 10 ms of the engine thread once per theme load (one extra draw per screen and
   a readback), after the first frame is already on screen; nothing at all when the theme's files
   haven't changed (the still is named by a hash of the theme folder's file metadata and the screen
@@ -965,14 +965,14 @@ wallpaper takes over from an identical still.
 
 ## Autostart
 
-`mypaper-core --autostart on|off|status` prints one JSON line
-(`{"enabled":true,"method":"task","command":"\"C:\...\mypaper-core.exe\""}`), and Studio's
+`glaze-core --autostart on|off|status` prints one JSON line
+(`{"enabled":true,"method":"task","command":"\"C:\...\glaze-core.exe\""}`), and Studio's
 "Start with Windows" runs it.
 
-- **On** registers a per-user **Task Scheduler logon task** (`mypaper (<user>)` in the root folder)
+- **On** registers a per-user **Task Scheduler logon task** (`Glaze (<user>)` in the root folder)
   through `ITaskService`: a logon trigger for the current user only, no delay,
   `TASK_LOGON_INTERACTIVE_TOKEN`, `TASK_RUNLEVEL_LUA` (limited, no elevation), no execution time
-  limit (the default 72 h would end mypaper), priority 4 (normal; the default 7 is below-normal CPU
+  limit (the default 72 h would end Glaze), priority 4 (normal; the default 7 is below-normal CPU
   *and* low I/O priority), no battery conditions, hidden, ignore-new for a second instance. The
   `Run` value is then removed so Explorer doesn't start a second copy. If the task can't be
   registered (Task Scheduler unavailable, policy), it falls back to the `HKCU\...\Run` value.
@@ -981,7 +981,7 @@ wallpaper takes over from an identical still.
   deny-only): `RegisterTaskDefinition` succeeds in the root folder and in a subfolder (created on
   the fly), the read-back matches (trigger user, LUA run level, PT0S, priority 4, battery flags),
   and an on-demand `IRegisteredTask::Run` completes with `LastTaskResult` 0. All with test task
-  names, deleted afterwards (`cargo nextest run -p mypaper-core --run-ignored only`).
+  names, deleted afterwards (`cargo nextest run -p glaze-core --run-ignored only`).
 - Task Scheduler starts the task at logon itself, not from Explorer's `Run` processing, which
   Microsoft says it may delay. Core therefore can start **before Explorer**: it waits for
   Explorer's desktop window (checking every 25 ms, up to a minute) before starting its children,

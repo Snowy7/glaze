@@ -3,7 +3,7 @@
   "name": "System",
   "category": "System",
   "version": "3.0.0",
-  "author": "mypaper",
+  "author": "Glaze",
   "description": "CPU, memory, GPU, network, drives and battery, as rings, bars or live graphs.",
   "size": {
     "default": [6, 4],

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>mypaper native: the plan</title>
+<title>Glaze native: the plan</title>
 <style>
 :root{--bg:#0b0b0c;--panel:#121214;--line:#26262a;--text:#f2f2f3;--muted:#9a9aa2;--accent:#7cc4ff;--warn:#ffcf70}
 *{box-sizing:border-box}
@@ -35,7 +35,7 @@ svg{width:100%;height:auto;display:block;margin:16px 0}
 </head>
 <body>
 <main>
-<h1>mypaper native: the plan</h1>
+<h1>Glaze native: the plan</h1>
 <p class="sub">This plan rebuilds the shell fully native, with live Liquid Glass on every surface and near-zero resource use. A council of GPT&nbsp;Sol, Claude&nbsp;Opus and Grok signed it off after six review rounds. Source: <code>plans/council/native-plan.md</code> (v8).</p>
 
 <div class="lead">
@@ -86,9 +86,9 @@ svg{width:100%;height:auto;display:block;margin:16px 0}
 <h2>Architecture</h2>
 <svg viewBox="0 0 880 330" role="img" aria-label="Three always-on processes and two glass paths">
 <style>.b{fill:#121214;stroke:#2e2e33}.a{fill:#121214;stroke:#7cc4ff}.t{fill:#f2f2f3;font:600 15px Segoe UI,sans-serif}.s{fill:#9a9aa2;font:13px Segoe UI,sans-serif}.l{stroke:#3a3a40;stroke-width:1.5;fill:none}.la{stroke:#7cc4ff;stroke-width:1.5;fill:none}</style>
-<rect class="b" x="20" y="20" width="250" height="110" rx="8"/><text class="t" x="36" y="48">mypaper-core</text><text class="s" x="36" y="72">supervisor, tray, panic hotkey</text><text class="s" x="36" y="92">styling journal, restarts the shell</text><text class="s" x="36" y="112">≤8 MB</text>
-<rect class="b" x="315" y="20" width="250" height="110" rx="8"/><text class="t" x="331" y="48">mypaper-shell (new)</text><text class="s" x="331" y="72">bars, dock, flyouts, menus, widgets</text><text class="s" x="331" y="92">software D2D, no hardware GPU</text><text class="s" x="331" y="112">≤40 MB, ≤0.1% idle</text>
-<rect class="a" x="610" y="20" width="250" height="110" rx="8"/><text class="t" x="626" y="48">mypaper-wallpaper</text><text class="s" x="626" y="72">the only hardware GPU process</text><text class="s" x="626" y="92">wallpaper + all Liquid Glass</text><text class="s" x="626" y="112">gate set by the first spike</text>
+<rect class="b" x="20" y="20" width="250" height="110" rx="8"/><text class="t" x="36" y="48">glaze-core</text><text class="s" x="36" y="72">supervisor, tray, panic hotkey</text><text class="s" x="36" y="92">styling journal, restarts the shell</text><text class="s" x="36" y="112">≤8 MB</text>
+<rect class="b" x="315" y="20" width="250" height="110" rx="8"/><text class="t" x="331" y="48">glaze-shell (new)</text><text class="s" x="331" y="72">bars, dock, flyouts, menus, widgets</text><text class="s" x="331" y="92">software D2D, no hardware GPU</text><text class="s" x="331" y="112">≤40 MB, ≤0.1% idle</text>
+<rect class="a" x="610" y="20" width="250" height="110" rx="8"/><text class="t" x="626" y="48">glaze-wallpaper</text><text class="s" x="626" y="72">the only hardware GPU process</text><text class="s" x="626" y="92">wallpaper + all Liquid Glass</text><text class="s" x="626" y="112">gate set by the first spike</text>
 <path class="l" d="M270 75H315"/><path class="la" d="M565 75H610"/><text class="s" x="560" y="150" text-anchor="middle">shared memory: glass geometry</text>
 <rect class="b" x="315" y="190" width="250" height="120" rx="8"/><text class="t" x="331" y="218">Plates</text><text class="s" x="331" y="242">bars, dock, widgets over the wallpaper</text><text class="s" x="331" y="262">drawn into the wallpaper frame</text><text class="s" x="331" y="282">live by construction, 0 at idle</text>
 <rect class="b" x="610" y="190" width="250" height="120" rx="8"/><text class="t" x="626" y="218">Overlays</text><text class="s" x="626" y="242">flyouts, menus, notifications</text><text class="s" x="626" y="262">screen capture, only on change</text><text class="s" x="626" y="282">exist only while open</text>
@@ -97,14 +97,14 @@ svg{width:100%;height:auto;display:block;margin:16px 0}
 <div class="wrap"><table>
 <thead><tr><th>Process</th><th>Role</th><th>Always on</th></tr></thead>
 <tbody>
-<tr><td><code>mypaper-core</code></td><td>Supervisor, tray icon, panic hotkey, styling journal; restores the taskbar if the shell dies</td><td>yes</td></tr>
-<tr><td><code>mypaper-wallpaper</code></td><td>wgpu: wallpaper, glass plates, glass overlays</td><td>yes</td></tr>
-<tr><td><code>mypaper-shell</code></td><td>Top bar, dock, flyouts, notification center, launcher, all menus (the desktop menu moves here from core), widgets, tray host, window list</td><td>yes</td></tr>
+<tr><td><code>glaze-core</code></td><td>Supervisor, tray icon, panic hotkey, styling journal; restores the taskbar if the shell dies</td><td>yes</td></tr>
+<tr><td><code>glaze-wallpaper</code></td><td>wgpu: wallpaper, glass plates, glass overlays</td><td>yes</td></tr>
+<tr><td><code>glaze-shell</code></td><td>Top bar, dock, flyouts, notification center, launcher, all menus (the desktop menu moves here from core), widgets, tray host, window list</td><td>yes</td></tr>
 <tr><td>Plugins</td><td>Third-party data providers over JSON-RPC</td><td>only while used</td></tr>
 <tr><td>Studio</td><td>Settings app</td><td>only while open</td></tr>
 </tbody></table></div>
 <ul>
-<li><strong>Deleted:</strong> the <code>mypaper-bars</code> and <code>mypaper-widgets</code> processes. Their Rust services (app bars, tray host, window list, media, audio, network, notifications, stats, icons, journal) become one library inside the shell, with the duplicates between them merged.</li>
+<li><strong>Deleted:</strong> the <code>glaze-bars</code> and <code>glaze-widgets</code> processes. Their Rust services (app bars, tray host, window list, media, audio, network, notifications, stats, icons, journal) become one library inside the shell, with the duplicates between them merged.</li>
 <li><strong>Cut:</strong> HTML widgets and the widget SDK. No third-party HTML widget exists, and plugins cover data needs.</li>
 <li><strong>Crashes:</strong> if the shell dies, core restores the taskbar immediately and restarts the shell in ≤300&nbsp;ms. Core never waits on the shell, so the panic hotkey works even if the shell hangs.</li>
 </ul>

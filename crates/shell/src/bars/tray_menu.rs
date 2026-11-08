@@ -1,7 +1,7 @@
 //! A nonblocking inbox for core's tray menu. No commands or GPU work run in core's UI path.
 use anyhow::Result;
-use mypaper_bars::tray_menu::{self as wire, Item, Request};
-use mypaper_ui::{Entry, Event, Menu, Outcome, SurfaceId, Ui};
+use glaze_bars::tray_menu::{self as wire, Item, Request};
+use glaze_ui::{Entry, Event, Menu, Outcome, SurfaceId, Ui};
 use std::cell::RefCell;
 use windows::{
     Win32::{
@@ -22,7 +22,7 @@ pub struct Host {
 }
 impl Host {
     pub fn new() -> Result<Self> {
-        let menu = Menu::new("mypaper commands")?;
+        let menu = Menu::new("Glaze commands")?;
         // SAFETY: a static callback; this thread owns and destroys the hidden inbox.
         let hwnd = unsafe {
             let instance = GetModuleHandleW(None)?.into();
@@ -65,7 +65,7 @@ impl Host {
                 ui,
                 entries(request.items),
                 request.point,
-                mypaper_ui::screen_at(request.point.0, request.point.1),
+                glaze_ui::screen_at(request.point.0, request.point.1),
                 &tokens,
             ) {
                 log::warn!("tray menu: {e:#}");

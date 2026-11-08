@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let cycle = paper.time * clamp(params.frequency, 0.5, 20.0) / 60.0;
     let event_id = floor(cycle);

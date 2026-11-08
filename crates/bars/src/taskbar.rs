@@ -7,7 +7,7 @@
 //! is never seen, even for a frame, however late we notice and hide it again.
 //!
 //! Everything is reversible: before the first change of anything, its original is written to
-//! `%LOCALAPPDATA%\mypaper\taskbar.json`. Applying `keep` (on exit, on the panic hotkey, by core
+//! `%LOCALAPPDATA%\glaze\taskbar.json`. Applying `keep` (on exit, on the panic hotkey, by core
 //! after a crash) puts each original back and deletes the journal. The logic runs against the
 //! [`Shell`] trait, so it's tested without touching the real taskbar.
 
@@ -50,7 +50,7 @@ pub struct JournalLease {
 }
 impl JournalLease {
     pub fn acquire() -> Result<Self> {
-        Self::named(w!("Local\\mypaper.taskbar.journal"))
+        Self::named(w!("Local\\glaze.taskbar.journal"))
     }
 
     fn named(name: PCWSTR) -> Result<Self> {
@@ -138,7 +138,7 @@ pub struct Taskbar<S> {
 }
 
 impl Taskbar<NativeShell> {
-    /// The real taskbar, journaled at `%LOCALAPPDATA%\mypaper\taskbar.json`.
+    /// The real taskbar, journaled at `%LOCALAPPDATA%\glaze\taskbar.json`.
     pub fn native() -> Result<Self> {
         Ok(Self::new(NativeShell, crate::files::local(JOURNAL)?))
     }
@@ -553,7 +553,7 @@ mod tests {
 
     #[test]
     fn journal_lease_holds_replacement_writes_until_recovery_finishes() {
-        let name = format!("Local\\mypaper.journal.test.{}", std::process::id());
+        let name = format!("Local\\glaze.journal.test.{}", std::process::id());
         let wide = windows::core::HSTRING::from(name.clone());
         let recovery = JournalLease::named(PCWSTR(wide.as_ptr())).unwrap();
         let (tx, rx) = std::sync::mpsc::channel();

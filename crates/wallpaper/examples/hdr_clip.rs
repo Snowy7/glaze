@@ -3,7 +3,7 @@
 //! large binary files in the repo.
 //!
 //! ```text
-//! cargo run -p mypaper-wallpaper --example hdr_clip -- OUT.mp4 [pq|hlg|sdr]
+//! cargo run -p glaze-wallpaper --example hdr_clip -- OUT.mp4 [pq|hlg|sdr]
 //! ```
 //!
 //! `pq` (default) is HDR10: SMPTE ST 2084 transfer, BT.2020 primaries. `hlg` is

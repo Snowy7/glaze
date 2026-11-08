@@ -1,23 +1,23 @@
 //! Opt-in, isolated memory review. No app startup, live settings, IPC, input or activation.
 //!
-//! Run this test alone in release mode with `MYPAPER_STUDIO_MEMORY_REPORT` pointing to JSON.
+//! Run this test alone in release mode with `GLAZE_STUDIO_MEMORY_REPORT` pointing to JSON.
 //! The app window is created hidden and is never shown; fixtures keep every edit in memory.
 
 use super::{Command, Page, measure};
 use crate::actions::{Action, Bar, Slot};
-use mypaper_ui::{Kind, Role, Surface, Ui};
+use glaze_ui::{Kind, Role, Surface, Ui};
 use windows::Win32::UI::WindowsAndMessaging::IsWindowVisible;
 
 #[test]
 #[ignore = "run alone: release-mode hidden-window memory measurement"]
 fn hidden_window_memory_tour() {
-    let report = std::env::var_os("MYPAPER_STUDIO_MEMORY_REPORT")
-        .expect("set MYPAPER_STUDIO_MEMORY_REPORT to the output JSON path");
+    let report = std::env::var_os("GLAZE_STUDIO_MEMORY_REPORT")
+        .expect("set GLAZE_STUDIO_MEMORY_REPORT to the output JSON path");
     let mut ui = Ui::new().unwrap();
     ui.text.set_capacity(64);
     let mut surface = Surface::new_deferred_accessibility(
         Kind::App { min: (960, 640) },
-        "mypaper Studio (hidden memory fixture)",
+        "Glaze Studio (hidden memory fixture)",
         Role::Window,
     )
     .unwrap();

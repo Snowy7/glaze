@@ -8,7 +8,7 @@ use crate::{
     app::App,
     ui::{B, Col},
 };
-use mypaper_ui::{
+use glaze_ui::{
     Event, Rect, Role,
     controls::{Align, Behavior, Key, key},
 };
@@ -762,7 +762,7 @@ unsafe extern "system" fn wake(
 ) {
     // SAFETY: a callback for our own one-shot HWND timer, delivered on the owning UI thread.
     let _ = unsafe { windows::Win32::UI::WindowsAndMessaging::KillTimer(Some(window), id) };
-    mypaper_ui::queue_event(window, Event::Frame);
+    glaze_ui::queue_event(window, Event::Frame);
 }
 
 #[cfg(test)]
@@ -772,8 +772,8 @@ mod tests {
         docs::DocId,
         panel::{Page, State as PanelState},
     };
-    use mypaper_config::look::Style;
-    use mypaper_ui::{Point, Ui};
+    use glaze_config::look::Style;
+    use glaze_ui::{Point, Ui};
 
     #[test]
     fn gallery_drawings_are_released_when_rows_or_the_page_leave() {
@@ -931,12 +931,12 @@ mod tests {
             assert_eq!(target.rect, rect);
         }
         assert!(during.list.ops.iter().any(|op| matches!(op,
-            mypaper_ui::Op::Text { text, .. } if text.as_ref() == "Liquid settings")));
+            glaze_ui::Op::Text { text, .. } if text.as_ref() == "Liquid settings")));
         assert_eq!(app.docs.undo_count(), 0);
         app.run(action);
         let applied = crate::panel::build(&app, &mut ui.text);
         assert!(applied.list.ops.iter().any(|op| matches!(op,
-            mypaper_ui::Op::Text { text, .. } if text.as_ref() == "Fluent settings")));
+            glaze_ui::Op::Text { text, .. } if text.as_ref() == "Fluent settings")));
     }
 
     #[test]
@@ -959,29 +959,29 @@ mod tests {
         app.input.hover = None;
         let frame = crate::panel::build(&app, &mut ui.text);
         // The hover wash is drawn inside the picture's clip.
-        fn flat(ops: &[mypaper_ui::Op]) -> Vec<&mypaper_ui::Op> {
+        fn flat(ops: &[glaze_ui::Op]) -> Vec<&glaze_ui::Op> {
             ops.iter()
                 .flat_map(|op| match op {
-                    mypaper_ui::Op::Clipped { ops, .. } | mypaper_ui::Op::RoundedClipped { ops, .. } => flat(ops),
+                    glaze_ui::Op::Clipped { ops, .. } | glaze_ui::Op::RoundedClipped { ops, .. } => flat(ops),
                     _ => vec![op],
                 })
                 .collect()
         }
         assert!(flat(&frame.list.ops).into_iter().any(
-            |op| matches!(op, mypaper_ui::Op::Fill { rect: drawn, color, .. }
+            |op| matches!(op, glaze_ui::Op::Fill { rect: drawn, color, .. }
             if drawn.contains(app.input.pointer.unwrap())
                 && drawn.top >= rect.top && drawn.bottom <= rect.bottom
-                && mypaper_ui::theme::luminance(*color)
-                    > mypaper_ui::theme::luminance(crate::panel::palette_for(&app).fill))
+                && glaze_ui::theme::luminance(*color)
+                    > glaze_ui::theme::luminance(crate::panel::palette_for(&app).fill))
         ));
         assert!(frame.semantics.iter().any(
-            |(_, semantic)| matches!(semantic, mypaper_ui::Semantics::Status(message)
+            |(_, semantic)| matches!(semantic, glaze_ui::Semantics::Status(message)
             if message.as_ref() == "Previewing Fluent · Click to apply")
         ));
         assert!(crate::panel::on_key(&mut app, 0x1B, (false, false, false)));
         let frame = crate::panel::build(&app, &mut ui.text);
         assert!(!frame.semantics.iter().any(
-            |(_, semantic)| matches!(semantic, mypaper_ui::Semantics::Status(message)
+            |(_, semantic)| matches!(semantic, glaze_ui::Semantics::Status(message)
             if message.starts_with("Previewing"))
         ));
     }
@@ -1014,7 +1014,7 @@ mod tests {
         assert_eq!(app.docs.doc(DocId::Config).raw, before);
         assert_eq!(app.docs.undo_count(), 0);
         assert!(frame.semantics.iter().any(
-            |(_, semantic)| matches!(semantic, mypaper_ui::Semantics::Status(message)
+            |(_, semantic)| matches!(semantic, glaze_ui::Semantics::Status(message)
             if message.as_ref() == "Previewing Solid · Click to apply")
         ));
         app.key_with(0x28, (false, true, false));
@@ -1050,7 +1050,7 @@ mod tests {
                 .count(),
             1
         );
-        for name in ["As is", "Match mypaper", "Glass", "Sharp"] {
+        for name in ["As is", "Match Glaze", "Glass", "Sharp"] {
             assert!(
                 frame
                     .list
@@ -1135,7 +1135,7 @@ mod tests {
         );
         event(
             &mut app,
-            &Event::Move(mypaper_ui::Pointer {
+            &Event::Move(glaze_ui::Pointer {
                 at: Point::new(475.0, 20.0),
                 screen: (0, 0),
             }),

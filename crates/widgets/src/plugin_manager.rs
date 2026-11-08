@@ -73,8 +73,8 @@ impl Snapshot {
             log::warn!("Studio plugin stats: {error:#}");
         }
     }
-    pub fn route(&mut self, message: &mypaper_plugin_api::wire::HelperMsg) -> bool {
-        use mypaper_plugin_api::wire::{HelperMsg, Status};
+    pub fn route(&mut self, message: &glaze_plugin_api::wire::HelperMsg) -> bool {
+        use glaze_plugin_api::wire::{HelperMsg, Status};
         match message {
             HelperMsg::Stats {
                 plugin,
@@ -151,10 +151,10 @@ pub fn send(request: &Request) -> Result<()> {
         let host = FindWindowExW(
             Some(HWND_MESSAGE),
             None::<HWND>,
-            w!("mypaper.widgets.host"),
+            w!("glaze.widgets.host"),
             PCWSTR::null(),
         )
-        .context("mypaper shell is not running")?;
+        .context("Glaze shell is not running")?;
         let mut result = 0;
         ensure!(
             SendMessageTimeoutW(
@@ -168,7 +168,7 @@ pub fn send(request: &Request) -> Result<()> {
             )
             .0 != 0
                 && result == 1,
-            "The shell could not accept the plugin request. Restart mypaper to update it."
+            "The shell could not accept the plugin request. Restart Glaze to update it."
         );
     }
     Ok(())
@@ -190,7 +190,7 @@ impl Package {
             .duration_since(std::time::UNIX_EPOCH)?
             .as_nanos();
         let root =
-            std::env::temp_dir().join(format!("mypaper-install-{}-{nonce}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-install-{}-{nonce}", std::process::id()));
         std::fs::create_dir(&root)?;
         let result = (|| {
             if source.is_dir() {
@@ -200,8 +200,8 @@ impl Package {
                 ensure!(
                     source
                         .extension()
-                        .is_some_and(|e| e.eq_ignore_ascii_case("mypaper-plugin")),
-                    "Choose a .mypaper-plugin package or a plugin folder"
+                        .is_some_and(|e| e.eq_ignore_ascii_case("glaze-plugin")),
+                    "Choose a .glaze-plugin package or a plugin folder"
                 );
                 let mut zip = zip::ZipArchive::new(std::fs::File::open(source)?)
                     .context("The package is not a ZIP archive")?;
@@ -347,11 +347,11 @@ pub fn compatible_api(api: &str) -> Result<()> {
         .and_then(|(a, b)| Some((a.parse::<u32>().ok()?, b.parse::<u32>().ok()?)));
     ensure!(
         version.is_some_and(
-            |(a, b)| a == mypaper_plugin_api::API_MAJOR && b <= mypaper_plugin_api::API_MINOR
+            |(a, b)| a == glaze_plugin_api::API_MAJOR && b <= glaze_plugin_api::API_MINOR
         ),
-        "Incompatible plugin SDK/API {api:?}. This mypaper supports {}.{}; update mypaper or choose a compatible plugin.",
-        mypaper_plugin_api::API_MAJOR,
-        mypaper_plugin_api::API_MINOR
+        "Incompatible plugin SDK/API {api:?}. This Glaze supports {}.{}; update Glaze or choose a compatible plugin.",
+        glaze_plugin_api::API_MAJOR,
+        glaze_plugin_api::API_MINOR
     );
     Ok(())
 }
@@ -470,7 +470,7 @@ fn cleanup(
 fn remove_secrets(id: &str) -> Result<()> {
     use windows::Win32::{Foundation::ERROR_NOT_FOUND, Security::Credentials::*};
     use windows::core::PCWSTR;
-    let prefix = format!("mypaper/integrations/plugin/{id}/");
+    let prefix = format!("glaze/integrations/plugin/{id}/");
     let filter: Vec<u16> = format!("{prefix}*\0").encode_utf16().collect();
     let mut count = 0;
     let mut credentials = std::ptr::null_mut();
@@ -545,8 +545,8 @@ mod tests {
         use std::io::Write;
         let dir = files::temp_dir("package-zip");
         for (filename, bad) in [
-            ("valid.mypaper-plugin", false),
-            ("bad.mypaper-plugin", true),
+            ("valid.glaze-plugin", false),
+            ("bad.glaze-plugin", true),
         ] {
             let path = dir.join(filename);
             let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
@@ -599,7 +599,7 @@ mod tests {
     }
     #[test]
     fn stats_route_preserves_all_counters_and_status_reason() {
-        use mypaper_plugin_api::wire::{HelperMsg, Status};
+        use glaze_plugin_api::wire::{HelperMsg, Status};
         let mut s = Snapshot::default();
         s.route(&HelperMsg::Stats {
             plugin: "test".into(),
@@ -634,14 +634,14 @@ mod tests {
             format!("plugin/{id}/nested/b"),
             format!("plugin/{neighbor}/a"),
         ] {
-            mypaper_integrations::credentials::write(&key, "test-only-secret").unwrap();
+            glaze_integrations::credentials::write(&key, "test-only-secret").unwrap();
         }
         remove_secrets(&id).unwrap();
-        assert!(mypaper_integrations::credentials::read(&format!("plugin/{id}/a")).is_err());
-        assert!(mypaper_integrations::credentials::read(&format!("plugin/{id}/nested/b")).is_err());
+        assert!(glaze_integrations::credentials::read(&format!("plugin/{id}/a")).is_err());
+        assert!(glaze_integrations::credentials::read(&format!("plugin/{id}/nested/b")).is_err());
         let key = format!("plugin/{neighbor}/a");
-        assert!(mypaper_integrations::credentials::read(&key).is_ok());
-        mypaper_integrations::credentials::remove(&key).unwrap();
+        assert!(glaze_integrations::credentials::read(&key).is_ok());
+        glaze_integrations::credentials::remove(&key).unwrap();
     }
 
     #[test]

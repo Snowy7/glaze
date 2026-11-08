@@ -1,6 +1,6 @@
 ﻿[
     {
-        "part":  "mypaper-shell",
+        "part":  "glaze-shell",
         "before_threads":  5,
         "before_switches_s":  46.175,
         "after_threads":  6,
@@ -9,7 +9,7 @@
         "cpu_core_pct_after":  0.36
     },
     {
-        "part":  "mypaper-core",
+        "part":  "glaze-core",
         "before_threads":  1,
         "before_switches_s":  9.597,
         "after_threads":  1,
@@ -18,7 +18,7 @@
         "cpu_core_pct_after":  0
     },
     {
-        "part":  "mypaper-index",
+        "part":  "glaze-index",
         "before_threads":  2,
         "before_switches_s":  18.673,
         "after_threads":  2,

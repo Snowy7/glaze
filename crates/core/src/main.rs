@@ -1,8 +1,8 @@
-//! mypaper-core supervises the wallpaper engine and native shell, restores the taskbar after
+//! glaze-core supervises the wallpaper engine and native shell, restores the taskbar after
 //! shell exit, and owns the tray, styling journal and panic hotkey.
 //!
 //! ```text
-//! mypaper-core [THEME]
+//! glaze-core [THEME]
 //! ```
 //!
 //! The wallpaper follows `config.json` on its own (theme, pausing), so core
@@ -10,7 +10,7 @@
 //! Core owns the tray icon (pause, themes, studio, restart, quit).
 //!
 //! **Panic hotkey: Ctrl+Alt+Shift+Backspace** stops everything and restores
-//! the stock desktop, whatever state mypaper is in.
+//! the stock desktop, whatever state Glaze is in.
 
 // No console window in release builds; logs go to a file (see init_logging).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -31,8 +31,8 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use mypaper_config::Config;
-use mypaper_desktop::{DesktopHost, startup};
+use glaze_config::Config;
+use glaze_desktop::{DesktopHost, startup};
 use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Threading::{CreateMutexW, INFINITE};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -59,10 +59,10 @@ fn main() -> ExitCode {
     if let Some(code) = autostart::cli(std::env::args().skip(1)) {
         return code;
     }
-    // Before any thread: everything mypaper launches inherits this environment (clean_env.rs).
+    // Before any thread: everything Glaze launches inherits this environment (clean_env.rs).
     clean_env::reset();
-    mypaper_desktop::init_logging();
-    mypaper_desktop::quit_on_ctrl_c();
+    glaze_desktop::init_logging();
+    glaze_desktop::quit_on_ctrl_c();
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
@@ -79,10 +79,10 @@ fn main() -> ExitCode {
 fn run() -> Result<()> {
     startup::ready("core", "main_ms");
     // SAFETY: named mutex we hold for the lifetime of the process.
-    let _instance = unsafe { CreateMutexW(None, true, w!("Local\\mypaper-core"))? };
+    let _instance = unsafe { CreateMutexW(None, true, w!("Local\\glaze-core"))? };
     // SAFETY: reads the calling thread's last error.
     if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
-        bail!("mypaper is already running");
+        bail!("Glaze is already running");
     }
     // SAFETY: thread-level hotkey; WM_HOTKEY arrives in our message queue.
     unsafe {
@@ -95,7 +95,7 @@ fn run() -> Result<()> {
         .context("panic hotkey Ctrl+Alt+Shift+Backspace is taken by another app")?;
     }
     let exe = std::env::current_exe()?;
-    let wallpaper_exe = exe.with_file_name("mypaper-wallpaper.exe");
+    let wallpaper_exe = exe.with_file_name("glaze-wallpaper.exe");
     if !wallpaper_exe.exists() {
         bail!(
             "{} not found; build the workspace first (cargo build)",
@@ -107,13 +107,13 @@ fn run() -> Result<()> {
     // The shell paints before acquiring the taskbar journal and hiding Explorer. Start it
     // before the wallpaper and all of core's optional work.
     startup::ready("core", "shell_spawn_begin_ms");
-    if let Err(e) = mypaper_desktop::tiling_recovery::restore_pending() {
+    if let Err(e) = glaze_desktop::tiling_recovery::restore_pending() {
         log::error!("recovering tiling before shell startup: {e:#}");
     }
-    let mut shell = start_optional("shell", exe.with_file_name("mypaper-shell.exe"));
+    let mut shell = start_optional("shell", exe.with_file_name("glaze-shell.exe"));
     startup::ready("core", "shell_spawn_ms");
 
-    // The wallpaper is essential: when it stops for good, so does mypaper. It reads the config
+    // The wallpaper is essential: when it stops for good, so does glaze. It reads the config
     // itself and exits with EXIT_CONFIG on a bad one, which stops core too. Only an explicit
     // theme override is forwarded, as an absolute path.
     // `--parent` makes it exit with core however core ends (a crash or a kill too), so no
@@ -124,7 +124,7 @@ fn run() -> Result<()> {
         PathBuf::from(std::process::id().to_string()),
     ];
     if let Some(name) = &theme_override {
-        wallpaper_args.push(mypaper_theme::locate(Some(name)).context("theme to start with")?);
+        wallpaper_args.push(glaze_theme::locate(Some(name)).context("theme to start with")?);
     }
     let mut wallpaper = Supervised::new("wallpaper", wallpaper_exe, wallpaper_args);
     wallpaper.start()?;
@@ -155,7 +155,7 @@ fn run() -> Result<()> {
     // right-click menu is the native shell's.
     let mut extras = DesktopExtras::new(&config);
     let mut system = system::SystemSettings::new(&config);
-    let index_exe = exe.with_file_name("mypaper-index.exe");
+    let index_exe = exe.with_file_name("glaze-index.exe");
     let mut file_index = config
         .experimental
         .file_index
@@ -163,7 +163,7 @@ fn run() -> Result<()> {
         .flatten();
     // The app styler (experimental; docs/windows-styling.md, "App styler") runs only while its
     // flag is on. Stopping it, by any path, is what puts Explorer and Settings back.
-    let styler_exe = exe.with_file_name("mypaper-styler.exe");
+    let styler_exe = exe.with_file_name("glaze-styler.exe");
     let mut app_styler = config
         .experimental
         .app_styler
@@ -212,13 +212,13 @@ fn run() -> Result<()> {
                     }
                 }
                 name if shell.as_ref().is_some_and(|s| s.name == name) => {
-                    if let Err(e) = mypaper_desktop::tiling_recovery::restore_pending() {
+                    if let Err(e) = glaze_desktop::tiling_recovery::restore_pending() {
                         log::error!("recovering tiling after shell exit: {e:#}");
                     }
                     // The exited shell released its lease. Its replacement may paint while
                     // core owns the journal, then waits before changing Explorer or the journal.
-                    let journal = mypaper_bars::taskbar::JournalLease::acquire()?;
-                    if let Err(e) = mypaper_bars::taskbar::Taskbar::native()
+                    let journal = glaze_bars::taskbar::JournalLease::acquire()?;
+                    if let Err(e) = glaze_bars::taskbar::Taskbar::native()
                         .and_then(|mut t| t.restore_visibility())
                     {
                         log::warn!("revealing the native taskbar after shell exit: {e:#}");
@@ -330,7 +330,7 @@ fn run() -> Result<()> {
     }
     bars::replay_journal();
     wallpaper.stop();
-    if let Err(e) = mypaper_desktop::tiling_recovery::restore_pending() {
+    if let Err(e) = glaze_desktop::tiling_recovery::restore_pending() {
         log::error!("recovering tiling on shutdown: {e:#}");
     }
     if let Some(child) = &mut file_index {
@@ -347,8 +347,8 @@ fn run() -> Result<()> {
         host.restore();
     }
     // The stock desktop includes the user's own Windows wallpaper (a quit keeps the theme's
-    // still, which is what Windows shows until mypaper starts again).
-    if panicked && let Err(e) = mypaper_desktop::desktop_wallpaper::restore() {
+    // still, which is what Windows shows until Glaze starts again).
+    if panicked && let Err(e) = glaze_desktop::desktop_wallpaper::restore() {
         log::error!("putting the Windows wallpaper back: {e:#}");
     }
     // SAFETY: unregisters the hotkey this thread registered.

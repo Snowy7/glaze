@@ -5,7 +5,7 @@
 //! do not disturb (`toggles::dnd`) and shows what Windows reads back. The month sits under the
 //! list, as Windows 11 puts it (the clock opens this center).
 //!
-//! Drawn with the kit (`mypaper_ui::kit`, docs/ui.md "Porting a surface"): the header and the
+//! Drawn with the kit (`glaze_ui::kit`, docs/ui.md "Porting a surface"): the header and the
 //! month never move; only the list scrolls, inside a viewport whose height depends on the
 //! cards, never on where the list is scrolled to. Touchpads scroll it pixel by pixel, a wheel
 //! notch glides, and the overlay scrollbar lives inside the viewport and fades when idle.
@@ -17,15 +17,15 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use mypaper_bars::flyouts::index::epoch_ms;
-use mypaper_bars::flyouts::notifications::{Notification, NotificationList};
-use mypaper_bars::system;
-use mypaper_integrations::{Action, Availability, Data, Lease, Provider};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::interact::Interaction;
-use mypaper_ui::kit::{ButtonKind, Frame};
-use mypaper_ui::layout::{Align, Stack};
-use mypaper_ui::{HitId, Image, Op, Rect, Role, Scroll, TextRole};
+use glaze_bars::flyouts::index::epoch_ms;
+use glaze_bars::flyouts::notifications::{Notification, NotificationList};
+use glaze_bars::system;
+use glaze_integrations::{Action, Availability, Data, Lease, Provider};
+use glaze_ui::icons::Icon;
+use glaze_ui::interact::Interaction;
+use glaze_ui::kit::{ButtonKind, Frame};
+use glaze_ui::layout::{Align, Stack};
+use glaze_ui::{HitId, Image, Op, Rect, Role, Scroll, TextRole};
 
 use super::calendar::Calendar;
 use super::kit::Kit;
@@ -258,7 +258,7 @@ impl Center {
     }
 }
 
-fn card(card: mypaper_integrations::notifications::Card) -> Notification {
+fn card(card: glaze_integrations::notifications::Card) -> Notification {
     Notification {
         id: card.id,
         app: card.app,
@@ -267,7 +267,7 @@ fn card(card: mypaper_integrations::notifications::Card) -> Notification {
         icon: None,
         title: card.title,
         body: card.body,
-        at: mypaper_bars::flyouts::notifications::epoch_ms(card.at),
+        at: glaze_bars::flyouts::notifications::epoch_ms(card.at),
     }
 }
 
@@ -446,7 +446,7 @@ impl Panel for Center {
             }
             GRANT => {
                 // WinRT requires the permission request itself on this UI thread and explicit click.
-                match mypaper_integrations::notifications::request_access() {
+                match glaze_integrations::notifications::request_access() {
                     Ok(operation) => cx.lanes.apps(move |_| Reply::NotificationAccess(
                         operation.join().map_err(|e| e.to_string()).and_then(|status| {
                             if status == windows::UI::Notifications::Management::UserNotificationListenerAccessStatus::Allowed {
@@ -872,21 +872,21 @@ mod tests {
     /// scrollbar ran down beside the month. Now only the list's viewport moves.
     #[test]
     fn only_the_list_scrolls_and_the_flyout_keeps_its_size() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let look = Look::default();
         let mut center = many();
-        let draw = |ui: &mut mypaper_ui::Ui, center: &Center| {
+        let draw = |ui: &mut glaze_ui::Ui, center: &Center| {
             build(center, &mut ui.text, &look, 1.0, 900.0, (None, None, None), false)
         };
         let (before, size) = draw(&mut ui, &center);
-        let fixed = |list: &mypaper_ui::DisplayList| -> Vec<(HitId, Rect)> {
+        let fixed = |list: &glaze_ui::DisplayList| -> Vec<(HitId, Rect)> {
             list.hits
                 .iter()
                 .filter(|h| h.id < CARD && !(GROUP..CARD).contains(&h.id))
                 .map(|h| (h.id, h.rect))
                 .collect()
         };
-        let viewport = |list: &mypaper_ui::DisplayList| {
+        let viewport = |list: &glaze_ui::DisplayList| {
             list.ops
                 .iter()
                 .find_map(|op| match op {
@@ -911,15 +911,15 @@ mod tests {
                 hit.rect
             );
         }
-        let first = |list: &mypaper_ui::DisplayList| {
+        let first = |list: &glaze_ui::DisplayList| {
             list.hits.iter().find(|h| h.id == CARD).map(|h| h.rect.bottom)
         };
         assert_ne!(first(&before), first(&after), "the list moved");
-        if std::env::var_os("MYPAPER_SHOT").is_some() {
-            let dir = std::env::temp_dir().join("mypaper-golden");
+        if std::env::var_os("GLAZE_SHOT").is_some() {
+            let dir = std::env::temp_dir().join("glaze-golden");
             for (name, list) in [("notifications-top", &before), ("notifications-scrolled", &after)] {
-                let image = mypaper_ui::render(&mut ui, list, size.0, size.1).unwrap();
-                mypaper_ui::golden::write(&image, &dir.join(format!("{name}.png"))).unwrap();
+                let image = glaze_ui::render(&mut ui, list, size.0, size.1).unwrap();
+                glaze_ui::golden::write(&image, &dir.join(format!("{name}.png"))).unwrap();
             }
         }
     }

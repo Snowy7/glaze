@@ -6,8 +6,8 @@ use crate::{
     docs::{DocId, Op},
     ui::{B, Col},
 };
-use mypaper_ui::controls::{Glyph, Key, key};
-use mypaper_ui::{Button, Event, Point, Rect};
+use glaze_ui::controls::{Glyph, Key, key};
+use glaze_ui::{Button, Event, Point, Rect};
 use serde_json::{Value, json};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -65,9 +65,9 @@ pub fn row_detail(
         super::controls::row_height(b, detail),
     );
     let first_target = b.targets.len();
-    let picture = mypaper_ui::sortable::row(
+    let picture = glaze_ui::sortable::row(
         b,
-        mypaper_ui::sortable::Row {
+        glaze_ui::sortable::Row {
             key: row_key(list, index),
             rect,
             label,
@@ -75,7 +75,7 @@ pub fn row_detail(
             separator,
             icon: if separator {
                 Some(if matches!(list, List::Menu) {
-                    Glyph::Icon(mypaper_ui::icons::Icon::Remove)
+                    Glyph::Icon(glaze_ui::icons::Icon::Remove)
                 } else {
                     Glyph::Font(' ')
                 })
@@ -231,7 +231,7 @@ pub fn drop_overlay(app: &App, b: &mut B) {
     if !drag.moved || !matches!(drag.list, List::Modules(..)) {
         return;
     }
-    use mypaper_ui::controls::Align;
+    use glaze_ui::controls::Align;
     let x = b.px(16.0);
     let width = app.size.0 as f32 - x * 2.0;
     let line = super::controls::height(b, 30.0);
@@ -286,7 +286,7 @@ pub fn drop_overlay(app: &App, b: &mut B) {
     );
     b.list.ops.insert(
         at,
-        mypaper_ui::Op::Fill {
+        glaze_ui::Op::Fill {
             rect: body,
             radius: 0.0,
             color: b.p.chrome.with_alpha(0.82),
@@ -294,7 +294,7 @@ pub fn drop_overlay(app: &App, b: &mut B) {
     );
     b.list.ops.insert(
         at + 1,
-        mypaper_ui::Op::Fill {
+        glaze_ui::Op::Fill {
             rect: plate,
             radius: b.px(radius::CARD),
             color: b.p.chrome,
@@ -302,7 +302,7 @@ pub fn drop_overlay(app: &App, b: &mut B) {
     );
     b.list.ops.insert(
         at + 2,
-        mypaper_ui::Op::Stroke {
+        glaze_ui::Op::Stroke {
             rect: plate,
             radius: b.px(radius::CARD),
             width: b.px(1.0),
@@ -400,10 +400,10 @@ pub fn zone_target(app: &App, b: &mut B, rect: Rect, bar: Bar, zone: &'static st
     b.hit(
         key(("panel-zone", &list)),
         rect,
-        mypaper_ui::Role::Group,
+        glaze_ui::Role::Group,
         "Module zone",
         Action::Panel(Command::SortRow(list, index)),
-        mypaper_ui::controls::Behavior::Click,
+        glaze_ui::controls::Behavior::Click,
     );
 }
 
@@ -448,7 +448,7 @@ fn values(app: &App, list: &List) -> Vec<Value> {
             .and_then(Value::as_array)
             .cloned()
             .unwrap_or_else(|| {
-                serde_json::to_value(mypaper_config::desktop_menu::default_items())
+                serde_json::to_value(glaze_config::desktop_menu::default_items())
                     .unwrap()
                     .as_array()
                     .unwrap()
@@ -533,7 +533,7 @@ fn store(app: &mut App, list: &List, items: Vec<Value>, label: &str) {
 
 pub fn reorder(app: &mut App, list: &List, from: usize, to: usize) {
     let mut items = values(app, list);
-    if mypaper_ui::sortable::reorder(&mut items, from, to) {
+    if glaze_ui::sortable::reorder(&mut items, from, to) {
         let version = app.docs.version;
         store(app, list, items, "Reorder items");
         if app.docs.version == version {
@@ -595,21 +595,21 @@ mod tests {
 
     #[test]
     fn render_module_drag_and_focus() {
-        let out = std::env::var_os("MYPAPER_STUDIO_PANEL_SHOTS")
+        let out = std::env::var_os("GLAZE_STUDIO_PANEL_SHOTS")
             .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| r"C:\mypaper-targets\studio-panel\shots".into())
+            .unwrap_or_else(|| r"C:\glaze-targets\studio-panel\shots".into())
             .join("states");
         std::fs::create_dir_all(&out).unwrap();
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         for dark in [true, false] {
             for (width, scale) in [(480, 1.0), (360, 1.5)] {
                 let mut app = fixture(&ui);
                 app.size.0 = width;
                 app.theme.ty.text_scale = scale;
                 app.theme.palette = if dark {
-                    mypaper_ui::controls::Palette::dark()
+                    glaze_ui::controls::Palette::dark()
                 } else {
-                    mypaper_ui::controls::Palette::light()
+                    glaze_ui::controls::Palette::light()
                 };
                 app.panel.as_mut().unwrap().page = super::super::Page::Top;
                 app.nav.bar = Some(Bar::Top);
@@ -645,7 +645,7 @@ mod tests {
                             .ops
                             .iter()
                             .find_map(|op| match op {
-                                mypaper_ui::Op::Fill { rect, .. }
+                                glaze_ui::Op::Fill { rect, .. }
                                     if (rect.left - 16.0).abs() < 0.1
                                         && (rect.top - 56.0).abs() < 0.1 =>
                                 {
@@ -669,20 +669,20 @@ mod tests {
                         }
                     }
                     let image =
-                        mypaper_ui::render(&mut ui, &built.list, width, app.size.1).unwrap();
+                        glaze_ui::render(&mut ui, &built.list, width, app.size.1).unwrap();
                     let name = format!(
                         "module-{}-{}{}.png",
                         if drag { "drag" } else { "focus" },
                         width,
                         if dark { "-dark" } else { "-light" }
                     );
-                    mypaper_ui::golden::write(&image, &out.join(name)).unwrap();
+                    glaze_ui::golden::write(&image, &out.join(name)).unwrap();
                 }
             }
         }
     }
 
-    fn fixture(ui: &mypaper_ui::Ui) -> App {
+    fn fixture(ui: &glaze_ui::Ui) -> App {
         let mut app = crate::goldens::app(true, ui);
         app.panel = Some(super::super::State::default());
         app.size = (480, 760);
@@ -697,7 +697,7 @@ mod tests {
 
     #[test]
     fn module_transfers_cross_zones_and_bars_atomically_on_the_selected_display() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         for (bar, zone) in [(Bar::Top, "center"), (Bar::Dock, "left")] {
             let mut app = fixture(&ui);
             app.nav.display = 1;
@@ -729,7 +729,7 @@ mod tests {
 
     #[test]
     fn duplicate_modules_and_invalid_zones_leave_both_lists_intact() {
-        let ui = mypaper_ui::Ui::new().unwrap();
+        let ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(&ui);
         let source = crate::actions::Slot {
             bar: Bar::Top,
@@ -762,8 +762,8 @@ mod tests {
 
     #[test]
     fn captured_drag_exposes_other_bar_zones_and_writes_only_on_release() {
-        use mypaper_ui::Pointer;
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        use glaze_ui::Pointer;
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(&ui);
         app.panel.as_mut().unwrap().page = super::super::Page::Top;
         app.nav.bar = Some(Bar::Top);
@@ -822,7 +822,7 @@ mod tests {
 
     #[test]
     fn keyboard_focus_reveals_the_module_row_and_its_entire_ring_at_360_dips() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = fixture(&ui);
         app.size = (360, 760);
         app.theme.ty.text_scale = 1.5;
@@ -858,7 +858,7 @@ mod tests {
             target.rect
         );
         let ring = built.list.ops.iter().find_map(|op| match op {
-            mypaper_ui::Op::Stroke { rect, width, color, .. }
+            glaze_ui::Op::Stroke { rect, width, color, .. }
                 if *width == app.px(2.0)
                     && *color == super::super::palette_for(&app).ink1
                     && rect.width() > target.rect.width()

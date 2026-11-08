@@ -7,7 +7,7 @@ use super::{
 };
 use crate::glass::Plate;
 use anyhow::Result;
-use mypaper_bars::{
+use glaze_bars::{
     BarsConfig,
     actions::{BarKind, bar_topics},
     appbar::{self, Edge},
@@ -15,9 +15,9 @@ use mypaper_bars::{
     config::{DockHide, DockPosition, DockStyle, TopPosition},
     events::Reservation,
 };
-use mypaper_desktop::{Monitor, Rect as DesktopRect};
-use mypaper_ui::reveal::{Reveal, Snapshot, Transform};
-use mypaper_ui::{Glass, Kind, Point, Rect, Role, Surface, SurfaceId, Ui};
+use glaze_desktop::{Monitor, Rect as DesktopRect};
+use glaze_ui::reveal::{Reveal, Snapshot, Transform};
+use glaze_ui::{Glass, Kind, Point, Rect, Role, Surface, SurfaceId, Ui};
 use std::{
     cell::Cell,
     collections::HashMap,
@@ -146,9 +146,9 @@ impl Bar {
         let surface = Surface::new_deferred_accessibility(
             Kind::Bar,
             if kind == BarKind::Top {
-                "mypaper top bar"
+                "Glaze top bar"
             } else {
-                "mypaper dock"
+                "Glaze dock"
             },
             Role::Toolbar,
         )?;
@@ -163,7 +163,7 @@ impl Bar {
         } else {
             &config.top.animation
         };
-        let performance = config.performance.active(mypaper_desktop::on_battery());
+        let performance = config.performance.active(glaze_desktop::on_battery());
         let dock = kind == BarKind::Dock;
         let slide_settings =
             motion::resolve(motion, dock, motion::Leaf::Show, animate, performance);
@@ -229,7 +229,7 @@ impl Bar {
             zoom: vec![],
             zoom_due: false,
             zoomed_at: Instant::now(),
-            frame_interval: mypaper_ui::display_frame()
+            frame_interval: glaze_ui::display_frame()
                 .mul_f32(0.85)
                 .max(Duration::from_millis(8)),
             animate: slide_settings.enabled,
@@ -391,7 +391,7 @@ impl Bar {
             &config.top.animation
         };
         let dock = self.kind == BarKind::Dock;
-        let performance = config.performance.active(mypaper_desktop::on_battery());
+        let performance = config.performance.active(glaze_desktop::on_battery());
         let slide = motion::resolve(motion, dock, motion::Leaf::Show, animate, performance);
         self.magnify_settings =
             motion::resolve(motion, dock, motion::Leaf::Magnify, animate, performance);
@@ -454,11 +454,11 @@ impl Bar {
         self.studio_base.is_none() && !self.studio_only
             || if self.kind == BarKind::Top { self.config.top.enabled } else { self.config.dock.enabled }
     }
-    pub fn topics(&self) -> std::collections::BTreeSet<mypaper_bars::actions::Topic> {
+    pub fn topics(&self) -> std::collections::BTreeSet<glaze_bars::actions::Topic> {
         let mut topics = bar_topics(self.kind, &self.config);
         topics.extend(
             super::visible_modules(self.kind, &self.config)
-                .filter_map(mypaper_bars::actions::module_topic),
+                .filter_map(glaze_bars::actions::module_topic),
         );
         topics
     }
@@ -572,7 +572,7 @@ impl Bar {
             return;
         };
         let rect = appbar::settle(self.monitor.rect, super::bar::edge(self.kind, &self.config), 1);
-        // SAFETY: read-only hit test. Do not raise above another mypaper popup or bar.
+        // SAFETY: read-only hit test. Do not raise above another Glaze popup or bar.
         unsafe {
             use windows::Win32::Foundation::POINT;
             use windows::Win32::UI::WindowsAndMessaging::{
@@ -698,7 +698,7 @@ impl Bar {
         }) && (if launch {
             self.config.dock.bounce
         } else {
-            self.config.dock.attention != mypaper_bars::config::AttentionStyle::None
+            self.config.dock.attention != glaze_bars::config::AttentionStyle::None
         }) {
             self.animations.insert(key, (now, launch));
             self.dirty = true;
@@ -780,7 +780,7 @@ impl Bar {
                     let t = timing
                         .start(0.0, timing.duration.as_secs_f32(), *start)
                         .value(now);
-                    if !*launch && attention == mypaper_bars::config::AttentionStyle::Pulse {
+                    if !*launch && attention == glaze_bars::config::AttentionStyle::Pulse {
                         -(0.7 + 0.3 * (t * std::f32::consts::TAU / 0.4).cos())
                     } else {
                         (t * std::f32::consts::PI / 0.6).sin().abs() * 8.0 * self.scale()
@@ -794,7 +794,7 @@ impl Bar {
         if rebuilt {
             self.reveal_snapshots.clear();
             let scale = self.scale();
-            let hot = mypaper_ui::Interaction {
+            let hot = glaze_ui::Interaction {
                 hover: self.hover,
                 pressed: self.pressed,
                 focus: self.focus,
@@ -851,7 +851,7 @@ impl Bar {
             self.surface.show();
         }
         if first_paint && self.surface.is_visible() {
-            mypaper_desktop::startup::ready("shell", "first_paint_ms");
+            glaze_desktop::startup::ready("shell", "first_paint_ms");
         }
         let auto_hides = self.auto_hides();
         if let Some(edge) = &mut self.edge_surface {
@@ -864,11 +864,11 @@ impl Bar {
                 super::bar::edge(self.kind, &self.config),
                 1,
             );
-            let list = mypaper_ui::DisplayList {
-                ops: vec![mypaper_ui::Op::Fill {
+            let list = glaze_ui::DisplayList {
+                ops: vec![glaze_ui::Op::Fill {
                     rect: Rect::new(0.0, 0.0, e.width as f32, e.height as f32),
                     radius: 0.0,
-                    color: mypaper_ui::Rgba::HIT,
+                    color: glaze_ui::Rgba::HIT,
                 }],
                 ..Default::default()
             };
@@ -890,7 +890,7 @@ impl Bar {
         while self.islands.len() + 1 < count {
             self.islands.push(Surface::new_deferred_accessibility(
                 Kind::Bar,
-                "mypaper bar island",
+                "Glaze bar island",
                 Role::Toolbar,
             )?);
         }
@@ -1000,15 +1000,15 @@ impl Bar {
 
     /// What the dock's window draws: only its hit mask when its plate is glass (or bare) and
     /// the rest goes to sprites, else the whole frame.
-    fn dock_list(&mut self, ui: &mut Ui) -> mypaper_ui::DisplayList {
+    fn dock_list(&mut self, ui: &mut Ui) -> glaze_ui::DisplayList {
         let t = &self.tokens;
         let glass_plate =
             t.bare || (t.fill.is_none() && t.material.is_some() && t.theme.glass.is_some());
         // Off by default: with the exact hit mask still re-uploaded each frame, a sweep cost more
-        // CPU than drawing it all (27.6 % vs 20.1 %, 2026-11-05). `MYPAPER_DOCK_SPRITES=1` turns
+        // CPU than drawing it all (27.6 % vs 20.1 %, 2026-11-05). `GLAZE_DOCK_SPRITES=1` turns
         // it on; `=full` also keeps the whole window hit while composing (measures the floor).
         static MODE: std::sync::OnceLock<Option<bool>> = std::sync::OnceLock::new();
-        let mode = *MODE.get_or_init(|| match std::env::var("MYPAPER_DOCK_SPRITES").as_deref() {
+        let mode = *MODE.get_or_init(|| match std::env::var("GLAZE_DOCK_SPRITES").as_deref() {
             Ok("1") => Some(false),
             Ok("full") => Some(true),
             _ => None,
@@ -1039,10 +1039,10 @@ impl Bar {
         match sprites.update(ui, &self.frame.list) {
             Ok(Some(mut mask)) if full_mask => {
                 let (w, h) = self.frame.size;
-                mask.ops = vec![mypaper_ui::Op::Fill {
+                mask.ops = vec![glaze_ui::Op::Fill {
                     rect: Rect::new(0.0, 0.0, w as f32, h as f32),
                     radius: 0.0,
-                    color: mypaper_ui::Rgba::HIT,
+                    color: glaze_ui::Rgba::HIT,
                 }];
                 mask
             }
@@ -1118,7 +1118,7 @@ impl Bar {
             .shapes
             .iter()
             .enumerate()
-            .filter(|(_, (rect, _))| !self.covered(*rect) || !mypaper_ui::glass::available())
+            .filter(|(_, (rect, _))| !self.covered(*rect) || !glaze_ui::glass::available())
             .map(|(i, (rect, radius))| {
                 let window = if self.kind == BarKind::Top { i } else { 0 };
                 let offset = self.offsets.get(window).copied().unwrap_or_default();
@@ -1166,15 +1166,15 @@ fn raise(hwnd: windows::Win32::Foundation::HWND) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mypaper_ui::GlassMaterial;
-    use mypaper_ui::glass::{Backdrop, Shape};
+    use glaze_ui::GlassMaterial;
+    use glaze_ui::glass::{Backdrop, Shape};
     use windows::Win32::Foundation::HWND;
     struct Available;
 
     #[test]
     fn always_hidden_dock_reveals_over_filled_windows_and_hides_one_second_after_leaving() {
         let config = BarsConfig::parse(r#"{"dock":{"enabled":true,"autohide":true,"hide_when_maximized":true}}"#).unwrap();
-        let tokens = Tokens::resolve(&config.dock.look, &Default::default(), &mypaper_bars::accent::read());
+        let tokens = Tokens::resolve(&config.dock.look, &Default::default(), &glaze_bars::accent::read());
         // Native surfaces stay offscreen; no input or user windows are touched.
         let monitor = Monitor {
             device: "test".into(), dpi: 96, primary: true,
@@ -1215,7 +1215,7 @@ mod tests {
     #[test]
     fn studio_preview_restores_auto_hide_and_keeps_reservations_untouched() {
         let config = BarsConfig::parse(r#"{"preset":"macos","dock":{"enabled":true,"autohide":true}}"#).unwrap();
-        let tokens = Tokens::resolve(&config.dock.look, &Default::default(), &mypaper_bars::accent::read());
+        let tokens = Tokens::resolve(&config.dock.look, &Default::default(), &glaze_bars::accent::read());
         let monitor = Monitor {
             device: "test".into(), dpi: 96, primary: true,
             rect: DesktopRect { x: 0, y: 0, width: 1280, height: 720 },
@@ -1248,12 +1248,12 @@ mod tests {
     }
     #[test]
     fn only_the_covered_island_loses_its_plate_and_uncover_restores_it() {
-        mypaper_ui::glass::install(std::rc::Rc::new(Available));
+        glaze_ui::glass::install(std::rc::Rc::new(Available));
         let config = BarsConfig::default();
         let tokens = Tokens::resolve(
             &config.top.look,
             &Default::default(),
-            &mypaper_bars::accent::read(),
+            &glaze_bars::accent::read(),
         );
         let monitor = Monitor {
             device: "test".into(),

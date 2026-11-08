@@ -10,8 +10,8 @@ use crate::{
     theme::glyph,
     ui::{B, Col},
 };
-use mypaper_ui::controls::{Align, Behavior, key};
-use mypaper_ui::{Rect, Role, TextStyle};
+use glaze_ui::controls::{Align, Behavior, key};
+use glaze_ui::{Rect, Role, TextStyle};
 use serde_json::{Value, json};
 
 pub fn action(command: Command) -> Action {
@@ -107,8 +107,8 @@ fn color(app: &App, b: &mut B, c: &mut Col, path: String, label: &str, value: &V
         b.px(26.0),
         b.px(26.0),
     );
-    let fill = mypaper_config::Color::parse(hex)
-        .map(|v| mypaper_ui::Rgba::rgb8(v.0, 1.0))
+    let fill = glaze_config::Color::parse(hex)
+        .map(|v| glaze_ui::Rgba::rgb8(v.0, 1.0))
         .unwrap_or(b.p.ink1);
     b.fill(swatch, b.px(8.0), fill);
     b.stroke(swatch, b.px(8.0), b.px(1.0), b.p.edge);
@@ -148,7 +148,7 @@ fn pair(b: &mut B, c: &mut Col, left: (&str, Action), right: (&str, Action)) {
 }
 
 /// The gallery card's hit key; the editor's tick compares it with the hovered key.
-pub fn effect_key(id: &str) -> mypaper_ui::controls::Key {
+pub fn effect_key(id: &str) -> glaze_ui::controls::Key {
     key(("builder-effect", id))
 }
 
@@ -188,12 +188,12 @@ pub fn page(app: &App, b: &mut B, c: &mut Col, page: Page) {
     footer(app, b, c, &value);
 }
 
-fn small_text(b: &mut B, r: Rect, label: &str, ink: mypaper_ui::Rgba) {
+fn small_text(b: &mut B, r: Rect, label: &str, ink: glaze_ui::Rgba) {
     text(b, r, label, 12.0, 400, ink, Align::Start);
 }
 
 /// A 28 DIP icon button with a hover plate.
-fn icon_button(b: &mut B, r: Rect, k: mypaper_ui::controls::Key, glyph: mypaper_ui::controls::Glyph, ink: mypaper_ui::Rgba, label: &str, act: Action) {
+fn icon_button(b: &mut B, r: Rect, k: glaze_ui::controls::Key, glyph: glaze_ui::controls::Glyph, ink: glaze_ui::Rgba, label: &str, act: Action) {
     if b.hovered(k) {
         b.fill(r, b.px(8.0), b.p.hover);
     }
@@ -202,12 +202,12 @@ fn icon_button(b: &mut B, r: Rect, k: mypaper_ui::controls::Key, glyph: mypaper_
     b.focus_ring(k, r, b.px(8.0));
 }
 
-fn more_glyph() -> mypaper_ui::controls::Glyph {
-    mypaper_ui::icons::Icon::More.into()
+fn more_glyph() -> glaze_ui::controls::Glyph {
+    glaze_ui::icons::Icon::More.into()
 }
 
 /// A full-width menu row (overflow menus and pickers).
-fn menu_row(b: &mut B, c: &mut Col, k: mypaper_ui::controls::Key, glyph: Option<mypaper_ui::controls::Glyph>, label: &str, detail: &str, act: Action) {
+fn menu_row(b: &mut B, c: &mut Col, k: glaze_ui::controls::Key, glyph: Option<glaze_ui::controls::Glyph>, label: &str, detail: &str, act: Action) {
     let r = Rect::new(c.x, c.y, c.w, b.px(34.0));
     if b.hovered(k) {
         b.fill(r, b.px(8.0), b.p.hover);
@@ -277,7 +277,7 @@ fn header(app: &App, b: &mut B, c: &mut Col, value: &Value) {
         menu_row(b, &mut inner, key("builder-more-revert"), Some(glyph::UNDO), "Revert to original", "", action(Command::Revert));
         menu_row(b, &mut inner, key("builder-more-discard"), Some(glyph::DELETE), "Discard draft", "", action(Command::Discard));
         c.y = inner.y + b.px(4.0);
-        b.list.ops.insert(at, mypaper_ui::Op::Fill { rect: Rect::new(c.x, top, c.w, c.y - top), radius: b.px(12.0), color: b.p.panel });
+        b.list.ops.insert(at, glaze_ui::Op::Fill { rect: Rect::new(c.x, top, c.w, c.y - top), radius: b.px(12.0), color: b.p.panel });
         c.y += b.px(4.0);
     }
 }
@@ -317,7 +317,7 @@ fn start(app: &App, b: &mut B, c: &mut Col) {
 }
 
 /// What the base is, in words a person uses.
-fn base_label(app: &App, base: &Value) -> (mypaper_ui::controls::Glyph, String, String) {
+fn base_label(app: &App, base: &Value) -> (glaze_ui::controls::Glyph, String, String) {
     let file = base["source"].as_str().and_then(|s| s.rsplit('/').next()).unwrap_or("").to_owned();
     match base["kind"].as_str().unwrap_or("color") {
         "image" => (glyph::IMAGE, "Photo".into(), file),
@@ -354,12 +354,12 @@ fn base_picture(app: &App, base: &Value) -> Option<std::path::PathBuf> {
     }
 }
 
-fn swatch(base: &Value, fallback: mypaper_ui::Rgba) -> mypaper_ui::Rgba {
+fn swatch(base: &Value, fallback: glaze_ui::Rgba) -> glaze_ui::Rgba {
     base["color"]
         .as_str()
         .or_else(|| base["stops"][0]["color"].as_str())
-        .and_then(mypaper_config::Color::parse)
-        .map(|v| mypaper_ui::Rgba::rgb8(v.0, 1.0))
+        .and_then(glaze_config::Color::parse)
+        .map(|v| glaze_ui::Rgba::rgb8(v.0, 1.0))
         .unwrap_or(fallback)
 }
 
@@ -381,7 +381,7 @@ fn background(app: &App, b: &mut B, c: &mut Col, base: &Value) {
         text(b, Rect::new(tx, row.top + b.px(6.0), change.left - tx - b.px(8.0), b.px(20.0)), &label, 13.0, 600, b.p.ink1, Align::Start);
         small_text(b, Rect::new(tx, row.top + b.px(26.0), change.left - tx - b.px(8.0), b.px(18.0)), &detail, b.p.ink3);
         let ck = key("builder-change");
-        b.button(ck, change, if app.is_open(ck) { "Done" } else { "Change" }, None, mypaper_ui::controls::ButtonKind::Secondary, true, Action::More(ck));
+        b.button(ck, change, if app.is_open(ck) { "Done" } else { "Change" }, None, glaze_ui::controls::ButtonKind::Secondary, true, Action::More(ck));
         c.y = row.bottom + b.px(10.0);
         if app.is_open(ck) {
             picker(app, b, c);
@@ -464,7 +464,7 @@ fn fit(b: &mut B, c: &mut Col, current: &str) {
             _ => Rect::new(screen.left + b.px(9.0), screen.top + b.px(5.0), screen.width() - b.px(18.0), screen.height() - b.px(10.0)),
         };
         let clip = Rect::new(picture.left.max(screen.left), picture.top.max(screen.top), picture.right.min(screen.right) - picture.left.max(screen.left), picture.bottom.min(screen.bottom) - picture.top.max(screen.top));
-        b.fill(clip, b.px(2.0), mypaper_ui::Rgba { a: 0.45, ..ink });
+        b.fill(clip, b.px(2.0), glaze_ui::Rgba { a: 0.45, ..ink });
         b.stroke(screen, b.px(3.0), b.px(1.2), ink);
         text(b, Rect::new(cell.left, cell.bottom - b.px(24.0), cell.width(), b.px(20.0)), label, 12.0, if on { 600 } else { 500 }, if on { b.p.ink1 } else { b.p.ink2 }, Align::Center);
         b.hit(k, cell, Role::RadioButton, label, action(Command::Fit(fit)), Behavior::Click);
@@ -535,7 +535,7 @@ fn layers(app: &App, b: &mut B, c: &mut Col, value: &Value) {
     let head = Rect::new(c.x, c.y, c.w, b.px(28.0));
     text(b, head, "Layers", 16.0, 600, b.p.ink1, Align::Start);
     let add = Rect::new(head.right - b.px(72.0), head.top, b.px(72.0), head.height());
-    b.button(key("builder-add-layer"), add, "Add", Some(glyph::ADD), mypaper_ui::controls::ButtonKind::Secondary, true, action(Command::Gallery));
+    b.button(key("builder-add-layer"), add, "Add", Some(glyph::ADD), glaze_ui::controls::ButtonKind::Secondary, true, action(Command::Gallery));
     c.y = head.bottom + b.px(8.0);
     let list = super::layers(app);
     let top = c.y;
@@ -558,7 +558,7 @@ fn layers(app: &App, b: &mut B, c: &mut Col, value: &Value) {
         }
     }
     c.y = inner.y + b.px(6.0);
-    b.list.ops.insert(at, mypaper_ui::Op::Fill { rect: Rect::new(c.x, top, c.w, c.y - top), radius: b.px(b.kit.radius.card), color: b.p.panel });
+    b.list.ops.insert(at, glaze_ui::Op::Fill { rect: Rect::new(c.x, top, c.w, c.y - top), radius: b.px(b.kit.radius.card), color: b.p.panel });
     let _ = value;
 }
 
@@ -623,7 +623,7 @@ fn layer_row(app: &App, b: &mut B, c: &mut Col, i: usize, layer: &Value, selecte
         }
         menu_row(b, &mut inner, key(("builder-lm-del", i)), Some(glyph::DELETE), "Remove", "Del", action(Command::RemoveAt(i)));
         c.y = inner.y + b.px(4.0);
-        b.list.ops.insert(at, mypaper_ui::Op::Fill { rect: Rect::new(c.x + b.px(24.0), top, c.w - b.px(24.0), c.y - top), radius: b.px(10.0), color: b.p.fill });
+        b.list.ops.insert(at, glaze_ui::Op::Fill { rect: Rect::new(c.x + b.px(24.0), top, c.w - b.px(24.0), c.y - top), radius: b.px(10.0), color: b.p.fill });
         c.y += b.px(4.0);
     }
 }
@@ -952,7 +952,7 @@ pub fn stage(app: &App, b: &mut B, area: Rect) -> bool {
     } else if app.fixture || engine_frame {
         format!("Live preview · {mw} × {mh}")
     } else if editor.preview.error.is_some() {
-        "Preview unavailable · update mypaper".into()
+        "Preview unavailable · update Glaze".into()
     } else {
         "Starting the preview…".into()
     };
@@ -1059,7 +1059,7 @@ fn shader(app: &App, b: &mut B, area: Rect) {
     if let Some(field) = app.field.as_ref().filter(|f| f.id == FieldId::ShaderCode) {
         field.field.set_rect(code);
         field.field.set_style(&mono, b.p.ink1);
-        b.list.ops.push(mypaper_ui::Op::TextField {
+        b.list.ops.push(glaze_ui::Op::TextField {
             rect: code,
             field: field.field.clone(),
             revision: field.field.revision(),

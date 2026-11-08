@@ -24,9 +24,9 @@ function Open-Page([string]$uri) {
   }
 }
 $cdb = 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe'
-$styler = 'C:\mypaper-targets\app-styler\release\mypaper-styler.exe'
-$tapLog = Join-Path $env:LOCALAPPDATA 'mypaper\app-styler\styler.log'
-$sym = 'srv*C:\symbols*https://msdl.microsoft.com/download/symbols;C:\mypaper-targets\app-styler\release'
+$styler = 'C:\glaze-targets\app-styler\release\glaze-styler.exe'
+$tapLog = Join-Path $env:LOCALAPPDATA 'glaze\app-styler\styler.log'
+$sym = 'srv*C:\symbols*https://msdl.microsoft.com/download/symbols;C:\glaze-targets\app-styler\release'
 Take-Lock
 try {
   Open-Page 'ms-settings:sound'

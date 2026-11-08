@@ -2,8 +2,8 @@
 //! All editors are the shared panel pages. Navigation and stage zoom never edit documents.
 
 use crate::panel::tokens::radius;
-use mypaper_ui::controls::{Align, Behavior, Font, Glyph, ScrollArea, Target, key};
-use mypaper_ui::{Chrome, DisplayList, Point, Rect, Role};
+use glaze_ui::controls::{Align, Behavior, Font, Glyph, ScrollArea, Target, key};
+use glaze_ui::{Chrome, DisplayList, Point, Rect, Role};
 use serde_json::Value;
 
 use crate::actions::{Action, Bar};
@@ -222,7 +222,7 @@ pub fn content_regions(app: &App) -> (Rect, Option<Rect>) {
 
 pub struct Built {
     pub list: DisplayList,
-    pub semantics: Vec<(mypaper_ui::HitId, mypaper_ui::Semantics)>,
+    pub semantics: Vec<(glaze_ui::HitId, glaze_ui::Semantics)>,
     pub targets: Vec<Target<Action>>,
     pub scrolls: Vec<ScrollArea>,
     pub chrome: Vec<(Rect, Chrome)>,
@@ -231,7 +231,7 @@ pub struct Built {
 }
 
 /// Prepare at the display's scale for 100%, or at the fitted picture's scale for Fit.
-fn prepare_stage(app: &App, ui: &mut mypaper_ui::Ui, viewport: Rect) -> Rect {
+fn prepare_stage(app: &App, ui: &mut glaze_ui::Ui, viewport: Rect) -> Rect {
     let actual = app.panel.as_ref().unwrap().stage_actual;
     let show = stage_show(app);
     let mut frame = if show == Show::Bars && !actual {
@@ -260,7 +260,7 @@ fn prepare_stage(app: &App, ui: &mut mypaper_ui::Ui, viewport: Rect) -> Rect {
             let mut b = crate::ui::builder(&mut ui.text, &p, &app.theme.ty, app.scale, &app.input);
             crate::stage::draw(app, &mut b, Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32), show, |_| Action::None);
             let list = b.list;
-            if let Ok(image) = mypaper_ui::render(ui, &list, size.0, size.1) {
+            if let Ok(image) = glaze_ui::render(ui, &list, size.0, size.1) {
                 app.stage.borrow_mut().picture = Some(std::sync::Arc::new(image));
             }
         }
@@ -355,7 +355,7 @@ fn stage_pick(item: Option<&Item>) -> Action {
     }
 }
 
-pub fn build(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
+pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
     let page = crate::panel::prepare_page(app, &mut ui.text);
     if page == Page::FirstRun && matches!(app.overlay, Some(Overlay::FirstRun { .. })) {
         return onboarding(app, ui);
@@ -479,7 +479,7 @@ pub fn build(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
 
 /// First run takes the whole screen: Studio is placed over the main display (main.rs) and the
 /// onboarding draws edge to edge, always dark, like Windows' own setup.
-fn onboarding(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
+fn onboarding(app: &App, ui: &mut glaze_ui::Ui) -> Built {
     let full = Rect::new(0.0, 0.0, app.size.0 as f32, app.size.1 as f32);
     let p = crate::panel::tokens::palette(true);
     let ty = app.theme.ty.clone();
@@ -753,9 +753,9 @@ fn status_block(app: &App, b: &mut B, rect: Rect, rail: bool) {
         .map_or("No wallpaper", |i| app.library.items[i].name.as_str());
     let (title, detail, action, button) = if !running {
         (
-            "mypaper is off",
+            "Glaze is off",
             "Windows' own desktop",
-            Action::StartMypaper,
+            Action::StartGlaze,
             glyph::PLAY,
         )
     } else if let Some(part) = stopped_part {
@@ -840,7 +840,7 @@ fn status_block(app: &App, b: &mut B, rect: Rect, rail: bool) {
         button_rect
     };
     let label = match action {
-        Action::StartMypaper => "Start mypaper",
+        Action::StartGlaze => "Start Glaze",
         Action::Restart(_) => "Restart",
         _ if paused => "Resume",
         _ => "Pause",
@@ -1082,7 +1082,7 @@ fn caption_buttons(app: &App, b: &mut B, bar: Rect, chrome: &mut Vec<(Rect, Chro
             Role::Button,
             label,
             action,
-            mypaper_ui::controls::Behavior::Click,
+            glaze_ui::controls::Behavior::Click,
         );
         b.focus_ring(k, r, b.px(radius::SMALL));
         chrome.push((r, part));
@@ -1113,7 +1113,7 @@ pub fn sheet(app: &App, b: &mut B, title: &str, width: f32, height: f32) -> Rect
         Role::Dialog,
         title,
         Action::None,
-        mypaper_ui::controls::Behavior::Click,
+        glaze_ui::controls::Behavior::Click,
     );
     let style = b.font(Font::Title1);
     b.text_in(
@@ -1174,19 +1174,19 @@ fn stage_tag(b: &mut B, item: &Item, viewport: Rect) {
     b.fill(
         rect,
         b.px(radius::SMALL),
-        mypaper_ui::Rgba::new(0.04, 0.04, 0.04, 0.9),
+        glaze_ui::Rgba::new(0.04, 0.04, 0.04, 0.9),
     );
     b.text_in(
         Rect::new(x + b.px(8.0), y, width - b.px(16.0), rect.height()),
         &item.label,
         &font,
-        mypaper_ui::Rgba::new(0.95, 0.95, 0.95, 1.0),
+        glaze_ui::Rgba::new(0.95, 0.95, 0.95, 1.0),
         Align::Start,
     );
 }
 
 fn off_card(b: &mut B, picture: Rect, viewport: Rect) {
-    let visible = mypaper_ui::controls::intersect(picture, viewport).unwrap_or(viewport);
+    let visible = glaze_ui::controls::intersect(picture, viewport).unwrap_or(viewport);
     let width = b.px(340.0).min(viewport.width() - b.px(32.0));
     let rect = Rect::new(
         viewport.left + (viewport.width() - width) / 2.0,
@@ -1204,7 +1204,7 @@ fn off_card(b: &mut B, picture: Rect, viewport: Rect) {
             rect.width() - b.px(32.0),
             b.px(28.0),
         ),
-        "mypaper is off",
+        "Glaze is off",
         &title,
         b.p.ink1,
         Align::Center,
@@ -1216,7 +1216,7 @@ fn off_card(b: &mut B, picture: Rect, viewport: Rect) {
             rect.width() - b.px(24.0),
             b.px(26.0),
         ),
-        "Changes apply when mypaper starts",
+        "Changes apply when Glaze starts",
         &caption,
         b.p.ink3,
         Align::Center,
@@ -1225,7 +1225,7 @@ fn off_card(b: &mut B, picture: Rect, viewport: Rect) {
 
 /// A drawing of the configured desktop menu; its commands never execute inside the stage.
 fn stage_menu(app: &App, b: &mut B, picture: Rect) {
-    use mypaper_shell::preview::menu;
+    use glaze_shell::preview::menu;
     let config = app
         .get(DocId::Config, "/desktop_menu")
         .and_then(|value| serde_json::from_value(value.clone()).ok())
@@ -1242,8 +1242,8 @@ fn stage_menu(app: &App, b: &mut B, picture: Rect) {
             ..Default::default()
         },
     );
-    let layout = mypaper_ui::menu::layout(&entries, &tokens, b.s, b.text);
-    let list = mypaper_ui::menu::view(&entries, &layout, None, &tokens);
+    let layout = glaze_ui::menu::layout(&entries, &tokens, b.s, b.text);
+    let list = glaze_ui::menu::view(&entries, &layout, None, &tokens);
     let x = picture.left + (picture.width() - layout.width) / 2.0;
     let y = picture.top + (picture.height() - layout.height) / 2.0;
     b.list.ops.extend(crate::stage::offset(&list.ops, x, y));
@@ -1263,7 +1263,7 @@ mod layout_tests {
 
     #[test]
     fn sidebar_motion_reuses_one_stage_picture_until_settled() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
+        let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::window_app(true, &ui, (1280, 800));
         build(&app, &mut ui);
         let size = app.stage.borrow().content.size;
@@ -1276,7 +1276,7 @@ mod layout_tests {
             let built = build(&app, &mut ui);
             assert_eq!(app.stage.borrow().content.size, size);
             assert!(std::sync::Arc::ptr_eq(&picture, app.stage.borrow().picture.as_ref().unwrap()));
-            assert!(built.list.ops.iter().any(|op| matches!(op, mypaper_ui::Op::RoundedImage { image, .. } if std::sync::Arc::ptr_eq(&picture, image))));
+            assert!(built.list.ops.iter().any(|op| matches!(op, glaze_ui::Op::RoundedImage { image, .. } if std::sync::Arc::ptr_eq(&picture, image))));
         }
         app.panel.as_mut().unwrap().window.sidebar = None;
         build(&app, &mut ui);
@@ -1285,8 +1285,8 @@ mod layout_tests {
 
     #[test]
     fn settings_grow_and_groups_reflow_without_horizontal_overflow() {
-        let mut ui = mypaper_ui::Ui::new().unwrap();
-        let out = std::env::var_os("MYPAPER_STUDIO_LAYOUT_SHOTS").map(std::path::PathBuf::from);
+        let mut ui = glaze_ui::Ui::new().unwrap();
+        let out = std::env::var_os("GLAZE_STUDIO_LAYOUT_SHOTS").map(std::path::PathBuf::from);
         for size in [(960, 640), (1280, 800), (1920, 1080), (2560, 1440)] {
             for dark in [true, false] {
                 for (page, name) in [
@@ -1338,7 +1338,7 @@ mod layout_tests {
                                 .ops
                                 .iter()
                                 .find_map(|op| match op {
-                                    mypaper_ui::Op::Text { rect, text, .. }
+                                    glaze_ui::Op::Text { rect, text, .. }
                                         if text.as_ref() == name =>
                                     {
                                         Some(*rect)
@@ -1359,8 +1359,8 @@ mod layout_tests {
                     }
                     if let Some(out) = &out {
                         let image =
-                            mypaper_ui::render(&mut ui, &built.list, size.0, size.1).unwrap();
-                        mypaper_ui::golden::write(
+                            glaze_ui::render(&mut ui, &built.list, size.0, size.1).unwrap();
+                        glaze_ui::golden::write(
                             &image,
                             &out.join(format!(
                                 "{name}-{}x{}-{}.png",

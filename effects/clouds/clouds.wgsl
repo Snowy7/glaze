@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn effect(frag: vec2f, uv: vec2f) -> vec4f {
     let angle = clamp(params.wind, -180.0, 180.0) * 0.0174533;
     let drift = vec2f(cos(angle), sin(angle)) * paper.time * clamp(params.speed, 0.0, 1.0) * 0.08;

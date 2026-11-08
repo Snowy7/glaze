@@ -1,5 +1,5 @@
 use crate::{Data, faces, golden, obs};
-use mypaper_plugin_sdk::SizeClass;
+use glaze_plugin_sdk::SizeClass;
 use serde_json::json;
 
 #[test]

@@ -184,7 +184,7 @@ mod tests {
             },
         };
         let path = HSTRING::from(format!(
-            r"Software\mypaper\tests\desktops-{}",
+            r"Software\glaze\tests\desktops-{}",
             std::process::id()
         ));
         struct Cleanup(HSTRING);

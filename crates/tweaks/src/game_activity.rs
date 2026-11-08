@@ -165,11 +165,11 @@ pub fn read() -> Option<(Snapshot, Owner)> {
 }
 
 /// Watches atomic replacement/removal. Dropping releases the directory watcher.
-pub fn watch(changed: impl Fn() + Send + 'static) -> Result<mypaper_fswatch::Watch> {
+pub fn watch(changed: impl Fn() + Send + 'static) -> Result<glaze_fswatch::Watch> {
     let file = path()?;
     let parent = file.parent().context("game signal path has no parent")?;
     std::fs::create_dir_all(parent)?;
-    mypaper_fswatch::Watch::files(parent, &[FILE], changed)
+    glaze_fswatch::Watch::files(parent, &[FILE], changed)
 }
 
 struct State {
@@ -184,7 +184,7 @@ struct Lease(HANDLE);
 impl Lease {
     fn acquire() -> Result<Self> {
         // SAFETY: session-local mutex; only its owner may publish/remove the signal file.
-        let handle = unsafe { CreateMutexW(None, false, w!("Local\\mypaper.game-activity.v1"))? };
+        let handle = unsafe { CreateMutexW(None, false, w!("Local\\glaze.game-activity.v1"))? };
         // SAFETY: valid owned handle, zero timeout.
         let acquired = unsafe { WaitForSingleObject(handle, 0) };
         if !matches!(acquired, WAIT_OBJECT_0 | WAIT_ABANDONED) {
@@ -256,7 +256,7 @@ impl GameWatcher {
         let class = WNDCLASSW {
             lpfnWndProc: Some(window_proc),
             hInstance: instance.into(),
-            lpszClassName: w!("mypaper-game-activity"),
+            lpszClassName: w!("glaze-game-activity"),
             ..Default::default()
         };
         // SAFETY: class strings/callback are static; already registered on restart is fine.

@@ -1,8 +1,8 @@
 //! The T3 plugin's faces drawn by the host, laid out like the native `t3-sizes.png` so the two
 //! sheets compare side by side. Input is the plugin's own view golden (`plugins/t3/golden`).
 use crate::widgets::{model::{Model, Widget}, time::Stamp, views};
-use mypaper_ui::{DisplayList, Op, Rect, Rgba, TextStyle, Tokens, Ui, golden, render};
-use mypaper_widgets::{layout::Placed, storage::Storage};
+use glaze_ui::{DisplayList, Op, Rect, Rgba, TextStyle, Tokens, Ui, golden, render};
+use glaze_widgets::{layout::Placed, storage::Storage};
 use serde_json::{Map, Value, json};
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
@@ -21,7 +21,7 @@ fn model(face: &Value, title: &str) -> Model {
         appearance: Map::new(),
         own: Map::new(),
     };
-    let storage = &mut Storage::new(std::env::temp_dir().join("mypaper-plugin-fixture"));
+    let storage = &mut Storage::new(std::env::temp_dir().join("glaze-plugin-fixture"));
     let mut m = Model::new(placed, storage, Stamp::at(NOW)).unwrap();
     m.kind = Widget::Plugin;
     m.visible = true;
@@ -46,7 +46,7 @@ const SHEET_W: u32 = 1350;
 /// Draws one labelled row of `faces` (`{ size: Face }`) at `y`, light or dark, and checks
 /// every cell's hits stay inside it and an idle redraw damages nothing.
 fn sheet_row(ui: &mut Ui, sheet: &mut DisplayList, y: f32, caption: &str, faces: &Value, title: &str, light: bool) {
-    let tokens = if light { Tokens { colors: mypaper_ui::Colors::new(false, [0, 120, 215]), ..Tokens::default() } } else { Tokens::default() };
+    let tokens = if light { Tokens { colors: glaze_ui::Colors::new(false, [0, 120, 215]), ..Tokens::default() } } else { Tokens::default() };
     sheet.ops.push(Op::Text {
         rect: Rect::new(24.0, y, 1000.0, 24.0),
         text: caption.to_owned().into(),
@@ -112,7 +112,7 @@ fn t3_plugin_edge_cases_render_on_the_kit() {
 fn hits_map_back_to_plugin_actions() {
     use views::plugin::{ACTION, Hit, action_at};
     let faces: Value = serde_json::from_str(include_str!("../../../../../plugins/t3/golden/faces.json")).unwrap();
-    let face = |id: &str| serde_json::from_value::<mypaper_plugin_sdk::Face>(faces[id]["medium"].clone()).unwrap();
+    let face = |id: &str| serde_json::from_value::<glaze_plugin_sdk::Face>(faces[id]["medium"].clone()).unwrap();
     let attention = face("attention");
     assert_eq!(action_at(&attention, ACTION), Some(Hit::Action("thread:thread-0".into())));
     assert_eq!(action_at(&attention, ACTION + 1), Some(Hit::Action("approve:thread-0:approval".into())));

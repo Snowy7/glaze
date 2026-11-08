@@ -1,11 +1,11 @@
 //! The T3 faces as declarative views: Running now, Needs you, Limits, Usage, New thread.
-//! Drawn in mypaper's own calm style with the kit (no copied T3 chrome): monochrome rows and
+//! Drawn in Glaze's own calm style with the kit (no copied T3 chrome): monochrome rows and
 //! meters, colour only for state, totals in the footer so rows that don't fit are still counted.
 
 use crate::t3::{Limit, ModelChoice, Pill, Snapshot as State, Thread};
 use crate::{Availability, Data, Snapshot};
-use mypaper_plugin_sdk::view::SelectOption;
-use mypaper_plugin_sdk::{Face, Role, Series, SizeClass, Tone, View};
+use glaze_plugin_sdk::view::SelectOption;
+use glaze_plugin_sdk::{Face, Role, Series, SizeClass, Tone, View};
 
 /// `face` at `size` with the default options (fixtures and benches).
 pub fn face(face: &str, size: SizeClass, snapshot: &Snapshot, pick: &Pick, now_ms: i64) -> Face {

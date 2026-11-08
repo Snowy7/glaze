@@ -413,7 +413,7 @@ mod tests {
     #[test]
     fn native_reader_drains_during_pause_without_metadata_or_exact_path_queueing() {
         let root =
-            std::env::temp_dir().join(format!("mypaper-paused-watch-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-paused-watch-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let (tx, rx) = std::sync::mpsc::sync_channel(256);
         let rules = Arc::new(std::sync::RwLock::new(
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn deleted_root_stops_only_its_watch_and_idle_watch_cancels_on_drop() {
-        let base = std::env::temp_dir().join(format!("mypaper-watch-roots-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("glaze-watch-roots-{}", std::process::id()));
         let a = base.join("a");
         let b = base.join("b");
         std::fs::create_dir_all(&a).unwrap();

@@ -1,18 +1,18 @@
-param([string]$From='C:\mypaper-targets\main\release\examples\mypaper-look-fixture.exe')
+param([string]$From='C:\glaze-targets\main\release\examples\glaze-look-fixture.exe')
 $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $evidence=Join-Path $repo 'crates/shell/evidence/look-settings'
-$testRoot='C:\Users\you\AppData\Local\Temp\mypaper-tools\look-fixture'
-$configRoot=Join-Path $testRoot 'appdata\mypaper'
-$runRoot='C:\mypaper-targets\look-fixture'
-$lock='C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
-$realConfig=Join-Path $env:APPDATA 'mypaper\config.json'
+$testRoot='C:\Users\you\AppData\Local\Temp\glaze-tools\look-fixture'
+$configRoot=Join-Path $testRoot 'appdata\glaze'
+$runRoot='C:\glaze-targets\look-fixture'
+$lock='C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$realConfig=Join-Path $env:APPDATA 'glaze\config.json'
 $beforeHash=(Get-FileHash -LiteralPath $realConfig -Algorithm SHA256).Hash
 New-Item -ItemType Directory -Force $evidence,$configRoot,$runRoot | Out-Null
 if (Test-Path -LiteralPath (Join-Path $evidence 'capture-windows.jsonl')) {Remove-Item -LiteralPath (Join-Path $evidence 'capture-windows.jsonl')}
 if (Test-Path -LiteralPath (Join-Path $configRoot 'revisions.jsonl')) {Remove-Item -LiteralPath (Join-Path $configRoot 'revisions.jsonl')}
 if (Test-Path -LiteralPath (Join-Path $configRoot 'stop')) {Remove-Item -LiteralPath (Join-Path $configRoot 'stop')}
-Copy-Item -LiteralPath $From -Destination (Join-Path $runRoot 'mypaper-look-fixture.exe') -Force
+Copy-Item -LiteralPath $From -Destination (Join-Path $runRoot 'glaze-look-fixture.exe') -Force
 $baseline=@{theme='aurora';look=@{style='solid';shape=@{corners=0;edge=$false};text=@{font='Segoe UI';size=1;shadow=$false;tone='light';icons='lucide'}}}
 function Save-Config { [IO.File]::WriteAllText((Join-Path $configRoot 'config.json'),($baseline | ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false)) }
 Save-Config
@@ -39,7 +39,7 @@ function Foreground-Owner {
  return (Get-Process -Id $foregroundPid -ErrorAction SilentlyContinue).ProcessName
 }
 $foregroundOwner=Foreground-Owner
-$previous=@{APPDATA=$env:APPDATA;LOCALAPPDATA=$env:LOCALAPPDATA;MYPAPER_LOOK_FIXTURE=$env:MYPAPER_LOOK_FIXTURE}
+$previous=@{APPDATA=$env:APPDATA;LOCALAPPDATA=$env:LOCALAPPDATA;GLAZE_LOOK_FIXTURE=$env:GLAZE_LOOK_FIXTURE}
 $fixture=$null
 $held=$false
 $observations=@()
@@ -79,9 +79,9 @@ try {
  if(-not $held){throw 'Desktop lock is busy; retry after the other action finishes'}
  $env:APPDATA=Join-Path $testRoot 'appdata'
  $env:LOCALAPPDATA=Join-Path $testRoot 'localappdata'
- $env:MYPAPER_LOOK_FIXTURE=$configRoot
+ $env:GLAZE_LOOK_FIXTURE=$configRoot
  try {
-  $fixture=Start-Process -FilePath (Join-Path $runRoot 'mypaper-look-fixture.exe') -WorkingDirectory $repo -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $evidence 'stdout.log') -RedirectStandardError (Join-Path $evidence 'stderr.log')
+  $fixture=Start-Process -FilePath (Join-Path $runRoot 'glaze-look-fixture.exe') -WorkingDirectory $repo -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $evidence 'stdout.log') -RedirectStandardError (Join-Path $evidence 'stderr.log')
  } finally {foreach($key in $previous.Keys){[Environment]::SetEnvironmentVariable($key,$previous[$key],'Process')}}
  $revision=Await-Revision 0
  Start-Sleep -Milliseconds 600
@@ -105,9 +105,9 @@ try {
  [IO.Directory]::Delete($lock);$held=$false
  # Give other agents a turn; measure.ps1 owns the lock itself.
  Start-Sleep -Seconds 30
- & powershell -NoProfile -File 'C:\Users\you\AppData\Local\Temp\mypaper-tools\measure.ps1' -Label 'look-settings' -Seconds 20
+ & powershell -NoProfile -File 'C:\Users\you\AppData\Local\Temp\glaze-tools\measure.ps1' -Label 'look-settings' -Seconds 20
  if($LASTEXITCODE -ne 0){throw 'measure.ps1 failed'}
- Copy-Item -LiteralPath 'C:\Users\you\AppData\Local\Temp\mypaper-tools\measure-look-settings.json' -Destination (Join-Path $evidence 'idle.json') -Force
+ Copy-Item -LiteralPath 'C:\Users\you\AppData\Local\Temp\glaze-tools\measure-look-settings.json' -Destination (Join-Path $evidence 'idle.json') -Force
  Copy-Item -LiteralPath (Join-Path $configRoot 'revisions.jsonl') -Destination (Join-Path $evidence 'revisions.jsonl') -Force
  $sameWindows=$true
  $firstWindows=@($observations[0].revision.surfaces | ForEach-Object {$_.hwnd}) -join ','
@@ -119,12 +119,12 @@ try {
   $visualChanges[$pair[0]]=(Get-FileHash -LiteralPath (Join-Path $evidence $pair[1])).Hash -ne (Get-FileHash -LiteralPath (Join-Path $evidence $pair[2])).Hash
  }
  $visualChanges['input_font']=(Get-FileHash -LiteralPath (Join-Path $evidence '03-edge-field.png')).Hash -ne (Get-FileHash -LiteralPath (Join-Path $evidence '04-font-field.png')).Hash
- $result=@{head=(& git -C $repo rev-parse HEAD);fixture_sha256=(Get-FileHash -LiteralPath (Join-Path $runRoot 'mypaper-look-fixture.exe')).Hash;deployed_shell_sha256=(Get-FileHash -LiteralPath (Join-Path $repo 'target/release/mypaper-shell.exe')).Hash;fixture_pid=$fixture.Id;config_unchanged=((Get-FileHash -LiteralPath $realConfig -Algorithm SHA256).Hash -eq $beforeHash);foreground_before=$foreground;foreground_after=$foregroundAfter;foreground_owner_before=$foregroundOwner;foreground_owner_after=(Foreground-Owner);synthetic_input=$false;same_windows_all_revisions=$sameWindows;visual_changes=$visualChanges;observations=$observations}
+ $result=@{head=(& git -C $repo rev-parse HEAD);fixture_sha256=(Get-FileHash -LiteralPath (Join-Path $runRoot 'glaze-look-fixture.exe')).Hash;deployed_shell_sha256=(Get-FileHash -LiteralPath (Join-Path $repo 'target/release/glaze-shell.exe')).Hash;fixture_pid=$fixture.Id;config_unchanged=((Get-FileHash -LiteralPath $realConfig -Algorithm SHA256).Hash -eq $beforeHash);foreground_before=$foreground;foreground_after=$foregroundAfter;foreground_owner_before=$foregroundOwner;foreground_owner_after=(Foreground-Owner);synthetic_input=$false;same_windows_all_revisions=$sameWindows;visual_changes=$visualChanges;observations=$observations}
  $result | ConvertTo-Json -Depth 18 | Set-Content -LiteralPath (Join-Path $evidence 'verification.json') -Encoding UTF8
  if(-not $result.config_unchanged){throw 'User config hash changed during verification'}
  if(-not $sameWindows){throw 'A live restyle replaced a fixture window'}
  if(@($visualChanges.Values | Where-Object {-not $_}).Count -gt 0){throw 'A control failed to change its captured surface'}
- if($result.foreground_owner_after -eq 'mypaper-look-fixture'){throw 'The no-activate fixture became foreground'}
+ if($result.foreground_owner_after -eq 'glaze-look-fixture'){throw 'The no-activate fixture became foreground'}
  [pscustomobject]$result | Select-Object fixture_pid,config_unchanged,foreground_before,foreground_after | Format-List
 } finally {
  if($fixture -and -not $fixture.HasExited) {

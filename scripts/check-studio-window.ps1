@@ -7,9 +7,9 @@ param(
 )
 # Review only our release exe, with disposable settings and PrintWindow-only captures.
 $ErrorActionPreference = 'Stop'
-$reviewRoot = 'C:\mypaper-targets\studio-window'
+$reviewRoot = 'C:\glaze-targets\studio-window'
 $reviewState = Join-Path $reviewRoot 'live-window-state.json'
-$Exe = Join-Path $reviewRoot 'target\release\mypaper-studio.exe'
+$Exe = Join-Path $reviewRoot 'target\release\glaze-studio.exe'
 $Shots = Join-Path $reviewRoot 'shots'
 $checkout = Split-Path $PSScriptRoot -Parent
 . (Join-Path $checkout 'crates\studio\src\panel\memory_check.ps1') -Exe $Exe -Shots $Shots -HelpersOnly
@@ -39,7 +39,7 @@ if ($Mode -eq 'Start') {
     # Every fixture is created outside the checkout and outside the owner's settings.
     $fixtureRoot = Join-Path $reviewRoot 'live-data'
     $roaming = Join-Path $fixtureRoot 'roaming'
-    $settings = Join-Path $roaming 'mypaper'
+    $settings = Join-Path $roaming 'Glaze'
     [void][IO.Directory]::CreateDirectory($settings)
     $source = Get-Content -LiteralPath (Join-Path $checkout 'crates\studio\src\goldens.rs') -Raw
     foreach ($pair in @(@('CONFIG','config'), @('BARS','bars'), @('WIDGETS','widgets'))) {
@@ -52,7 +52,7 @@ if ($Mode -eq 'Start') {
     [IO.File]::WriteAllText((Join-Path $settings 'studio.json'), (@{ first_run_done = $false; appearance = 'dark' } | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
     [void][IO.Directory]::CreateDirectory($Shots)
     $review = [pscustomobject]@{
-        process = 0; exe = $Exe; title = 'mypaper Studio'; closed = $false
+        process = 0; exe = $Exe; title = 'Glaze Studio'; closed = $false
         sourceHead = (git -C $checkout rev-parse HEAD)
         exeSha256 = (Get-FileHash -LiteralPath $Exe).Hash
         startedAt = (Get-Date).ToUniversalTime().ToString('o')
@@ -67,8 +67,8 @@ if ($Mode -eq 'Start') {
     $start.CreateNoWindow = $true
     $start.EnvironmentVariables['APPDATA'] = $roaming
     $start.EnvironmentVariables['LOCALAPPDATA'] = Join-Path $fixtureRoot 'local'
-    $start.EnvironmentVariables.Remove('MYPAPER_STUDIO_PANEL')
-    $start.EnvironmentVariables.Remove('MYPAPER_STUDIO_TEST_INSTANCE')
+    $start.EnvironmentVariables.Remove('GLAZE_STUDIO_PANEL')
+    $start.EnvironmentVariables.Remove('GLAZE_STUDIO_TEST_INSTANCE')
     WithDesktopLock { $script:process = [Diagnostics.Process]::Start($start) }
     $review.process = $script:process.Id
     SaveReview $review
@@ -86,7 +86,7 @@ if ($Mode -eq 'Start') {
 
 $script:window = $script:process.MainWindowHandle
 if ($script:process.Id -eq 32732 -or $script:process.Path -ne $Exe -or
-    $script:process.MainWindowTitle -ne 'mypaper Studio' -or $script:window -eq [IntPtr]::Zero) {
+    $script:process.MainWindowTitle -ne 'Glaze Studio' -or $script:window -eq [IntPtr]::Zero) {
     throw 'The selected process is not our standalone review window; no UI action was sent.'
 }
 WaitOwnStable

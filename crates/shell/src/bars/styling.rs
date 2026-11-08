@@ -1,7 +1,7 @@
 //! Flat item and surface states, resolved once per look. Explicit surface hairlines may draw
 //! over glass; the engine owns its specular rim and shadow.
-use mypaper_bars::style::{BorderStyle, ColorRef, ItemStyle, Look, Paint, ShadowStyle};
-use mypaper_ui::{Rgba, Theme};
+use glaze_bars::style::{BorderStyle, ColorRef, ItemStyle, Look, Paint, ShadowStyle};
+use glaze_ui::{Rgba, Theme};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Edge {
@@ -184,9 +184,9 @@ mod tests {
     fn states_inherit_fields_and_width_only_edges_keep_their_color() {
         let look: Look = serde_json::from_value(serde_json::json!({"items":{"rest":{"scale":1.2,"border":{"width":2,"color":"#123456"}},"hover":{"color":"#fedcba"},"active":{"scale":0.8}}})).unwrap();
         let theme = Theme::new(
-            mypaper_ui::Style::Solid,
-            mypaper_ui::Scheme::Dark,
-            mypaper_ui::theme::SYSTEM_BLUE,
+            glaze_ui::Style::Solid,
+            glaze_ui::Scheme::Dark,
+            glaze_ui::theme::SYSTEM_BLUE,
         );
         let styles = Styles::resolve(&look, &theme, |c| {
             super::super::look::hex(c.as_str()).unwrap()

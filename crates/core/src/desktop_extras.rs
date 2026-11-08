@@ -1,15 +1,15 @@
 //! Desktop extras (docs/desktop-extras.md) that stay in core: the opt-in Win11 "classic context
 //! menu" switch, following `config.json` live, and the desktop view helpers the tray uses.
 //!
-//! mypaper's own right-click menu lives in the shell (`mypaper-shell`, which core supervises),
+//! Glaze's own right-click menu lives in the shell (`glaze-shell`, which core supervises),
 //! so core loads no Direct2D and installs no mouse hook.
 
 use std::sync::mpsc;
 use std::time::Duration;
 
-use mypaper_config::Config;
-use mypaper_desktop::desktop_view::{DesktopView, IconSize};
-use mypaper_tweaks::classic_menu::{Change, ClassicMenu};
+use glaze_config::Config;
+use glaze_desktop::desktop_view::{DesktopView, IconSize};
+use glaze_tweaks::classic_menu::{Change, ClassicMenu};
 use windows::Win32::UI::WindowsAndMessaging::{
     MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
 };
@@ -67,8 +67,8 @@ impl DesktopExtras {
 /// startup reconcile it; disabling also recovers a journal left by an interrupted run.
 fn apply_folder_routing(enabled: bool) {
     let result = (|| -> anyhow::Result<()> {
-        let executable = std::env::current_exe()?.with_file_name("mypaper-files.exe");
-        mypaper_tweaks::folder_routing::FolderRouting::new()?.set(enabled, &executable)?;
+        let executable = std::env::current_exe()?.with_file_name("glaze-files.exe");
+        glaze_tweaks::folder_routing::FolderRouting::new()?.set(enabled, &executable)?;
         Ok(())
     })();
     if let Err(error) = result { log::warn!("folder routing unchanged: {error:#}"); }
@@ -82,14 +82,14 @@ fn notify_restart_explorer(classic: bool) {
         "The classic Windows context menu is now {state}.\n\n\
          Explorer reads this setting when it starts: restart Explorer (Task Manager, \
          Windows Explorer, Restart) or sign out and back in to see it.\n\n\
-         mypaper never restarts Explorer for you."
+         Glaze never restarts Explorer for you."
     );
     let spawned = std::thread::Builder::new()
         .name("classic-menu-notice".into())
         .spawn(move || {
             let flags = MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST;
             // SAFETY: both strings outlive the call, which blocks this thread until dismissed.
-            unsafe { MessageBoxW(None, &HSTRING::from(text), w!("mypaper"), flags) };
+            unsafe { MessageBoxW(None, &HSTRING::from(text), w!("Glaze"), flags) };
         });
     if let Err(e) = spawned {
         log::warn!("could not show the Explorer restart notice: {e}");

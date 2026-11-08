@@ -95,7 +95,7 @@
       }
     },
     {
-      "key": "@mypaper/power-mode",
+      "key": "@glaze/power-mode",
       "name": "ac",
       "original": {
         "binary": [
@@ -139,7 +139,7 @@
       }
     },
     {
-      "key": "@mypaper/power-mode",
+      "key": "@glaze/power-mode",
       "name": "dc",
       "original": {
         "binary": [

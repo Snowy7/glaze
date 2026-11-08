@@ -42,7 +42,7 @@ Explorer hangs it. So styling is only safe in processes that end on their own.
   changes how folder windows open (a separate process), so say so in the report. If not clean, leave
   it off.
 
-**Hold rules:** deploy only from `C:\mypaper-targets\main`; desktop lock one action at a time; your own
+**Hold rules:** deploy only from `C:\glaze-targets\main`; desktop lock one action at a time; your own
 windows only. The user may be awake now: never steal focus from their apps. Run your windows on the
 secondary monitor if possible, and keep live input to the minimum.
-`CARGO_TARGET_DIR=C:\mypaper-targets\app-styler`. Stop when proven, or after 2.5 hours. Report as before.
+`CARGO_TARGET_DIR=C:\glaze-targets\app-styler`. Stop when proven, or after 2.5 hours. Report as before.

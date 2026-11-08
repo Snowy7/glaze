@@ -37,7 +37,7 @@ additive commits in `crates/core` (the helper's parent watch) and `crates/inject
 
 Unit tests where logic is pure. Live, with your own Explorer/Settings windows only:
 - open and close windows and navigate Settings quickly during rule changes (finding 1);
-- kill core (only `mypaper-core`) and check the helper exits and Explorer restores; restart mypaper
+- kill core (only `glaze-core`) and check the helper exits and Explorer restores; restart Glaze
   normally afterwards (finding 2);
 - rapid rules change then flag off (finding 4);
 - Explorer private memory and handle count over 15 minutes of open/close/navigate cycles, flat
@@ -47,5 +47,5 @@ Then a 30-minute soak as in round 2. Leave the flag on if it's clean, off if not
 
 **No deploy-local.ps1 or core restart between 06:40 and 07:05 local** (index measurement window); check
 the clock first. Killing core for finding 2 counts as a core restart: do it outside that window.
-`CARGO_TARGET_DIR=C:\mypaper-targets\app-styler`. Stop when all eight are fixed and verified, or after
+`CARGO_TARGET_DIR=C:\glaze-targets\app-styler`. Stop when all eight are fixed and verified, or after
 3 hours. Report: each finding → fix → evidence, soak result, final flag state, commits.

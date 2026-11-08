@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn short_prefix_cache_cannot_hide_better_rows_after_deletions() {
         let path =
-            std::env::temp_dir().join(format!("mypaper-index-short-{}.bin", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-index-short-{}.bin", std::process::id()));
         let mut store = Store::new();
         let root = store.insert(0, "X:", DIRECTORY, 0, 0);
         for i in 0..400 {
@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn persisted_prefilter_and_overlay_match_unfiltered_search() {
         let path =
-            std::env::temp_dir().join(format!("mypaper-index-column-{}.bin", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-index-column-{}.bin", std::process::id()));
         let mut store = Store::new();
         let root = store.insert(0, "X:", DIRECTORY, 0, 0);
         let folder = store.insert(root, "Project 東京", DIRECTORY, 0, 0);

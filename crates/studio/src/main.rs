@@ -1,6 +1,6 @@
-//! mypaper Studio: the settings app, native on `mypaper-ui` (software Direct2D, one window, no
+//! Glaze Studio: the settings app, native on `glaze-ui` (software Direct2D, one window, no
 //! WebView, no GPU device). It edits `config.json`, `bars.json`, `widgets.json` and your own
-//! wallpaper folders; mypaper's programs watch those files and apply changes live. Its previews
+//! wallpaper folders; Glaze's programs watch those files and apply changes live. Its previews
 //! draw with the shell's own views, and the engine draws their glass (plans/native/
 //! studio-redesign.md).
 //!
@@ -43,7 +43,7 @@ use std::sync::mpsc::{Receiver, channel};
 use std::time::Instant;
 
 use anyhow::{Context, Result};
-use mypaper_ui::{Kind, Role, Surface, Ui, next_event};
+use glaze_ui::{Kind, Role, Surface, Ui, next_event};
 use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HANDLE, LPARAM, WAIT_OBJECT_0, WPARAM};
 use windows::Win32::System::Threading::{CreateMutexW, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -54,9 +54,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::w;
 
 use crate::app::{App, Msg, WM_STUDIO};
-use mypaper_bars::wake as mypaper_bars_wake;
+use glaze_bars::wake as glaze_bars_wake;
 
-const TITLE: &str = "mypaper Studio";
+const TITLE: &str = "Glaze Studio";
 /// Decoded pictures the window keeps (RAM counts as much as CPU).
 const IMAGES: usize = 2 << 20;
 /// Full-screen onboarding shows a few large pictures every animation frame: under the window's
@@ -70,12 +70,12 @@ pub fn wake(thread: u32) {
 }
 
 fn main() -> ExitCode {
-    mypaper_desktop::init_logging();
-    mypaper_desktop::enable_dpi_awareness();
-    // mypaper's window names: a second launch finds this window by its `mypaper.ui.app` class.
-    let _ = mypaper_ui::set_identity(mypaper_ui::Identity {
-        prefix: "mypaper.ui",
-        desktop_classes: &["mypaper.wallpaper.glass"],
+    glaze_desktop::init_logging();
+    glaze_desktop::enable_dpi_awareness();
+    // Glaze's window names: a second launch finds this window by its `glaze.ui.app` class.
+    let _ = glaze_ui::set_identity(glaze_ui::Identity {
+        prefix: "glaze.ui",
+        desktop_classes: &["glaze.wallpaper.glass"],
     });
     match run() {
         Ok(()) => ExitCode::SUCCESS,
@@ -93,10 +93,10 @@ struct Studio {
     surface: Surface,
     /// The selects' menu (the kit's), made on first use so it costs nothing at startup, and
     /// the options it is showing.
-    menu: Option<mypaper_ui::Menu<usize>>,
+    menu: Option<glaze_ui::Menu<usize>>,
     picking: Option<actions::Choices>,
     /// The DWM frame last set: dark, border colour.
-    frame: Option<(bool, mypaper_ui::Rgba)>,
+    frame: Option<(bool, glaze_ui::Rgba)>,
     /// The full-screen first run, while it covers the displays.
     onboarding: Option<onboarding::Session>,
 }
@@ -147,10 +147,10 @@ impl Studio {
             .input
             .hover
             .and_then(|k| app.frame.targets.iter().find(|t| t.key == k))
-            .is_some_and(|t| matches!(t.behavior, mypaper_ui::controls::Behavior::Field));
+            .is_some_and(|t| matches!(t.behavior, glaze_ui::controls::Behavior::Field));
         let resize = matches!(app.drag, Some(crate::app::Drag::Inspector { .. }))
-            || app.input.hover == Some(mypaper_ui::controls::key("inspector-resize"));
-        surface.set_cursor(if resize { mypaper_ui::Cursor::ResizeHorizontal } else if over_field { mypaper_ui::Cursor::Text } else { mypaper_ui::Cursor::Arrow });
+            || app.input.hover == Some(glaze_ui::controls::key("inspector-resize"));
+        surface.set_cursor(if resize { glaze_ui::Cursor::ResizeHorizontal } else if over_field { glaze_ui::Cursor::Text } else { glaze_ui::Cursor::Arrow });
     }
 
     /// The window's border and caption follow the palette (light/dark, contrast) live. DWM
@@ -161,7 +161,7 @@ impl Studio {
             return;
         }
         let p = panel::palette_for(&self.app);
-        let frame = (p.dark, mypaper_ui::theme::over(p.edge, p.chrome));
+        let frame = (p.dark, glaze_ui::theme::over(p.edge, p.chrome));
         if self.frame != Some(frame) {
             self.surface.set_frame(frame.0, frame.1);
             self.frame = Some(frame);
@@ -174,7 +174,7 @@ impl Studio {
             return;
         };
         if self.menu.is_none() {
-            self.menu = mypaper_ui::Menu::new("Options")
+            self.menu = glaze_ui::Menu::new("Options")
                 .inspect_err(|e| log::error!("select menu: {e:#}"))
                 .ok();
         }
@@ -183,7 +183,7 @@ impl Studio {
             .options
             .iter()
             .enumerate()
-            .map(|(i, (value, label))| mypaper_ui::menu::Entry::check(label, i, choices.current.as_ref() == Some(value)))
+            .map(|(i, (value, label))| glaze_ui::menu::Entry::check(label, i, choices.current.as_ref() == Some(value)))
             .collect();
         let mut at = windows::Win32::Foundation::POINT {
             x: rect.left as i32,
@@ -196,7 +196,7 @@ impl Studio {
         // A popover over the window: the card fill, Studio's selected wash, no hairline in dark.
         tokens.material.tint = p.panel;
         tokens.colors.hover = p.selected;
-        let screen = mypaper_ui::menu::screen_at(at.x, at.y);
+        let screen = glaze_ui::menu::screen_at(at.x, at.y);
         match menu.open(&mut self.ui, items, (at.x, at.y), screen, &tokens) {
             Ok(()) => self.picking = Some(choices),
             Err(e) => log::error!("select menu: {e:#}"),
@@ -205,9 +205,9 @@ impl Studio {
 
     /// The select menu closed: apply the choice and give the window its focus back (unless
     /// the user clicked into another app).
-    fn picked(&mut self, outcome: mypaper_ui::menu::Outcome<usize>) {
+    fn picked(&mut self, outcome: glaze_ui::menu::Outcome<usize>) {
         let choices = self.picking.take();
-        if let (mypaper_ui::menu::Outcome::Chosen(i), Some(choices)) = (&outcome, &choices) {
+        if let (glaze_ui::menu::Outcome::Chosen(i), Some(choices)) = (&outcome, &choices) {
             self.app.chose(choices, *i);
         }
         use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
@@ -238,12 +238,12 @@ impl Studio {
             if of != id {
                 continue;
             }
-            if let mypaper_ui::Event::DpiChanged(dpi) = event {
+            if let glaze_ui::Event::DpiChanged(dpi) = event {
                 self.app.scale = dpi as f32 / 96.0;
                 self.app.dirty = true;
                 continue;
             }
-            let accessibility = if let mypaper_ui::Event::Invoke(hit) = event {
+            let accessibility = if let glaze_ui::Event::Invoke(hit) = event {
                 self.surface.take_accessibility_action(hit).map(|action| (hit, action))
             } else { None };
             if let Some((hit, action)) = accessibility { panel::accessibility(&mut self.app, hit, action); }
@@ -285,11 +285,11 @@ fn run() -> Result<()> {
     let title = if panel_mode { panel::TITLE } else { TITLE };
     // SAFETY: a named mutex held (never closed) for the life of the process.
     unsafe {
-        let name = if panel_mode { w!("Local\\mypaper-studio-panel") } else { w!("Local\\mypaper-studio") };
+        let name = if panel_mode { w!("Local\\glaze-studio-panel") } else { w!("Local\\glaze-studio") };
         let _mutex = CreateMutexW(None, true, name).context("mutex")?;
         if GetLastError() == ERROR_ALREADY_EXISTS {
             if !no_activate
-                && let Ok(hwnd) = FindWindowW(w!("mypaper.ui.app"), &windows::core::HSTRING::from(title))
+                && let Ok(hwnd) = FindWindowW(w!("glaze.ui.app"), &windows::core::HSTRING::from(title))
             {
                 let _ = ShowWindow(hwnd, SW_RESTORE);
                 let _ = SetForegroundWindow(hwnd);
@@ -350,11 +350,11 @@ fn run() -> Result<()> {
         }
     }
     // `READY component=studio open_ms=…`, counted from process creation (the ≤300 ms gate).
-    mypaper_desktop::startup::ready("studio", "open_ms");
+    glaze_desktop::startup::ready("studio", "open_ms");
     let _watch = watch::start(tx, thread).inspect_err(|e| log::warn!("not following outside edits: {e:#}"));
     // While Windows' size/move loop runs, the app's stops: render from inside it.
     let hook = Rc::downgrade(&studio);
-    mypaper_ui::set_modal_hook(Some(Box::new(move || {
+    glaze_ui::set_modal_hook(Some(Box::new(move || {
         if let Some(s) = hook.upgrade()
             && let Ok(mut s) = s.try_borrow_mut()
         {
@@ -364,7 +364,7 @@ fn run() -> Result<()> {
         }
     })));
     let result = pump(&studio, &rx);
-    mypaper_ui::set_modal_hook(None);
+    glaze_ui::set_modal_hook(None);
     let mut s = studio.borrow_mut();
     // A window closed mid-onboarding was full screen: that is no place to reopen at.
     if !panel_mode && s.onboarding.is_none() {
@@ -449,7 +449,7 @@ fn pump(studio: &Rc<RefCell<Studio>>, rx: &Receiver<Msg>) -> Result<()> {
                     match msg.message {
                         WM_STUDIO => continue,
                         // The shell's icon service (in the stage) has news.
-                        mypaper_bars_wake::WM_WAKE => {
+                        glaze_bars_wake::WM_WAKE => {
                             let s = studio.borrow();
                             let rebuilt = s.app.stage.borrow_mut().icons_arrived();
                             drop(s);
@@ -513,13 +513,13 @@ fn placement(app: &App, scale: f32) -> ((i32, i32, i32, i32), bool) {
         .monitors
         .iter()
         .find(|m| m.primary)
-        .map_or(mypaper_desktop::Rect { x: 0, y: 0, width: 1920, height: 1080 }, |m| m.work);
+        .map_or(glaze_desktop::Rect { x: 0, y: 0, width: 1920, height: 1080 }, |m| m.work);
     let (w, h) = (((1280.0 * scale) as i32).min(work.width), ((800.0 * scale) as i32).min(work.height));
     ((work.x + (work.width - w) / 2, work.y + (work.height - h) / 2, w, h), false)
 }
 
 /// `rect` shrunk to fit `work` and moved fully inside it.
-fn inside(work: mypaper_desktop::Rect, (x, y, w, h): (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
+fn inside(work: glaze_desktop::Rect, (x, y, w, h): (i32, i32, i32, i32)) -> (i32, i32, i32, i32) {
     let (w, h) = (w.min(work.width), h.min(work.height));
     (
         x.clamp(work.x, work.x + work.width - w),
@@ -571,7 +571,7 @@ fn remember_placement(s: &mut Studio) {
 #[cfg(test)]
 mod placement_tests {
     use super::inside;
-    use mypaper_desktop::Rect;
+    use glaze_desktop::Rect;
 
     #[test]
     fn a_window_left_above_the_top_bar_opens_below_it() {

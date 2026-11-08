@@ -1,13 +1,13 @@
 //! Grid placement and edit chrome. Layout is committed only at the end of a gesture; a rejected
 //! drop leaves the saved layout intact. Motion itself stays in physical pixels, at display rate.
-use mypaper_bars::config::{BarsConfig, DockPosition, TopPosition};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{
+use glaze_bars::config::{BarsConfig, DockPosition, TopPosition};
+use glaze_ui::icons::Icon;
+use glaze_ui::{
     Accessory, Align, ButtonKind, DisplayList, Frame, HitId, Interaction, Lead, ListRow, Op, Rect,
     Rgba, Scheme, Scroll, Text, TextField, TextRole, Theme,
 };
-use mypaper_widgets::layout::{Grid, Instance};
-use mypaper_widgets::{layout::RectF, manifest::WidgetManifest};
+use glaze_widgets::layout::{Grid, Instance};
+use glaze_widgets::{layout::RectF, manifest::WidgetManifest};
 
 /// Intersect the OS work area with bands derived from config, even if appbar registration
 /// failed. An autohiding dock reserves nothing: widgets reach the bottom edge and the dock
@@ -206,7 +206,7 @@ pub fn constrain(
     grid: &Grid,
     instances: &[Instance],
     monitor: &str,
-    registry: &mypaper_widgets::registry::Registry,
+    registry: &glaze_widgets::registry::Registry,
 ) -> Vec<Instance> {
     let mut next = instances.to_vec();
     let mut changed = Vec::new();
@@ -367,9 +367,9 @@ pub const PICK_ROW: HitId = 100;
 /// primary action takes the label's ink).
 pub fn chrome_theme() -> Theme {
     let mut theme = Theme::new(
-        mypaper_ui::theme::active(),
+        glaze_ui::theme::active(),
         Scheme::Dark,
-        mypaper_ui::theme::SYSTEM_BLUE,
+        glaze_ui::theme::SYSTEM_BLUE,
     );
     let p = &mut theme.color;
     (p.accent, p.on_accent) = (Rgba::rgb8([242; 3], 1.0), Rgba::rgb8([17, 17, 19], 1.0));
@@ -378,7 +378,7 @@ pub fn chrome_theme() -> Theme {
 }
 
 /// The edit controls share the desktop's type, icons and explicit surface shape.
-pub fn chrome_look(look: &mypaper_config::Look, text: &Text) -> Theme {
+pub fn chrome_look(look: &glaze_config::Look, text: &Text) -> Theme {
     let mut theme = chrome_theme();
     if let Some(radius) = look.shape.corners { theme = theme.with_surface_radius(radius); }
     if let Some(edge) = look.shape.edge { theme.border = edge.then_some(theme.color.separator); }
@@ -487,7 +487,7 @@ pub fn picker(
     let (w, h) = picker_size(s);
     let body = Rect::new(0.0, 0.0, w as f32, h as f32);
     f.surface(body, false);
-    let inner = body.inset(mypaper_ui::Insets::all(f.px(theme.metrics.pad)));
+    let inner = body.inset(glaze_ui::Insets::all(f.px(theme.metrics.pad)));
     let (list, pane) = inner.take_left(f.px(250.0), f.px(theme.metrics.gap));
     let (search, rows) = list.take_top(f.px(theme.metrics.control), f.px(8.0));
     let field_rect = f.field_frame(
@@ -498,7 +498,7 @@ pub fn picker(
         Some(Icon::Search),
     );
     if let Some(field) = state.field {
-        field.set_style(&f.font(mypaper_ui::TextRole::Body), theme.color.label);
+        field.set_style(&f.font(glaze_ui::TextRole::Body), theme.color.label);
         field.set_rect(field_rect);
         f.push(Op::TextField {
             rect: field_rect,
@@ -612,7 +612,7 @@ pub fn widget_icon(id: &str) -> Icon {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mypaper_widgets::layout::{GridSpec, Layout, RectF};
+    use glaze_widgets::layout::{GridSpec, Layout, RectF};
     #[test]
     fn configured_bands_apply_without_appbar_and_do_not_double_reserve() {
         let area = RectF {
@@ -651,7 +651,7 @@ mod tests {
     }
     #[test]
     fn weather_resizes_one_cell_at_a_time_and_keeps_opposite_edges() {
-        let registry = mypaper_widgets::registry::builtins();
+        let registry = glaze_widgets::registry::builtins();
         let manifest = &registry.get("weather").unwrap().manifest;
         let grid = Grid {
             origin: [16.0, 64.0],
@@ -730,7 +730,7 @@ mod tests {
     }
     #[test]
     fn keyboard_steps_one_cell_and_clamped_layout_keeps_valid_neighbors() {
-        let registry = mypaper_widgets::registry::builtins();
+        let registry = glaze_widgets::registry::builtins();
         let timer = &registry.get("timer").unwrap().manifest;
         assert_eq!(nudge_size(timer, [4, 4], 1, -1, [6, 6]), Some([4, 3]));
         assert_eq!(nudge_size(timer, [4, 3], 1, 1, [6, 6]), Some([4, 4]));

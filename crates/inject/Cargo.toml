@@ -1,6 +1,6 @@
 [package]
-name = "mypaper-inject"
-description = "Injection policy: decides which processes mypaper may ever touch."
+name = "glaze-inject"
+description = "Injection policy: decides which processes Glaze may ever touch."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

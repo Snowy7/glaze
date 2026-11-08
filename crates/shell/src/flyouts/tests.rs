@@ -1,18 +1,18 @@
 //! The flyouts drawn headless through the same software target the screen gets ([`build`]),
-//! with fixed data: golden PNGs (`tests/golden/flyouts`, `MYPAPER_BLESS=1` rewrites them),
+//! with fixed data: golden PNGs (`tests/golden/flyouts`, `GLAZE_BLESS=1` rewrites them),
 //! click coverage of every body and control, placement, and the panels' pure logic.
 
-use mypaper_bars::audio::Volume;
-use mypaper_bars::flyouts::index::{App, History};
-use mypaper_bars::flyouts::language::Layout;
-use mypaper_bars::flyouts::mixer::{Device, MixerState, Session};
-use mypaper_bars::flyouts::notifications::{Notification, NotificationList};
-use mypaper_bars::flyouts::quick::{PowerMode, RadioInfo, RadioKind};
-use mypaper_bars::flyouts::wifi::{Network, Security, WifiState};
-use mypaper_bars::system::Battery;
-use mypaper_bars::tray_data::TrayItem;
-use mypaper_desktop::{Monitor, Rect as Screen};
-use mypaper_ui::{Kind as SurfaceKind, Point, Role, Surface, TextField, Ui, render};
+use glaze_bars::audio::Volume;
+use glaze_bars::flyouts::index::{App, History};
+use glaze_bars::flyouts::language::Layout;
+use glaze_bars::flyouts::mixer::{Device, MixerState, Session};
+use glaze_bars::flyouts::notifications::{Notification, NotificationList};
+use glaze_bars::flyouts::quick::{PowerMode, RadioInfo, RadioKind};
+use glaze_bars::flyouts::wifi::{Network, Security, WifiState};
+use glaze_bars::system::Battery;
+use glaze_bars::tray_data::TrayItem;
+use glaze_desktop::{Monitor, Rect as Screen};
+use glaze_ui::{Kind as SurfaceKind, Point, Role, Surface, TextField, Ui, render};
 use windows::Win32::Foundation::SYSTEMTIME;
 
 use super::calendar::Calendar;
@@ -250,11 +250,11 @@ fn panels(ui: &mut Ui, surface: &Surface) -> Vec<(&'static str, Box<dyn Panel>)>
                 now(),
                 NOW_MS as i64,
                 vec![
-                    mypaper_bars::config::Zone {
+                    glaze_bars::config::Zone {
                         zone: "America/New_York".into(),
                         label: Some("New York".into()),
                     },
-                    mypaper_bars::config::Zone {
+                    glaze_bars::config::Zone {
                         zone: "Asia/Kathmandu".into(),
                         label: None,
                     },
@@ -312,11 +312,11 @@ fn every_flyout_matches_its_golden_image_and_takes_clicks_on_its_whole_body() {
     let look = Look::default();
     // The same bar in the light scheme (the kit's light palette).
     let light = Look::resolve(
-        &mypaper_bars::style::Look {
-            scheme: Some(mypaper_bars::style::Scheme::Light),
+        &glaze_bars::style::Look {
+            scheme: Some(glaze_bars::style::Scheme::Light),
             ..Default::default()
         },
-        &mypaper_theme::Appearance::default(),
+        &glaze_theme::Appearance::default(),
         &super::look::fixed_system(),
     );
     let golden = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/flyouts");
@@ -334,7 +334,7 @@ fn every_flyout_matches_its_golden_image_and_takes_clicks_on_its_whole_body() {
             );
             let image = render(&mut ui, &list, size.0, size.1).unwrap();
             let path = golden.join(format!("{name}{suffix}.png"));
-            mypaper_ui::golden::check(&image, &path).unwrap();
+            glaze_ui::golden::check(&image, &path).unwrap();
         }
         // Glass under it: the body is invisible but every pixel of its rounded shape is hit.
         let (list, size) = build(
@@ -471,14 +471,14 @@ fn monitor() -> Monitor {
 #[test]
 fn flyouts_open_under_their_module_and_stay_in_the_work_area() {
     let m = monitor();
-    let clock = mypaper_ui::Rect::new(-1320.0, 8.0, 120.0, 32.0);
+    let clock = glaze_ui::Rect::new(-1320.0, 8.0, 120.0, 32.0);
     // Centred under the clock, a gap below the bar.
     assert_eq!(
         place(Kind::Calendar, (300, 400), clock, &m, 1.0, true),
         (-1410, 48)
     );
     // Near the right edge it is pushed back inside, keeping the margin.
-    let quick = mypaper_ui::Rect::new(-60.0, 8.0, 40.0, 32.0);
+    let quick = glaze_ui::Rect::new(-60.0, 8.0, 40.0, 32.0);
     assert_eq!(
         place(Kind::Quick, (340, 500), quick, &m, 1.0, true),
         (-8 - 340, 48)
@@ -504,7 +504,7 @@ fn flyouts_open_under_their_module_and_stay_in_the_work_area() {
         );
     }
     // Above a bottom dock.
-    let dock = mypaper_ui::Rect::new(-1300.0, 1380.0, 48.0, 48.0);
+    let dock = glaze_ui::Rect::new(-1300.0, 1380.0, 48.0, 48.0);
     let (_, y) = place(Kind::TrayOverflow, (190, 100), dock, &m, 1.0, false);
     assert_eq!(y, 1380 - 8 - 100);
     // Taller than the screen: it starts at the top of the work area.
@@ -609,7 +609,7 @@ fn wifi_sends_passwords_to_windows_and_shows_signal_in_four_steps() {
 
 #[test]
 fn ending_the_session_asks_first_and_locking_does_not() {
-    use mypaper_bars::actions::PowerAction::*;
+    use glaze_bars::actions::PowerAction::*;
     assert!(Power::confirms(Restart) && Power::confirms(Shutdown) && Power::confirms(Signout));
     assert!(!Power::confirms(Lock) && !Power::confirms(Sleep));
 }

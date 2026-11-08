@@ -1,19 +1,19 @@
-//! `mypaper-styler`: the app styler's helper (docs/windows-styling.md, "App styler"). Core runs
+//! `glaze-styler`: the app styler's helper (docs/windows-styling.md, "App styler"). Core runs
 //! it only while `experimental.app_styler` is on; when it exits (flag off, quit, panic hotkey,
 //! killed), every styled app puts its original look back.
 //!
 //! ```text
-//! mypaper-styler [--parent PID]        follow the config and style Explorer and Settings;
+//! glaze-styler [--parent PID]        follow the config and style Explorer and Settings;
 //!                                      with --parent (core passes its pid), exit with it
-//! mypaper-styler --preview PRESET      the same with that preset, whatever the flag and theme
-//! mypaper-styler --dump PID [--winui] [--out FILE] [--props SELECTOR]
+//! glaze-styler --preview PRESET      the same with that preset, whatever the flag and theme
+//! glaze-styler --dump PID [--winui] [--out FILE] [--props SELECTOR]
 //!                                      write that app's live XAML tree (for writing rules),
 //!                                      and the property values of what SELECTOR picks
-//! mypaper-styler --attach PID [--winui] --rules FILE [--seconds N]
+//! glaze-styler --attach PID [--winui] --rules FILE [--seconds N]
 //!                                      style one process with one rules file for N seconds
 //! ```
 
-// No console window in release builds; logs go to mypaper.log.
+// No console window in release builds; logs go to glaze.log.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod helper;
@@ -22,10 +22,10 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use mypaper_app_styler::{Attach, Framework};
+use glaze_app_styler::{Attach, Framework};
 
 fn main() -> std::process::ExitCode {
-    mypaper_desktop::init_logging();
+    glaze_desktop::init_logging();
     match run() {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(e) => {

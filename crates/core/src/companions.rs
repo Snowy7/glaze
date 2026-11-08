@@ -28,7 +28,7 @@ use windows::Win32::{
 };
 use windows::core::{BOOL, PWSTR};
 
-const APPS: [&str; 2] = ["mypaper-studio.exe", "mypaper-files.exe"];
+const APPS: [&str; 2] = ["glaze-studio.exe", "glaze-files.exe"];
 const GRACE: Duration = Duration::from_secs(3);
 
 struct Handle(HANDLE);
@@ -227,7 +227,7 @@ mod tests {
                 "--nocapture",
             ])
             .env(
-                "MYPAPER_COMPANION_STUBBORN",
+                "GLAZE_COMPANION_STUBBORN",
                 if stubborn { "1" } else { "0" },
             )
             .stdout(Stdio::piped())
@@ -245,7 +245,7 @@ mod tests {
 
     #[test]
     fn closes_matching_apps_gracefully_and_bounds_a_hung_app_without_touching_other_installs() {
-        let root = std::env::temp_dir().join(format!("mypaper-quit-test-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("glaze-quit-test-{}", std::process::id()));
         let ours = root.join("ours");
         let other = root.join("other");
         std::fs::create_dir_all(&ours).unwrap();
@@ -258,7 +258,7 @@ mod tests {
             let mut studio = fixture(&ours.join(APPS[0]), false);
             let mut files = fixture(&ours.join(APPS[1]), true);
             let mut unrelated = fixture(&other.join(APPS[0]), false);
-            close_with_grace(&ours.join("mypaper-core.exe"), Duration::from_millis(300)).unwrap();
+            close_with_grace(&ours.join("glaze-core.exe"), Duration::from_millis(300)).unwrap();
             assert!(
                 studio.0.try_wait().unwrap().unwrap().success(),
                 "WM_CLOSE should allow an ordinary app to save and exit"
@@ -281,13 +281,13 @@ mod tests {
     fn companion_window_fixture() {
         use windows::Win32::UI::WindowsAndMessaging::*;
         use windows::core::w;
-        let stubborn = std::env::var("MYPAPER_COMPANION_STUBBORN").unwrap() == "1";
+        let stubborn = std::env::var("GLAZE_COMPANION_STUBBORN").unwrap() == "1";
         // SAFETY: built-in window class, hidden and owned by this test thread.
         let window = unsafe {
             CreateWindowExW(
                 Default::default(),
                 w!("STATIC"),
-                w!("mypaper close fixture"),
+                w!("Glaze close fixture"),
                 WS_OVERLAPPEDWINDOW,
                 0,
                 0,
@@ -321,34 +321,34 @@ mod tests {
 
     #[test]
     fn shutdown_is_scoped_to_known_apps_beside_this_core() {
-        let core = Path::new(r"C:\mypaper\mypaper-core.exe");
+        let core = Path::new(r"C:\glaze\glaze-core.exe");
         assert!(is_companion(
             core,
-            Path::new(r"c:\MYPAPER\mypaper-studio.exe")
-        ));
-        assert!(is_companion(
-            core,
-            Path::new(r"C:\mypaper\mypaper-files.exe")
-        ));
-        assert!(!is_companion(
-            core,
-            Path::new(r"C:\other\mypaper-studio.exe")
-        ));
-        assert!(!is_companion(
-            core,
-            Path::new(r"C:\mypaper\mypaper-wallpaper.exe")
-        ));
-        assert!(!is_companion(
-            core,
-            Path::new(r"C:\mypaper\mypaper-studio.exe.backup")
+            Path::new(r"c:\GLAZE\glaze-studio.exe")
         ));
         assert!(is_companion(
             core,
-            Path::new(r"C:\mypaper\mypaper-studio.exe.old-20261108120000")
+            Path::new(r"C:\glaze\glaze-files.exe")
         ));
         assert!(!is_companion(
             core,
-            Path::new(r"C:\other\mypaper-studio.exe.old-20261108120000")
+            Path::new(r"C:\other\glaze-studio.exe")
+        ));
+        assert!(!is_companion(
+            core,
+            Path::new(r"C:\glaze\glaze-wallpaper.exe")
+        ));
+        assert!(!is_companion(
+            core,
+            Path::new(r"C:\glaze\glaze-studio.exe.backup")
+        ));
+        assert!(is_companion(
+            core,
+            Path::new(r"C:\glaze\glaze-studio.exe.old-20261108120000")
+        ));
+        assert!(!is_companion(
+            core,
+            Path::new(r"C:\other\glaze-studio.exe.old-20261108120000")
         ));
     }
 }

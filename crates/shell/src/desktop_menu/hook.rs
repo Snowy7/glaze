@@ -10,7 +10,7 @@ use std::sync::mpsc;
 use std::thread::JoinHandle;
 
 use anyhow::{Context, Result};
-use mypaper_desktop::desktop_hit::{self, Click, Edge, IconMap, Swallower, Under, Verdict};
+use glaze_desktop::desktop_hit::{self, Click, Edge, IconMap, Swallower, Under, Verdict};
 use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::SystemInformation::GetTickCount64;

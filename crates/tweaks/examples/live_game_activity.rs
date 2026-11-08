@@ -3,7 +3,7 @@
 //! `--idle SECONDS` only pumps messages, for measuring the enabled watcher.
 
 use anyhow::{Result, ensure};
-use mypaper_tweaks::game_activity::{self, GameWatcher};
+use glaze_tweaks::game_activity::{self, GameWatcher};
 use std::os::windows::io::AsRawHandle;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -64,7 +64,7 @@ fn test_window() -> Result<()> {
         let class = WNDCLASSW {
             lpfnWndProc: Some(window_proc),
             hInstance: instance.into(),
-            lpszClassName: w!("mypaper-game-probe"),
+            lpszClassName: w!("glaze-game-probe"),
             ..Default::default()
         };
         RegisterClassW(&class);
@@ -84,7 +84,7 @@ fn test_window() -> Result<()> {
         let window = CreateWindowExW(
             WINDOW_EX_STYLE::default(),
             class.lpszClassName,
-            w!("mypaper fullscreen signal probe"),
+            w!("Glaze fullscreen signal probe"),
             WS_POPUP,
             r.left,
             r.top,
@@ -126,7 +126,7 @@ fn main() -> Result<()> {
         return test_window();
     }
     ensure!(
-        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock")
+        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock")
             .exists(),
         "caller must hold desktop lock"
     );

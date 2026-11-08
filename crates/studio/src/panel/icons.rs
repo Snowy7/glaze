@@ -5,15 +5,15 @@ use crate::{
     app::App,
     ui::{B, Col},
 };
-use mypaper_ui::controls::Glyph;
-use mypaper_ui::{Image, Rect};
+use glaze_ui::controls::Glyph;
+use glaze_ui::{Image, Rect};
 use std::{collections::BTreeMap, path::PathBuf, sync::OnceLock};
 
 fn shortcuts() -> &'static BTreeMap<String, PathBuf> {
     static APPS: OnceLock<BTreeMap<String, PathBuf>> = OnceLock::new();
     APPS.get_or_init(|| {
         let mut apps = BTreeMap::new();
-        let mut dirs = mypaper_bars::icons::start_menu_dirs();
+        let mut dirs = glaze_bars::icons::start_menu_dirs();
         while let Some(dir) = dirs.pop() {
             for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
                 let path = entry.path();
@@ -84,7 +84,7 @@ pub fn image(app: &App, path: &str) -> Option<std::sync::Arc<Image>> {
     let file = app
         .stage
         .borrow_mut()
-        .app_icon(app.thread, mypaper_bars::icons::Source::Path(path.into()))?;
+        .app_icon(app.thread, glaze_bars::icons::Source::Path(path.into()))?;
     app.images.borrow_mut().get(&file, (48, 48))
 }
 
@@ -107,7 +107,7 @@ pub fn plugin_image(app: &App, id: &str) -> Option<std::sync::Arc<Image>> {
         .map_or(plugin, |p| p.name.as_str())
         .to_lowercase();
     // Prefer package artwork when it exists. Never guess another app's picture.
-    for root in mypaper_widgets::registry::plugin_roots() {
+    for root in glaze_widgets::registry::plugin_roots() {
         for file in ["icon.png", "assets/icon.png", "logo.png"] {
             let path = root.join(plugin).join(file);
             if path.is_file() {
@@ -131,7 +131,7 @@ pub fn plugin_image(app: &App, id: &str) -> Option<std::sync::Arc<Image>> {
 
 /// A component face's declared kit icon when the package has no raster artwork.
 pub fn plugin_glyph(app: &App, id: &str) -> Glyph {
-    use mypaper_ui::icons::Icon;
+    use glaze_ui::icons::Icon;
     let Some((plugin, face)) = id.split_once("--") else {
         return crate::editing::widgets::glyph_of(id);
     };
@@ -141,7 +141,7 @@ pub fn plugin_glyph(app: &App, id: &str) -> Glyph {
         .iter()
         .find(|manifest| manifest.id == plugin)
         .cloned()
-        .or_else(|| mypaper_widgets::registry::find_plugin(plugin).map(|(manifest, _)| manifest));
+        .or_else(|| glaze_widgets::registry::find_plugin(plugin).map(|(manifest, _)| manifest));
     let icon = manifest
         .as_ref()
         .and_then(|manifest| manifest.faces.iter().find(|item| item.id == face))
@@ -248,7 +248,7 @@ pub fn row(
     let image = plugin_image(app, id);
     let h = super::controls::height(b, if caption.is_empty() { 40.0 } else { 72.0 });
     let r = Rect::new(c.x, c.y, c.w, h);
-    let k = mypaper_ui::controls::key(("catalog-row", c.view, id));
+    let k = glaze_ui::controls::key(("catalog-row", c.view, id));
     let area = b.list_row_area(r);
     if checked {
         b.fill(area, b.px(radius::CONTROL), b.p.selected);
@@ -273,7 +273,7 @@ pub fn row(
         13.0,
         500,
         b.p.ink1,
-        mypaper_ui::controls::Align::Start,
+        glaze_ui::controls::Align::Start,
     );
     let font = super::controls::font(b, 12.0, 400);
     let lines = b.text.lines(caption, &font, r.width() - b.px(54.0), 2);
@@ -289,11 +289,11 @@ pub fn row(
     b.hit_checked(
         k,
         area,
-        mypaper_ui::Role::RadioButton,
+        glaze_ui::Role::RadioButton,
         label,
         Some(checked),
         action,
-        mypaper_ui::controls::Behavior::Click,
+        glaze_ui::controls::Behavior::Click,
     );
     b.focus_ring(k, area, b.px(radius::CONTROL));
     c.y = r.bottom;

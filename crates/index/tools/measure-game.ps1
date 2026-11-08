@@ -1,15 +1,15 @@
 # Owns only index_game.exe and the desktop lock; never moves another application's window.
-param([int]$Seconds = 60, [string]$FixtureExe = 'C:\mypaper-targets\index\release\examples\index_game.exe', [switch]$TestCatchup)
+param([int]$Seconds = 60, [string]$FixtureExe = 'C:\glaze-targets\index\release\examples\index_game.exe', [switch]$TestCatchup)
 $ErrorActionPreference = 'Stop'
-$lockDir = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
-$signalPath = Join-Path $env:LOCALAPPDATA 'mypaper\game-activity.json'
+$lockDir = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$signalPath = Join-Path $env:LOCALAPPDATA 'glaze\game-activity.json'
 $evidence = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\evidence'))
-$deployed = 'D:\Coding\projects\desktop\wallpaper\target\release\mypaper-index.exe'
-$service = @(Get-CimInstance Win32_Process -Filter "Name='mypaper-index.exe'" | Where-Object { $_.ExecutablePath -eq $deployed -and $_.CommandLine -match '--parent' })
+$deployed = 'D:\Coding\projects\desktop\wallpaper\target\release\glaze-index.exe'
+$service = @(Get-CimInstance Win32_Process -Filter "Name='glaze-index.exe'" | Where-Object { $_.ExecutablePath -eq $deployed -and $_.CommandLine -match '--parent' })
 if ($service.Count -ne 1) { throw 'Expected one core-owned deployed index' }
 $index = Get-Process -Id $service[0].ProcessId
 function Request-Index([hashtable]$Request) {
-  $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'mypaper-index', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
+  $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'glaze-index', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
   try {
     $pipe.Connect(500)
     $pipe.ReadMode = [IO.Pipes.PipeTransmissionMode]::Message
@@ -88,8 +88,8 @@ try {
   if ($status.entries -lt 1000000) { throw 'Full cached index is not ready for the game test' }
   if ($TestCatchup) {
     if ($status.scanning) { throw 'Wait for initial reconciliation before the subtree catch-up test' }
-    $gameRoot = Join-Path $env:USERPROFILE ('mypaper-index-fixtures\game-' + [Guid]::NewGuid().ToString('N'))
-    $gameName = 'mypaper-game-resume-' + [Guid]::NewGuid().ToString('N') + '.txt'
+    $gameRoot = Join-Path $env:USERPROFILE ('glaze-index-fixtures\game-' + [Guid]::NewGuid().ToString('N'))
+    $gameName = 'glaze-game-resume-' + [Guid]::NewGuid().ToString('N') + '.txt'
     $gameFile = Join-Path $gameRoot $gameName
     [IO.Directory]::CreateDirectory($gameRoot) | Out-Null
     $until = [DateTime]::UtcNow.AddSeconds(10)
@@ -116,7 +116,7 @@ try {
   $fixture.Refresh()
   [IndexGameThreads]::ActivateOwn($fixture.MainWindowHandle,$fixture.Id)
   Start-Sleep -Seconds 10
-  & 'C:\Users\you\AppData\Local\Temp\mypaper-tools\shotall.ps1' -Out (Join-Path $evidence 'round2-game-fullscreen.png') | Out-Null
+  & 'C:\Users\you\AppData\Local\Temp\glaze-tools\shotall.ps1' -Out (Join-Path $evidence 'round2-game-fullscreen.png') | Out-Null
   $signal = Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json
   if (-not $signal.activity.pause_background -or $signal.activity.foreground_pid -ne $fixture.Id -or [IndexGameThreads]::ForegroundPid() -ne $fixture.Id) {
     [IndexGameThreads]::ActivateOwn($fixture.MainWindowHandle,$fixture.Id)
@@ -190,12 +190,12 @@ try {
       [pscustomobject]@{created_at=$createdAt;file=$gameFile;catchup_ms=$catchupMs;search=$answer;sizes=$sizes} | ConvertTo-Json -Depth 7 | Set-Content -Encoding utf8 (Join-Path $evidence 'round2-backed-game-catchup.json')
     }
     Start-Sleep -Seconds 2
-    & 'C:\Users\you\AppData\Local\Temp\mypaper-tools\shotall.ps1' -Out (Join-Path $evidence 'round2-game-restored.png') | Out-Null
+    & 'C:\Users\you\AppData\Local\Temp\glaze-tools\shotall.ps1' -Out (Join-Path $evidence 'round2-game-restored.png') | Out-Null
   } finally { [IO.Directory]::Delete($lockDir) }
 }
 } finally {
   if ($gameRoot) {
-    if (-not $gameRoot.StartsWith((Join-Path $env:USERPROFILE 'mypaper-index-fixtures\game-'),[StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe game fixture cleanup path' }
+    if (-not $gameRoot.StartsWith((Join-Path $env:USERPROFILE 'glaze-index-fixtures\game-'),[StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe game fixture cleanup path' }
     if (Test-Path -LiteralPath $gameFile) { Remove-Item -LiteralPath $gameFile }
     [IO.Directory]::Delete($gameRoot)
   }

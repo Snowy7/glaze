@@ -4,13 +4,13 @@ Copyright (C) 2013 Microsoft.  All rights reserved.
 
 
 
-The path (/p) parameter is: "\\?\D:\Coding\projects\desktop\wallpaper\target\package\mypaper.Desktop.msix"
+The path (/p) parameter is: "\\?\D:\Coding\projects\desktop\wallpaper\target\package\glaze.Desktop.msix"
 
 The content directory (/d) parameter is: "\\?\D:\Coding\projects\desktop\wallpaper\target\package\f476252f1284401192105d1d1d906224"
 
 Enumerating files from directory "\\?\D:\Coding\projects\desktop\wallpaper\target\package\f476252f1284401192105d1d1d906224"
 
-Packing 4 file(s) in "\\?\D:\Coding\projects\desktop\wallpaper\target\package\f476252f1284401192105d1d1d906224" (content directory) to "\\?\D:\Coding\projects\desktop\wallpaper\target\package\mypaper.Desktop.msix" (output file name).
+Packing 4 file(s) in "\\?\D:\Coding\projects\desktop\wallpaper\target\package\f476252f1284401192105d1d1d906224" (content directory) to "\\?\D:\Coding\projects\desktop\wallpaper\target\package\glaze.Desktop.msix" (output file name).
 
 Memory limit defaulting to 16705343488 bytes.
 
@@ -25,20 +25,20 @@ Processing "\\?\D:\Coding\projects\desktop\wallpaper\target\package\f476252f1284
 Package creation succeeded.
 
 Done Adding Additional Store
-Successfully signed: D:\Coding\projects\desktop\wallpaper\target\package\mypaper.Desktop.msix
+Successfully signed: D:\Coding\projects\desktop\wallpaper\target\package\glaze.Desktop.msix
 
 Signed with FDD93C684102679B22AA837EE54E9326B96D4BED (CurrentUser\My).
 
 ProcessName          Id Path
 -----------          -- ----
-mypaper-core      67296 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-core.exe
-mypaper-index     42232 C:\mypaper-targets\index\release\mypaper-index.exe
-mypaper-index     58796 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-index.exe
-mypaper-plugins   16848 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-plugins.exe
-mypaper-shell     48596 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-shell.exe
-mypaper-studio    32732 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-studio.exe
-mypaper-styler    41964 C:\mypaper-targets\app-styler\release\mypaper-styler.exe
-mypaper-wallpaper 19340 D:\Coding\projects\desktop\wallpaper\target\release\mypaper-wallpaper.exe
+glaze-core      67296 D:\Coding\projects\desktop\wallpaper\target\release\glaze-core.exe
+glaze-index     42232 C:\glaze-targets\index\release\glaze-index.exe
+glaze-index     58796 D:\Coding\projects\desktop\wallpaper\target\release\glaze-index.exe
+glaze-plugins   16848 D:\Coding\projects\desktop\wallpaper\target\release\glaze-plugins.exe
+glaze-shell     48596 D:\Coding\projects\desktop\wallpaper\target\release\glaze-shell.exe
+glaze-studio    32732 D:\Coding\projects\desktop\wallpaper\target\release\glaze-studio.exe
+glaze-styler    41964 C:\glaze-targets\app-styler\release\glaze-styler.exe
+glaze-wallpaper 19340 D:\Coding\projects\desktop\wallpaper\target\release\glaze-wallpaper.exe
 
 
 WARNING: Studio is open; leaving it running (its exe is swapped below)
@@ -47,9 +47,9 @@ Identity already registered at D:\Coding\projects\desktop\wallpaper\target\relea
 
 ProcessName          Id MB
 -----------          -- --
-mypaper-core      55692 14
-mypaper-plugins   50748 24
-mypaper-shell     65256 99
-mypaper-studio    32732 41
-mypaper-styler    41964 16
-mypaper-wallpaper 74184 13
+glaze-core      55692 14
+glaze-plugins   50748 24
+glaze-shell     65256 99
+glaze-studio    32732 41
+glaze-styler    41964 16
+glaze-wallpaper 74184 13

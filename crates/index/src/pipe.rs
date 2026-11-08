@@ -279,7 +279,7 @@ pub fn start(state: Arc<RwLock<State>>) -> Result<()> {
 }
 
 // This workspace's Windows Cranelift debug backend cannot unwind. Exercise containment
-// under the same LLVM backend as deployment: cargo test --release -p mypaper-index.
+// under the same LLVM backend as deployment: cargo test --release -p glaze-index.
 #[cfg(all(test, not(debug_assertions)))]
 mod tests {
     use super::*;

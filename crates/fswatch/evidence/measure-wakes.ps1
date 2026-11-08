@@ -21,7 +21,7 @@ public static class WatchThreadName {
 '@
 function Sample {
     $rows = @{}
-    foreach ($row in Get-CimInstance Win32_PerfRawData_PerfProc_Thread -Filter "Name LIKE 'mypaper%'") {
+    foreach ($row in Get-CimInstance Win32_PerfRawData_PerfProc_Thread -Filter "Name LIKE 'Glaze%'") {
         $rows["$($row.IDProcess)/$($row.IDThread)"] = $row
     }
     return $rows
@@ -44,5 +44,5 @@ $rows = foreach ($key in $after.Keys) {
 $output = Join-Path $PSScriptRoot "$Label-wakes.json"
 @($rows | Sort-Object process, tid) | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $output -Encoding utf8
 @{ started=$started; finished=(Get-Date).ToString('o'); requested_seconds=$Seconds; thread_count=@($rows).Count } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PSScriptRoot "$Label-wakes-meta.json") -Encoding utf8
-$rows | Where-Object { $_.thread -match 'watch|notify' -or $_.process -in 'mypaper-core', 'mypaper-index' } | Sort-Object process, switches_per_sec -Descending | Format-Table -AutoSize
+$rows | Where-Object { $_.thread -match 'watch|notify' -or $_.process -in 'glaze-core', 'glaze-index' } | Sort-Object process, switches_per_sec -Descending | Format-Table -AutoSize
 Write-Output "Saved $output"

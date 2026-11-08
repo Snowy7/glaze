@@ -2,7 +2,7 @@ use crate::{
     faces,
     model::{self, Call, Config, Decoder, Message, Saved},
 };
-use mypaper_plugin_sdk::guest::{
+use glaze_plugin_sdk::guest::{
     self, Event, FaceOpen, Plugin, SizeClass, events, http, pipes, secrets, timers, ui,
 };
 use serde_json::{Value, json};
@@ -760,4 +760,4 @@ impl Plugin for Discord {
         serde_json::to_vec(&self.saved).unwrap_or_default()
     }
 }
-mypaper_plugin_sdk::export!(Discord);
+glaze_plugin_sdk::export!(Discord);

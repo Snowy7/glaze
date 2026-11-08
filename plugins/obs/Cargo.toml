@@ -10,7 +10,7 @@ name = "obs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-mypaper-plugin-sdk = { path = "../../crates/plugin-sdk" }
+glaze-plugin-sdk = { path = "../../crates/plugin-sdk" }
 serde_json = "1"
 base64 = "0.22"
 sha2 = "0.10"

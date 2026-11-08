@@ -2,17 +2,17 @@
 # byte for byte in finally; the theme under test is a disposable copy outside the checkout.
 param([string]$Repo = 'D:\Coding\projects\desktop\wallpaper')
 $ErrorActionPreference = 'Stop'
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 if (-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) { throw 'Desktop lock busy; retry later' }
-$configPath = Join-Path $env:APPDATA 'mypaper\config.json'
-$barsPath = Join-Path $env:APPDATA 'mypaper\bars.json'
-$palettePath = Join-Path $env:LOCALAPPDATA 'mypaper\palette.json'
-$activityPath = Join-Path $env:LOCALAPPDATA 'mypaper\game-activity.json'
-$logPath = Join-Path $env:LOCALAPPDATA 'mypaper\mypaper.log'
+$configPath = Join-Path $env:APPDATA 'glaze\config.json'
+$barsPath = Join-Path $env:APPDATA 'glaze\bars.json'
+$palettePath = Join-Path $env:LOCALAPPDATA 'glaze\palette.json'
+$activityPath = Join-Path $env:LOCALAPPDATA 'glaze\game-activity.json'
+$logPath = Join-Path $env:LOCALAPPDATA 'glaze\glaze.log'
 $backup = @{}
 $result = [ordered]@{ at = (Get-Date).ToString('o') }
-$probeTheme = Join-Path $env:TEMP ('mypaper-fswatch-theme-' + [Guid]::NewGuid().ToString('N'))
-$backupDir = Join-Path $env:TEMP ('mypaper-fswatch-backup-' + [Guid]::NewGuid().ToString('N'))
+$probeTheme = Join-Path $env:TEMP ('glaze-fswatch-theme-' + [Guid]::NewGuid().ToString('N'))
+$backupDir = Join-Path $env:TEMP ('glaze-fswatch-backup-' + [Guid]::NewGuid().ToString('N'))
 $menuProbe = Join-Path $env:APPDATA ('Microsoft\Windows\Start Menu\Programs\fswatch-probe-' + [Guid]::NewGuid().ToString('N') + '.tmp')
 $utf8 = New-Object Text.UTF8Encoding $false
 Add-Type @'
@@ -66,7 +66,7 @@ try {
         [IO.File]::WriteAllBytes((Join-Path $backupDir ([IO.Path]::GetFileName($path))), $backup[$path])
     }
     $logStart = (Read-Text $logPath).Length
-    $beforeIds = @(Get-Process mypaper-core,mypaper-shell,mypaper-index | Sort-Object ProcessName | ForEach-Object { "$($_.ProcessName):$($_.Id)" })
+    $beforeIds = @(Get-Process glaze-core,glaze-shell,glaze-index | Sort-Object ProcessName | ForEach-Object { "$($_.ProcessName):$($_.Id)" })
     $config = [Text.Encoding]::UTF8.GetString($backup[$configPath]) | ConvertFrom-Json
     $hadIndexConfig = $null -ne $config.PSObject.Properties['index']
     $originalIndexConfig = $config.index
@@ -124,7 +124,7 @@ try {
         $text.Substring([Math]::Min($launcherLogStart, $text.Length)) -match 'launcher: \d+ apps indexed'
     }
     Remove-Item -LiteralPath $menuProbe
-    $afterIds = @(Get-Process mypaper-core,mypaper-shell,mypaper-index | Sort-Object ProcessName | ForEach-Object { "$($_.ProcessName):$($_.Id)" })
+    $afterIds = @(Get-Process glaze-core,glaze-shell,glaze-index | Sort-Object ProcessName | ForEach-Object { "$($_.ProcessName):$($_.Id)" })
     $result['processes_survived_without_restart'] = ($beforeIds -join ',') -eq ($afterIds -join ',')
     $result['processes'] = $afterIds
 } catch {

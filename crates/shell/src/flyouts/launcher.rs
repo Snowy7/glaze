@@ -1,5 +1,5 @@
 //! The launcher: a search field (windowless RichEdit, so IME, Arabic and CJK input work) over
-//! the apps the Start menu lists (`mypaper_bars::flyouts::index`, cached in `apps.json`).
+//! the apps the Start menu lists (`glaze_bars::flyouts::index`, cached in `apps.json`).
 //! Typing filters them; Up and Down move the choice, Enter or a click runs it. With nothing
 //! typed it lists what was run most recently (`launcher.json`), then the rest by name.
 
@@ -9,12 +9,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
-use mypaper_bars::files;
-use mypaper_bars::flyouts::index::{self, App, History};
-use mypaper_bars::system;
-use mypaper_ui::icons::Icon;
-use mypaper_ui::layout::{self, Align, Stack};
-use mypaper_ui::{
+use glaze_bars::files;
+use glaze_bars::flyouts::index::{self, App, History};
+use glaze_bars::system;
+use glaze_ui::icons::Icon;
+use glaze_ui::layout::{self, Align, Stack};
+use glaze_ui::{
     Accessory, ButtonKind, Frame, HitId, Image, Lead, ListRow, Op, Rect, Rgba, Role, Scroll,
     TextField, TextRole,
 };
@@ -26,8 +26,8 @@ use super::kit::Kit;
 /// The panel padding (the kit theme's `metrics.pad`), design px.
 const PAD: f32 = 12.0;
 use super::{Cx, Effect, LIST, Panel, PanelCommand, Reply};
-use mypaper_bars::config::{LauncherLayout, Pinned};
-use mypaper_ui::Entry;
+use glaze_bars::config::{LauncherLayout, Pinned};
+use glaze_ui::Entry;
 
 /// Result rows the list shows before it scrolls.
 const ROWS: usize = 8;
@@ -219,10 +219,10 @@ pub struct Launcher {
     indexed_files: Option<Vec<App>>,
     file_sizes: HashMap<String, String>,
     // Separate from COM app discovery; a cold AppsFolder build must not delay instant files.
-    index_lane: Option<mypaper_bars::flyouts::Lane<()>>,
+    index_lane: Option<glaze_bars::flyouts::Lane<()>>,
     index_generation: Arc<AtomicU64>,
     clipboard_open: bool,
-    clipboard: Option<mypaper_bars::flyouts::clipboard::History>,
+    clipboard: Option<glaze_bars::flyouts::clipboard::History>,
     menu_entries: Vec<Entry<PanelCommand>>,
     user: String,
 }
@@ -495,12 +495,12 @@ impl Launcher {
                 if latest.load(Ordering::Relaxed) != generation {
                     return Reply::Done;
                 }
-                let request = mypaper_index::Request::Search {
+                let request = glaze_index::Request::Search {
                     query: query.clone(),
                     limit: 50,
                 };
                 // Quiet services trim mapped pages; a cold full-volume query faults them back in.
-                let hits = mypaper_index::pipe::request(&request, 250)
+                let hits = glaze_index::pipe::request(&request, 250)
                     .ok()
                     .filter(|r| r.error.is_none())
                     .map(|r| r.hits);
@@ -679,7 +679,7 @@ impl Panel for Launcher {
                 );
             }
             if let Some(text) = &self.field {
-                text.set_style(&mypaper_ui::TextStyle::new(&f.theme.font.family, Self::field_text(f.s)), c.label);
+                text.set_style(&glaze_ui::TextStyle::new(&f.theme.font.family, Self::field_text(f.s)), c.label);
                 f.push(Op::TextField {
                     rect: field,
                     field: text.clone(),
@@ -977,7 +977,7 @@ impl Panel for Launcher {
     }
     fn command(&mut self, command: PanelCommand, cx: &mut Cx) -> Effect {
         let previous = self.pins.clone();
-        let result = mypaper_bars::config::path().and_then(|path| match command {
+        let result = glaze_bars::config::path().and_then(|path| match command {
             PanelCommand::PinLauncher(pin) => {
                 if !self
                     .pins
@@ -986,20 +986,20 @@ impl Panel for Launcher {
                 {
                     self.pins.push(pin);
                 }
-                mypaper_bars::config::set_field(&path, "launcher", "pinned", &self.pins)
+                glaze_bars::config::set_field(&path, "launcher", "pinned", &self.pins)
             }
             PanelCommand::UnpinLauncher(path_to_remove) => {
                 self.pins
                     .retain(|p| !p.path.eq_ignore_ascii_case(&path_to_remove));
-                mypaper_bars::config::set_field(&path, "launcher", "pinned", &self.pins)
+                glaze_bars::config::set_field(&path, "launcher", "pinned", &self.pins)
             }
             PanelCommand::PinDock(pin) => {
-                let config = mypaper_bars::BarsConfig::load(&path)?;
+                let config = glaze_bars::BarsConfig::load(&path)?;
                 let mut pins = config.dock.pinned.unwrap_or_default();
                 if !pins.iter().any(|p| p.path.eq_ignore_ascii_case(&pin.path)) {
                     pins.push(pin);
                 }
-                mypaper_bars::config::set_field(&path, "dock", "pinned", pins)
+                glaze_bars::config::set_field(&path, "dock", "pinned", pins)
             }
         });
         if let Err(e) = result {
@@ -1143,7 +1143,7 @@ impl Panel for Launcher {
                 Ok(field) => self.field = Some(field),
                 Err(e) => {
                     log::warn!("launcher search field: {e:#}; opening Start");
-                    mypaper_bars::system::start_menu();
+                    glaze_bars::system::start_menu();
                     return false;
                 }
             }
@@ -1211,7 +1211,7 @@ fn file_size(bytes: u64) -> String {
 /// Route folders and the File Explorer entry to our on-demand browser only while opted in.
 /// Path classification stays on a worker: a disconnected share must not hold up the launcher.
 fn open_with_native_files(app: &App) {
-    let enabled = mypaper_config::Config::load().is_ok_and(|c| c.experimental.files_default);
+    let enabled = glaze_config::Config::load().is_ok_and(|c| c.experimental.files_default);
     if !enabled {
         system::open(app.path.clone());
         return;
@@ -1234,7 +1234,7 @@ fn open_with_native_files(app: &App) {
             };
             if let Some(folder) = folder
                 && let Ok(executable) =
-                    std::env::current_exe().map(|p| p.with_file_name("mypaper-files.exe"))
+                    std::env::current_exe().map(|p| p.with_file_name("glaze-files.exe"))
                 && std::process::Command::new(executable)
                     .args(["--", &folder])
                     .creation_flags(0x08000000)
@@ -1252,7 +1252,7 @@ fn open_with_native_files(app: &App) {
 fn resolve_pin(
     pin: &Pinned,
     apps: &[App],
-    described: Option<&mypaper_bars::icons::Described>,
+    described: Option<&glaze_bars::icons::Described>,
 ) -> App {
     let matched = apps.iter().find(|app| {
         app.path.eq_ignore_ascii_case(&pin.path)
@@ -1265,7 +1265,7 @@ fn resolve_pin(
         .name
         .clone()
         .or_else(|| described.and_then(|d| d.name.clone()))
-        .unwrap_or_else(|| mypaper_bars::apps::file_stem(&pin.path));
+        .unwrap_or_else(|| glaze_bars::apps::file_stem(&pin.path));
     let mut names = apps
         .iter()
         .filter(|app| app.name.eq_ignore_ascii_case(&name));
@@ -1359,7 +1359,7 @@ mod search_tests {
             path: r"C:\TaskBar\Discord.lnk".into(),
             name: None,
         };
-        let described = mypaper_bars::icons::Described {
+        let described = glaze_bars::icons::Described {
             aumid: Some(discord.id.clone()),
             ..Default::default()
         };
@@ -1371,7 +1371,7 @@ mod search_tests {
         let custom = resolve_pin(
             &pin,
             &[],
-            Some(&mypaper_bars::icons::Described {
+            Some(&glaze_bars::icons::Described {
                 icon: Some("shortcut.png".into()),
                 ..Default::default()
             }),

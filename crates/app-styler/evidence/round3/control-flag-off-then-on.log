@@ -18,7 +18,7 @@
 09:09:56 [end] explorer 76024: 2,243.1 MB priv, 13355 handles, 565.09 s cpu | SystemSettings 73468: 199.3 MB priv, 1941 handles, 75.00 s cpu
 09:09:56 soak done
 09:10:31 soak start (0 min)
-09:10:31 [start] explorer 76024: 2,242.6 MB priv, 13241 handles, 565.22 s cpu | mypaper-styler 64828: 3.7 MB priv, 301 handles, 0.08 s cpu | SystemSettings 73468: 199.3 MB priv, 1892 handles, 75.05 s cpu
+09:10:31 [start] explorer 76024: 2,242.6 MB priv, 13241 handles, 565.22 s cpu | glaze-styler 64828: 3.7 MB priv, 301 handles, 0.08 s cpu | SystemSettings 73468: 199.3 MB priv, 1892 handles, 75.05 s cpu
 09:11:02   opened window 8133796
 09:11:02   rules -> changed
 09:11:02   opened window 50073160
@@ -32,11 +32,11 @@
 09:11:09   rules -> styled
 09:11:09   closed one during a change
 09:11:09   burst 1: 8 s with the lock; rules back to styled
-09:11:12 [after burst 1] explorer 76024: 2,364.3 MB priv, 14271 handles, 575.64 s cpu | mypaper-styler 64828: 3.7 MB priv, 304 handles, 0.09 s cpu | SystemSettings 73468: 204.7 MB priv, 1965 handles, 81.34 s cpu
-09:11:23 [end] explorer 76024: 2,364.2 MB priv, 14261 handles, 575.66 s cpu | mypaper-styler 64828: 3.7 MB priv, 304 handles, 0.09 s cpu | SystemSettings 73468: 204.1 MB priv, 1941 handles, 81.34 s cpu
+09:11:12 [after burst 1] explorer 76024: 2,364.3 MB priv, 14271 handles, 575.64 s cpu | glaze-styler 64828: 3.7 MB priv, 304 handles, 0.09 s cpu | SystemSettings 73468: 204.7 MB priv, 1965 handles, 81.34 s cpu
+09:11:23 [end] explorer 76024: 2,364.2 MB priv, 14261 handles, 575.66 s cpu | glaze-styler 64828: 3.7 MB priv, 304 handles, 0.09 s cpu | SystemSettings 73468: 204.1 MB priv, 1941 handles, 81.34 s cpu
 09:11:23 soak done
 09:11:58 soak start (0 min)
-09:11:58 [start] explorer 76024: 2,363.9 MB priv, 14159 handles, 575.73 s cpu | mypaper-styler 64828: 3.7 MB priv, 304 handles, 0.09 s cpu | SystemSettings 73468: 203.8 MB priv, 1913 handles, 81.34 s cpu
+09:11:58 [start] explorer 76024: 2,363.9 MB priv, 14159 handles, 575.73 s cpu | glaze-styler 64828: 3.7 MB priv, 304 handles, 0.09 s cpu | SystemSettings 73468: 203.8 MB priv, 1913 handles, 81.34 s cpu
 09:11:58   opened window 16320790
 09:11:58   rules -> changed
 09:11:59   opened window 8913222
@@ -50,7 +50,7 @@
 09:12:05   rules -> styled
 09:12:05   closed one during a change
 09:12:06   burst 1: 8 s with the lock; rules back to styled
-09:12:09 [after burst 1] explorer 76024: 2,520.1 MB priv, 15415 handles, 585.73 s cpu | mypaper-styler 64828: 3.7 MB priv, 304 handles, 0.11 s cpu | SystemSettings 73468: 209.3 MB priv, 1974 handles, 87.59 s cpu
+09:12:09 [after burst 1] explorer 76024: 2,520.1 MB priv, 15415 handles, 585.73 s cpu | glaze-styler 64828: 3.7 MB priv, 304 handles, 0.11 s cpu | SystemSettings 73468: 209.3 MB priv, 1974 handles, 87.59 s cpu
 09:12:19 [end] explorer 76024: 1,330.4 MB priv, 8202 handles, 591.41 s cpu | SystemSettings 73468: 208.8 MB priv, 1970 handles, 87.75 s cpu
 09:12:19 soak done
 09:12:23 flag on; styler running: False

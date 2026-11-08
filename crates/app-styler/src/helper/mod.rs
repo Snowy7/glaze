@@ -8,8 +8,8 @@ use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use mypaper_inject::signature::microsoft_signed;
-use mypaper_inject::{Target, Verdict, evaluate};
+use glaze_inject::signature::microsoft_signed;
+use glaze_inject::{Target, Verdict, evaluate};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, WAIT_TIMEOUT};
 use windows::Win32::Storage::Packaging::Appx::GetPackageFamilyName;
 use windows::Win32::System::SystemInformation::GetWindowsDirectoryW;
@@ -30,10 +30,10 @@ const APPS: [(&str, &str); 2] = [
     (r"ImmersiveControlPanel\SystemSettings.exe", "settings"),
 ];
 
-/// `%LOCALAPPDATA%\mypaper\app-styler`: the rules files and the log.
+/// `%LOCALAPPDATA%\glaze\app-styler`: the rules files and the log.
 pub fn data_dir() -> Result<PathBuf> {
     let local = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?;
-    let dir = PathBuf::from(local).join("mypaper").join("app-styler");
+    let dir = PathBuf::from(local).join("glaze").join("app-styler");
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }
@@ -45,7 +45,7 @@ pub fn data_dir() -> Result<PathBuf> {
 /// shipped DLL is never mapped into an app, so deploying can replace it. Copies no process has
 /// mapped any more are deleted here (deleting a mapped one fails, which is the check).
 pub fn tap_path() -> Result<PathBuf> {
-    let source = std::env::current_exe()?.with_file_name("mypaper_app_styler.dll");
+    let source = std::env::current_exe()?.with_file_name("glaze_app_styler.dll");
     let bytes = std::fs::read(&source).with_context(|| format!("reading {}", source.display()))?;
     // FNV-1a: only needs to tell builds apart.
     let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, &b| {

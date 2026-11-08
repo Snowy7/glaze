@@ -2,9 +2,9 @@
 param([int]$StandalonePid = 0)
 $ErrorActionPreference = 'Stop'
 Add-Type 'public static class IndexConfigSwap { public static void Replace(string source, string destination) { System.IO.File.Replace(source, destination, null); } }'
-$lock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
-$configPath = Join-Path $env:APPDATA 'mypaper\config.json'
-$exe = 'D:\Coding\projects\desktop\wallpaper\target\release\mypaper-index.exe'
+$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$configPath = Join-Path $env:APPDATA 'glaze\config.json'
+$exe = 'D:\Coding\projects\desktop\wallpaper\target\release\glaze-index.exe'
 $deadline = [DateTime]::UtcNow.AddMinutes(2)
 while (-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) {
   if ([DateTime]::UtcNow -ge $deadline) { throw 'Desktop lock remained busy' }
@@ -19,7 +19,7 @@ function Set-IndexFlag([bool]$Enabled) {
   [IndexConfigSwap]::Replace($temporary, $configPath)
 }
 function Index-Status {
-  $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'mypaper-index', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
+  $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'glaze-index', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
   try {
     $pipe.Connect(50)
     $pipe.ReadMode = [IO.Pipes.PipeTransmissionMode]::Message
@@ -44,19 +44,19 @@ $original = [bool](Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | Co
 try {
   if ($StandalonePid) {
     $standalone = Get-Process -Id $StandalonePid -ErrorAction SilentlyContinue
-    if ($standalone -and $standalone.Path -ne 'C:\mypaper-targets\index\service\mypaper-index.exe') { throw 'Unexpected standalone index owner' }
+    if ($standalone -and $standalone.Path -ne 'C:\glaze-targets\index\service\glaze-index.exe') { throw 'Unexpected standalone index owner' }
     if ($standalone) { Stop-Process -Id $standalone.Id; $standalone.WaitForExit(5000) | Out-Null }
   }
   Set-IndexFlag $true
   $status = Await-Index
-  $started = Get-CimInstance Win32_Process -Filter "Name='mypaper-index.exe'" | Where-Object ExecutablePath -eq $exe
+  $started = Get-CimInstance Win32_Process -Filter "Name='glaze-index.exe'" | Where-Object ExecutablePath -eq $exe
   if (@($started).Count -ne 1) { throw 'Expected exactly one deployed index process' }
   $parent = Get-Process -Id $started.ParentProcessId -ErrorAction Stop
-  if ($parent.ProcessName -ne 'mypaper-core') { throw 'The index is not supervised by core' }
+  if ($parent.ProcessName -ne 'glaze-core') { throw 'The index is not supervised by core' }
   $offClock = [Diagnostics.Stopwatch]::StartNew()
   Set-IndexFlag $false
   $until = [DateTime]::UtcNow.AddSeconds(10)
-  while (Get-Process mypaper-index -ErrorAction SilentlyContinue) {
+  while (Get-Process glaze-index -ErrorAction SilentlyContinue) {
     if ([DateTime]::UtcNow -ge $until) { throw 'Index survived disabling its flag' }
     Start-Sleep -Milliseconds 25
   }
@@ -77,7 +77,7 @@ try {
 } finally {
   try { if (-not $succeeded) { Set-IndexFlag $original } }
   finally {
-    if ([IO.Path]::GetFullPath($lock) -ne 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock') { throw 'Invalid desktop lock' }
+    if ([IO.Path]::GetFullPath($lock) -ne 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock') { throw 'Invalid desktop lock' }
     [IO.Directory]::Delete($lock)
   }
 }

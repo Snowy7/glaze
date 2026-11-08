@@ -4,9 +4,9 @@
 //! beside it). The symbols are drawn in the web widget's colours (sun, moon, cloud, rain), the
 //! way Apple's multicolour weather symbols read on glass.
 use super::{Ctx, PRIMARY, PRIVACY, RETRY};
-use mypaper_ui::calendar::{Date, WEEKDAYS};
-use mypaper_ui::icons::Icon;
-use mypaper_ui::{Align, ButtonKind, Op, Point, Rect, Rgba, Role, TextRole, TextStyle};
+use glaze_ui::calendar::{Date, WEEKDAYS};
+use glaze_ui::icons::Icon;
+use glaze_ui::{Align, ButtonKind, Op, Point, Rect, Rgba, Role, TextRole, TextStyle};
 use serde_json::Value;
 use std::f32::consts::TAU;
 

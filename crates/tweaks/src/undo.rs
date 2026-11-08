@@ -490,7 +490,7 @@ pub(crate) mod tests {
 
     impl Scratch {
         pub(crate) fn new(name: &str) -> Self {
-            let dir = std::env::temp_dir().join(format!("mypaper-{name}-{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!("glaze-{name}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             Self(dir)
         }
@@ -607,7 +607,7 @@ pub(crate) mod tests {
 
         undo.apply(&[
             put("C", "Arrow", Value::ExpandString(r"D:\new.cur".into())),
-            put("C", "", Value::String("mypaper".into())),
+            put("C", "", Value::String("Glaze".into())),
         ])
         .unwrap();
         assert!(undo.journaled_key("C") && !undo.journaled_key("D"));
@@ -834,8 +834,8 @@ pub(crate) mod tests {
 
         interrupted_setting(
             "folders",
-            &writes(Path::new(r"C:\A\mypaper-files.exe")).unwrap(),
-            &writes(Path::new(r"C:\B\mypaper-files.exe")).unwrap(),
+            &writes(Path::new(r"C:\A\glaze-files.exe")).unwrap(),
+            &writes(Path::new(r"C:\B\glaze-files.exe")).unwrap(),
             true,
             how,
         );
@@ -852,7 +852,7 @@ pub(crate) mod tests {
     }
 
     fn interrupted_system_preferences(how: Interruption) {
-        use mypaper_config::{PowerMode, SystemConfig};
+        use glaze_config::{PowerMode, SystemConfig};
 
         let config = |on| SystemConfig {
             game_mode: Some(on),
@@ -886,7 +886,7 @@ pub(crate) mod tests {
     }
 
     fn interrupted_windows_styling(how: Interruption) {
-        use mypaper_theme::{Color, Paint, WindowsStyle};
+        use glaze_theme::{Color, Paint, WindowsStyle};
 
         let style = |on| WindowsStyle {
             accent: Some(Paint::Color(if on {

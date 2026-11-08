@@ -40,7 +40,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
-use mypaper_config::AppRules;
+use glaze_config::AppRules;
 use windows::Win32::Foundation::{
     CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, CloseHandle, E_INVALIDARG, E_NOTIMPL,
     E_POINTER, HANDLE, HINSTANCE, HMODULE, HWND, LPARAM, LRESULT, S_FALSE, S_OK, WAIT_OBJECT_0,
@@ -160,7 +160,7 @@ impl IObjectWithSite_Impl for Tap_Impl {
         // `AdviseVisualTreeChange` from this thread hangs (it waits on the UI thread we are on),
         // so the session runs on its own thread.
         let spawned = std::thread::Builder::new()
-            .name("mypaper-app-styler".into())
+            .name("glaze-app-styler".into())
             .spawn(move || run(diagnostics, attach));
         if let Err(e) = spawned {
             log(&format!("no session thread: {e}"));
@@ -1332,7 +1332,7 @@ impl Session {
         state.nodes.clear();
     }
 
-    /// Writes the visual tree as an indented outline (`mypaper-styler --dump`).
+    /// Writes the visual tree as an indented outline (`glaze-styler --dump`).
     fn dump(&self, path: &Path) {
         let state = self.lock();
         let mut stack: Vec<(InstanceHandle, usize)> = state
@@ -1543,7 +1543,7 @@ fn class_atom() -> Option<u16> {
         let class = WNDCLASSW {
             lpfnWndProc: Some(window_proc),
             hInstance: HINSTANCE(module.0),
-            lpszClassName: w!("mypaper-app-styler"),
+            lpszClassName: w!("glaze-app-styler"),
             ..Default::default()
         };
         // SAFETY: a valid class description with a 'static name.

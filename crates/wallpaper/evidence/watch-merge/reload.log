@@ -1,12 +1,12 @@
-[2026-11-06T07:40:56Z INFO  mypaper_wallpaper::engine] renderer settings: RenderSettings { gpu: Auto, fps: Some(24) }
-[2026-11-06T07:40:57Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 38.0 ms (not waited on), copy 0.01 ms on the frame, write 1.72 ms off it
-[2026-11-06T07:40:57Z INFO  mypaper_wallpaper::engine] Rainy Hong Kong (non-commercial) loaded in 32.4ms
-[2026-11-06T07:40:57Z INFO  mypaper_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
-[2026-11-06T07:40:57Z INFO  mypaper_wallpaper::snapshot] snapshot: 2 of 2 screens drawn in 22.6ms on the main thread
-[2026-11-06T07:40:57Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 27.2 ms (not waited on), copy 0.06 ms on the frame, write 61.17 ms off it
-[2026-11-06T07:40:57Z INFO  mypaper_wallpaper::snapshot] snapshot (worker thread): GPU wait 13.4ms, encode 74.8ms, set 14.2ms
-[2026-11-06T07:40:57Z INFO  mypaper_wallpaper::engine] Rainy Hong Kong (non-commercial) loaded in 35.1ms
-[2026-11-06T07:40:57Z INFO  mypaper_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
-[2026-11-06T07:40:57Z INFO  mypaper_wallpaper::snapshot] snapshot: 0 of 2 screens drawn in 1.1ms on the main thread
-[2026-11-06T07:40:57Z INFO  mypaper_wallpaper::snapshot] snapshot (worker thread): GPU wait 0.0ns, encode 0.0ns, set 0.0ns
-[2026-11-06T07:40:57Z INFO  mypaper_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 4.9 ms (not waited on), copy 0.07 ms on the frame, write 1.88 ms off it
+[2026-11-06T07:40:56Z INFO  glaze_wallpaper::engine] renderer settings: RenderSettings { gpu: Auto, fps: Some(24) }
+[2026-11-06T07:40:57Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 38.0 ms (not waited on), copy 0.01 ms on the frame, write 1.72 ms off it
+[2026-11-06T07:40:57Z INFO  glaze_wallpaper::engine] Rainy Hong Kong (non-commercial) loaded in 32.4ms
+[2026-11-06T07:40:57Z INFO  glaze_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-06T07:40:57Z INFO  glaze_wallpaper::snapshot] snapshot: 2 of 2 screens drawn in 22.6ms on the main thread
+[2026-11-06T07:40:57Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 27.2 ms (not waited on), copy 0.06 ms on the frame, write 61.17 ms off it
+[2026-11-06T07:40:57Z INFO  glaze_wallpaper::snapshot] snapshot (worker thread): GPU wait 13.4ms, encode 74.8ms, set 14.2ms
+[2026-11-06T07:40:57Z INFO  glaze_wallpaper::engine] Rainy Hong Kong (non-commercial) loaded in 35.1ms
+[2026-11-06T07:40:57Z INFO  glaze_wallpaper::palette] palette: dominant #424b7f, accent #2e42b8
+[2026-11-06T07:40:57Z INFO  glaze_wallpaper::snapshot] snapshot: 0 of 2 screens drawn in 1.1ms on the main thread
+[2026-11-06T07:40:57Z INFO  glaze_wallpaper::snapshot] snapshot (worker thread): GPU wait 0.0ns, encode 0.0ns, set 0.0ns
+[2026-11-06T07:40:57Z INFO  glaze_wallpaper::backdrop] backdrop DISPLAY2 320x180 (1 screens): ready after 4.9 ms (not waited on), copy 0.07 ms on the frame, write 1.88 ms off it

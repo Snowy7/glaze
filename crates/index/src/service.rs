@@ -99,7 +99,7 @@ pub(crate) fn trim_working_set() {
 pub fn cache_dir() -> Result<PathBuf> {
     Ok(
         PathBuf::from(std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is not set")?)
-            .join("mypaper/index"),
+            .join("glaze/index"),
     )
 }
 
@@ -396,7 +396,7 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
     let snapshot = cache.join("snapshot.bin");
     let (tx, rx) = mpsc::sync_channel(256);
     let quiet = crate::quiet::Quiet::start(tx.clone())?;
-    let config = mypaper_config::Config::load()?;
+    let config = glaze_config::Config::load()?;
     let rules = Arc::new(RwLock::new(Rules::new(&config.index, &cache)?));
     // Arm notifications before loading/validating the snapshot, closing the startup gap
     // even when a recent volume will skip offline reconciliation completely.
@@ -504,7 +504,7 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
     );
     let config_tx = tx.clone();
     let _config_watch =
-        mypaper_fswatch::Watch::files(&mypaper_config::dir()?, &["config.json"], move || {
+        glaze_fswatch::Watch::files(&glaze_config::dir()?, &["config.json"], move || {
             let _ = config_tx.try_send(Change::RulesChanged);
         })?;
     let _background = Background::enter();
@@ -648,7 +648,7 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
                             }
                         }
                         Change::RulesChanged => {
-                            if let Ok(config) = mypaper_config::Config::load()
+                            if let Ok(config) = glaze_config::Config::load()
                                 && config.index != current_config
                             {
                                 match Rules::new(&config.index, &cache) {
@@ -820,7 +820,7 @@ fn run_roots(roots: Vec<PathBuf>, cache: PathBuf, discover: bool) -> Result<()> 
                 if let Some(scanned_roots) = completed.take()
                     && catchup_config
                         .take()
-                        .is_some_and(|config: mypaper_config::IndexConfig| {
+                        .is_some_and(|config: glaze_config::IndexConfig| {
                             config.exclude == current_config.exclude
                                 && config.include == current_config.include
                         })
@@ -898,7 +898,7 @@ pub fn cli(args: Vec<String>) -> Result<()> {
                 "replay root absent from snapshot"
             );
             let offline = hide_missing_roots(&mut store, &scan::volumes());
-            let config = mypaper_config::Config::load()?;
+            let config = glaze_config::Config::load()?;
             let state = RwLock::new(State {
                 store,
                 offline,
@@ -1166,13 +1166,13 @@ pub fn cli(args: Vec<String>) -> Result<()> {
         }
         None => run(scan::volumes(), cache_dir()?),
         _ => bail!(
-            "mypaper-index [--query QUERY | --sizes PATH | --status | --rescan | --bench [COUNT] | --bench-query | --bench-scan PATH | --root PATH [CACHE]]"
+            "glaze-index [--query QUERY | --sizes PATH | --status | --rescan | --bench [COUNT] | --bench-query | --bench-scan PATH | --root PATH [CACHE]]"
         ),
     }
 }
 
 fn benchmark(count: usize) -> Result<()> {
-    let path = std::env::temp_dir().join(format!("mypaper-index-bench-{}.bin", std::process::id()));
+    let path = std::env::temp_dir().join(format!("glaze-index-bench-{}.bin", std::process::id()));
     let mut store = Store::new();
     let root = store.insert(0, "X:", DIRECTORY, 0, 0);
     for i in 0..count {
@@ -1287,14 +1287,14 @@ mod tests {
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir)
             .join("fixtures")
-            .join(format!("mypaper-large-replay-{}", std::process::id()));
+            .join(format!("glaze-large-replay-{}", std::process::id()));
         let _fixture = Fixture(root.clone());
         let scratch = root.join("project");
         let cache = root.join("cache");
         std::fs::create_dir_all(&scratch).unwrap();
         let rules = Arc::new(RwLock::new(
             Rules::new(
-                &mypaper_config::IndexConfig {
+                &glaze_config::IndexConfig {
                     include: vec![format!("{}/**", root.to_string_lossy().replace('\\', "/"))],
                     ..Default::default()
                 },
@@ -1333,14 +1333,14 @@ mod tests {
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir)
             .join("fixtures")
-            .join(format!("mypaper-paused-replay-{}", std::process::id()));
+            .join(format!("glaze-paused-replay-{}", std::process::id()));
         let _fixture = Fixture(root.clone());
         let project = root.join("project");
         let scratch = project.join("scratch");
         std::fs::create_dir_all(&scratch).unwrap();
         let rules = Arc::new(RwLock::new(
             Rules::new(
-                &mypaper_config::IndexConfig {
+                &glaze_config::IndexConfig {
                     include: vec![format!("{}/**", root.to_string_lossy().replace('\\', "/"))],
                     ..Default::default()
                 },
@@ -1471,7 +1471,7 @@ mod tests {
 
     #[test]
     fn marker_below_unindexed_parent_cannot_import_an_orphan_root() {
-        let dir = std::env::temp_dir().join(format!("mypaper-orphan-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("glaze-orphan-{}", std::process::id()));
         let target = dir.join("node_modules/project/target");
         std::fs::create_dir_all(&target).unwrap();
         std::fs::write(target.join("CACHEDIR.TAG"), b"").unwrap();
@@ -1499,7 +1499,7 @@ mod tests {
     #[test]
     fn live_final_state_changes_keep_subtree_sizes_and_moves_current() {
         let dir =
-            std::env::temp_dir().join(format!("mypaper-index-changes-{}", std::process::id()));
+            std::env::temp_dir().join(format!("glaze-index-changes-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("a")).unwrap();
         std::fs::write(dir.join("a/test.txt"), b"123").unwrap();
         let scanned = scan::scan(&dir, Fetch::Large).unwrap();

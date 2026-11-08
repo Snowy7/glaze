@@ -4,7 +4,7 @@ use crate::{
     model::{Entry, History, Selection, Sort},
     shell::Location,
 };
-use mypaper_ui::Scroll;
+use glaze_ui::Scroll;
 use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,

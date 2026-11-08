@@ -2,14 +2,14 @@
 //! back: the icon size, the sort order, whether the icons are shown, and the item rectangles.
 //!
 //! ```text
-//! cargo run -p mypaper-desktop --example view_live
+//! cargo run -p glaze-desktop --example view_live
 //! ```
 //!
 //! A new item is NOT created (that would leave a file behind); `DesktopView::create` is covered by
 //! the menu harness when asked for.
 
 use anyhow::{Result, bail};
-use mypaper_desktop::desktop_view::{DesktopView, IconSize, SortKey};
+use glaze_desktop::desktop_view::{DesktopView, IconSize, SortKey};
 
 fn main() -> Result<()> {
     let view = DesktopView::open()?;

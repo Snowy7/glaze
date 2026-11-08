@@ -1,11 +1,11 @@
 //! Power: lock, sleep, sign out, restart and shut down. The last three ask first (a second
 //! click on the confirmation); lock and sleep go at once.
 
-use mypaper_bars::actions::PowerAction;
-use mypaper_bars::system;
-use mypaper_ui::icons::Icon;
-use mypaper_ui::layout::{Align, Stack};
-use mypaper_ui::{Accessory, ButtonKind, HitId, Lead, ListRow, Rect, TextRole};
+use glaze_bars::actions::PowerAction;
+use glaze_bars::system;
+use glaze_ui::icons::Icon;
+use glaze_ui::layout::{Align, Stack};
+use glaze_ui::{Accessory, ButtonKind, HitId, Lead, ListRow, Rect, TextRole};
 
 use super::kit::Kit;
 use super::{Cx, Effect, LIST, Panel};

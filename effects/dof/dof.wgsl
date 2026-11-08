@@ -1,4 +1,4 @@
-// Original mypaper effect. SPDX-License-Identifier: MIT
+// Original Glaze effect. SPDX-License-Identifier: MIT
 fn aperture(uv: vec2f, radius: f32) -> vec3f {
     if radius < 0.25 { return sample_src(uv).rgb; }
     let pixel = radius / max(paper.resolution, vec2f(1.0));

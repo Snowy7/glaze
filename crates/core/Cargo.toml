@@ -1,16 +1,16 @@
 [package]
-name = "mypaper-core"
-description = "The supervisor: runs and restarts mypaper processes, owns the panic hotkey."
+name = "glaze-core"
+description = "The supervisor: runs and restarts Glaze processes, owns the panic hotkey."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-mypaper-bars.workspace = true
-mypaper-config.workspace = true
-mypaper-desktop.workspace = true
-mypaper-theme.workspace = true
-mypaper-tweaks.workspace = true
+glaze-bars.workspace = true
+glaze-config.workspace = true
+glaze-desktop.workspace = true
+glaze-theme.workspace = true
+glaze-tweaks.workspace = true
 
 anyhow.workspace = true
 log.workspace = true

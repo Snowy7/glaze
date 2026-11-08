@@ -6,14 +6,14 @@ Source: <https://github.com/al1h3n/liquid-rust>, commit `2073cd96c48458093ae3ea2
 vendored file starts with an attribution header.
 
 `src/` is upstream's `src/`, copied as-is (commit `17cc402` in this repo), then changed only where
-mypaper's architecture forces it. mypaper's engine draws all Liquid Glass through it:
+Glaze's architecture forces it. Glaze's engine draws all Liquid Glass through it:
 `crates/wallpaper/src/glass_pass.rs` for plates in the wallpaper frame, and
 `crates/wallpaper/src/overlay/glass.rs` for overlays over app windows. Upstream's examples, GPU
 tests and web wrapper are not copied.
 
 ## Local changes
 
-Each is marked `mypaper:` in the source.
+Each is marked `Glaze:` in the source.
 
 - `Frame::copy_content`: `false` skips the content-to-target blit. Plates draw over the
   swapchain image the engine has already restored, whose kept wallpaper can be another size.

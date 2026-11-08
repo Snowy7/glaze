@@ -1,6 +1,6 @@
 # Run under the IMPLEMENTING.md desktop lock. Only this test AUMID/history is touched.
 param(
-    [ValidatePattern('^mypaper\.NotificationTest\.[a-fA-F0-9]{32}$')]
+    [ValidatePattern('^glaze\.NotificationTest\.[a-fA-F0-9]{32}$')]
     [Parameter(Mandatory)][string]$AppId,
     [switch]$Remove
 )
@@ -20,9 +20,9 @@ if ($Remove) {
     return
 }
 New-Item -Path $registration -Force | Out-Null
-New-ItemProperty -LiteralPath $registration -Name DisplayName -Value 'mypaper notification test' -PropertyType String -Force | Out-Null
+New-ItemProperty -LiteralPath $registration -Name DisplayName -Value 'Glaze notification test' -PropertyType String -Force | Out-Null
 $document = New-Object Windows.Data.Xml.Dom.XmlDocument
-$document.LoadXml('<toast><visual><binding template="ToastGeneric"><text>mypaper event test</text><text>A temporary toast for live delivery verification.</text></binding></visual></toast>')
+$document.LoadXml('<toast><visual><binding template="ToastGeneric"><text>Glaze event test</text><text>A temporary toast for live delivery verification.</text></binding></visual></toast>')
 $toast = [Windows.UI.Notifications.ToastNotification]::new($document)
 $toast.Tag = 'live-test'
 $toast.SuppressPopup = $true

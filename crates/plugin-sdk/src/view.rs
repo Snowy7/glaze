@@ -28,7 +28,7 @@ pub enum Tone {
     Hex(String),
 }
 
-/// The kit's text roles (`mypaper_ui::theme::TextRole`).
+/// The kit's text roles (`glaze_ui::theme::TextRole`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {

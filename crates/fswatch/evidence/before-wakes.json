@@ -1,6 +1,6 @@
 ﻿[
     {
-        "process":  "mypaper-core",
+        "process":  "glaze-core",
         "pid":  83056,
         "tid":  10244,
         "thread":  "main",
@@ -8,7 +8,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-core",
+        "process":  "glaze-core",
         "pid":  83056,
         "tid":  25496,
         "thread":  "notify-rs windows loop",
@@ -16,7 +16,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-core",
+        "process":  "glaze-core",
         "pid":  83056,
         "tid":  28316,
         "thread":  "",
@@ -24,7 +24,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-core",
+        "process":  "glaze-core",
         "pid":  83056,
         "tid":  62116,
         "thread":  "dir-watch",
@@ -32,7 +32,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-core",
+        "process":  "glaze-core",
         "pid":  83056,
         "tid":  74120,
         "thread":  "dir-watch",
@@ -40,7 +40,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-core",
+        "process":  "glaze-core",
         "pid":  83056,
         "tid":  89228,
         "thread":  "",
@@ -48,7 +48,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  2824,
         "thread":  "index-search-2",
@@ -56,7 +56,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  16000,
         "thread":  "index-watch-D:\\",
@@ -64,7 +64,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  21148,
         "thread":  "index-watch-C:\\",
@@ -72,7 +72,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  22320,
         "thread":  "index-search-3",
@@ -80,7 +80,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  25532,
         "thread":  "notify-rs windows loop",
@@ -88,7 +88,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  33012,
         "thread":  "index-watch-E:\\",
@@ -96,7 +96,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  47956,
         "thread":  "notify-rs windows loop",
@@ -104,7 +104,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  51588,
         "thread":  "index-parent",
@@ -112,7 +112,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  56468,
         "thread":  "index-search-0",
@@ -120,7 +120,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  66208,
         "thread":  "index-pipe-1",
@@ -128,7 +128,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  66352,
         "thread":  "index-game",
@@ -136,7 +136,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  66956,
         "thread":  "main",
@@ -144,7 +144,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  67036,
         "thread":  "index-search-4",
@@ -152,7 +152,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  69356,
         "thread":  "index-pipe-2",
@@ -160,7 +160,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  80540,
         "thread":  "index-pipe-0",
@@ -168,7 +168,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  81908,
         "thread":  "index-search-6",
@@ -176,7 +176,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  85352,
         "thread":  "index-search-7",
@@ -184,7 +184,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  87192,
         "thread":  "index-delivery-D:\\",
@@ -192,7 +192,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  88296,
         "thread":  "index-delivery-E:\\",
@@ -200,7 +200,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  90496,
         "thread":  "index-pipe-3",
@@ -208,7 +208,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  90720,
         "thread":  "index-search-1",
@@ -216,7 +216,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  91312,
         "thread":  "index-search-5",
@@ -224,7 +224,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-index",
+        "process":  "glaze-index",
         "pid":  75068,
         "tid":  93976,
         "thread":  "index-delivery-C:\\",
@@ -232,7 +232,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-plugins",
+        "process":  "glaze-plugins",
         "pid":  20296,
         "tid":  8116,
         "thread":  "",
@@ -240,7 +240,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-plugins",
+        "process":  "glaze-plugins",
         "pid":  20296,
         "tid":  50788,
         "thread":  "stdin",
@@ -248,7 +248,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-plugins",
+        "process":  "glaze-plugins",
         "pid":  20296,
         "tid":  52004,
         "thread":  "ws send",
@@ -256,7 +256,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-plugins",
+        "process":  "glaze-plugins",
         "pid":  20296,
         "tid":  56176,
         "thread":  "",
@@ -264,7 +264,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-plugins",
+        "process":  "glaze-plugins",
         "pid":  20296,
         "tid":  58272,
         "thread":  "ws",
@@ -272,7 +272,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-plugins",
+        "process":  "glaze-plugins",
         "pid":  20296,
         "tid":  70312,
         "thread":  "epoch",
@@ -280,7 +280,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-plugins",
+        "process":  "glaze-plugins",
         "pid":  20296,
         "tid":  70556,
         "thread":  "main",
@@ -288,7 +288,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-plugins",
+        "process":  "glaze-plugins",
         "pid":  20296,
         "tid":  81712,
         "thread":  "",
@@ -296,7 +296,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-plugins",
+        "process":  "glaze-plugins",
         "pid":  20296,
         "tid":  89788,
         "thread":  "",
@@ -304,7 +304,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  2612,
         "thread":  "winkey",
@@ -312,7 +312,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  6232,
         "thread":  "",
@@ -320,7 +320,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  6796,
         "thread":  "notify-rs windows loop",
@@ -328,7 +328,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  8852,
         "thread":  "integration-Notifications",
@@ -336,7 +336,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  11376,
         "thread":  "ui-file-change",
@@ -344,7 +344,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  12708,
         "thread":  "desktop-menu-shell",
@@ -352,7 +352,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  12864,
         "thread":  "icons",
@@ -360,7 +360,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  17696,
         "thread":  "ui-file-change",
@@ -368,7 +368,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  27124,
         "thread":  "integration-Calendar",
@@ -376,7 +376,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  27156,
         "thread":  "",
@@ -384,7 +384,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  27800,
         "thread":  "integration-Media",
@@ -392,7 +392,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  31860,
         "thread":  "",
@@ -400,7 +400,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  32104,
         "thread":  "plugins out",
@@ -408,7 +408,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  32136,
         "thread":  "notify-rs windows loop",
@@ -416,7 +416,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  32756,
         "thread":  "",
@@ -424,7 +424,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  34916,
         "thread":  "",
@@ -432,7 +432,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  37300,
         "thread":  "",
@@ -440,7 +440,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  39932,
         "thread":  "",
@@ -448,7 +448,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  40132,
         "thread":  "notify-rs windows loop",
@@ -456,7 +456,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  40656,
         "thread":  "plugins err",
@@ -464,7 +464,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  44824,
         "thread":  "",
@@ -472,7 +472,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  45644,
         "thread":  "",
@@ -480,7 +480,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  46340,
         "thread":  "plugins in",
@@ -488,7 +488,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  48540,
         "thread":  "",
@@ -496,7 +496,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  50228,
         "thread":  "widget-data",
@@ -504,7 +504,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  50824,
         "thread":  "notify-rs windows loop",
@@ -512,7 +512,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  53120,
         "thread":  "win-events",
@@ -520,7 +520,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  57680,
         "thread":  "dir-watch",
@@ -528,7 +528,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  60392,
         "thread":  "",
@@ -536,7 +536,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  67080,
         "thread":  "desktop-menu-hook",
@@ -544,7 +544,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  72932,
         "thread":  "notify-rs windows loop",
@@ -552,7 +552,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  73988,
         "thread":  "",
@@ -560,7 +560,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  77480,
         "thread":  "main",
@@ -568,7 +568,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  78528,
         "thread":  "tray-host",
@@ -576,7 +576,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  79128,
         "thread":  "",
@@ -584,7 +584,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  86848,
         "thread":  "",
@@ -592,7 +592,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  86936,
         "thread":  "",
@@ -600,7 +600,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  89400,
         "thread":  "",
@@ -608,7 +608,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  90124,
         "thread":  "",
@@ -616,7 +616,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  93760,
         "thread":  "ui-file-change",
@@ -624,7 +624,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  93800,
         "thread":  "ui-file-change",
@@ -632,7 +632,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-shell",
+        "process":  "glaze-shell",
         "pid":  94016,
         "tid":  93868,
         "thread":  "",
@@ -640,7 +640,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-studio",
+        "process":  "glaze-studio",
         "pid":  32732,
         "tid":  20840,
         "thread":  "",
@@ -648,7 +648,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-studio",
+        "process":  "glaze-studio",
         "pid":  32732,
         "tid":  20892,
         "thread":  "main",
@@ -656,7 +656,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-studio",
+        "process":  "glaze-studio",
         "pid":  32732,
         "tid":  22608,
         "thread":  "notify-rs windows loop",
@@ -664,7 +664,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-studio",
+        "process":  "glaze-studio",
         "pid":  32732,
         "tid":  42240,
         "thread":  "ui-file-change",
@@ -672,7 +672,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-studio",
+        "process":  "glaze-studio",
         "pid":  32732,
         "tid":  54724,
         "thread":  "",
@@ -680,7 +680,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-studio",
+        "process":  "glaze-studio",
         "pid":  32732,
         "tid":  60240,
         "thread":  "",
@@ -688,7 +688,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-studio",
+        "process":  "glaze-studio",
         "pid":  32732,
         "tid":  83632,
         "thread":  "icons",
@@ -696,7 +696,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  12612,
         "thread":  "D3D Background Thread 3",
@@ -704,7 +704,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  17416,
         "thread":  "D3D Background Thread 1",
@@ -712,7 +712,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  37340,
         "thread":  "dir-watch",
@@ -720,7 +720,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  40312,
         "thread":  "D3D Background Thread 0",
@@ -728,7 +728,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  48924,
         "thread":  "",
@@ -736,7 +736,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  51684,
         "thread":  "",
@@ -744,7 +744,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  52288,
         "thread":  "main",
@@ -752,7 +752,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  53504,
         "thread":  "",
@@ -760,7 +760,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  54016,
         "thread":  "D3D Background Thread 2",
@@ -768,7 +768,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  58084,
         "thread":  "dir-watch",
@@ -776,7 +776,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  61376,
         "thread":  "",
@@ -784,7 +784,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  63292,
         "thread":  "snapshot",
@@ -792,7 +792,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  70216,
         "thread":  "",
@@ -800,7 +800,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  81620,
         "thread":  "",
@@ -808,7 +808,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  81696,
         "thread":  "window-events",
@@ -816,7 +816,7 @@
         "elapsed_sec":  36.015
     },
     {
-        "process":  "mypaper-wallpaper",
+        "process":  "glaze-wallpaper",
         "pid":  83820,
         "tid":  92504,
         "thread":  "",

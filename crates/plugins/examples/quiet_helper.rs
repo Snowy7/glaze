@@ -1,7 +1,7 @@
 //! Measures the real helper with Hello's one-second timer active, then game-paused. It uses
 //! an isolated profile and owns/reaps its child; it never publishes game activity or touches UI.
 use anyhow::{Context, Result, ensure};
-use mypaper_plugin_api::{
+use glaze_plugin_api::{
     SizeClass,
     wire::{self, HelperMsg, HostMsg},
 };
@@ -73,7 +73,7 @@ fn main() -> Result<()> {
         "quiet_helper HELPER_EXE HELLO_DIR SECONDS OUTPUT.json"
     );
     let seconds = args[2].to_string_lossy().parse::<u64>()?;
-    let root = std::env::temp_dir().join(format!("mypaper-game-helper-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("glaze-game-helper-{}", std::process::id()));
     std::fs::create_dir_all(&root)?;
     let mut helper = Helper(
         Command::new(&args[0])
@@ -157,7 +157,7 @@ fn main() -> Result<()> {
         root.parent() == Some(std::env::temp_dir().as_path())
             && root
                 .file_name()
-                .is_some_and(|n| n.to_string_lossy().starts_with("mypaper-game-helper-")),
+                .is_some_and(|n| n.to_string_lossy().starts_with("glaze-game-helper-")),
         "unexpected probe profile path"
     );
     std::fs::remove_dir_all(root)?;
