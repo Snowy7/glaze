@@ -19,6 +19,7 @@ mod autostart;
 mod bars;
 mod child;
 mod clean_env;
+mod companions;
 mod desktop_extras;
 mod restart;
 mod styling;
@@ -314,6 +315,9 @@ fn run() -> Result<()> {
         }
     };
 
+    // On-demand apps are not supervised/restarted, but belong to this desktop's lifetime.
+    // Close them while the shell and wallpaper still serve their final saves/cleanup.
+    companions::close(&exe);
     // Stop and reap first; only then may core replay the shell's taskbar journal.
     if let Some(child) = &mut shell {
         child.stop_gracefully(bars::ask_to_close, bars::GRACE);

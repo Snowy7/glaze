@@ -61,7 +61,7 @@ impl Overflow {
             (hit.top + hit.height() / 2.0) as i32,
         );
         cx.bars.click_tray(&item.id, button, point, hit);
-        // The app shows its own menu or window, which takes the focus and closes this.
+        // Left clicks hand off to the app; the controller holds right clicks for their menu.
         Effect::None
     }
 }
@@ -108,12 +108,13 @@ impl Panel for Overflow {
     }
 
     /// The app's own menu opens over the overflow, which stays open behind it (as Windows'
-    /// does) until something else comes to the front.
+    /// does). The controller arms its menu watch before forwarding this callback.
     fn context(&mut self, id: HitId, cx: &mut Cx) -> Effect {
-        match self.click(id, Button::Right, cx) {
-            Effect::None => Effect::HoldForMenu,
-            effect => effect,
-        }
+        self.click(id, Button::Right, cx)
+    }
+    fn context_owner(&self, id: HitId) -> Option<u32> {
+        let item = self.items.get(id.checked_sub(LIST)? as usize)?;
+        mypaper_bars::tray_host::icon_owner(&item.id)
     }
     fn middle(&mut self, id: HitId, cx: &mut Cx) -> Effect {
         self.click(id, Button::Middle, cx)

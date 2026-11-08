@@ -34,6 +34,7 @@ use std::collections::HashMap;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::Mutex;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -129,6 +130,19 @@ const CHECK_EVERY: Duration = Duration::from_secs(3);
 /// When the host last broadcast `TaskbarCreated` (`GetTickCount64`), so the bars don't take their
 /// own broadcast for an Explorer restart.
 static OWN_BROADCAST: AtomicU64 = AtomicU64::new(0);
+
+// The UI needs the callback owner's PID before forwarding a context click, including GUID icons.
+static ICON_OWNERS: Mutex<Vec<(String, u32)>> = Mutex::new(Vec::new());
+
+/// Process expected to show an icon's context menu. Updated with the published icon snapshot.
+pub fn icon_owner(id: &str) -> Option<u32> {
+    ICON_OWNERS
+        .lock()
+        .ok()?
+        .iter()
+        .find(|(key, _)| key == id)
+        .map(|(_, pid)| *pid)
+}
 
 /// Did the host broadcast `TaskbarCreated` in the last couple of seconds?
 pub fn own_broadcast() -> bool {
@@ -652,6 +666,7 @@ fn run(commands: &Receiver<Command>, own: Sender<Command>, waker: Waker, band: O
     forward_queued(SHUTDOWN_TIMEOUT_MS);
     session.leave();
     drop(settings);
+    ICON_OWNERS.lock().unwrap().clear();
     STATE.with(|cell| cell.borrow_mut().take());
     if registered {
         unregister_classes();
@@ -1392,6 +1407,12 @@ fn report_if_due(now: Instant) {
     with_state(|s| {
         s.report_at = None;
         s.reported = Some(now);
+        *ICON_OWNERS.lock().unwrap() = s
+            .icons
+            .list
+            .iter()
+            .map(|icon| (icon.id(), icon.pid))
+            .collect();
         // An exe not described yet shows its file name until `describe` reports back.
         let mut unnamed = Vec::new();
         let names = &s.names;

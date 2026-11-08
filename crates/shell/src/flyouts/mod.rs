@@ -20,6 +20,7 @@ pub(crate) mod kit;
 mod language;
 mod launcher;
 pub mod look;
+mod menu_hold;
 mod mixer;
 pub(crate) mod notifications;
 mod plugin_panel;
@@ -126,9 +127,6 @@ pub enum Effect {
     /// Another flyout replaces it (quick settings' chevrons).
     Switch(Kind),
     Menu,
-    /// An app's own menu opens from it (a tray icon's right click): it stays open while that
-    /// menu is in front, and closes once something else is.
-    HoldForMenu,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -187,6 +185,10 @@ pub trait Panel {
     /// A right click on hit `id`.
     fn context(&mut self, _id: HitId, _cx: &mut Cx) -> Effect {
         Effect::None
+    }
+    /// The callback process, before a tray context click is sent asynchronously.
+    fn context_owner(&self, _id: HitId) -> Option<u32> {
+        None
     }
     /// The window is on screen: slow set-up that can follow a frame later (a COM endpoint, a
     /// registry walk, icons) goes here instead of in its constructor. Whether it changed.
@@ -450,8 +452,8 @@ struct Open {
     due: Option<Instant>,
     dirty: bool,
     return_to: isize,
-    /// An app's menu opened from it: deactivation doesn't close it (see `Effect::HoldForMenu`).
-    held: bool,
+    /// A tray context menu borrows focus; observe dismissal and outside input until it ends.
+    held: Option<menu_hold::Hold>,
 }
 
 /// The flyouts: one reused popup window and the panel shown in it.
@@ -549,6 +551,9 @@ impl Flyouts {
             self.open.as_ref().and_then(|o| o.due),
             self.release_due,
             self.index_due,
+            self.open
+                .as_ref()
+                .and_then(|o| o.held.as_ref().map(|h| h.deadline())),
         ]
         .into_iter()
         .flatten()
@@ -771,11 +776,6 @@ impl Flyouts {
                 }
             }
             Effect::None => {}
-            Effect::HoldForMenu => {
-                if let Some(open) = &mut self.open {
-                    open.held = true;
-                }
-            }
             Effect::Redraw => {
                 if let Some(open) = &mut self.open {
                     open.dirty = true;
@@ -868,27 +868,18 @@ impl Flyouts {
         );
     }
 
-    /// A flyout held for an app's menu (`Effect::HoldForMenu`) stays while that menu, or the
-    /// app's hidden window that owns it, is in front; it closes once a visible window that isn't
-    /// ours is (a click elsewhere, or a window the menu's command opened). Back in front, it
-    /// closes on deactivation again. Runs each loop pass; foreground changes wake the loop.
+    /// Follow native menu mode and our own tray menu, including asynchronous menu startup/end.
     fn follow_held(&mut self) {
-        let Some(open) = self.open.as_mut().filter(|o| o.held) else {
+        let Some(hold) = self.open.as_mut().and_then(|o| o.held.as_mut()) else {
             return;
         };
-        // SAFETY: read-only window queries; a stale handle reads as nothing.
-        let (front, menu, visible) = unsafe {
-            use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, IsWindowVisible};
-            let front = GetForegroundWindow();
-            let mut class = [0u16; 16];
-            let len = GetClassNameW(front, &mut class).max(0) as usize;
-            let menu = class[..len].iter().copied().eq("#32768".encode_utf16());
-            (front, menu, IsWindowVisible(front).as_bool())
-        };
-        if front == self.surface.hwnd() {
-            open.held = false;
-        } else if !menu && visible && !front.is_invalid() {
-            self.close();
+        match hold.follow() {
+            menu_hold::Decision::Wait => {}
+            menu_hold::Decision::Close => self.close(),
+            menu_hold::Decision::Resume => {
+                self.open.as_mut().unwrap().held = None;
+                self.surface.take_focus();
+            }
         }
     }
 
@@ -975,7 +966,7 @@ impl Flyouts {
             due: None,
             dirty: true,
             return_to,
-            held: false,
+            held: None,
         });
         if let Some(field) = self.open.as_ref().and_then(|o| o.panel.field()) {
             self.surface.set_text_field(Some(field.clone()));
@@ -1311,6 +1302,16 @@ impl Flyouts {
                     .map(|h| h.id);
                 if let Some(id) = hit {
                     self.target(id);
+                    if let Some(open) = &mut self.open
+                        && open.kind == Kind::TrayOverflow
+                    {
+                        open.held = None;
+                        open.held = Some(menu_hold::Hold::new(
+                            self.surface.hwnd(),
+                            open.panel.context_owner(id),
+                            open.return_to,
+                        ));
+                    }
                     self.with_panel(ui, bars, |panel, cx| panel.context(id, cx));
                 }
             }
@@ -1389,8 +1390,8 @@ impl Flyouts {
                     self.with_panel(ui, bars, |panel, cx| panel.submit(cx));
                 }
             }
-            // Held for an app's menu: `follow_held` closes it once something else is in front.
-            Event::Deactivated if self.open.as_ref().is_some_and(|o| o.held) => {}
+            // A tray menu borrows focus; `follow_held` decides when to resume or dismiss.
+            Event::Deactivated if self.open.as_ref().is_some_and(|o| o.held.is_some()) => {}
             Event::Deactivated if !self.menu.as_ref().is_some_and(mypaper_ui::Menu::is_open) => {
                 let kind = self.open.as_ref().map(|o| o.kind);
                 self.close();
