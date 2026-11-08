@@ -138,6 +138,18 @@ pub fn on_desktop(page: Page) -> bool {
     matches!(page, Page::Root | Page::Look | Page::Widgets | Page::Widget | Page::Bars | Page::Top | Page::Dock | Page::Module | Page::BarDesign)
 }
 
+/// How wide a page's column may grow: rows stay close to their values, two-column settings
+/// keep both columns readable, and wide pages (a grid with details) take the window.
+fn reading_width(app: &App, page: Page) -> f32 {
+    if wide(page) {
+        f32::MAX
+    } else if SETTINGS.contains(&page) && page != Page::DesktopMenu {
+        app.px(1024.0)
+    } else {
+        app.px(840.0)
+    }
+}
+
 /// Pages that use the whole width: a grid with a details pane beside it.
 fn wide(page: Page) -> bool {
     page == Page::Wallpapers
@@ -203,10 +215,10 @@ pub fn regions(app: &App) -> Regions {
 pub fn content_regions(app: &App) -> (Rect, Option<Rect>) {
     let r = regions(app);
     let content = r.inspector.unwrap_or_else(|| {
-        let cap = if wide(crate::panel::current_page(app)) { f32::MAX } else { app.px(1200.0) };
-        let width = (r.body.width() - app.px(32.0)).min(cap);
+        let width = (r.body.width() - app.px(32.0)).min(reading_width(app, crate::panel::current_page(app)));
+        // Anchored under the tabs and breadcrumbs, not centered in a wide window.
         Rect::new(
-            r.body.left + (r.body.width() - width) / 2.0,
+            r.body.left + app.px(16.0),
             r.body.top + app.px(16.0),
             width,
             r.body.height() - app.px(16.0),
@@ -526,7 +538,7 @@ fn tab_strip(b: &mut B, rect: Rect, tabs: &[(Page, &str)], open: Page) {
         let k = key(("page-tab", *page));
         let on = *page == open;
         if on {
-            b.fill(r, h / 2.0, b.p.fill);
+            b.fill(r, h / 2.0, b.p.selected);
         } else {
             b.wash(k, r, h / 2.0);
         }

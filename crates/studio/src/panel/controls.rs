@@ -51,6 +51,14 @@ pub fn card_selection(b: &mut B, picture: Rect) {
     );
 }
 
+/// The one mark of what's applied: a filled check in the picture's top-right corner.
+pub fn applied_badge(b: &mut B, picture: Rect) {
+    let size = b.px(18.0);
+    let check = Rect::new(picture.right - size - b.px(8.0), picture.top + b.px(8.0), size, size);
+    b.fill(check, size / 2.0, b.p.solid);
+    b.icon(check, crate::theme::glyph::CHECK, 11.0, b.p.on_solid);
+}
+
 /// A card is its picture, rounded on its own, with the label under it: no plate behind either.
 /// Hovering washes the picture; selection is [`card_selection`] around it.
 pub fn card_picture(b: &mut B, picture: Rect, hot: bool, draw: impl FnOnce(&mut B, Rect)) {
@@ -177,6 +185,11 @@ pub fn display_order(app: &App) -> Vec<usize> {
     let mut order: Vec<_> = (0..app.monitors.len()).collect();
     order.sort_by_key(|&i| (app.monitors[i].rect.x, app.monitors[i].rect.y));
     order
+}
+
+/// A display named for prose: "Right display", or "This display" on a single-monitor PC.
+pub fn display_label(app: &App, index: usize) -> String {
+    if app.monitors.len() < 2 { "This display".into() } else { format!("{} display", display_name(app, index)) }
 }
 
 /// Place names remain stable when Windows enumerates the monitors in another order.

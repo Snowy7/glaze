@@ -52,7 +52,7 @@ pub fn widget(app: &App, b: &mut B, c: &mut Col) {
                 .split(',')
                 .next()
                 .unwrap_or(""),
-            crate::panel::controls::display_name(app, app.nav.display)
+            crate::panel::controls::display_label(app, app.nav.display)
         ),
     );
     let index = layout
@@ -1486,15 +1486,12 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         "Add a widget",
         "Choose one \u{00b7} Enter or double-click to add",
     );
-    field(
-        app,
-        b,
-        c,
-        FieldId::WidgetSearch,
-        "Search widgets",
-        "Name or description",
-        "",
-    );
+    // Search, with the category dropdown beside it (drawn once the categories are known).
+    let filter_w = b.px(170.0).min(c.w * 0.4);
+    let search = Rect::new(c.x, c.y + b.px(4.0), c.w - filter_w - b.px(8.0), height(b, 32.0));
+    crate::ui::text_field(app, b, search, FieldId::WidgetSearch, Some(glyph::SEARCH), "Search widgets", "", "Search widgets");
+    b.stroke(search, b.control_radius(search), b.px(1.0), b.p.edge);
+    c.y = search.bottom + b.px(16.0);
     let query = app.text(&FieldId::WidgetSearch).trim().to_lowercase();
     let selected = &app.panel.as_ref().unwrap().add_widget;
     let layout = legacy::layout(app);
@@ -1598,8 +1595,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
             )
         })
         .collect();
-    dropdown(b, key("widget-category"), c.x, c.y, "Category", &shown, Action::Menu(menu));
-    c.y += height(b, 32.0) + b.px(12.0);
+    dropdown(b, key("widget-category"), search.right + b.px(8.0), search.top, "Category", &shown, Action::Menu(menu));
     for ((kind, heading), widgets) in sections {
         if category.is_some_and(|category| {
             if category == "@apps" {

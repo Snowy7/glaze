@@ -172,14 +172,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
                 super::super::controls::card_selection(b, r);
             }
             if wallpaper.active {
-                let check = Rect::new(
-                    r.left + b.px(6.0),
-                    r.top + b.px(6.0),
-                    b.px(16.0),
-                    b.px(16.0),
-                );
-                b.fill(check, b.px(radius::CONTROL), b.p.solid);
-                b.icon(check, glyph::CHECK, 11.0, b.p.on_solid);
+                super::super::controls::applied_badge(b, r);
             }
             text(
                 b,
@@ -286,16 +279,17 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
         return;
     };
     let w = &app.library.items[i];
-    page_title(app,
-        b,
-        c,
-        &w.name,
-        &format!(
-            "{} · {}",
-            shown_kind(w).map_or("Can’t load", Kind::label),
-            w.category()
-        ),
-    );
+    let meta = format!("{} · {}", shown_kind(w).map_or("Can’t load", Kind::label), w.category());
+    let windowed = app.panel.as_ref().is_some_and(|state| state.windowed);
+    if windowed {
+        // A pane beside the grid: a smaller heading than the page's own.
+        text(b, Rect::new(c.x, c.y, c.w, height(b, 30.0)), &w.name, 22.0, 600, b.p.ink1, Align::Start);
+        c.y += height(b, 30.0);
+        text(b, Rect::new(c.x, c.y, c.w, height(b, 20.0)), &meta, 13.0, 400, b.p.ink3, Align::Start);
+        c.y += height(b, 20.0);
+    } else {
+        page_title(app, b, c, &w.name, &meta);
+    }
     let pic = Rect::new(c.x, c.y + b.px(8.0), c.w, c.w * 0.56);
     thumbnail(app, b, pic, i);
     c.y = pic.bottom + b.px(12.0);
@@ -304,11 +298,16 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
     let h = height(b, 36.0);
     let gap = b.px(8.0);
     let more = Rect::new(c.right() - h, c.y, h, h);
-    let half = (more.left - gap - c.x - gap) / 2.0;
     let usable = w.error.is_none();
-    button(b, Rect::new(c.x, c.y, half, h), if w.active { "On your desktop" } else { "Apply" }, None, true, usable && !w.active, Action::UseWallpaper(i));
-    button(b, Rect::new(c.x + half + gap, c.y, half, h), "Edit", None, false, blocked.is_none(),
-        Action::Panel(Command::Builder(crate::builder::Command::Edit(i))));
+    let edit = Action::Panel(Command::Builder(crate::builder::Command::Edit(i)));
+    if w.active {
+        // Already on the desktop: that's a state, so Edit is the one action.
+        button(b, Rect::new(c.x, c.y, more.left - gap - c.x, h), "Edit", None, true, blocked.is_none(), edit);
+    } else {
+        let half = (more.left - gap - c.x - gap) / 2.0;
+        button(b, Rect::new(c.x, c.y, half, h), "Apply", None, true, usable, Action::UseWallpaper(i));
+        button(b, Rect::new(c.x + half + gap, c.y, half, h), "Edit", None, false, blocked.is_none(), edit);
+    }
     let mut menu = vec![MenuItem::new("Show in folder", Action::Reveal(w.dir.clone()))];
     if usable {
         menu.push(if w.editable() {
@@ -322,6 +321,11 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
     }
     b.icon_button(key("panel-wallpaper-more"), more, glaze_ui::controls::Glyph::from(glaze_ui::icons::Icon::More), "More actions", false, true, Action::Menu(menu));
     c.y = more.bottom + b.px(10.0);
+    if w.active {
+        b.icon(Rect::new(c.x, c.y, b.px(16.0), height(b, 20.0)), glyph::CHECK, 13.0, b.p.ink2);
+        text(b, Rect::new(c.x + b.px(22.0), c.y, c.w, height(b, 20.0)), "On your desktop", 13.0, 500, b.p.ink2, Align::Start);
+        c.y += height(b, 28.0);
+    }
     if let Some(why) = blocked {
         notice(b, c, why);
     }
@@ -384,7 +388,7 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                 if w.brings_look {
                     "Brings a look. Your own choices still win."
                 } else {
-                    "Your look applies until you add a look here."
+                    "Uses your look."
                 },
             );
         });

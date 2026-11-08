@@ -105,6 +105,13 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                     Some((word, reason)) => (word, Some(reason)),
                     None => (plugin_status(app, &item.id), None),
                 };
+                // One vocabulary with the built-ins: running reads On. Under "Available" the heading
+                // already says it, so the row needs no status.
+                let status = match status {
+                    "Live" => "On",
+                    "Available" => "",
+                    other => other,
+                };
                 let detail = if let Some(reason) = reason {
                     reason.to_owned()
                 } else {

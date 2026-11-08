@@ -440,7 +440,7 @@ fn playback_status(app: &App) -> String {
 fn root(app: &App, b: &mut B, c: &mut Col) {
     let windowed = app.panel.as_ref().is_some_and(|state| state.windowed);
     if windowed {
-        title(b, c, "Your desktop", "Change things where they are with Edit on desktop");
+        title(b, c, "Your desktop", "Arrange widgets and bars right on the desktop with Edit on desktop");
     }
     if app.system.running() && !app.system.parts[2].running {
         ui::feedback(
@@ -567,14 +567,7 @@ fn desktop_rows(app: &App, b: &mut B, c: &mut Col, windowed: bool) {
                 );
                 image(app, b, r, i);
                 if app.library.items[i].active {
-                    let check = Rect::new(
-                        r.right - b.px(18.0),
-                        r.top + b.px(3.0),
-                        b.px(14.0),
-                        b.px(14.0),
-                    );
-                    b.fill(check, b.px(radius::CONTROL), b.p.solid);
-                    b.icon(check, glyph::CHECK, 10.0, b.p.on_solid);
+                    ui::applied_badge(b, r);
                 }
                 // Wallpaper trying is deferred: the strip opens its panel editor.
                 let k = key(("panel-recent", i));
@@ -623,9 +616,9 @@ fn desktop_rows(app: &App, b: &mut B, c: &mut Col, windowed: bool) {
             Some(glyph::WIDGETS),
             "Widgets",
             &format!(
-                "{} · {}",
+                "{} widgets · {}",
                 crate::editing::widgets::count_here(app),
-                ui::display_name(app, app.nav.display)
+                ui::display_label(app, app.nav.display)
             ),
             "",
             None,
@@ -640,7 +633,7 @@ fn desktop_rows(app: &App, b: &mut B, c: &mut Col, windowed: bool) {
             c,
             Some(glyph::NOTES),
             "Desktop menu",
-            if own_menu { "Glaze's" } else { "Windows'" },
+            if own_menu { "Glaze's menu" } else { "Windows' menu" },
             "",
             None,
             open(Page::DesktopMenu),
