@@ -977,6 +977,11 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
         }
     }
     tiler.as_mut().unwrap().update(Settings::default());
+    // Force a real pan even when the preceding fullscreen return retained a centered view.
+    tiler
+        .as_mut()
+        .unwrap()
+        .command(Op::Focus(Direction::Right));
     tiler.as_mut().unwrap().command(Op::Center);
     pump(tiler, Duration::from_millis(60));
     let animation = owned_overlay("glaze.tiling.animation")?;
