@@ -19,6 +19,7 @@ pub enum Kind {
     Scene,
     Web,
     App,
+    Stack,
 }
 
 impl Kind {
@@ -31,6 +32,7 @@ impl Kind {
             Source::Scene(_) => Self::Scene,
             Source::Web(_) => Self::Web,
             Source::App(_) => Self::App,
+            Source::Stack(_) => Self::Stack,
         }
     }
 
@@ -43,6 +45,7 @@ impl Kind {
             Self::Scene => "3D scene",
             Self::Web => "Web page",
             Self::App => "App",
+            Self::Stack => "Composition",
         }
     }
 
@@ -260,6 +263,7 @@ fn theme_dirs(root: &Path) -> Vec<PathBuf> {
         .flatten()
         .flatten()
         .map(|e| e.path())
+        .filter(|p| !p.file_name().is_some_and(|n| n.to_string_lossy().starts_with(".draft-")))
         .filter(|p| p.join(MANIFEST).is_file())
         .collect();
     dirs.sort_by_key(|p| p.file_name().map(|n| n.to_string_lossy().to_lowercase()));
@@ -527,6 +531,7 @@ pub fn create_in(root: &Path, new: &NewWallpaper) -> Result<PathBuf> {
         Kind::Web => json!({ "kind": "web", "url": source }),
         Kind::App if args.is_empty() => json!({ "kind": "app", "command": source }),
         Kind::App => json!({ "kind": "app", "command": source, "args": args }),
+        Kind::Stack => bail!("use Create to compose a wallpaper"),
     };
     let text = serde_json::to_string_pretty(&json!({ "name": name, "wallpaper": wallpaper }))? + "\n";
     std::fs::create_dir_all(root).with_context(|| format!("creating {}", root.display()))?;

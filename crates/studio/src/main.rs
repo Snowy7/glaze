@@ -11,6 +11,7 @@
 
 mod actions;
 mod app;
+mod builder;
 mod dialogs;
 mod docs;
 mod glass;

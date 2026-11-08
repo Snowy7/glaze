@@ -209,6 +209,7 @@ pub struct Choices {
 /// Text fields Studio keeps (windowless RichEdit), by what they edit.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FieldId {
+    ShaderCode,
     /// The command palette's input.
     Palette,
     WallpaperSearch,

@@ -623,6 +623,12 @@ impl Docs {
         Ok(())
     }
 
+    /// Publish a draft's live values while retaining the drag's original undo baseline.
+    pub fn preview_live(&mut self, id: DocId) -> Result<()> {
+        let raw = self.doc(id).raw.clone();
+        self.write(id, &raw)
+    }
+
     /// Takes back the last step; returns its label.
     pub fn undo(&mut self) -> Result<Option<String>> {
         self.commit_live("Change")?;

@@ -54,6 +54,9 @@ pub enum Page {
     #[default]
     Root,
     Wallpapers,
+    Create,
+    Effects,
+    Shader,
     Look,
     Bars,
     BarDesign,
@@ -88,6 +91,9 @@ impl Page {
         match self {
             Self::Root => "Studio",
             Self::Wallpapers => "Wallpaper",
+            Self::Create => "Create wallpaper",
+            Self::Effects => "Effect gallery",
+            Self::Shader => "Shader editor",
             Self::Look => "Look",
             Self::Bars => "Bars",
             Self::BarDesign => "Design",
@@ -130,6 +136,8 @@ impl Page {
             Self::BarDesign => Some(Self::Bars),
             Self::Widget | Self::AddWidget => Some(Self::Widgets),
             Self::Wallpaper | Self::AddWallpaper => Some(Self::Wallpapers),
+            Self::Create => Some(Self::Wallpapers),
+            Self::Effects | Self::Shader => Some(Self::Create),
             Self::Connection => Some(Self::Connections),
             Self::Module | Self::AddModule => Some(Self::Top),
             Self::Panels => Some(Self::Bars),
@@ -141,6 +149,7 @@ impl Page {
 
 #[derive(Debug, Default)]
 pub struct State {
+    pub builder: Option<crate::builder::Editor>,
     pub window: crate::view::State,
     /// The standalone frame borrows desktop previews without panel picking or placement.
     pub windowed: bool,
@@ -180,6 +189,7 @@ pub fn after_present(app: &App) {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
+    Builder(crate::builder::Command),
     Sidebar,
     SidebarSettings,
     ResizeInspector,
@@ -247,6 +257,7 @@ pub fn run(app: &mut App, command: Command) {
             | Command::SortHandle(_, _)
     );
     match command {
+        Command::Builder(command) => crate::builder::run(app, command),
         Command::Sidebar => crate::view::toggle_sidebar(app),
         Command::SidebarSettings => crate::view::toggle_settings(app),
         Command::ResizeInspector => {}, // Pointer drags are handled by App; no click action.
@@ -283,7 +294,7 @@ pub fn run(app: &mut App, command: Command) {
             }
             app.panel.as_mut().unwrap().page = page;
             app.nav.page = Some(match page {
-                Page::Wallpapers | Page::Wallpaper | Page::AddWallpaper => {
+                Page::Wallpapers | Page::Wallpaper | Page::AddWallpaper | Page::Create | Page::Effects | Page::Shader => {
                     crate::actions::Page::Wallpapers
                 }
                 Page::Look | Page::Windows => crate::actions::Page::Look,
@@ -882,6 +893,7 @@ pub fn end_peek() {
 
 /// List drags are transient until release. This early bridge leaves legacy input intact.
 pub fn event(app: &mut App, event: &mypaper_ui::Event) -> bool {
+    if crate::builder::event(app, event) { return true; }
     if app.panel.is_some() { choosers::event(app, event); }
     if editors::widgets::event(app, event) { return true; }
     if app.panel.is_some() && colors::event(app, event) { return true; }

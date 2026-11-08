@@ -51,6 +51,9 @@ fn matches_filter(app: &App, wallpaper: &crate::library::Wallpaper, query: &str)
 }
 
 pub fn list(app: &App, b: &mut B, c: &mut Col) {
+    let create = Rect::new(c.right() - b.px(168.0), c.y, b.px(86.0), height(b, 28.0));
+    button(b, create, "Create", Some(glyph::ADD), true, true,
+        Action::Panel(Command::Builder(crate::builder::Command::New)));
     let add_width = b
         .measure("Add", &crate::panel::controls::font(b, 13.0, 500))
         .0
@@ -366,6 +369,11 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
     let pic = Rect::new(c.x, c.y + b.px(8.0), c.w, c.w * 0.56);
     thumbnail(app, b, pic, i);
     c.y = pic.bottom + b.px(8.0);
+    if std::fs::read_to_string(w.dir.join("theme.json")).ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .is_some_and(|v| v.pointer("/wallpaper/kind").and_then(Value::as_str) == Some("stack")) {
+        action_button(b, c, "Edit wallpaper", Action::Panel(Command::Builder(crate::builder::Command::Edit(i))));
+    }
     if w.error.is_none() {
         if !w.active {
             action_button(b, c, "Use this wallpaper", Action::UseWallpaper(i));

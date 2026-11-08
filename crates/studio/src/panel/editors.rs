@@ -74,6 +74,7 @@ pub(super) fn columns(
 
 pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
     match page {
+        Page::Create | Page::Effects | Page::Shader => crate::builder::page(app, b, c, page),
         Page::Widget => widgets::widget(app, b, c),
         Page::AddWidget => {
             if let Some(id) = app.panel.as_ref().unwrap().add_widget.as_deref()

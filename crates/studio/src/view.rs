@@ -359,6 +359,7 @@ pub fn build(app: &App, ui: &mut mypaper_ui::Ui) -> Built {
     let mut focus_regions = vec![r.sidebar, r.bar];
     if let (Some(viewport), Some(picture)) = (r.stage, picture) {
         b.scroll(key("window-stage"), viewport, 0.0, Action::None, |b, _| {
+            if crate::builder::stage(app, b, viewport) { return viewport.bottom; }
             if page == Page::Windows {
                 crate::panel::specimens::window_stage(app, b, viewport);
                 b.hit(

@@ -13,7 +13,7 @@ path = "src/main.rs"
 mypaper-bars.workspace = true
 mypaper-config.workspace = true
 mypaper-desktop.workspace = true
-mypaper-theme.workspace = true
+mypaper-theme = { workspace = true, features = ["check"] }
 mypaper-ui.workspace = true
 mypaper-shell = { path = "../shell" }
 mypaper-widgets = { path = "../widgets" }

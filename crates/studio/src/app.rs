@@ -942,7 +942,7 @@ impl App {
         let size = self.theme.ty.style(mypaper_ui::controls::Font::Body, self.scale).size
             * if self.panel.is_some() { 13.0 / 14.0 } else { 1.0 };
         let color = self.theme.palette.ink1;
-        match mypaper_ui::TextField::new(hwnd, Rect::new(-1000.0, -1000.0, 10.0, 10.0), false, size, color) {
+        match mypaper_ui::TextField::new(hwnd, Rect::new(-1000.0, -1000.0, 10.0, 10.0), matches!(id, FieldId::ShaderCode), size, color) {
             Ok(field) => {
                 let _ = field.set_text(&initial);
                 field.focus();
@@ -955,6 +955,7 @@ impl App {
     }
 
     fn field_initial(&self, id: &FieldId) -> String {
+        if matches!(id, FieldId::ShaderCode) { return crate::builder::code(self); }
         if let Some(value) = crate::panel::field_initial(self, id) { return value; }
         if let FieldId::Text(DocId::Studio, path) = id
             && let Some(rest) = path.strip_prefix("/plugins/setting/")
@@ -1017,7 +1018,8 @@ impl App {
             if matches!(id, FieldId::PlaceSearch) {
                 self.search_places(&text);
             }
-            self.texts.insert(id, text);
+            self.texts.insert(id.clone(), text.clone());
+            if matches!(id, FieldId::ShaderCode) { crate::builder::code_changed(self, text); }
         }
         self.dirty = true;
     }
@@ -1041,6 +1043,7 @@ impl App {
     }
 
     fn commit_field(&mut self, id: &FieldId, text: String, _submitted: bool) {
+        if matches!(id, FieldId::ShaderCode) { crate::builder::code_changed(self, text); return; }
         match id {
             FieldId::Text(doc, path) => {
                 let current = self.field_initial(id);
@@ -1348,7 +1351,7 @@ impl App {
             _ => None,
         };
         let status = self.system.next_poll(self.watching_status());
-        [flash, toast, saved, status, crate::view::animation_deadline(self)].into_iter().flatten().min()
+        [flash, toast, saved, status, crate::view::animation_deadline(self), crate::builder::deadline(self)].into_iter().flatten().min()
     }
 
     /// Live numbers only while someone can see them: Studio in front, on a page showing them.
@@ -1364,6 +1367,7 @@ impl App {
 
     /// Timers: expire the toast and flash, refresh live status.
     pub fn tick(&mut self) {
+        crate::builder::tick(self);
         crate::view::tick(self);
         let now = Instant::now();
         if self.toast.as_ref().is_some_and(|t| t.until <= now) {
