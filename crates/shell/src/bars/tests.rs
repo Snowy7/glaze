@@ -7,6 +7,15 @@ use mypaper_bars::{
 use mypaper_ui::{Image, Op, Rgba, render};
 
 #[test]
+fn fullscreen_keeps_dock_reveal_available_except_while_asleep_or_gaming() {
+    assert!(!hidden_for_fullscreen(BarKind::Dock, false, true, false));
+    assert!(hidden_for_fullscreen(BarKind::Top, false, true, false));
+    assert!(hidden_for_fullscreen(BarKind::Dock, true, true, false));
+    assert!(hidden_for_fullscreen(BarKind::Dock, false, true, true));
+    assert!(!hidden_for_fullscreen(BarKind::Dock, false, false, false));
+}
+
+#[test]
 fn floating_dock_draws_added_modules_without_revealing_hidden_defaults() {
     let mut ui = Ui::new().unwrap();
     let base = BarsConfig::parse(r#"{"preset":"macos","dock":{"pinned":[]}}"#).unwrap();

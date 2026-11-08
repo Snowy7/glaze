@@ -84,6 +84,12 @@ impl Reservation {
         self.appbar = None;
         self.appbar = AppBar::register(self.hwnd, self.edge, APPBAR);
     }
+
+    pub fn needs_repair(&self, work: Rect) -> bool {
+        self.appbar
+            .as_ref()
+            .is_none_or(|appbar| appbar.needs_repair(work))
+    }
 }
 
 impl Drop for Reservation {

@@ -50,6 +50,11 @@ fn visible_modules(kind: BarKind, config: &BarsConfig) -> impl Iterator<Item = &
         (kind == BarKind::Dock).then(|| view::dock_module_lists(config).into_iter().flatten());
     top.into_iter().flatten().chain(dock.into_iter().flatten())
 }
+
+/// Fullscreen apps keep a dock edge available; lock, display-off and games suppress it.
+fn hidden_for_fullscreen(kind: BarKind, asleep: bool, fullscreen: bool, game: bool) -> bool {
+    asleep || (fullscreen && (kind != BarKind::Dock || game))
+}
 use windows::Win32::{
     Foundation::HANDLE,
     UI::{
@@ -109,6 +114,7 @@ pub struct Bars {
     config_due: Option<Instant>,
     display_due: Option<Instant>,
     reservation_due: Option<Instant>,
+    recovery_due: Option<Instant>,
     maximized_due: Option<Instant>,
     explorer_due: Option<Instant>,
     rehide_due: Option<Instant>,
@@ -190,6 +196,7 @@ impl Bars {
             config_due: None,
             display_due: None,
             reservation_due: None,
+            recovery_due: Some(Instant::now() + Duration::from_secs(30)),
             maximized_due: None,
             explorer_due: None,
             rehide_due: None,
@@ -277,6 +284,7 @@ impl Bars {
             self.config_due,
             self.display_due,
             self.reservation_due,
+            self.recovery_due,
             self.maximized_due,
             self.explorer_due,
             self.rehide_due,
@@ -319,6 +327,7 @@ impl Bars {
             (self.config_due, "bars.config"),
             (self.display_due, "bars.display"),
             (self.reservation_due, "bars.reservation"),
+            (self.recovery_due, "bars.recovery"),
             (self.maximized_due, "bars.maximized_settle"),
             (self.explorer_due, "bars.explorer"),
             (self.rehide_due, "bars.rehide"),
@@ -384,6 +393,8 @@ impl Bars {
             events::TIME => self.services.clock_due = Some(now),
             events::POWER => {
                 self.services.model.battery = system::battery();
+                self.recovery_due = Some(now);
+                self.display_due.get_or_insert(now + Duration::from_millis(150));
                 self.dirty();
             }
             events::TRASH => {
@@ -427,7 +438,14 @@ impl Bars {
             }
             _ => {}
         }
-        self.asleep = self.display_off || self.locked;
+        let asleep = self.display_off || self.locked;
+        if self.asleep && !asleep {
+            self.recovery_due = Some(Instant::now());
+            self.display_due = Some(Instant::now() + Duration::from_millis(150));
+        } else if asleep {
+            self.recovery_due = None;
+        }
+        self.asleep = asleep;
     }
 
     /// All drawing is gated by data changes or active animation. The ticker cancels at rest.
@@ -441,6 +459,29 @@ impl Bars {
         self.hover_tick(ui, now);
         at = tick_spent("hover", at);
         let changes = self.services.tick(now);
+        let recovery = services::take_due(&mut self.recovery_due, now);
+        if recovery {
+            self.recovery_due = (!self.asleep).then_some(now + Duration::from_secs(30));
+            if !self.asleep {
+                let monitors = monitor_infos();
+                if monitors.len() != self.monitors.len()
+                    || monitors.iter().any(|m| {
+                        !self.monitors.iter().any(|old| {
+                            old.device == m.device && old.rect == m.rect && old.dpi == m.dpi
+                        })
+                    })
+                {
+                    self.display_due.get_or_insert(now);
+                }
+                for b in &mut self.bars {
+                    if let Some(m) = monitors.iter().find(|m| m.device == b.monitor.device) {
+                        b.monitor.work = m.work;
+                        b.recover(m.work, now);
+                    }
+                }
+                self.schedule_reservations();
+            }
+        }
         let max_config = self.config_due.is_some_and(|at| at <= now);
         let max_display = self.display_due.is_some_and(|at| at <= now);
         at = tick_spent("services", at);
@@ -526,7 +567,7 @@ impl Bars {
             }
         }
         at = tick_spent("items", at);
-        if changes.apps || changes.moved || changes.windows {
+        if changes.apps || changes.moved || changes.windows || (recovery && !self.asleep) {
             let windows: Vec<_> = self
                 .services
                 .apps
@@ -584,7 +625,11 @@ impl Bars {
         {
             providers::taskbar::hide_visible();
         }
-        let maximized_event = changes.windows || changes.moved || max_config || max_display;
+        let maximized_event = changes.windows
+            || changes.moved
+            || max_config
+            || max_display
+            || (recovery && !self.asleep);
         let maximized_settled = services::take_due(&mut self.maximized_due, now);
         if maximized_event {
             // One follow-up snapshot also covers focus/maximize arriving before the shared
@@ -603,7 +648,9 @@ impl Bars {
                 .collect();
             let windows = maximized::ZOrder::read(&monitors);
             for b in &mut self.bars {
-                let hide = b.hide_when_maximized() && windows.hides(b.monitor.rect);
+                let hide = (b.hide_when_maximized() && windows.hides(b.monitor.rect))
+                    || (b.kind == BarKind::Dock
+                        && self.fullscreen.as_deref() == Some(&b.monitor.device));
                 b.maximized.observe(hide, now);
             }
         }
@@ -611,11 +658,19 @@ impl Bars {
             if let Err(e) = b.tick_maximized(now) {
                 log::warn!("maximized auto-hide: {e:#}");
             }
+            if maximized_event {
+                b.recover_edge();
+            }
         }
         at = tick_spent("windows", at);
         let mut visibility_changed = false;
         for b in &mut self.bars {
-            let hidden = self.asleep || self.fullscreen.as_deref() == Some(&b.monitor.device);
+            let hidden = hidden_for_fullscreen(
+                b.kind,
+                self.asleep,
+                self.fullscreen.as_deref() == Some(&b.monitor.device),
+                self.game_active,
+            );
             if b.hidden != hidden {
                 b.hidden = hidden;
                 b.dirty = true;
@@ -807,7 +862,8 @@ impl Bars {
                             &config.appearance.over(&appearance), &self.system), false)?;
                         bar.studio_only = true;
                         bar.studio_session(self.studio_active);
-                        bar.hidden = self.asleep || self.fullscreen.as_deref() == Some(&monitor.device);
+                        bar.hidden = hidden_for_fullscreen(kind, self.asleep,
+                            self.fullscreen.as_deref() == Some(&monitor.device), self.game_active);
                         if kind == BarKind::Dock {
                             bar.items = self.services.dock_items(&config, providers::apps::window_monitor(bar.surface.hwnd()));
                         }
@@ -2070,8 +2126,8 @@ impl Bars {
                 }
                 None => {
                     let mut bar = Bar::new(kind, config, monitor, tokens, animate)?;
-                    bar.hidden =
-                        self.asleep || self.fullscreen.as_deref() == Some(&bar.monitor.device);
+                    bar.hidden = hidden_for_fullscreen(kind, self.asleep,
+                        self.fullscreen.as_deref() == Some(&bar.monitor.device), self.game_active);
                     if kind == BarKind::Dock {
                         bar.items = self.services.dock_items(
                             &bar.config,

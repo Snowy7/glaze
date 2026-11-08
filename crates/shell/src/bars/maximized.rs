@@ -1,4 +1,4 @@
-//! Event-driven per-monitor z-order maximization and a trailing visibility debounce.
+//! Per-monitor z-order maximization and a trailing visibility debounce.
 use mypaper_desktop::Rect;
 use std::{
     collections::HashSet,
@@ -63,7 +63,7 @@ fn topmost_overlay(ex: u32, style: u32) -> bool {
     ex & WS_EX_TOPMOST.0 != 0 && ex & WS_EX_APPWINDOW.0 == 0 && style & WS_CAPTION.0 != WS_CAPTION.0
 }
 
-/// Snapshot only after a shared WinEvent or config/display change, never on a periodic timer.
+/// Snapshot after window/config/display changes and the shell's infrequent recovery sweep.
 pub struct ZOrder(Vec<AppWindow>);
 
 impl ZOrder {

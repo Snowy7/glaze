@@ -519,9 +519,69 @@ impl Bar {
         self.dirty = true;
     }
     pub fn reveal(&mut self, now: Instant) {
+        // An always-on-top app may have entered the band after our windows were shown.
+        if self.hide_at.is_none() {
+            for surface in std::iter::once(&self.surface).chain(&self.islands) {
+                raise(surface.hwnd());
+            }
+        }
         self.slide.target(0.0, self.animate, now);
         self.hide_at = Some(now + Duration::from_secs(1));
         self.dirty = true;
+    }
+
+    /// Reconcile only cheap native facts; healthy bars allocate and repaint nothing here.
+    pub fn recover(&mut self, work: DesktopRect, now: Instant) {
+        if self.studio_only || self.studio_base.is_some() {
+            return;
+        }
+        if !self.reserved
+            || self.reservation.as_ref().is_some_and(|r| r.needs_repair(work))
+        {
+            self.reserve();
+        }
+        if self.auto_hides() && self.edge_surface.is_none() {
+            self.edge_surface = Surface::new_deferred_accessibility(
+                Kind::Bar, "Reveal dock", Role::Toolbar,
+            )
+            .inspect_err(|e| log::warn!("recover reveal strip: {e:#}"))
+            .ok();
+            self.dirty = true;
+        }
+        if self.pointer.is_some() {
+            let mut at = windows::Win32::Foundation::POINT::default();
+            // SAFETY: read-only cursor/hit queries. A missed leave must not pin the dock open.
+            unsafe {
+                use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, WindowFromPoint};
+                if GetCursorPos(&mut at).is_ok() && !self.owns_hwnd(WindowFromPoint(at)) {
+                    self.leave(now);
+                }
+            }
+        }
+        self.recover_edge();
+    }
+
+    pub fn recover_edge(&self) {
+        let Some(edge) = self.edge_surface.as_ref().filter(|s| s.is_visible()) else {
+            return;
+        };
+        let rect = appbar::settle(self.monitor.rect, super::bar::edge(self.kind, &self.config), 1);
+        // SAFETY: read-only hit test. Do not raise above another mypaper popup or bar.
+        unsafe {
+            use windows::Win32::Foundation::POINT;
+            use windows::Win32::UI::WindowsAndMessaging::{
+                GetWindowThreadProcessId, WindowFromPoint,
+            };
+            let at = POINT {
+                x: rect.x + rect.width / 2,
+                y: rect.y + rect.height / 2,
+            };
+            let mut pid = 0;
+            GetWindowThreadProcessId(WindowFromPoint(at), Some(&mut pid));
+            if pid != std::process::id() {
+                raise(edge.hwnd());
+            }
+        }
     }
     pub fn leave(&mut self, now: Instant) {
         self.pointer = None;
@@ -791,7 +851,7 @@ impl Bar {
                 return Ok(moving);
             }
             let e = appbar::settle(
-                self.monitor.work,
+                self.monitor.rect,
                 super::bar::edge(self.kind, &self.config),
                 1,
             );
@@ -1081,6 +1141,17 @@ impl Bar {
             })
             .collect()
     }
+}
+
+fn raise(hwnd: windows::Win32::Foundation::HWND) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
+    };
+    // SAFETY: changes only our surface's z-order, never focus or coordinates.
+    let _ = unsafe {
+        SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0,
+            SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE)
+    };
 }
 
 #[cfg(test)]

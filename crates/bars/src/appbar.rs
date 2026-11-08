@@ -3,6 +3,9 @@
 
 use mypaper_desktop::Rect;
 use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromRect,
+};
 use windows::Win32::UI::Shell::{
     ABE_BOTTOM, ABE_LEFT, ABE_RIGHT, ABE_TOP, ABM_NEW, ABM_QUERYPOS, ABM_REMOVE, ABM_SETPOS,
     APPBARDATA, SHAppBarMessage,
@@ -100,6 +103,8 @@ fn to_rect(r: Rect) -> RECT {
 pub struct AppBar {
     hwnd: HWND,
     edge: Edge,
+    callback: u32,
+    registered: bool,
     /// The band last granted, so an unchanged band isn't set again (each set notifies every app
     /// bar, ours included).
     band: Option<Rect>,
@@ -122,6 +127,8 @@ impl AppBar {
         ok.then_some(Self {
             hwnd,
             edge,
+            callback,
+            registered: true,
             band: None,
         })
     }
@@ -135,6 +142,49 @@ impl AppBar {
 
     /// As [`reserve`](Self::reserve), but exposes an Explorer refusal so the shell can retry.
     pub fn try_reserve(&mut self, monitor: Rect, thickness: i32) -> Option<Rect> {
+        // Explorer can forget a registration without changing the queried band. A cached
+        // rectangle alone is not evidence that Windows still excludes it from the work area.
+        let mut info = MONITORINFO {
+            cbSize: size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        // SAFETY: read-only monitor queries with initialized storage.
+        let lost = unsafe {
+            GetMonitorInfoW(
+                MonitorFromRect(&to_rect(monitor), MONITOR_DEFAULTTONEAREST),
+                &mut info,
+            )
+        }
+        .as_bool()
+            && self.needs_repair(info.rcWork.into());
+        if lost {
+            log::warn!(
+                "app bar {:?}: work area overlaps reserved band; registering again",
+                self.edge
+            );
+            let mut data = APPBARDATA {
+                cbSize: size_of::<APPBARDATA>() as u32,
+                hWnd: self.hwnd,
+                ..Default::default()
+            };
+            // SAFETY: removes only our own reservation; the HWND remains alive.
+            unsafe { SHAppBarMessage(ABM_REMOVE, &mut data) };
+            self.registered = false;
+            self.band = None;
+        }
+        if !self.registered {
+            let mut data = APPBARDATA {
+                cbSize: size_of::<APPBARDATA>() as u32,
+                hWnd: self.hwnd,
+                uCallbackMessage: self.callback,
+                ..Default::default()
+            };
+            // SAFETY: re-registers our live window, including retries after Explorer refused it.
+            self.registered = unsafe { SHAppBarMessage(ABM_NEW, &mut data) } != 0;
+            if !self.registered {
+                return None;
+            }
+        }
         let mut data = APPBARDATA {
             cbSize: size_of::<APPBARDATA>() as u32,
             hWnd: self.hwnd,
@@ -166,6 +216,21 @@ impl AppBar {
     pub fn invalidate(&mut self) {
         self.band = None;
     }
+
+    pub fn needs_repair(&self, work: Rect) -> bool {
+        self.band
+            .is_some_and(|band| !work_excludes_band(work, band, self.edge))
+    }
+}
+
+/// Other bars may shrink the work area further. Only intrusion into our band is a loss.
+fn work_excludes_band(work: Rect, band: Rect, edge: Edge) -> bool {
+    match edge {
+        Edge::Top => work.y >= band.y + band.height,
+        Edge::Bottom => work.y + work.height <= band.y,
+        Edge::Left => work.x >= band.x + band.width,
+        Edge::Right => work.x + work.width <= band.x,
+    }
 }
 
 impl Drop for AppBar {
@@ -195,6 +260,52 @@ mod tests {
 
     const SCREEN: Rect = rect(0, 0, 2560, 1440);
     const LEFT_SCREEN: Rect = rect(-2560, 9, 2560, 1440);
+
+    #[test]
+    fn work_area_reset_invalidates_an_unchanged_band_on_every_edge() {
+        for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
+            let band = settle(LEFT_SCREEN, edge, 32);
+            assert!(!work_excludes_band(LEFT_SCREEN, band, edge), "{edge:?}");
+            let inset = rect(-2520, 49, 2480, 1360);
+            assert!(work_excludes_band(inset, band, edge), "{edge:?}");
+        }
+    }
+
+    #[test]
+    #[ignore = "temporarily reserves 3 px of the live desktop; run under the desktop lock"]
+    fn repairs_a_registration_removed_without_taskbar_created() {
+        let window = crate::events::Broadcast::new().unwrap();
+        let monitor = mypaper_desktop::monitor_infos()
+            .into_iter()
+            .find(|m| m.primary)
+            .unwrap();
+        let mut bar = AppBar::register(window.hwnd(), Edge::Right, crate::events::APPBAR).unwrap();
+        let band = bar.try_reserve(monitor.rect, 3).unwrap();
+        let work = || {
+            mypaper_desktop::monitor_infos()
+                .into_iter()
+                .find(|m| m.primary)
+                .unwrap()
+                .work
+        };
+        assert!(!bar.needs_repair(work()));
+        let mut data = APPBARDATA {
+            cbSize: size_of::<APPBARDATA>() as u32,
+            hWnd: window.hwnd(),
+            ..Default::default()
+        };
+        // SAFETY: fault injection removes only the test's own appbar, never Explorer's.
+        unsafe { SHAppBarMessage(ABM_REMOVE, &mut data) };
+        assert!(
+            bar.needs_repair(work()),
+            "removal must expose the stale cached band"
+        );
+        assert_eq!(bar.try_reserve(monitor.rect, 3), Some(band));
+        assert!(
+            !bar.needs_repair(work()),
+            "the unchanged rectangle must be reserved again"
+        );
+    }
 
     #[test]
     fn proposes_a_band_on_each_edge() {
