@@ -666,7 +666,7 @@ impl Snapshot {
             };
             RegisterClassExW(&class);
             let window = match CreateWindowExW(
-                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
                 w!("glaze.tiling.snapshot"),
                 w!("Tiling snapshot"),
                 WS_POPUP,
@@ -701,8 +701,33 @@ impl Snapshot {
                     (rect.y - outer.y).round() as usize as *mut _,
                 )),
             )?;
+            // Upload once: a newly created off-screen GDI window may never receive a DWM surface.
+            // Only this owned source is layered; the destination overlay and client stay unchanged.
+            let memory = CreateCompatibleDC(None);
+            let previous = SelectObject(memory, HGDIOBJ(bitmap.0));
+            let size = windows::Win32::Foundation::SIZE {
+                cx: rect.w.round() as i32,
+                cy: rect.h.round() as i32,
+            };
+            let source = windows::Win32::Foundation::POINT {
+                x: (rect.x - outer.x).round() as i32,
+                y: (rect.y - outer.y).round() as i32,
+            };
+            let uploaded = UpdateLayeredWindow(
+                window,
+                None,
+                None,
+                Some(&size),
+                Some(memory),
+                Some(&source),
+                windows::Win32::Foundation::COLORREF(0),
+                None,
+                ULW_OPAQUE,
+            );
+            SelectObject(memory, previous);
+            let _ = DeleteDC(memory);
+            uploaded?;
             let _ = ShowWindow(window, SW_SHOWNOACTIVATE);
-            let _ = UpdateWindow(window);
             Ok(snapshot)
         }
     }
@@ -717,33 +742,50 @@ impl Drop for Snapshot {
     }
 }
 unsafe extern "system" fn snapshot_proc(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    if msg == WM_PRINT || msg == WM_PRINTCLIENT {
+        // SAFETY: PrintWindow supplies its caller's output DC; our bitmap lives with this window.
+        unsafe {
+            let mut rect = RECT::default();
+            if GetClientRect(h, &mut rect).is_ok() {
+                draw_snapshot(h, HDC(w.0 as *mut _), rect.right, rect.bottom);
+            }
+        }
+        return LRESULT(0);
+    }
     if msg == WM_PAINT {
         // SAFETY: WM_PAINT bracket; bitmap lives until the window is destroyed.
         unsafe {
             let mut paint = PAINTSTRUCT::default();
             let dc = BeginPaint(h, &mut paint);
-            let memory = CreateCompatibleDC(Some(dc));
-            let bitmap = HBITMAP(GetWindowLongPtrW(h, GWLP_USERDATA) as *mut _);
-            let old = SelectObject(memory, HGDIOBJ(bitmap.0));
-            let _ = BitBlt(
-                dc,
-                0,
-                0,
-                paint.rcPaint.right,
-                paint.rcPaint.bottom,
-                Some(memory),
-                GetPropW(h, w!("glaze.crop.x")).0 as usize as i32,
-                GetPropW(h, w!("glaze.crop.y")).0 as usize as i32,
-                SRCCOPY,
-            );
-            SelectObject(memory, old);
-            let _ = DeleteDC(memory);
+            draw_snapshot(h, dc, paint.rcPaint.right, paint.rcPaint.bottom);
             let _ = EndPaint(h, &paint);
         }
         return LRESULT(0);
     }
     // SAFETY: default handling of the original message.
     unsafe { DefWindowProcW(h, msg, w, l) }
+}
+/// Draw the immutable captured bitmap into a paint/print DC belonging to our source window.
+unsafe fn draw_snapshot(h: HWND, dc: HDC, width: i32, height: i32) {
+    // SAFETY: callers supply a valid paint/print DC; userdata and crop properties belong to Snapshot.
+    unsafe {
+        let memory = CreateCompatibleDC(Some(dc));
+        let bitmap = HBITMAP(GetWindowLongPtrW(h, GWLP_USERDATA) as *mut _);
+        let old = SelectObject(memory, HGDIOBJ(bitmap.0));
+        let _ = BitBlt(
+            dc,
+            0,
+            0,
+            width,
+            height,
+            Some(memory),
+            GetPropW(h, w!("glaze.crop.x")).0 as usize as i32,
+            GetPropW(h, w!("glaze.crop.y")).0 as usize as i32,
+            SRCCOPY,
+        );
+        SelectObject(memory, old);
+        let _ = DeleteDC(memory);
+    }
 }
 #[cfg(test)]
 mod tests {

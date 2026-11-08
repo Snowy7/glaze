@@ -355,6 +355,8 @@ fn run(
                 pump(&mut None, Duration::from_millis(10));
             };
             pump(&mut None, Duration::from_millis(50));
+            let snapshot = owned_overlay("glaze.tiling.snapshot")?;
+            capture(Identity::read(snapshot)?, &output.join("resize-source.png"))?;
             capture(Identity::read(overlay)?, &output.join("resize-proxy.png"))?;
             settle(&mut None)?;
             animator.cancel();
