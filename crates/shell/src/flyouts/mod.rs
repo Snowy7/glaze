@@ -29,6 +29,8 @@ mod quick;
 mod settings_pages;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod glass_live;
 mod toggles;
 mod tray;
 mod wifi;

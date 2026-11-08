@@ -71,6 +71,9 @@ pub fn appearance(
         accent: look.accent,
         tint: match material.tint {
             Some(Paint::Color(c)) => Some(c),
+            // Automatic popup/widget glass is neutral, so wallpaper colour comes through the
+            // lens itself rather than being painted onto it a second time.
+            Some(Paint::Auto) if surface != Family::Bars => Some(mypaper_widgets::look::DEFAULT_TINT),
             Some(Paint::Auto) => mypaper_tweaks::palette::read().map(|p| {
                 let dark = match look.appearance {
                     Some(Scheme::Light) => false,

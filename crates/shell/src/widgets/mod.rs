@@ -3875,14 +3875,15 @@ fn plate_material(
     let style = mypaper_ui::theme::active();
     let base = mypaper_ui::theme::material(style, Rgba::rgb8(tint.0, opacity))?;
     let base = if mypaper_ui::theme::lensed(style) {
-        let liquid = look::liquid(skin);
+        let defaults = crate::glass::liquid_material(tint);
+        let liquid = &skin.glass;
         let intensity = liquid.intensity.unwrap_or(1.0);
-        let skin_tint = liquid.tint.unwrap_or(0.06).max(if tint != look::DEFAULT_TINT { 0.22 } else { 0.06 });
+        let skin_tint = liquid.tint.unwrap_or(defaults.tint.a);
         Material {
             clarity: 1.0 - (skin_tint * opacity / 0.46).clamp(0.0, 1.0),
-            blur: number(a, "blur").unwrap_or(12.0) * liquid.blur.unwrap_or(12.0) / 12.0,
-            refraction: liquid.refraction.unwrap_or(0.6) * intensity,
-            highlight: liquid.highlight.unwrap_or(0.55) * intensity,
+            blur: number(a, "blur").unwrap_or(defaults.blur) * liquid.blur.unwrap_or(defaults.blur) / defaults.blur,
+            refraction: liquid.refraction.unwrap_or(defaults.refraction) * intensity,
+            highlight: liquid.highlight.unwrap_or(defaults.highlight) * intensity,
             tint: Rgba::rgb8(tint.0, skin_tint),
         }
     } else {

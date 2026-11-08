@@ -221,7 +221,6 @@ impl Look {
         let tint = tokens.theme.color.surface.with_alpha(1.0);
         let accent = tokens.theme.color.accent;
         let on_accent = tokens.theme.color.on_accent;
-        let flyout_tint = bar.flyouts.tint.unwrap_or(0.62).clamp(0.0, 1.0);
         let kit = crate::bars::look::style(style);
         let fill = tokens.fill.unwrap_or_else(|| {
             tint.with_alpha(bar.tint.or(appearance.opacity).unwrap_or(
@@ -232,27 +231,22 @@ impl Look {
                 },
             ))
         });
-        // The style's material (`theme::material`) under the user's controls by the kit's one
-        // rule (`GlassMaterial::tuned`), as the bars and widgets. Flyouts sit over app windows,
-        // so their own default (no control set) is more tinted and more frosted than the bars':
-        // whatever is behind a flyout must not read through its text. Blur in DIPs.
-        let glass = mypaper_ui::theme::material(kit, tint)
+        let glass_tint = appearance.tint.unwrap_or(mypaper_widgets::look::DEFAULT_TINT);
+        // Start with the widgets' material. A bar's surface fill is not a popup tint colour.
+        let liquid = crate::glass::liquid_material(glass_tint);
+        let glass = mypaper_ui::theme::material(kit, liquid.tint)
             .filter(|_| {
                 bar.glass.style != Some(mypaper_bars::style::GlassKind::None)
                     && appearance.surface != Some(mypaper_theme::Surface::Solid)
             })
             .map(|base| {
-                let own = GlassMaterial {
-                    clarity: if mypaper_ui::theme::lensed(kit) {
-                        1.0 - flyout_tint
-                    } else {
-                        (1.0 - flyout_tint).min(base.clarity)
-                    },
-                    blur: base.blur.max(28.0),
-                    ..base
+                let own = if mypaper_ui::theme::lensed(kit) {
+                    liquid
+                } else {
+                    base
                 };
                 let bar_knobs = Knobs {
-                    clarity: bar.glass.clarity,
+                    clarity: bar.flyouts.tint.map(|t| 1.0 - t.clamp(0.0, 1.0)).or(bar.glass.clarity),
                     blur: bar.glass.blur.or(appearance.blur),
                     refraction: bar.glass.refraction,
                     highlight: bar.glass.highlight,
@@ -403,7 +397,7 @@ mod tests {
         let system = fixed_system();
         let liquid = Look::resolve(&BarLook::default(), &Appearance::default(), &system);
         let glass = liquid.glass.expect("liquid is the default and has glass");
-        assert!((0.0..1.0).contains(&glass.clarity), "tinted enough to read");
+        assert_eq!(glass, crate::glass::liquid_material(mypaper_widgets::look::DEFAULT_TINT));
         for style in [NativeStyle::Solid, NativeStyle::Mono] {
             let bar = BarLook {
                 style: Some(style),
@@ -440,7 +434,7 @@ mod tests {
     }
 
     /// The user's controls reach the flyouts as they reach the bars: blur 0 is no frost (no
-    /// 28 px floor) and clarity 1 is clear, untinted glass, in every glass style.
+    /// floor) and clarity 1 is clear, untinted glass, in every glass style.
     #[test]
     fn the_users_controls_reach_the_flyouts() {
         for style in [NativeStyle::Liquid, NativeStyle::OneUi, NativeStyle::Fluent] {
@@ -461,6 +455,13 @@ mod tests {
                 "{style:?}"
             );
         }
+        let mut bar = BarLook::default();
+        bar.flyouts.tint = Some(0.35);
+        let resolve = |knobs: &Knobs| Look::resolve_with(&bar, &Appearance::default(), &fixed_system(), knobs).glass.unwrap();
+        let own = resolve(&Knobs::default());
+        assert_eq!((own.clarity, own.tint.a), (0.65, 0.35));
+        let global = resolve(&Knobs { clarity: Some(0.8), ..Default::default() });
+        assert!((global.clarity - 0.8).abs() < 1e-6 && (global.tint.a - 0.2).abs() < 1e-6);
     }
 }
 

@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use mypaper_desktop::Rect;
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::DirectComposition::{
     IDCompositionAnimation, IDCompositionDesktopDevice, IDCompositionRectangleClip,
     IDCompositionScaleTransform, IDCompositionSurface, IDCompositionTarget, IDCompositionVisual2,
@@ -31,9 +31,9 @@ use windows::Win32::Graphics::Dxgi::Common::{
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, HTTRANSPARENT, LWA_ALPHA, MA_NOACTIVATE,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GetWindow, GW_HWNDNEXT, HTTRANSPARENT, LWA_ALPHA, MA_NOACTIVATE,
     RegisterClassExW, SWP_NOACTIVATE, SWP_NOCOPYBITS, SWP_NOSIZE, SWP_SHOWWINDOW,
-    SetLayeredWindowAttributes, SetWindowPos, WINDOW_EX_STYLE, WM_MOUSEACTIVATE, WM_NCHITTEST,
+    SetLayeredWindowAttributes, SetPropW, SetWindowPos, WINDOW_EX_STYLE, WM_MOUSEACTIVATE, WM_NCHITTEST,
     WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW,
     WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
@@ -169,6 +169,10 @@ impl OverlayWindow {
             }
             self.size = size;
         }
+        // A client can be raised without moving. Its UI-thread subclass follows this handle
+        // in the same message, keeping engine glass paired without a capture or GPU pass.
+        // SAFETY: a value property on our own window, removed by Windows when it is destroyed.
+        unsafe { SetPropW(self.hwnd.0, w!("mypaper.glass.client"), Some(HANDLE(client.0)))? };
         move_under(self.hwnd.0, client, frame, false)?;
         self.set_clip(plate, radius, smoothing)
     }
@@ -305,6 +309,21 @@ pub fn move_under(hwnd: HWND, client: HWND, frame: Rect, keep_size: bool) -> Res
         )?;
     }
     Ok(())
+}
+
+/// Whether `upper` currently precedes `lower` in the top-level z-order. Geometry changes can
+/// recreate a monitor piece, so creation order is not the stacking order of popup clients.
+pub fn above(upper: HWND, lower: HWND) -> bool {
+    let mut at = upper;
+    // Bound traversal in case another process changes the chain during these queries.
+    for _ in 0..4096 {
+        // SAFETY: read-only z-order query; destroyed handles terminate the walk.
+        let Ok(next) = (unsafe { GetWindow(at, GW_HWNDNEXT) }) else { return false };
+        if next == lower { return true; }
+        if next == upper { return false; }
+        at = next;
+    }
+    false
 }
 
 /// A premultiplied BGRA surface of `size`.

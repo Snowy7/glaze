@@ -7,6 +7,20 @@ fn settings(value: serde_json::Value) -> Look {
     serde_json::from_value(value).unwrap()
 }
 
+#[test]
+fn automatic_menu_and_widget_glass_share_the_neutral_tint() {
+    for value in [json!({"material":{"tint":"auto"}}), json!({"material":{"tint":"#c88d3c"}})] {
+        let look = settings(value);
+        let system = crate::flyouts::look::fixed_system();
+        let tint = |family| appearance(&look, family, &Appearance::default(), false, &system).tint;
+        assert_eq!(tint(Family::Menus), tint(Family::Widgets));
+        assert_eq!(tint(Family::Menus), Some(match look.material.tint.unwrap() {
+            mypaper_theme::Paint::Auto => mypaper_widgets::look::DEFAULT_TINT,
+            mypaper_theme::Paint::Color(color) => color,
+        }));
+    }
+}
+
 fn resolve(user: &Look, bars: &BarsConfig, key: &str, text: &Text) -> crate::bars::look::Tokens {
     let system = crate::flyouts::look::fixed_system();
     let mut appearance = Appearance {

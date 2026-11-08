@@ -409,6 +409,9 @@ struct Overlay {
     plate: Option<u64>,
     /// Shows its last glass and takes no frames (a plate on a covered or held screen).
     frozen: bool,
+    /// A newer overlapping popup samples this window and its retained glass. Do not capture
+    /// into it at the same time: that would feed its own pixels back through the lens.
+    behind_popup: bool,
     /// The client surface, virtual px.
     rect: Rect,
     radius: f32,
@@ -1021,6 +1024,7 @@ impl Overlays {
             layer,
             plate,
             frozen: false,
+            behind_popup: false,
             rect,
             radius,
             material,
@@ -1174,18 +1178,44 @@ impl Overlays {
     /// Gives each session its overlays' frames (`fresh` for `monitor`: take the next frame),
     /// and, after an open or close, everyone's windows to exclude.
     fn sync_capture(&mut self, fresh: Option<HMONITOR>) -> Result<()> {
+        // One shared monitor capture still suffices for nested menus. Retain the lower
+        // popup's glass while its child is up, and let the child's capture see the actual
+        // lower popup (including icons/text). Closing the child restores live capture.
+        let sources: Vec<HWND> = self.open.iter().filter(|lower| {
+            lower.plate.is_none() && lower.layer == Layer::Popup && lower.shown.is_some()
+                && self.open.iter().any(|upper| {
+                    upper.plate.is_none() && upper.layer == Layer::Popup
+                        && upper.client != lower.client && upper.monitor == lower.monitor
+                        && geometry::touches(lower.rect, upper.frame)
+                        && window::above(upper.client, lower.client)
+                })
+                && !self.inbox.affinity.get()
+        }).map(|lower| lower.client).collect();
+        let mut nesting_changed = false;
+        for overlay in &mut self.open {
+            // Exclusion is per HWND, not per monitor piece. All pieces of an included client
+            // must retain their glass, and none may re-add that client to the exclusion list.
+            let source = sources.contains(&overlay.client);
+            if overlay.behind_popup != source {
+                overlay.behind_popup = source;
+                if !source { overlay.fresh = true; }
+                nesting_changed = true;
+            }
+        }
+        self.exclusion_changed |= nesting_changed;
         let excluded: Vec<HWND> = self
             .open
             .iter()
+            .filter(|o| !o.behind_popup)
             .flat_map(|o| [o.window.hwnd(), o.client])
             .collect();
         for session in &self.sessions {
             let frames = self
                 .open
                 .iter()
-                .filter(|o| o.monitor == session.monitor && !o.frozen)
+                .filter(|o| o.monitor == session.monitor && !o.frozen && !o.behind_popup)
                 .map(|o| o.frame);
-            session.set_regions(frames, fresh == Some(session.monitor));
+            session.set_regions(frames, nesting_changed || fresh == Some(session.monitor));
             if self.exclusion_changed {
                 session.exclude(&excluded)?;
             }
@@ -1234,6 +1264,7 @@ impl Overlays {
                 let frame = geometry::local(overlay.frame, bounds);
                 overlay.monitor == monitor
                     && !overlay.frozen
+                    && !overlay.behind_popup
                     && (overlay.fresh || dirty.iter().any(|d| geometry::touches(*d, frame)))
             })
             .collect();
@@ -1360,6 +1391,7 @@ impl Overlays {
         if which.is_empty() {
             return Ok(());
         }
+        let first = which.iter().any(|&o| self.open[o].shown.is_none());
         let live = self.live.as_mut().context("no overlays")?;
         live.capture.wait_for_wgpu()?;
         for &o in which {
@@ -1392,6 +1424,7 @@ impl Overlays {
         unsafe { live.dcomp.Commit()? };
         self.stats.passes += which.len() as u64;
         self.failure = None;
+        if first { self.sync_capture(None)?; }
         Ok(())
     }
 

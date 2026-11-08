@@ -16,6 +16,20 @@ pub mod tone;
 /// [`Knobs`]) is published as it is. Blur here is physical px.
 pub type Material = mypaper_ui::GlassMaterial;
 
+/// The same quiet Liquid Glass for widgets, menus and flyouts. Theme/instance controls are
+/// applied by the caller; the widget look owns the built-in optical defaults.
+pub fn liquid_material(tint: mypaper_theme::Color) -> Material {
+    let defaults = mypaper_widgets::look::liquid_defaults();
+    let alpha = defaults.tint.expect("built-in tint");
+    Material {
+        clarity: 1.0 - alpha,
+        blur: defaults.blur.expect("built-in blur"),
+        refraction: defaults.refraction.expect("built-in refraction"),
+        highlight: defaults.highlight.expect("built-in highlight"),
+        tint: mypaper_ui::Rgba::rgb8(tint.0, alpha),
+    }
+}
+
 /// Which of the look's families a surface belongs to (`config.json` › `look.bars`, `widgets`,
 /// `menus`: "Different for").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -14,6 +14,9 @@
 #[path = "../../wallpaper/src/overlay/request.rs"]
 mod request;
 
+#[path = "popup_stack.rs"]
+mod stack;
+
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -163,6 +166,7 @@ impl Backdrop for Client {
         if !self.send(&request) {
             return false;
         }
+        stack::open(client);
         self.style(client, style);
         let mut plates = self.plates.borrow_mut();
         plates.retain(|p| p.client != client);
@@ -227,6 +231,7 @@ impl Backdrop for Client {
     }
 
     fn close(&self, client: HWND) {
+        stack::close(client);
         self.send(&Request::Close { client });
         self.plates.borrow_mut().retain(|p| p.client != client);
     }
