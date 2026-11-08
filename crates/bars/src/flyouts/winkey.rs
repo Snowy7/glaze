@@ -25,6 +25,24 @@ use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, Ordering};
 use std::thread::JoinHandle;
 use std::time::Instant;
+use std::sync::{Arc, Mutex, OnceLock};
+use mypaper_tiling::{Binding, Command};
+
+type TilingHandler = Arc<dyn Fn(Command) + Send + Sync>;
+type TilingConfig = (Vec<Binding>, TilingHandler);
+static TILING_ENABLED: AtomicBool = AtomicBool::new(false);
+static OVERVIEW: AtomicBool = AtomicBool::new(false);
+pub fn set_overview(on:bool){OVERVIEW.store(on,Ordering::Relaxed);}
+static TILING_CONFIG: OnceLock<Mutex<Option<TilingConfig>>> = OnceLock::new();
+/// Reuses the shell's keyboard hook; the handler must only enqueue the command.
+pub fn configure_tiling(config: Option<TilingConfig>) {
+    TILING_ENABLED.store(config.is_some(), Ordering::Release);
+    if config.is_some() || TILING_CONFIG.get().is_some() {
+        *TILING_CONFIG.get_or_init(|| Mutex::new(None)).lock().unwrap() = config;
+    }
+    WinKey::reset();
+}
+pub fn tiling_enabled() -> bool { TILING_ENABLED.load(Ordering::Acquire) }
 
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -306,15 +324,44 @@ unsafe extern "system" fn on_key(code: i32, wparam: WPARAM, lparam: LPARAM) -> L
         let key = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
         let down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
         let ours = key.dwExtraInfo == OURS;
+        HOOK.with(|hook|{if let Ok(mut hook)=hook.try_borrow_mut(){hook.0.sync(EPOCH.load(Ordering::Relaxed));}});
+        // Core owns the panic hotkey. The overview must never swallow its Backspace.
+        if key.vkCode==0x08 && [VK_CONTROL,VK_SHIFT,VK_MENU].iter().all(|vk|unsafe{GetAsyncKeyState(i32::from(vk.0))}<0){return unsafe{CallNextHookEx(None,code,wparam,lparam)};}
+        if !ours && OVERVIEW.load(Ordering::Relaxed) && !is_win(key.vkCode as u16) {
+            if key.vkCode==0x1B && down {
+                if let Some(config)=TILING_CONFIG.get().and_then(|c|c.try_lock().ok()) && let Some((_,handler))=&*config{handler(Command::Overview);}
+            }
+            let win=HOOK.with(|h|h.try_borrow().is_ok_and(|h|h.0.held.is_some()));
+            if !win || key.vkCode==0x1B { return LRESULT(1); }
+        }
+        // Classification and enqueue only. Real windows are touched on the shell thread.
+        if !ours && down && tiling_enabled() && !FULLSCREEN.load(Ordering::Relaxed) {
+            let win = HOOK.with(|hook| hook.try_borrow().is_ok_and(|h| h.0.held.is_some()));
+            if win && !is_win(key.vkCode as u16) {
+                let held = |vk: VIRTUAL_KEY| unsafe { GetAsyncKeyState(i32::from(vk.0)) < 0 };
+                let command = TILING_CONFIG.get().and_then(|c| c.try_lock().ok()).and_then(|c| c.as_ref().and_then(|(bindings, handler)| {
+                    bindings.iter().find(|b| b.key == key.vkCode as u16 && b.ctrl == held(VK_CONTROL) && b.shift == held(VK_SHIFT) && b.alt == held(VK_MENU)).map(|b| (b.command, handler.clone()))
+                }));
+                // Win+arrow always belongs to tiling, even after user remapping.
+                if command.is_some() || (0x25..=0x28).contains(&key.vkCode) {
+                    HOOK.with(|hook| { if let Ok(mut h) = hook.try_borrow_mut() { h.0.combo = true; h.0.swallowing = Some(key.vkCode as u16); } });
+                    if let Some((command, handler)) = command { handler(command); }
+                    // The existing menu-mask path prevents Explorer opening Start on release.
+                    let _ = send_mask();
+                    return LRESULT(1);
+                }
+            }
+        }
         let action = HOOK.with(|hook| {
             let Ok(mut hook) = hook.try_borrow_mut() else {
                 return Action::Pass;
             };
             hook.0.sync(EPOCH.load(Ordering::Relaxed));
-            if !ENABLED.load(Ordering::Relaxed) {
+            if !ENABLED.load(Ordering::Relaxed) && !tiling_enabled() {
                 return Action::Pass;
             }
-            hook.0.on_key_with_files(key.vkCode as u16, down, ours, FILES.load(Ordering::Relaxed))
+            let action = hook.0.on_key_with_files(key.vkCode as u16, down, ours, FILES.load(Ordering::Relaxed));
+            if !ENABLED.load(Ordering::Relaxed) && action != Action::Swallow { Action::Pass } else { action }
         });
         if action != Action::Pass || is_win(key.vkCode as u16) {
             log::debug!(
