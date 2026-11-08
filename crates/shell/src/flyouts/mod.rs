@@ -472,6 +472,7 @@ pub struct Flyouts {
     replies: Receiver<Reply>,
     release_due: Option<Instant>,
     winkey: Option<WinKey>,
+    winkey_launcher: bool,
     /// The foreground window last seen, to follow fullscreen apps for the Windows key.
     foreground: HWND,
     menu: Option<mypaper_ui::Menu<PanelCommand>>,
@@ -524,6 +525,7 @@ impl Flyouts {
             replies,
             release_due: None,
             winkey: None,
+            winkey_launcher: false,
             foreground: HWND::default(),
             menu: Some(mypaper_ui::Menu::new("App commands")?),
             index_due: Some(Instant::now() + Duration::from_secs(8)),
@@ -597,14 +599,16 @@ impl Flyouts {
         let hidden = mypaper_bars::config::path()
             .and_then(|p| mypaper_bars::BarsConfig::load(&p))
             .is_ok_and(|c| c.taskbar_mode() == mypaper_bars::TaskbarMode::Hide);
-        let wanted = self.look.win_key && hidden;
+        let launcher = self.look.win_key && hidden;
+        self.winkey_launcher=launcher;
+        let wanted = launcher || mypaper_config::Config::load().is_ok_and(|c| c.experimental.tiling);
         if wanted != self.winkey.is_some() {
             self.winkey = wanted
                 .then(|| WinKey::start(self.lanes.waker.clone(), main))
                 .flatten();
         }
         // The hook lets every key through until it is enabled.
-        WinKey::set_enabled(self.winkey.is_some());
+        WinKey::set_enabled(self.winkey.is_some() && launcher);
     }
 
     /// Whether `id` is the flyout's window.
@@ -621,7 +625,7 @@ impl Flyouts {
         }
         self.follow_fullscreen();
         self.follow_held();
-        WinKey::set_enabled(self.winkey.is_some() && bars.can_open_flyouts());
+        WinKey::set_enabled(self.winkey.is_some() && self.winkey_launcher && bars.can_open_flyouts());
         if !bars.can_open_flyouts() && self.open.is_some() {
             self.close();
         }

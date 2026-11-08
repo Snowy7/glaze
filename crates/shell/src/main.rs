@@ -10,7 +10,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 // The shell's modules are a library (`lib.rs`) so Studio can draw previews with them.
-use mypaper_shell::{bars, desktop_menu, flyouts, inbox, integrations, look, overlay_client, studio_pick, widgets};
+use mypaper_shell::{bars, desktop_menu, flyouts, inbox, integrations, look, overlay_client, studio_pick, widgets, tiling};
 
 mod wakes;
 mod game;
@@ -92,6 +92,7 @@ fn run() -> Result<()> {
         game_active: false,
         game_enabled: true,
         studio: studio_pick::StudioPick::new()?,
+        tiling: None,
     };
     shell.follow_config(&ui);
     shell.bars.tick(&mut ui);
@@ -327,6 +328,7 @@ fn wait_ms(duration: std::time::Duration) -> u32 {
 
 /// What the shell hosts.
 struct Shell {
+    tiling: Option<tiling::Tiler>,
     studio: studio_pick::StudioPick,
     bars: bars::Bars,
     inbox: windows::Win32::Foundation::HWND,
@@ -344,6 +346,7 @@ impl Shell {
     fn set_game_activity(&mut self, ui: &mut Ui, active: bool) {
         if self.game_active == active { return; }
         self.game_active = active;
+        if let Some(tiling)=&mut self.tiling{tiling.set_game_activity(active);}
         log::info!("game background pause: {active}");
         integrations::set_game_activity(active);
         self.bars.set_game_activity(active);
@@ -386,6 +389,7 @@ impl Shell {
     /// Handling one may call into Explorer and so let more arrive; they are handled here too.
     /// Adds the time each part took to `wakes`, from `at`; returns when it finished.
     fn drain(&mut self, ui: &mut Ui, wakes: &mut Wakes, mut at: Instant, poll_widgets: bool) -> Instant {
+        if let Some(tiling) = &mut self.tiling { tiling.process(); tiling::process_commands(tiling); at=wakes.spent("tiling",at); }
         if integrations::process() {
             self.bars.integration_changed();
         }
@@ -487,6 +491,16 @@ impl Shell {
             }
         };
         self.game_enabled = config.system.game_activity.unwrap_or(true);
+        if config.experimental.tiling {
+            match &mut self.tiling {
+                Some(tiling) => tiling.update(config.tiling.clone()),
+                None => match tiling::Tiler::start(config.tiling.clone()) {
+                    Ok(tiling) => self.tiling = Some(tiling),
+                    Err(e) => log::error!("scrolling tiling could not start: {e:#}"),
+                }
+            }
+        } else { self.tiling = None; }
+        tiling::configure_keys(self.tiling.is_some().then_some(&config.tiling));
         if !config.desktop_menu.enabled || self.game_active {
             if self.menu.take().is_some() {
                 log::info!("desktop right-click menu off");
