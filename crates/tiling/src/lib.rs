@@ -220,6 +220,7 @@ impl Layout {
     }
     /// Update by stable output identity. Portrait outputs use a vertical strip.
     pub fn add_monitor(&mut self, id: String, area: Rect, full: Rect, scale: f64) -> Vec<Target> {
+        let focused = self.focused();
         let scale = if scale.is_finite() {
             scale.clamp(0.5, 8.0)
         } else {
@@ -267,18 +268,32 @@ impl Layout {
                 active,
             });
             if self.focused_monitor.is_none() {
-                self.focused_monitor = Some(id);
+                self.focused_monitor = Some(id.clone());
             }
         }
         self.normalize();
+        if let Some((mi, wi)) = focused.and_then(|window| self.locate(window)) {
+            self.focused_monitor = Some(self.monitors[mi].id.clone());
+            self.monitors[mi].active = self.monitors[mi].workspaces[wi].id;
+        }
+        if let Some(mi) = self.monitors.iter().position(|m| m.id == id) {
+            for wi in 0..self.monitors[mi].workspaces.len() {
+                self.fit(mi, wi);
+            }
+        }
         self.targets()
     }
     pub fn remove_monitor(&mut self, id: &str) -> Vec<Target> {
+        let mut migrated = Vec::new();
         if let Some(index) = self.monitors.iter().position(|m| m.id == id) {
             let m = self.monitors.remove(index);
             self.remembered_active.insert(m.id.clone(), m.active);
-            let occupied = m.workspaces.into_iter().filter(|w| !w.empty());
+            let occupied: Vec<_> = m.workspaces.into_iter().filter(|w| !w.empty()).collect();
+            migrated = occupied.iter().map(|w| w.id).collect();
             if let Some(other) = self.monitors.first_mut() {
+                if self.focused_monitor.as_deref() == Some(id) && migrated.contains(&m.active) {
+                    other.active = m.active;
+                }
                 other.workspaces.extend(occupied);
             } else {
                 self.detached.extend(occupied);
@@ -288,6 +303,13 @@ impl Layout {
             }
         }
         self.normalize();
+        for mi in 0..self.monitors.len() {
+            for wi in 0..self.monitors[mi].workspaces.len() {
+                if migrated.contains(&self.monitors[mi].workspaces[wi].id) {
+                    self.fit(mi, wi);
+                }
+            }
+        }
         self.targets()
     }
     fn current(&self) -> Option<(usize, usize)> {

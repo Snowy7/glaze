@@ -231,6 +231,53 @@ fn zero_monitors_preserves_windows() {
     assert!(l.locate(WindowId(1)).is_some());
 }
 #[test]
+fn a_smaller_output_refits_the_focused_column() {
+    let mut l = layout();
+    for id in 1..=4 {
+        open(&mut l, id);
+    }
+    let smaller = Rect {
+        w: 800.0,
+        h: 600.0,
+        ..area()
+    };
+    l.add_monitor("a".into(), smaller, smaller, 1.5);
+    assert!(
+        l.targets()
+            .iter()
+            .find(|t| t.window == WindowId(4))
+            .unwrap()
+            .visible
+    );
+    assert_eq!(l.focused(), Some(WindowId(4)));
+}
+#[test]
+fn unplug_and_reconnect_keep_the_active_workspace_and_focus() {
+    let mut l = layout();
+    let smaller = Rect {
+        w: 800.0,
+        h: 600.0,
+        ..area()
+    };
+    l.add_monitor("b".into(), smaller, smaller, 1.5);
+    for id in 1..=4 {
+        open(&mut l, id);
+    }
+    l.remove_monitor("a");
+    assert_eq!(l.focused(), Some(WindowId(4)));
+    assert!(
+        l.targets()
+            .iter()
+            .find(|t| t.window == WindowId(4))
+            .unwrap()
+            .visible
+    );
+    l.add_monitor("a".into(), area(), area(), 1.0);
+    assert_eq!(l.focused(), Some(WindowId(4)));
+    assert_eq!(l.focused_monitor.as_deref(), Some("a"));
+    check(&l);
+}
+#[test]
 fn owner_loops_do_not_recurse() {
     let mut l = layout();
     l.insert(
