@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+mypaper-tiling.workspace = true
 mypaper-plugin-api = { path = "../plugin-api" }
 mypaper-plugin-sdk = { path = "../plugin-sdk" }
 mypaper-config.workspace = true
@@ -40,6 +41,7 @@ features = [
   "Networking_NetworkOperators",
   "Foundation",
   "Win32_Foundation",
+  "Win32_Security",
   "Win32_Globalization",
   "Win32_System_Time",
   "Win32_System_Registry",
@@ -54,7 +56,9 @@ features = [
   "Win32_System_SystemInformation",
   "Win32_System_SystemServices",
   "Win32_System_Threading",
+  "Win32_System_ProcessStatus",
   "Win32_Storage_FileSystem",
+  "Win32_Storage_Xps",
   "Win32_UI_Accessibility",
   "Win32_UI_HiDpi",
   "Win32_UI_Input_KeyboardAndMouse",
