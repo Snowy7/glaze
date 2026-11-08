@@ -516,6 +516,10 @@ impl Tiler {
                 log::warn!("learned minimum: {e:#}");
             }
         }
+        if self.display_events.changed() {
+            self.displays_changed();
+            self.enumerate();
+        }
         let events = std::mem::take(&mut self.queue.lock().unwrap().events);
         if events.is_empty() {
             return;
