@@ -441,6 +441,11 @@ impl Tiler {
                 }
             }
         }
+        if self.display_events.drag_frame() {
+            if let Some(window) = self.dragging {
+                self.drag_hint(window);
+            }
+        }
         let mut learned_changed = false;
         for result in animation::results() {
             let window = WindowId(result.identity.hwnd as u64);
@@ -709,9 +714,68 @@ impl Tiler {
                     changed = true;
                     processes_changed = true;
                 }
+                EVENT_SYSTEM_MOVESIZESTART => {
+                    self.display_events.dragging(true);
+                    self.dragging = Some(window);
+                    self.cancel_projection();
+                    if let Some(point) = platform::cursor() {
+                        self.drag_origin = Some((f64::from(point.x), f64::from(point.y)));
+                    }
+                }
+                EVENT_SYSTEM_MOVESIZEEND => {
+                    self.display_events.dragging(false);
+                    self.hint = None;
+                    self.dragging = None;
+                    let point = platform::cursor().unwrap_or_default();
+                    if let Some(w) = self.windows.get_mut(&window) {
+                        w.moves.clear();
+                        w.expected = None;
+                        if let Some(l) = self.layouts.get_mut(&w.desktop) {
+                            let (x, y) = (f64::from(point.x), f64::from(point.y));
+                            if self
+                                .drag_origin
+                                .take()
+                                .is_some_and(|(ox, oy)| (x - ox).hypot(y - oy) > 256.0)
+                            {
+                                if l.is_floating(window) {
+                                    if let Some(actual) = platform::frame(h) {
+                                        l.move_floating(window, actual);
+                                    }
+                                } else if l.targets().iter().any(|t| {
+                                    t.window != window
+                                        && t.visible
+                                        && !t.floating
+                                        && t.rect.contains(x, y)
+                                }) {
+                                    l.drop_at(window, x, y);
+                                } else if let Some(actual) = platform::frame(h) {
+                                    l.float_at(window, actual);
+                                }
+                            } else if let Some(actual) = platform::frame(h) {
+                                if let Some((mi, _)) = l.locate(window) {
+                                    let m = &l.monitors[mi];
+                                    let along = match m.axis {
+                                        mypaper_tiling::Axis::Horizontal => actual.w / m.scale,
+                                        mypaper_tiling::Axis::Vertical => actual.h / m.scale,
+                                    };
+                                    if l.is_floating(window) {
+                                        l.move_floating(window, actual);
+                                    } else {
+                                        l.resize_column(window, along);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    changed = true;
+                }
                 EVENT_OBJECT_LOCATIONCHANGE => {
                     if animation::busy() {
                         self.queue.lock().unwrap().deferred.insert(event.window);
+                        continue;
+                    }
+                    if self.dragging == Some(window) {
+                        self.drag_hint(window);
                         continue;
                     }
                     if !self.current_desktop(h) {
@@ -803,6 +867,98 @@ impl Tiler {
         if changed {
             if let Err(e) = self.commit(true) {
                 log::error!("tiling layout: {e:#}");
+            }
+        }
+    }
+    fn drag_hint(&mut self, window: WindowId) {
+        let Some(point) = platform::cursor() else {
+            return;
+        };
+        let (x, y) = (f64::from(point.x), f64::from(point.y));
+        if !self
+            .drag_origin
+            .is_some_and(|(ox, oy)| (x - ox).hypot(y - oy) > 256.0)
+        {
+            return;
+        }
+        let Some(l) = self.layouts.get_mut(&self.current) else {
+            return;
+        };
+        if l.is_floating(window) {
+            self.hint = None;
+            return;
+        }
+        let target = l
+            .targets()
+            .into_iter()
+            .find(|t| t.window != window && t.visible && !t.floating && t.rect.contains(x, y));
+        if let Some(t) = target {
+            if self.hint.is_none() {
+                self.hint = platform::InsertHint::new().ok();
+            }
+            let horizontal = l
+                .locate(t.window)
+                .is_none_or(|(mi, _)| l.monitors[mi].axis == mypaper_tiling::Axis::Horizontal);
+            let fraction = if horizontal {
+                (x - t.rect.x) / t.rect.w
+            } else {
+                (y - t.rect.y) / t.rect.h
+            };
+            let r = if fraction < 0.3 {
+                if horizontal {
+                    Rect { w: 4.0, ..t.rect }
+                } else {
+                    Rect { h: 4.0, ..t.rect }
+                }
+            } else if fraction > 0.7 {
+                if horizontal {
+                    Rect {
+                        x: t.rect.x + t.rect.w - 4.0,
+                        w: 4.0,
+                        ..t.rect
+                    }
+                } else {
+                    Rect {
+                        y: t.rect.y + t.rect.h - 4.0,
+                        h: 4.0,
+                        ..t.rect
+                    }
+                }
+            } else {
+                Rect {
+                    y: t.rect.y + t.rect.h / 2.0,
+                    h: 4.0,
+                    ..t.rect
+                }
+            };
+            if let Some(hint) = &self.hint {
+                hint.place(r);
+            }
+        } else {
+            self.hint = None;
+        }
+        if self.edge_at.elapsed() > Duration::from_millis(150) {
+            if let Some(m) = l.monitors.iter().find(|m| m.area.contains(x, y)) {
+                let direction = if m.axis == mypaper_tiling::Axis::Horizontal {
+                    if x < m.area.x + 30.0 {
+                        Some(mypaper_tiling::Direction::Left)
+                    } else if x > m.area.x + m.area.w - 30.0 {
+                        Some(mypaper_tiling::Direction::Right)
+                    } else {
+                        None
+                    }
+                } else if y < m.area.y + 30.0 {
+                    Some(mypaper_tiling::Direction::Up)
+                } else if y > m.area.y + m.area.h - 30.0 {
+                    Some(mypaper_tiling::Direction::Down)
+                } else {
+                    None
+                };
+                if let Some(direction) = direction {
+                    l.command(Command::Focus(direction));
+                    self.edge_at = Instant::now();
+                    let _ = self.commit(true);
+                }
             }
         }
     }
