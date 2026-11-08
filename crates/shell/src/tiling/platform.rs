@@ -66,7 +66,7 @@ impl DisplayEvents {
     pub fn new() -> Result<Self> {
         // SAFETY: a static procedure and a hidden shell-owned window; no activation.
         unsafe {
-            let class = windows::core::w!("mypaper.tiling.events");
+            let class = windows::core::w!("glaze.tiling.events");
             let info = WNDCLASSEXW {
                 cbSize: size_of::<WNDCLASSEXW>() as u32,
                 lpfnWndProc: Some(display_proc),
@@ -145,7 +145,7 @@ impl InsertHint {
     pub fn new() -> Result<Self> {
         // SAFETY: static default procedure and a shell-owned, nonactivating popup.
         unsafe {
-            let class = windows::core::w!("mypaper.tiling.insert");
+            let class = windows::core::w!("glaze.tiling.insert");
             let info = WNDCLASSEXW {
                 cbSize: size_of::<WNDCLASSEXW>() as u32,
                 lpfnWndProc: Some(hint_proc),
@@ -297,7 +297,7 @@ pub fn title(h: HWND) -> String {
 
 /// A present but invalid PID scope is an error, never permission to manage the desktop.
 pub fn scope() -> Result<Option<HashSet<u32>>> {
-    let Some(value) = std::env::var_os("MYPAPER_TILING_PIDS") else {
+    let Some(value) = std::env::var_os("GLAZE_TILING_PIDS") else {
         return Ok(None);
     };
     let mut ids = HashSet::new();
@@ -305,7 +305,7 @@ pub fn scope() -> Result<Option<HashSet<u32>>> {
         let pid = part
             .trim()
             .parse::<u32>()
-            .context("invalid MYPAPER_TILING_PIDS")?;
+            .context("invalid GLAZE_TILING_PIDS")?;
         ensure!(pid != 0, "zero PID in scope");
         ids.insert(pid);
     }
@@ -405,7 +405,7 @@ pub fn admit(h: HWND, scope: &Option<HashSet<u32>>, rules: &Rules) -> Option<Adm
                 | "#32768"
                 | "Chrome_RenderWidgetHostHWND"
                 | "Windows.UI.Core.CoreWindow"
-        ) || class.starts_with("mypaper.")
+        ) || class.starts_with("glaze.")
         {
             return None;
         }

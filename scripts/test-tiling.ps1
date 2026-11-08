@@ -9,9 +9,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $taskTarget = 'C:\mypaper-targets\tiling\target'
-$fixture = Join-Path $taskTarget 'release\examples\tiling_fixture.exe'
+$fixture = Join-Path $taskTarget 'release\examples\glaze-tiling-fixture.exe'
 $outputDir = Join-Path 'C:\mypaper-targets\tiling\evidence' ($Label + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-$desktopLock = 'C:\Users\you\AppData\Local\Temp\mypaper-tools\desktop.lock'
+$desktopLock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
 if (!(Test-Path -LiteralPath $fixture)) { throw 'Build the release tiling_fixture example in the task target directory first.' }
 New-Item -ItemType Directory -Path $outputDir | Out-Null
 New-Item -ItemType Directory -Path $desktopLock -ErrorAction Stop | Out-Null
@@ -42,7 +42,7 @@ try {
 }
 finally {
     # Only this run's fixture and child: never terminate the user's shell or another fixture.
-    Get-CimInstance Win32_Process -Filter "Name = 'tiling_fixture.exe'" | Where-Object {
+    Get-CimInstance Win32_Process -Filter "Name = 'glaze-tiling-fixture.exe'" | Where-Object {
         $_.ExecutablePath -eq $fixture -and $_.CommandLine -and $_.CommandLine.Contains($outputDir)
     } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     if ($launcher -and !$launcher.HasExited) { Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue }

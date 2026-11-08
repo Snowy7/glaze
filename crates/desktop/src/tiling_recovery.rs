@@ -74,12 +74,12 @@ pub struct Journal {
 
 pub fn path() -> Result<PathBuf> {
     // Scoped fixtures must never share a recovery file with the user's shell.
-    if let Some(path) = std::env::var_os("MYPAPER_TILING_JOURNAL") {
+    if let Some(path) = std::env::var_os("GLAZE_TILING_JOURNAL") {
         return Ok(path.into());
     }
     Ok(
         PathBuf::from(std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA missing")?)
-            .join("mypaper/tiling-recovery.json"),
+            .join("glaze/tiling-recovery.json"),
     )
 }
 impl Journal {
@@ -107,7 +107,7 @@ impl Journal {
         if self.data.windows.iter().any(|e| {
             // SAFETY: read-only property query on the window before any mutation.
             let cookie =
-                unsafe { GetPropW(identity.window(), w!("mypaper.tiling.recovery")) }.0 as usize;
+                unsafe { GetPropW(identity.window(), w!("glaze.tiling.recovery")) }.0 as usize;
             e.identity == identity && cookie == e.cookie
         }) {
             return Ok(());
@@ -146,7 +146,7 @@ impl Journal {
         unsafe {
             SetPropW(
                 identity.window(),
-                w!("mypaper.tiling.recovery"),
+                w!("glaze.tiling.recovery"),
                 Some(HANDLE(cookie as *mut _)),
             )?;
         }
@@ -159,7 +159,7 @@ impl Journal {
         // SAFETY: our token is removed only from the same live window identity.
         if identity.valid() {
             // SAFETY: this property was installed by our journal on this live identity.
-            let _ = unsafe { RemovePropW(identity.window(), w!("mypaper.tiling.recovery")) };
+            let _ = unsafe { RemovePropW(identity.window(), w!("glaze.tiling.recovery")) };
         }
         Ok(())
     }
@@ -242,7 +242,7 @@ fn restore_entry(e: &Entry, monitors: &[crate::Rect], failed: &mut Vec<String>) 
     // SAFETY: properties are tied to the window lifetime, unlike a numeric HWND.
     if !e.identity.valid() || {
         // SAFETY: read-only property query; the token is tied to the HWND lifetime.
-        unsafe { GetPropW(e.identity.window(), w!("mypaper.tiling.recovery")) }.0 as usize
+        unsafe { GetPropW(e.identity.window(), w!("glaze.tiling.recovery")) }.0 as usize
             != e.cookie
     } {
         return false;
@@ -273,7 +273,7 @@ fn restore_entry(e: &Entry, monitors: &[crate::Rect], failed: &mut Vec<String>) 
     };
     if leave_alone {
         // SAFETY: remove only our journal property before handing back the window.
-        let _ = unsafe { RemovePropW(h, w!("mypaper.tiling.recovery")) };
+        let _ = unsafe { RemovePropW(h, w!("glaze.tiling.recovery")) };
         return false;
     }
     let [mut x, mut y, mut w, mut h] = e.rect;
@@ -343,7 +343,7 @@ fn restore_entry(e: &Entry, monitors: &[crate::Rect], failed: &mut Vec<String>) 
         return true;
     }
     // SAFETY: remove only our recovery token after successful restoration.
-    let _ = unsafe { RemovePropW(e.identity.window(), w!("mypaper.tiling.recovery")) };
+    let _ = unsafe { RemovePropW(e.identity.window(), w!("glaze.tiling.recovery")) };
     false
 }
 impl Drop for Journal {

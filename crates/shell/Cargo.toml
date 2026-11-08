@@ -73,6 +73,10 @@ png = "0.18"
 glaze-ui = { workspace = true, features = ["golden"] }
 
 [[example]]
+name = "glaze-tiling-fixture"
+path = "examples/tiling_fixture.rs"
+
+[[example]]
 name = "glaze-widget-fixture"
 path = "src/widgets/live.rs"
 

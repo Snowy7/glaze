@@ -127,10 +127,10 @@ fn run(
     )?;
     // SAFETY: no worker exists yet; this fixture's environment is private to its process.
     unsafe {
-        std::env::set_var("MYPAPER_TILING_PIDS", child.0.id().to_string());
-        std::env::set_var("MYPAPER_TILING_JOURNAL", output.join("recovery.json"));
+        std::env::set_var("GLAZE_TILING_PIDS", child.0.id().to_string());
+        std::env::set_var("GLAZE_TILING_JOURNAL", output.join("recovery.json"));
         std::env::set_var("APPDATA", output);
-        std::env::set_var("MYPAPER_TILING_STATS", "1");
+        std::env::set_var("GLAZE_TILING_STATS", "1");
     }
     let _com = glaze_desktop::desktop_view::Com::init();
     let _source = WinEvents::install();
@@ -364,7 +364,7 @@ fn recover(output: &Path) -> Result<()> {
         "recovery journal contains a non-fixture mutation"
     );
     unsafe {
-        std::env::set_var("MYPAPER_TILING_PIDS", child_pid.to_string());
+        std::env::set_var("GLAZE_TILING_PIDS", child_pid.to_string());
     }
     let foreground = unsafe { GetForegroundWindow() };
     tiling_recovery::restore_at(&output.join("recovery.json"))?;
@@ -461,7 +461,7 @@ fn child(output: &Path, count: usize) -> Result<()> {
         };
         RegisterClassExW(&class);
         for i in 0..count {
-            let title = HSTRING::from(format!("mypaper test window {}", i + 1));
+            let title = HSTRING::from(format!("Glaze test window {}", i + 1));
             let window = CreateWindowExW(
                 WINDOW_EX_STYLE(0),
                 w!("TilingFixtureApp"),

@@ -162,13 +162,13 @@ impl Overview {
                 cbSize: size_of::<WNDCLASSEXW>() as u32,
                 lpfnWndProc: Some(procedure),
                 hInstance: GetModuleHandleW(None)?.into(),
-                lpszClassName: w!("mypaper.tiling.overview"),
+                lpszClassName: w!("glaze.tiling.overview"),
                 ..Default::default()
             };
             RegisterClassExW(&class);
             CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                w!("mypaper.tiling.overview"),
+                w!("glaze.tiling.overview"),
                 w!("Workspaces"),
                 WS_POPUP,
                 left as i32,

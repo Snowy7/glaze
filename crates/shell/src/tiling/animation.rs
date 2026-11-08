@@ -337,14 +337,14 @@ fn run(
             cbSize: size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(procedure),
             hInstance: GetModuleHandleW(None)?.into(),
-            lpszClassName: w!("mypaper.tiling.animation"),
+            lpszClassName: w!("glaze.tiling.animation"),
             hbrBackground: HBRUSH(GetStockObject(BLACK_BRUSH).0),
             ..Default::default()
         };
         RegisterClassExW(&class);
         CreateWindowExW(
             WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
-            w!("mypaper.tiling.animation"),
+            w!("glaze.tiling.animation"),
             w!("Scrolling tiling"),
             WS_POPUP,
             bounds.x as i32,
@@ -530,7 +530,7 @@ fn run(
         sources.len(),
         costs.len()
     );
-    if std::env::var_os("MYPAPER_TILING_STATS").is_some() {
+    if std::env::var_os("GLAZE_TILING_STATS").is_some() {
         let mut records = FRAME_COSTS.lock().unwrap();
         if records.len() >= 64 {
             records.remove(0);
@@ -579,13 +579,13 @@ impl Snapshot {
                 cbSize: size_of::<WNDCLASSEXW>() as u32,
                 lpfnWndProc: Some(snapshot_proc),
                 hInstance: GetModuleHandleW(None)?.into(),
-                lpszClassName: w!("mypaper.tiling.snapshot"),
+                lpszClassName: w!("glaze.tiling.snapshot"),
                 ..Default::default()
             };
             RegisterClassExW(&class);
             let window = match CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                w!("mypaper.tiling.snapshot"),
+                w!("glaze.tiling.snapshot"),
                 w!("Tiling snapshot"),
                 WS_POPUP,
                 (bounds.x + bounds.w + 8.0) as i32,
@@ -607,14 +607,14 @@ impl Snapshot {
             let snapshot = Self { window, bitmap };
             SetPropW(
                 window,
-                w!("mypaper.crop.x"),
+                w!("glaze.crop.x"),
                 Some(windows::Win32::Foundation::HANDLE(
                     (rect.x - outer.x).round() as usize as *mut _,
                 )),
             )?;
             SetPropW(
                 window,
-                w!("mypaper.crop.y"),
+                w!("glaze.crop.y"),
                 Some(windows::Win32::Foundation::HANDLE(
                     (rect.y - outer.y).round() as usize as *mut _,
                 )),
@@ -650,8 +650,8 @@ unsafe extern "system" fn snapshot_proc(h: HWND, msg: u32, w: WPARAM, l: LPARAM)
                 paint.rcPaint.right,
                 paint.rcPaint.bottom,
                 Some(memory),
-                GetPropW(h, w!("mypaper.crop.x")).0 as usize as i32,
-                GetPropW(h, w!("mypaper.crop.y")).0 as usize as i32,
+                GetPropW(h, w!("glaze.crop.x")).0 as usize as i32,
+                GetPropW(h, w!("glaze.crop.y")).0 as usize as i32,
                 SRCCOPY,
             );
             SelectObject(memory, old);
