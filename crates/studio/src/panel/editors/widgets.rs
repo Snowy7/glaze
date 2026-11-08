@@ -1662,10 +1662,14 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         }) {
             continue;
         }
-        group(b, c, &heading, |b, c| {
-            let (widgets, rows): (Vec<_>, Vec<_>) = widgets
-                .into_iter()
-                .partition(|(id, _)| !id.contains("--") || plugin_data(app, id).is_some());
+        // Picture tiles sit on the page; only plugin rows keep a group plate.
+        let (widgets, rows): (Vec<_>, Vec<_>) = widgets
+            .into_iter()
+            .partition(|(id, _)| !id.contains("--") || plugin_data(app, id).is_some());
+        if rows.is_empty() {
+            crate::panel::controls::section(b, c, &heading);
+        }
+        if !rows.is_empty() { group(b, c, &heading, |b, c| {
             for (id, manifest) in rows {
                 let name = manifest
                     .name
@@ -1682,6 +1686,8 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     Action::Panel(Command::PickWidget(id.clone())),
                 );
             }
+        }); }
+        {
             let columns = if c.w < b.px(340.0) || b.t.text_scale > 1.0 {
                 1
             } else {
@@ -1734,7 +1740,6 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     }) {
                         continue;
                     }
-                    crate::panel::controls::card(b, rect, b.hovered(k));
                     let instance = Instance {
                         instance: format!("catalog-{id}"),
                         widget: (*id).clone(),
@@ -1753,7 +1758,8 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     .find(|key| resolved.get(*key).is_some_and(Value::is_string))
                     .unwrap_or("variant");
                     let value = resolved.get(face_key).and_then(Value::as_str).unwrap_or("");
-                    crate::panel::controls::card_picture(b, rect, Rect::new(rect.left, rect.top, width, picture_height), |b, pic| face(
+                    let pic = Rect::new(rect.left, rect.top, width, picture_height);
+                    crate::panel::controls::card_picture(b, pic, b.hovered(k), |b, pic| face(
                         app,
                         b,
                         &instance,
@@ -1765,9 +1771,9 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     text(
                         b,
                         Rect::new(
-                            rect.left + b.px(4.0),
-                            rect.top + picture_height + b.px(5.0),
-                            width - b.px(8.0),
+                            rect.left,
+                            crate::panel::controls::card_label_top(b, pic),
+                            width,
                             height(b, 22.0),
                         ),
                         name,
@@ -1782,10 +1788,9 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                     for (line, value) in lines.iter().enumerate() {
                         b.text_in(
                             Rect::new(
-                                rect.left + b.px(4.0),
-                                rect.top
-                                    + picture_height
-                                    + height(b, 28.0)
+                                rect.left,
+                                crate::panel::controls::card_label_top(b, pic)
+                                    + height(b, 22.0)
                                     + line as f32 * height(b, 15.0),
                                 width - b.px(8.0),
                                 height(b, 15.0),
@@ -1797,9 +1802,9 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                         );
                     }
                     if on {
-                        crate::panel::controls::card_selection(b, rect);
+                        crate::panel::controls::card_selection(b, pic);
                         let check = Rect::new(
-                            rect.right - b.px(25.0),
+                            pic.right - b.px(25.0),
                             rect.top + b.px(5.0),
                             b.px(20.0),
                             b.px(20.0),
@@ -1811,7 +1816,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
                 }
             });
             c.y += widgets.len().div_ceil(columns) as f32 * row_height;
-        });
+        }
     }
     notice(
         b,

@@ -100,6 +100,8 @@ fn render_panel_pages() {
             (Page::Wallpaper, "theme-save-failed"),
             (Page::FirstRun, "first-run"),
             (Page::FirstRun, "first-run-taskbar"),
+            (Page::FirstRun, "first-run-look"),
+            (Page::FirstRun, "first-run-wallpaper"),
             (Page::FirstRun, "first-run-recovery"),
             (Page::Module, "module"),
             (Page::Module, "module-more"),
@@ -332,14 +334,18 @@ fn render_panel_pages() {
                     app.nav.wallpaper = Some(app.library.items.len());
                     app.library.items.push(own);
                 }
-                "first-run" | "first-run-taskbar" | "first-run-recovery" => {
+                "first-run" | "first-run-taskbar" | "first-run-look" | "first-run-wallpaper"
+                | "first-run-recovery" => {
+                    use super::first_run::{DONE, LOOK, TASKBAR, WALLPAPER, WELCOME};
                     app.overlay = Some(crate::app::Overlay::FirstRun {
                         step: match name {
-                            "first-run-taskbar" => 1,
-                            "first-run-recovery" => 2,
-                            _ => 0,
+                            "first-run-taskbar" => TASKBAR,
+                            "first-run-look" => LOOK,
+                            "first-run-wallpaper" => WALLPAPER,
+                            "first-run-recovery" => DONE,
+                            _ => WELCOME,
                         },
-                        starter: 0,
+                        starter: None,
                         taskbar: 0,
                     });
                 }
@@ -944,15 +950,18 @@ fn first_run_stays_in_the_panel_and_finishes_through_its_footer() {
     app.run(Action::FirstRunNext);
     assert!(matches!(
         app.overlay,
-        Some(crate::app::Overlay::FirstRun { step: 1, .. })
+        Some(crate::app::Overlay::FirstRun { step: super::first_run::TASKBAR, .. })
     ));
     app.run(Action::FirstRunTaskbar(1));
     app.run(Action::FirstRunNext);
     assert!(matches!(
         app.overlay,
-        Some(crate::app::Overlay::FirstRun { step: 2, .. })
+        Some(crate::app::Overlay::FirstRun { step: super::first_run::LOOK, .. })
     ));
-    app.run(Action::FirstRunNext);
+    // Look, wallpaper, then done.
+    for _ in 0..3 {
+        app.run(Action::FirstRunNext);
+    }
     assert_eq!(app.panel.as_ref().unwrap().page, Page::Root);
     assert_eq!(
         app.get(DocId::Studio, "/first_run_done"),

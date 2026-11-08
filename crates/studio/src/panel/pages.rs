@@ -1006,7 +1006,7 @@ mod tests {
             assert!(
                 built.list.hits.iter().any(|hit| hit.label.as_ref()
                     == if page == Page::FirstRun {
-                        "Skip remaining steps"
+                        "Skip setup"
                     } else {
                         "Cancel"
                     }

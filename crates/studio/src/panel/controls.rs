@@ -36,30 +36,31 @@ pub fn row_height(b: &B, caption: &str) -> f32 {
 
 pub use mypaper_ui::controls::format_value as unit;
 
-/// One picture-card body. Selection never changes its fill.
-pub fn card(b: &mut B, rect: Rect, hot: bool) {
-    let hover = mypaper_ui::theme::over(
-        Rgba::new(1.0, 1.0, 1.0, if b.p.dark { 0.06 } else { 0.35 }),
-        b.p.fill,
-    );
-    b.fill(rect, b.px(radius::CARD), if hot { hover } else { b.p.fill });
+/// Where a picture card's label starts: flush with the picture, just below it.
+pub fn card_label_top(b: &B, picture: Rect) -> f32 {
+    picture.bottom + b.px(8.0)
 }
 
-/// A 2 DIP ring, with a 2 DIP clear gap and a concentric centerline.
-pub fn card_selection(b: &mut B, rect: Rect) {
+/// A 2 DIP ring around a card's picture, with a 2 DIP clear gap and a concentric centerline.
+pub fn card_selection(b: &mut B, picture: Rect) {
     b.stroke(
-        rect.inflate(b.px(3.0)),
-        b.px(radius::CARD + 3.0),
+        picture.inflate(b.px(3.0)),
+        b.px(radius::MEDIUM + 3.0),
         b.px(2.0),
         b.p.ink1,
     );
 }
 
-/// The picture shares the card's top corners and has a straight edge above its label.
-pub fn card_picture(b: &mut B, card: Rect, picture: Rect, draw: impl FnOnce(&mut B, Rect)) {
+/// A card is its picture, rounded on its own, with the label under it: no plate behind either.
+/// Hovering washes the picture; selection is [`card_selection`] around it.
+pub fn card_picture(b: &mut B, picture: Rect, hot: bool, draw: impl FnOnce(&mut B, Rect)) {
     let start = b.list.ops.len();
     b.fill(picture, 0.0, b.p.well);
     draw(b, picture);
+    if hot {
+        let wash = if b.p.dark { Rgba::new(1.0, 1.0, 1.0, 0.10) } else { Rgba::new(0.0, 0.0, 0.0, 0.08) };
+        b.fill(picture, 0.0, wash);
+    }
     let mut ops = b.list.ops.split_off(start);
     fn square_canvas(ops: &mut [mypaper_ui::Op], picture: Rect) {
         for op in ops {
@@ -82,8 +83,8 @@ pub fn card_picture(b: &mut B, card: Rect, picture: Rect, draw: impl FnOnce(&mut
     }
     square_canvas(&mut ops, picture);
     b.list.ops.push(mypaper_ui::Op::RoundedClipped {
-        rect: card,
-        radius: b.px(radius::CARD),
+        rect: picture,
+        radius: b.px(radius::MEDIUM),
         ops: vec![mypaper_ui::Op::Clipped {
             rect: picture,
             ops: ops.into(),
@@ -487,6 +488,20 @@ pub fn group(b: &mut B, c: &mut Col, heading: &str, content: impl FnOnce(&mut B,
 
 pub fn icon_group(b: &mut B, c: &mut Col, heading: &str, icon: Glyph, content: impl FnOnce(&mut B, &mut Col)) {
     group_heading(b, c, heading, Some(icon), content);
+}
+
+/// A section's heading with no plate under it, for picture cards that sit on the page.
+pub fn section(b: &mut B, c: &mut Col, heading: &str) {
+    c.y += b.px(20.0);
+    let h = height(b, 20.0);
+    text(b, Rect::new(c.x, c.y, c.w, h), heading, 16.0, 600, b.p.ink1, Align::Start);
+    c.y += h + b.px(12.0);
+}
+
+/// Picture cards under a heading, straight on the page: cards bring no plate of their own.
+pub fn cards_section(b: &mut B, c: &mut Col, heading: &str, content: impl FnOnce(&mut B, &mut Col)) {
+    section(b, c, heading);
+    content(b, c);
 }
 
 fn group_heading(b: &mut B, c: &mut Col, heading: &str, icon: Option<Glyph>, content: impl FnOnce(&mut B, &mut Col)) {

@@ -6,7 +6,7 @@ pub(crate) mod material;
 pub(crate) mod controls;
 pub use controls::display_name;
 pub(crate) mod editors;
-mod first_run;
+pub(crate) mod first_run;
 pub(crate) use first_run::run as run_first_run;
 mod history;
 pub(crate) use history::time_label as history_time;
@@ -159,6 +159,9 @@ pub struct State {
     raster: measure::Raster,
     pub page: Page,
     pub first_run: std::cell::RefCell<Option<first_run::Baseline>>,
+    /// When the full-screen onboarding opened: its intro animates from here. None shows it
+    /// fully built (fixtures, the docked panel).
+    pub intro: Option<std::time::Instant>,
     pub add_widget: Option<String>,
     pub category: Option<String>,
     pub add_module: Option<String>,
@@ -282,7 +285,7 @@ pub fn run(app: &mut App, command: Command) {
                 first_run::begin(app);
                 app.overlay = Some(crate::app::Overlay::FirstRun {
                     step: 0,
-                    starter: 0,
+                    starter: None,
                     taskbar: 0,
                 });
             }

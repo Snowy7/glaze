@@ -224,8 +224,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
             let r = Rect::new(x, c.y, width, width * 0.56);
             let card = Rect::new(x, c.y, width, row_height - b.px(8.0));
             let k = key(("panel-wallpaper", i));
-            super::super::controls::card(b, card, b.hovered(k));
-            super::super::controls::card_picture(b, card, r, |b, r| thumbnail(app, b, r, i));
+            super::super::controls::card_picture(b, r, b.hovered(k), |b, r| thumbnail(app, b, r, i));
             let apply = if wallpaper.error.is_some() {
                 Action::Panel(Command::Wallpaper(i))
             } else {
@@ -241,7 +240,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
             );
             b.focus_ring(k, card, b.px(super::radius::CARD));
             if wallpaper.active {
-                super::super::controls::card_selection(b, card);
+                super::super::controls::card_selection(b, r);
                 let check = Rect::new(
                     r.left + b.px(6.0),
                     r.top + b.px(6.0),
@@ -253,7 +252,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
             }
             text(
                 b,
-                Rect::new(x + b.px(8.0), r.bottom + b.px(4.0), width - b.px(16.0), height(b, 22.0)),
+                Rect::new(x, super::super::controls::card_label_top(b, r), width, height(b, 22.0)),
                 &wallpaper.name,
                 13.0,
                 500,
@@ -308,7 +307,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
             };
             text(
                 b,
-                Rect::new(x + b.px(8.0), r.bottom + height(b, 26.0), width - b.px(16.0), height(b, 18.0)),
+                Rect::new(x, r.bottom + height(b, 30.0), width, height(b, 18.0)),
                 caption,
                 12.0,
                 400,
@@ -335,7 +334,7 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
                 text(b, badge, label, 10.0, 500, b.p.ink2, Align::Center);
             }
             if wallpaper.brings_look {
-                b.badge(x, r.bottom + height(b, 47.0), "Brings a look", None, false);
+                b.badge(x, r.bottom + height(b, 51.0), "Brings a look", None, false);
             }
         }
         c.y += row_height;

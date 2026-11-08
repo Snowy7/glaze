@@ -452,16 +452,9 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
     let state = app.panel.as_ref().unwrap();
     let (secondary, cancel, primary, commit, enabled) = match state.page {
         Page::FirstRun => (
-            "Skip remaining steps",
+            "Skip setup",
             Action::FirstRunSkip,
-            if matches!(
-                app.overlay,
-                Some(crate::app::Overlay::FirstRun { step: 2, .. })
-            ) {
-                "Open Studio"
-            } else {
-                "Continue"
-            },
+            super::first_run::next_label(app),
             Action::FirstRunNext,
             true,
         ),

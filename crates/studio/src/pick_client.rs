@@ -737,7 +737,7 @@ fn choice_documents(app: &App, action: &Action) -> Option<Vec<wire::PreviewDocum
             ops
         }
         Action::FirstRunPick(index) => {
-            let (_, preset, _) = crate::editing::first_run::panel_starter(*index)?;
+            let (preset, _) = crate::editing::first_run::panel_starter(*index)?;
             let mut ops = vec![op(DocId::Bars, "/preset".into(), Some(json!(preset)))];
             for bar in ["top", "dock"] {
                 for field in ["design", "enabled"] {
@@ -1616,14 +1616,14 @@ mod tests {
         let mut app = crate::goldens::app(true, &ui);
         let before = snapshot(&app);
         for index in 0..crate::editing::first_run::panel_starters().len() {
-            let (_, preset, _) = crate::editing::first_run::panel_starter(index).unwrap();
+            let (preset, _) = crate::editing::first_run::panel_starter(index).unwrap();
             let docs = choice_documents(&app, &Action::FirstRunPick(index)).unwrap();
             assert!(docs.iter().all(|doc| doc.document == wire::Document::Bars));
             let ops = docs.iter().find(|doc| doc.document == wire::Document::Bars).map_or(&[][..], |doc| doc.ops.as_slice());
             let raw = wire::patched(&app.docs.doc(DocId::Bars).raw, ops).unwrap();
             assert_eq!(raw["preset"], preset);
         }
-        app.overlay = Some(crate::app::Overlay::FirstRun { step: 0, starter: 0, taskbar: 1 });
+        app.overlay = Some(crate::app::Overlay::FirstRun { step: 0, starter: None, taskbar: 1 });
         let docs = choice_documents(&app, &Action::FirstRunPick(2)).unwrap();
         let bars = docs.iter().find(|doc| doc.document == wire::Document::Bars).unwrap();
         let raw = wire::patched(&app.docs.doc(DocId::Bars).raw, &bars.ops).unwrap();
