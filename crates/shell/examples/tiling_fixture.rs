@@ -341,6 +341,9 @@ fn run(
         }
         report["animation"] = serde_json::to_value(glaze_shell::tiling::animation::measurements())?;
         if let Some(change) = resize_probe {
+            let identity = change.identity;
+            let expected = change.to;
+            let original = outer_rect(identity)?;
             let mut journal = tiling_recovery::Journal::open(output.join("resize-recovery.json"))?;
             journal.remember(change.identity)?;
             animator.apply(vec![change], true)?;
@@ -360,7 +363,12 @@ fn run(
             capture(Identity::read(overlay)?, &output.join("resize-proxy.png"))?;
             settle(&mut None)?;
             animator.cancel();
+            verify_frame(identity, expected)?;
             journal.restore()?;
+            ensure!(
+                outer_rect(identity)? == original,
+                "resize probe did not restore its original bounds"
+            );
             report["resize_proxy_captured"] = true.into();
         }
     }
@@ -388,24 +396,29 @@ fn outer_rect(identity: Identity) -> Result<[i32; 4]> {
 }
 fn verify_placements(tiler: &Tiler) -> Result<()> {
     for (identity, expected) in tiler.placements() {
-        let mut actual = RECT::default();
-        unsafe {
-            windows::Win32::Graphics::Dwm::DwmGetWindowAttribute(
-                identity.window(),
-                windows::Win32::Graphics::Dwm::DWMWA_EXTENDED_FRAME_BOUNDS,
-                (&mut actual as *mut RECT).cast(),
-                size_of::<RECT>() as u32,
-            )
-            .with_context(|| format!("reading placement of {identity:?}"))?;
-        }
-        ensure!(
-            (f64::from(actual.left) - expected.x).abs() < 2.0
-                && (f64::from(actual.top) - expected.y).abs() < 2.0
-                && (f64::from(actual.right - actual.left) - expected.w).abs() < 2.0
-                && (f64::from(actual.bottom - actual.top) - expected.h).abs() < 2.0,
-            "actual frame did not match layout for {identity:?}: actual {actual:?}, expected {expected:?}"
-        );
+        verify_frame(identity, expected)?;
     }
+    Ok(())
+}
+/// Compare the composed frame, excluding invisible native resize borders.
+fn verify_frame(identity: Identity, expected: Rect) -> Result<()> {
+    let mut actual = RECT::default();
+    unsafe {
+        windows::Win32::Graphics::Dwm::DwmGetWindowAttribute(
+            identity.window(),
+            windows::Win32::Graphics::Dwm::DWMWA_EXTENDED_FRAME_BOUNDS,
+            (&mut actual as *mut RECT).cast(),
+            size_of::<RECT>() as u32,
+        )
+        .with_context(|| format!("reading placement of {identity:?}"))?;
+    }
+    ensure!(
+        (f64::from(actual.left) - expected.x).abs() < 2.0
+            && (f64::from(actual.top) - expected.y).abs() < 2.0
+            && (f64::from(actual.right - actual.left) - expected.w).abs() < 2.0
+            && (f64::from(actual.bottom - actual.top) - expected.h).abs() < 2.0,
+        "actual frame did not match layout for {identity:?}: actual {actual:?}, expected {expected:?}"
+    );
     Ok(())
 }
 fn recover(output: &Path) -> Result<()> {
