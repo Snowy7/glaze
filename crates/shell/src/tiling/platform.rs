@@ -139,6 +139,75 @@ unsafe extern "system" fn display_proc(
     }
 }
 
+/// A narrow, input-transparent insert hint, alive only during an interactive drag.
+pub struct InsertHint(HWND);
+impl InsertHint {
+    pub fn new() -> Result<Self> {
+        // SAFETY: static default procedure and a shell-owned, nonactivating popup.
+        unsafe {
+            let class = windows::core::w!("mypaper.tiling.insert");
+            let info = WNDCLASSEXW {
+                cbSize: size_of::<WNDCLASSEXW>() as u32,
+                lpfnWndProc: Some(hint_proc),
+                hInstance: windows::Win32::System::LibraryLoader::GetModuleHandleW(None)?.into(),
+                lpszClassName: class,
+                hbrBackground: windows::Win32::Graphics::Gdi::GetSysColorBrush(
+                    windows::Win32::Graphics::Gdi::COLOR_HIGHLIGHT,
+                ),
+                ..Default::default()
+            };
+            RegisterClassExW(&info);
+            Ok(Self(CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
+                class,
+                windows::core::w!("Insert window"),
+                WS_POPUP,
+                0,
+                0,
+                0,
+                0,
+                None,
+                None,
+                None,
+                None,
+            )?))
+        }
+    }
+    pub fn place(&self, r: Rect) {
+        /* SAFETY: only moves our hint window. */
+        unsafe {
+            let _ = SetWindowPos(
+                self.0,
+                Some(HWND_TOPMOST),
+                r.x as i32,
+                r.y as i32,
+                r.w.max(3.0) as i32,
+                r.h.max(3.0) as i32,
+                SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            );
+        }
+    }
+}
+impl Drop for InsertHint {
+    fn drop(&mut self) {
+        /* SAFETY: owned window, destroyed on the creating thread. */
+        unsafe {
+            let _ = DestroyWindow(self.0);
+        }
+    }
+}
+unsafe extern "system" fn hint_proc(
+    h: HWND,
+    msg: u32,
+    w: WPARAM,
+    l: LPARAM,
+) -> windows::Win32::Foundation::LRESULT {
+    if msg == WM_NCHITTEST {
+        return windows::Win32::Foundation::LRESULT(HTTRANSPARENT as isize);
+    } /* SAFETY: original window message. */
+    unsafe { DefWindowProcW(h, msg, w, l) }
+}
+
 pub fn hwnd(id: WindowId) -> HWND {
     HWND(id.0 as usize as *mut _)
 }
@@ -453,7 +522,6 @@ pub fn responsive(h: HWND) -> bool {
         .0 != 0
     }
 }
-
 pub struct Placement {
     pub identity: Identity,
     pub rect: Rect,
