@@ -133,6 +133,10 @@ impl Tiler {
         let rules = rules::Rules::load()?;
         let display_events = platform::DisplayEvents::new()?;
         let learned = learned::Learned::load()?;
+        // Scoped tests do not change user-wide Windows preferences.
+        if scope.is_none() {
+            journal.disable_snap()?;
+        }
         let queue = Arc::new(Mutex::new(Queue::default()));
         let events = queue.clone();
         let event_scope = scope.clone();
