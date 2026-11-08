@@ -6,7 +6,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     thread::JoinHandle,
@@ -54,6 +54,7 @@ struct State {
     thumbnails: RefCell<HashMap<WindowId, isize>>,
     started: Instant,
     cancel: Arc<AtomicBool>,
+    projection: Arc<Mutex<()>>,
 }
 #[derive(Clone, Copy)]
 struct Drag {
@@ -195,6 +196,7 @@ impl Overview {
             thumbnails: RefCell::new(HashMap::new()),
             started: Instant::now(),
             cancel: Arc::new(AtomicBool::new(false)),
+            projection: Arc::new(Mutex::new(())),
         });
         let mut overview = Self {
             window,
@@ -278,12 +280,14 @@ impl Overview {
             })
             .collect();
         let cancel = overview.state.cancel.clone();
+        let projection = overview.state.projection.clone();
         let started = overview.state.started;
         overview.worker = std::thread::Builder::new()
             .name("tiling-overview-zoom".into())
             .stack_size(256 * 1024)
             .spawn(move || {
                 loop {
+                    let guard = projection.lock().unwrap();
                     if cancel.load(Ordering::Acquire) {
                         break;
                     }
@@ -298,6 +302,7 @@ impl Overview {
                         // SAFETY: drop joins this worker before unregistering its thumbnails.
                         let _ = unsafe { DwmUpdateThumbnailProperties(*thumbnail, &properties) };
                     }
+                    drop(guard);
                     // SAFETY: DWM pacing only during this finite transition.
                     if unsafe { DwmFlush() }.is_err() || t > 0.999 {
                         break;
@@ -361,6 +366,7 @@ unsafe extern "system" fn procedure(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -> 
                 *state.drag.borrow_mut() = state
                     .tiles
                     .iter()
+                    .rev()
                     .find(|t| interpolate(t.from, t.rect, progress).contains(x, y))
                     .map(|t| Drag {
                         window: t.window,
@@ -376,6 +382,8 @@ unsafe extern "system" fn procedure(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -> 
             WM_MOUSEMOVE => {
                 let (x, y) = point(l);
                 if let Some(Drag { window, offset, .. }) = *state.drag.borrow() {
+                    // The zoom worker cannot overwrite the dragged pose after this update.
+                    let _projection = state.projection.lock().unwrap();
                     state.cancel.store(true, Ordering::Release);
                     if let Some(tile) = state.tiles.iter().find(|t| t.window == window)
                         && let Some(thumbnail) = state.thumbnails.borrow().get(&window)
