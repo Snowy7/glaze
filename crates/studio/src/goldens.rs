@@ -598,7 +598,8 @@ fn desktop_pages_are_reading_pages_that_offer_edit_mode() {
         app.run(Action::Panel(Command::Open(page)));
         let r = crate::view::regions(&app);
         assert!(r.stage.is_none() && r.inspector.is_none());
-        assert!(crate::view::content_regions(&app).0.width() <= app.px(1200.0));
+        let (host, _) = crate::view::content_regions(&app);
+        assert!(crate::view::column(&app, host, page).1 <= app.px(1200.0));
     }
 }
 

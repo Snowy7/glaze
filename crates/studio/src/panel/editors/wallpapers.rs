@@ -52,7 +52,8 @@ fn matches_filter(app: &App, wallpaper: &crate::library::Wallpaper, query: &str)
 
 pub fn list(app: &App, b: &mut B, c: &mut Col) {
     let create = Rect::new(c.right() - b.px(168.0), c.y, b.px(86.0), height(b, 28.0));
-    button(b, create, "Create", Some(glyph::ADD), true, true,
+    // One primary per screen: the selected wallpaper's action; Create and Add are secondary.
+    button(b, create, "Create", Some(glyph::ADD), false, true,
         Action::Panel(Command::Builder(crate::builder::Command::New)));
     let add_width = b
         .measure("Add", &crate::panel::controls::font(b, 13.0, 500))

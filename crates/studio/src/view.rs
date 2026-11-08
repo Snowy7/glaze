@@ -146,8 +146,17 @@ fn reading_width(app: &App, page: Page) -> f32 {
     } else if SETTINGS.contains(&page) && page != Page::DesktopMenu {
         app.px(1024.0)
     } else {
-        app.px(840.0)
+        app.px(920.0)
     }
+}
+
+/// Where a page's column sits in `area` (x and width): at the left gutter, or centered once
+/// the window has room to spare.
+pub fn column(app: &App, area: Rect, page: Page) -> (f32, f32) {
+    let room = area.width() - app.px(32.0);
+    let width = room.min(reading_width(app, page));
+    let spare = if area.width() > app.px(1200.0) { (room - width) / 2.0 } else { 0.0 };
+    (area.left + app.px(16.0) + spare, width)
 }
 
 /// Pages that use the whole width: a grid with a details pane beside it.
@@ -215,8 +224,9 @@ pub fn regions(app: &App) -> Regions {
 pub fn content_regions(app: &App) -> (Rect, Option<Rect>) {
     let r = regions(app);
     let content = r.inspector.unwrap_or_else(|| {
-        let width = (r.body.width() - app.px(32.0)).min(reading_width(app, crate::panel::current_page(app)));
-        // Anchored under the tabs and breadcrumbs, not centered in a wide window.
+        // The page spans the body so its scrollbar sits at the window's edge; its column is
+        // placed inside it (see [`column`]).
+        let width = r.body.width() - app.px(32.0);
         Rect::new(
             r.body.left + app.px(16.0),
             r.body.top + app.px(16.0),
@@ -275,7 +285,9 @@ pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
     ];
     page_bar(app, &mut b, r, &mut chrome);
     if let Some((list, open)) = tabs(page) {
-        tab_strip(&mut b, Rect::new(r.bar.left, r.bar.bottom, r.bar.width(), r.body.top - r.bar.bottom), list, open);
+        // The tabs start where the page's column does.
+        let start = if r.stage.is_none() { column(app, host, page).0 - app.px(12.0) } else { r.bar.left + app.px(8.0) };
+        tab_strip(&mut b, Rect::new(r.bar.left, r.bar.bottom, r.bar.width(), r.body.top - r.bar.bottom), start, list, open);
     }
     let mut focus_regions = vec![r.sidebar, r.bar];
     if let Some(viewport) = r.stage {
@@ -527,9 +539,9 @@ fn tabs(page: Page) -> Option<(&'static [(Page, &'static str)], Page)> {
 }
 
 /// The tab strip under the page bar.
-fn tab_strip(b: &mut B, rect: Rect, tabs: &[(Page, &str)], open: Page) {
+fn tab_strip(b: &mut B, rect: Rect, start: f32, tabs: &[(Page, &str)], open: Page) {
     let font = b.font(Font::Body);
-    let mut x = rect.left + b.px(20.0);
+    let mut x = start;
     let h = b.px(30.0);
     let y = rect.top + (rect.height() - h) / 2.0;
     for (page, label) in tabs {
@@ -1062,8 +1074,8 @@ mod layout_tests {
                         app.nav.widget = Some("clock-1".into());
                     }
                     let (host, stage) = content_regions(&app);
-                    // Reading pages stay readable; wide pages put a details pane beside their grid.
-                    assert!(host.width() <= 1200.0 || wide(page));
+                    // Reading columns stay readable; wide pages put a details pane beside their grid.
+                    assert!(column(&app, host, page).1 <= 1200.0 || wide(page));
                     if let Some(stage) = stage {
                         assert!(stage.width() > host.width());
                     }

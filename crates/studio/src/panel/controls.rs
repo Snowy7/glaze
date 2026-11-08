@@ -579,14 +579,14 @@ pub fn button(
     enabled: bool,
     action: Action,
 ) {
-    let primary = primary && enabled;
+    // A disabled primary stays recognisably primary, only faded.
     let k = key(("panel-button", label));
     let hot = b.hovered(k) || b.pressed(k);
     b.fill(
         r,
         b.control_radius(r),
         if primary {
-            b.p.solid
+            if enabled { b.p.solid } else { b.p.solid.with_alpha(0.4) }
         } else if hot && enabled {
             b.p.hover
         } else {
@@ -596,10 +596,10 @@ pub fn button(
     if !primary {
         b.stroke(r, b.control_radius(r), b.px(1.0), b.p.line);
     }
-    let ink = if !enabled {
-        b.p.ink3
-    } else if primary {
+    let ink = if primary {
         b.p.on_solid
+    } else if !enabled {
+        b.p.ink3
     } else {
         b.p.ink1
     };

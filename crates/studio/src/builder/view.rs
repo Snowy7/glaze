@@ -235,12 +235,13 @@ fn header(app: &App, b: &mut B, c: &mut Col, value: &Value) {
     let h = b.px(34.0);
     let more = Rect::new(c.right() - h, c.y, h, h);
     let gap = b.px(8.0);
-    let save_w = b.px(84.0);
+    // Say where each action goes: onto the desktop, or into your wallpapers.
+    let save_w = b.px(128.0);
     let save = Rect::new(more.left - gap - save_w, c.y, save_w, h);
     let apply = Rect::new(c.x, c.y, save.left - gap - c.x, h);
     let ready = !editor.fresh;
-    button(b, apply, "Apply", None, true, ready, action(Command::Save(true)));
-    button(b, save, "Save", None, false, ready, action(Command::Save(false)));
+    button(b, apply, "Apply to desktop", None, true, ready, action(Command::Save(true)));
+    button(b, save, "Save wallpaper", None, false, ready, action(Command::Save(false)));
     let mk = key("builder-more");
     b.fill(more, b.control_radius(more), if b.hovered(mk) { b.p.hover } else { b.p.fill });
     b.stroke(more, b.control_radius(more), b.px(1.0), b.p.line);

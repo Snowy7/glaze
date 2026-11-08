@@ -513,7 +513,7 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
 }
 
 fn history(app: &App, b: &mut B, c: &mut Col) {
-    page_title(app, b, c, "History", "Preview on every display");
+    page_title(app, b, c, "History", "Point at a change to preview it on every display");
     if super::history::partial_preview(app) {
         notice(b, c, "Partial preview · wallpaper unchanged");
     }

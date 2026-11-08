@@ -741,13 +741,15 @@ pub(crate) fn content(app: &App, b: &mut crate::ui::B, area: Rect, page: Page) -
         (area.bottom - failures.y - app.px(footer)).max(0.0),
     );
     let view = key(("studio-panel", page));
+    // The window places a readable column inside the full-width page; the docked panel is
+    // narrow already.
+    let (x, w) = if app.panel.as_ref().is_some_and(|state| state.windowed) {
+        crate::view::column(app, area, page)
+    } else {
+        (area.left + b.px(16.0), body.width() - b.px(32.0))
+    };
     b.scroll(view, body, app.nav.scroll(view), Action::None, |b, top| {
-        let mut c = crate::ui::Col {
-            x: area.left + b.px(16.0),
-            y: top + b.px(24.0),
-            w: body.width() - b.px(32.0),
-            view,
-        };
+        let mut c = crate::ui::Col { x, y: top + b.px(24.0), w, view };
         controls::save_banner(app, b, &mut c, page);
         if !app.system.running() {
             controls::notice(b, &mut c, "Changes apply when Glaze starts.");

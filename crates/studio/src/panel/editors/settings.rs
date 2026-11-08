@@ -552,7 +552,7 @@ fn menu_name(entry: &Entry) -> String {
             Builtin::Studio => "Glaze Studio",
             Builtin::Display => "Display settings",
             Builtin::Personalize => "Personalize",
-            Builtin::Terminal => "Open terminal here",
+            Builtin::Terminal => "Open in Terminal",
             Builtin::More => "Show more options",
         }
         .into(),
