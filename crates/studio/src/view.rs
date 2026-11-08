@@ -18,6 +18,8 @@ use crate::ui::B;
 const SIDEBAR_SETTING: &str = "/frame/sidebar_collapsed";
 const SETTINGS_SECTION: &str = "/frame/settings_collapsed";
 pub const INSPECTOR_SETTING: &str = "/frame/inspector_width";
+/// The tab strip's height under the page bar, in DIPs.
+const TAB_STRIP: f32 = 44.0;
 const COLLAPSE_TIME: std::time::Duration = std::time::Duration::from_millis(160);
 
 #[derive(Debug, Default)]
@@ -139,7 +141,18 @@ pub fn has_stage(page: Page) -> bool {
             | Page::History
             | Page::Search
             | Page::FirstRun
+            | Page::Wallpapers
     )
+}
+
+/// Pages that use the whole width: a grid with a details pane beside it.
+fn wide(page: Page) -> bool {
+    page == Page::Wallpapers
+}
+
+/// The details pane beside a wide page's grid.
+pub fn detail_width(app: &App, area: Rect) -> f32 {
+    (area.width() * 0.32).clamp(app.px(340.0), app.px(460.0))
 }
 
 pub fn inspector_width(app: &App) -> f32 {
@@ -176,12 +189,13 @@ pub fn regions(app: &App) -> Regions {
         h - app.px(8.0),
     );
     let bar = Rect::new(side, main.top, main.width(), app.px(48.0));
-    let body = Rect::new(side, bar.bottom, main.width(), h - bar.bottom);
+    let strip = tabs(crate::panel::current_page(app)).map_or(0.0, |_| app.px(TAB_STRIP));
+    let body = Rect::new(side, bar.bottom + strip, main.width(), h - bar.bottom - strip);
     let staged = has_stage(crate::panel::current_page(app));
     let inspector = staged.then(|| {
         Rect::new(
             main.right - inspector_width(app),
-            bar.bottom,
+            body.top,
             inspector_width(app),
             body.height(),
         )
@@ -209,7 +223,8 @@ pub fn regions(app: &App) -> Regions {
 pub fn content_regions(app: &App) -> (Rect, Option<Rect>) {
     let r = regions(app);
     let content = r.inspector.unwrap_or_else(|| {
-        let width = (r.body.width() - app.px(32.0)).min(app.px(1200.0));
+        let cap = if wide(crate::panel::current_page(app)) { f32::MAX } else { app.px(1200.0) };
+        let width = (r.body.width() - app.px(32.0)).min(cap);
         Rect::new(
             r.body.left + (r.body.width() - width) / 2.0,
             r.body.top + app.px(16.0),
@@ -393,6 +408,9 @@ pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
         ),
     ];
     page_bar(app, &mut b, r, &mut chrome);
+    if let Some((list, open)) = tabs(page) {
+        tab_strip(&mut b, Rect::new(r.bar.left, r.bar.bottom, r.bar.width(), r.body.top - r.bar.bottom), list, open);
+    }
     let mut focus_regions = vec![r.sidebar, r.bar];
     if let (Some(viewport), Some(picture)) = (r.stage, picture) {
         b.scroll(key("window-stage"), viewport, 0.0, Action::None, |b, _| {
@@ -432,7 +450,16 @@ pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
     if let Some(inspector) = r.inspector {
         b.fill(inspector, 0.0, p.bg);
     }
-    crate::panel::content(app, &mut b, host, page);
+    if wide(page) {
+        // Grid, then the selected item's details in a pane at the right.
+        let detail = detail_width(app, host);
+        let list = Rect::new(host.left, host.top, host.width() - detail - b.px(16.0), host.height());
+        crate::panel::content(app, &mut b, list, page);
+        let pane = Rect::new(list.right + b.px(16.0), host.top + b.px(16.0), detail, host.height() - b.px(32.0));
+        crate::panel::pane(app, &mut b, pane, Page::Wallpaper);
+    } else {
+        crate::panel::content(app, &mut b, host, page);
+    }
     if let Some(inspector) = r.inspector {
         let handle = Rect::new(inspector.left - b.px(4.0), inspector.top, b.px(8.0), inspector.height());
         let k = key("inspector-resize");
@@ -610,31 +637,11 @@ fn sidebar(app: &App, b: &mut B, r: Regions) {
                 nav_item(app, b, Rect::new(x, y, width, row_height), page, r.rail);
                 y += step;
             }
-            let settings_collapsed = app.get(DocId::Studio, SETTINGS_SECTION).and_then(Value::as_bool) == Some(true);
-            if r.rail {
-                y += b.px(12.0);
-            } else {
-                let header = Rect::new(x, y + b.px(6.0), width, b.px(30.0 * b.t.text_scale));
-                let k = key("sidebar-settings");
-                if settings_collapsed && SETTINGS.contains(&nav_place(app)) {
-                    b.fill(header, b.px(radius::CONTROL), p.selected);
-                } else {
-                    b.wash(k, header, b.px(radius::CONTROL));
-                }
-                let font = b.font(Font::Caption);
-                let ink = if b.hovered(k) { p.ink1 } else { p.ink3 };
-                b.text_in(Rect::new(x + b.px(10.0), header.top, width - b.px(36.0), header.height()), "Settings", &font, ink, Align::Start);
-                b.icon(Rect::new(header.right - b.px(26.0), header.top, b.px(16.0), header.height()), if settings_collapsed { glyph::CHEVRON_RIGHT } else { glyph::CHEVRON_DOWN }, 13.0, ink);
-                b.hit_checked(k, header, Role::Button, "Settings section", Some(!settings_collapsed), Action::Panel(Command::SidebarSettings), Behavior::Click);
-                b.focus_ring(k, header, b.px(radius::CONTROL));
-                y = header.bottom;
-            }
-            if r.rail || !settings_collapsed {
-                for page in SETTINGS {
-                    nav_item(app, b, Rect::new(x, y, width, row_height), page, r.rail);
-                    y += step;
-                }
-            }
+            // Settings is one place; its pages are tabs.
+            y += b.px(if r.rail { 12.0 } else { 8.0 });
+            b.hline(x + b.px(4.0), x + width - b.px(4.0), y - b.px(5.0), p.line);
+            nav_item(app, b, Rect::new(x, y, width, row_height), Page::Settings, r.rail);
+            y += step;
             y
         },
     );
@@ -646,13 +653,56 @@ fn nav_place(app: &App) -> Page {
     if active == Page::Windows {
         active = Page::Look;
     }
-    if active == Page::Settings {
-        active = Page::General;
-    }
-    while !PLACES.contains(&active) && !SETTINGS.contains(&active) {
+    while !PLACES.contains(&active) && !SETTINGS.contains(&active) && active != Page::Settings {
         active = active.parent().unwrap_or(Page::Root);
     }
-    active
+    if SETTINGS.contains(&active) { Page::Settings } else { active }
+}
+
+/// Sibling pages shown as tabs under the page bar, and the one that is open.
+fn tabs(page: Page) -> Option<(&'static [(Page, &'static str)], Page)> {
+    const SETTINGS_TABS: [(Page, &str); 6] = [
+        (Page::General, "General"),
+        (Page::Performance, "Performance"),
+        (Page::DesktopMenu, "Desktop menu"),
+        (Page::Keyboard, "Keyboard"),
+        (Page::Troubleshoot, "Troubleshoot"),
+        (Page::About, "About"),
+    ];
+    const LOOK_TABS: [(Page, &str); 2] = [(Page::Look, "Desktop"), (Page::Windows, "Windows")];
+    let open = if page == Page::Settings { Page::General } else { page };
+    if SETTINGS_TABS.iter().any(|(p, _)| *p == open) {
+        Some((&SETTINGS_TABS, open))
+    } else if matches!(page, Page::Look | Page::Windows) {
+        Some((&LOOK_TABS, page))
+    } else {
+        None
+    }
+}
+
+/// The tab strip under the page bar.
+fn tab_strip(b: &mut B, rect: Rect, tabs: &[(Page, &str)], open: Page) {
+    let font = b.font(Font::Body);
+    let mut x = rect.left + b.px(20.0);
+    let h = b.px(30.0);
+    let y = rect.top + (rect.height() - h) / 2.0;
+    for (page, label) in tabs {
+        let w = b.measure(label, &font).0 + b.px(26.0);
+        let r = Rect::new(x, y, w, h);
+        let k = key(("page-tab", *page));
+        let on = *page == open;
+        if on {
+            b.fill(r, h / 2.0, b.p.fill);
+        } else {
+            b.wash(k, r, h / 2.0);
+        }
+        let style = crate::panel::controls::font(b, 13.0, if on { 600 } else { 500 });
+        b.text_in(r, label, &style, if on || b.hovered(k) { b.p.ink1 } else { b.p.ink3 }, Align::Center);
+        b.hit_checked(k, r, Role::Tab, label, Some(on), Action::Panel(Command::Open(*page)), Behavior::Click);
+        b.focus_ring(k, r, h / 2.0);
+        x = r.right + b.px(4.0);
+    }
+    b.hline(rect.left + b.px(16.0), rect.right - b.px(16.0), rect.bottom - 1.0, b.p.line);
 }
 
 fn nav_item(app: &App, b: &mut B, rect: Rect, page: Page, rail: bool) {
@@ -699,7 +749,8 @@ fn nav_item(app: &App, b: &mut B, rect: Rect, page: Page, rail: bool) {
         Role::Tab,
         window_title(page),
         Some(current),
-        Action::Panel(Command::Open(page)),
+        // Settings opens on its first tab.
+        Action::Panel(Command::Open(if page == Page::Settings { Page::General } else { page })),
         Behavior::Click,
     );
     b.focus_ring(k, rect, b.control_radius(rect));
@@ -971,19 +1022,6 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
             |i| Action::Panel(Command::StageZoom(i == 1)),
         );
         end = zoom.left - b.px(8.0);
-        if matches!(page, Page::Look | Page::Windows) {
-            let scope = Rect::new(end - b.px(160.0), y, b.px(160.0), b.px(28.0));
-            b.segmented(
-                key("look-stage-scope"),
-                scope,
-                &["Desktop", "Windows"],
-                Some(usize::from(page == Page::Windows)),
-                "Look preview",
-                true,
-                |i| Action::Panel(Command::Open(if i == 0 { Page::Look } else { Page::Windows })),
-            );
-            end = scope.left - b.px(8.0);
-        }
     }
     let mut x = bar.left + b.px(12.0);
     let toggle = Rect::new(x, y, b.px(28.0), b.px(28.0));
@@ -1313,7 +1351,8 @@ mod layout_tests {
                         app.nav.widget = Some("clock-1".into());
                     }
                     let (host, stage) = content_regions(&app);
-                    assert!(host.width() <= 1200.0);
+                    // Reading pages stay readable; wide pages put a details pane beside their grid.
+                    assert!(host.width() <= 1200.0 || wide(page));
                     if let Some(stage) = stage {
                         assert!(stage.width() > host.width());
                     }

@@ -4,7 +4,7 @@ use glaze_ui::{Rect, Role};
 use serde_json::{Value, json};
 
 use super::*;
-use crate::actions::Source;
+use crate::actions::{MenuItem, Source};
 use crate::app::Overlay;
 use crate::docs::token;
 use crate::library::Kind;
@@ -69,106 +69,36 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
         Action::AddWallpaper,
     );
     page_title(app, b, c, "Wallpapers", "");
-    let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(30.0));
-    let stacked = c.w < b.px(360.0) || b.t.text_scale > 1.0;
-    let filter_w = if stacked {
-        c.w
-    } else {
-        b.px(178.0).min(c.w * 0.57)
-    };
-    let search = Rect::new(
-        r.left,
-        r.top,
-        if stacked {
-            c.w
-        } else {
-            (r.width() - filter_w - b.px(8.0)).max(1.0)
-        },
-        r.height(),
-    );
-    crate::ui::text_field(
-        app,
-        b,
-        search,
-        FieldId::WallpaperSearch,
-        Some(glyph::SEARCH),
-        "Search",
-        "",
-        "Search wallpapers",
-    );
-    b.stroke(search, b.control_radius(search), b.px(1.0), b.p.edge);
-    let filter = Rect::new(
-        r.right - filter_w,
-        if stacked { r.bottom + b.px(8.0) } else { r.top },
-        filter_w,
-        height(b, 30.0),
-    );
-    b.segmented(
-        key("panel-wallpaper-filter"),
-        filter,
-        &["All", "Yours", "Built in"],
-        Some(usize::from(app.nav.filter.min(2))),
-        "Wallpapers",
-        true,
-        |i| Action::WallpaperFilter(i as u8),
-    );
-    b.stroke(filter, b.control_radius(filter), b.px(1.0), b.p.edge);
-    c.y = filter.bottom + b.px(4.0);
     let query = app.text(&FieldId::WallpaperSearch).to_lowercase();
     let category = &app.panel.as_ref().unwrap().category;
-    let categories_button = Rect::new(c.x, c.y, c.w, b.px(24.0));
-    b.button(
-        key("panel-categories-button"),
-        categories_button,
-        &format!("Categories: {}", category.as_deref().unwrap_or("All")),
-        Some(glyph::CHEVRON_DOWN),
-        glaze_ui::controls::ButtonKind::Ghost,
-        true,
-        Action::More(key("panel-wallpaper-categories")),
-    );
-    c.y = categories_button.bottom;
     let mut categories = Vec::new();
     for wallpaper in &app.library.items {
         if !categories.contains(&wallpaper.category()) {
             categories.push(wallpaper.category());
         }
     }
-    if app.is_open(key("panel-wallpaper-categories")) {
-        group(b, c, "Category", |b, c| {
-            row(
-                b,
-                c,
-                None,
-                "All categories",
-                &app.library
-                    .items
-                    .iter()
-                    .filter(|w| matches_filter(app, w, &query))
-                    .count()
-                    .to_string(),
-                "",
-                Some(category.is_none()),
-                Action::Panel(Command::Category(None)),
-            );
-            for name in &categories {
-                row(
-                    b,
-                    c,
-                    None,
-                    name,
-                    &app.library
-                        .items
-                        .iter()
-                        .filter(|w| w.category() == *name && matches_filter(app, w, &query))
-                        .count()
-                        .to_string(),
-                    "",
-                    Some(category.as_deref() == Some(name)),
-                    Action::Panel(Command::Category(Some((*name).into()))),
-                );
-            }
-        });
-    }
+    // Search, then which wallpapers and which category, as dropdowns beside it when they fit.
+    const FILTERS: [&str; 3] = ["All wallpapers", "Yours", "Built in"];
+    let filter = usize::from(app.nav.filter.min(2));
+    let filter_menu = FILTERS.iter().enumerate()
+        .map(|(i, l)| MenuItem::choice(*l, i == filter, Action::WallpaperFilter(i as u8))).collect();
+    let mut category_menu = vec![MenuItem::choice("All categories", category.is_none(), Action::Panel(Command::Category(None))), MenuItem::Separator];
+    category_menu.extend(categories.iter().map(|name| {
+        let n = app.library.items.iter().filter(|w| w.category() == *name && matches_filter(app, w, &query)).count();
+        MenuItem::choice(format!("{name} · {n}"), category.as_deref() == Some(name), Action::Panel(Command::Category(Some((*name).into()))))
+    }));
+    let style = crate::panel::controls::font(b, 13.0, 500);
+    let category_label = category.as_deref().unwrap_or("All categories");
+    let menus_w = b.measure(FILTERS[filter], &style).0 + b.measure(category_label, &style).0 + b.px(42.0 * 2.0 + 8.0);
+    let inline = c.w - menus_w >= b.px(220.0) && b.t.text_scale <= 1.0;
+    let y = c.y + b.px(4.0);
+    let search = Rect::new(c.x, y, if inline { c.w - menus_w - b.px(8.0) } else { c.w }, height(b, 32.0));
+    crate::ui::text_field(app, b, search, FieldId::WallpaperSearch, Some(glyph::SEARCH), "Search", "", "Search wallpapers");
+    b.stroke(search, b.control_radius(search), b.px(1.0), b.p.edge);
+    let (mut x, menus_y) = if inline { (search.right + b.px(8.0), y) } else { (c.x, search.bottom + b.px(8.0)) };
+    x += dropdown(b, key("panel-wallpaper-filter"), x, menus_y, "Show", FILTERS[filter], Action::Menu(filter_menu)) + b.px(8.0);
+    dropdown(b, key("panel-wallpaper-categories"), x, menus_y, "Category", category_label, Action::Menu(category_menu));
+    c.y = menus_y + height(b, 32.0) + b.px(12.0);
     let mut count = 0;
     for category_name in categories {
         if category
@@ -213,10 +143,14 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
 }
 
 /// Wallpaper results share the library's apply, details, current marker and card artwork.
+/// In the window a click selects (details sit beside the grid); the docked panel applies.
 pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
+    let windowed = app.panel.as_ref().is_some_and(|state| state.windowed);
     let gap = b.px(12.0);
-    let width = (c.w - gap) / 2.0;
-    for chunk in indices.chunks(2) {
+    let columns = if windowed { ((c.w + gap) / b.px(250.0)).floor().max(2.0) as usize } else { 2 };
+    let width = (c.w - gap * (columns - 1) as f32) / columns as f32;
+    let selected = app.nav.wallpaper.or_else(|| app.library.active());
+    for chunk in indices.chunks(columns) {
         let row_height = width * 0.56 + height(b, 76.0);
         for (column, &i) in chunk.iter().enumerate() {
             let wallpaper = &app.library.items[i];
@@ -225,22 +159,19 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
             let card = Rect::new(x, c.y, width, row_height - b.px(8.0));
             let k = key(("panel-wallpaper", i));
             super::super::controls::card_picture(b, r, b.hovered(k), |b, r| thumbnail(app, b, r, i));
-            let apply = if wallpaper.error.is_some() {
-                Action::Panel(Command::Wallpaper(i))
+            let (label, apply) = if windowed {
+                (wallpaper.name.clone(), Action::Panel(Command::Wallpaper(i)))
+            } else if wallpaper.error.is_some() {
+                (format!("Apply {}", wallpaper.name), Action::Panel(Command::Wallpaper(i)))
             } else {
-                Action::UseWallpaper(i)
+                (format!("Apply {}", wallpaper.name), Action::UseWallpaper(i))
             };
-            b.hit(
-                k,
-                card,
-                Role::Button,
-                &format!("Apply {}", wallpaper.name),
-                apply,
-                Behavior::Click,
-            );
+            b.hit_checked(k, card, Role::RadioButton, &label, windowed.then_some(selected == Some(i)), apply, Behavior::Click);
             b.focus_ring(k, card, b.px(super::radius::CARD));
-            if wallpaper.active {
+            if windowed && selected == Some(i) || !windowed && wallpaper.active {
                 super::super::controls::card_selection(b, r);
+            }
+            if wallpaper.active {
                 let check = Rect::new(
                     r.left + b.px(6.0),
                     r.top + b.px(6.0),
@@ -269,10 +200,10 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
             let edit_key = key(("panel-wallpaper-edit", i));
             let edit = Rect::new(detail.left - b.px(58.0), detail.top, b.px(54.0), detail.height());
             let blocked = crate::builder::cannot_edit(wallpaper);
-            if app.input.pointer.is_some_and(|point| card.contains(point))
+            if !windowed && (app.input.pointer.is_some_and(|point| card.contains(point))
                 || app.input.focus == Some(k)
                 || app.input.focus == Some(details_key)
-                || app.input.focus == Some(edit_key)
+                || app.input.focus == Some(edit_key))
             {
                 b.fill(detail, b.px(radius::SMALL), b.p.chrome);
                 text(b, detail, "\u{22ef}", 20.0, 600, b.p.ink1, Align::Center);
@@ -289,15 +220,17 @@ pub(super) fn cards(app: &App, b: &mut B, c: &mut Col, indices: &[usize]) {
                 );
                 b.focus_ring(edit_key, edit, b.px(radius::SMALL));
             }
-            b.hit(
-                details_key,
-                detail,
-                Role::Button,
-                &format!("{} details", wallpaper.name),
-                Action::Panel(Command::Wallpaper(i)),
-                Behavior::Click,
-            );
-            b.focus_ring(details_key, detail, b.px(radius::SMALL));
+            if !windowed {
+                b.hit(
+                    details_key,
+                    detail,
+                    Role::Button,
+                    &format!("{} details", wallpaper.name),
+                    Action::Panel(Command::Wallpaper(i)),
+                    Behavior::Click,
+                );
+                b.focus_ring(details_key, detail, b.px(radius::SMALL));
+            }
             let caption = if wallpaper.error.is_some() {
                 "Can't load · open for details"
             } else if wallpaper.active {
@@ -383,15 +316,34 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
     );
     let pic = Rect::new(c.x, c.y + b.px(8.0), c.w, c.w * 0.56);
     thumbnail(app, b, pic, i);
-    c.y = pic.bottom + b.px(8.0);
-    match crate::builder::cannot_edit(w) {
-        None => action_button(b, c, "Edit wallpaper", Action::Panel(Command::Builder(crate::builder::Command::Edit(i)))),
-        Some(why) => notice(b, c, why),
+    c.y = pic.bottom + b.px(12.0);
+    // Apply, Edit, and everything else in the "…" menu.
+    let blocked = crate::builder::cannot_edit(w);
+    let h = height(b, 36.0);
+    let gap = b.px(8.0);
+    let more = Rect::new(c.right() - h, c.y, h, h);
+    let half = (more.left - gap - c.x - gap) / 2.0;
+    let usable = w.error.is_none();
+    button(b, Rect::new(c.x, c.y, half, h), if w.active { "On your desktop" } else { "Apply" }, None, true, usable && !w.active, Action::UseWallpaper(i));
+    button(b, Rect::new(c.x + half + gap, c.y, half, h), "Edit", None, false, blocked.is_none(),
+        Action::Panel(Command::Builder(crate::builder::Command::Edit(i))));
+    let mut menu = vec![MenuItem::new("Show in folder", Action::Reveal(w.dir.clone()))];
+    if usable {
+        menu.push(if w.editable() {
+            MenuItem::new("Edit the look it brings", Action::Panel(Command::WallpaperLook(i)))
+        } else {
+            MenuItem::new("Make a copy to edit", Action::CopyWallpaper(i))
+        });
+    }
+    if w.editable() {
+        menu.extend([MenuItem::Separator, MenuItem::new("Remove", Action::RemoveWallpaper(i)).enabled(!w.active)]);
+    }
+    b.icon_button(key("panel-wallpaper-more"), more, glaze_ui::controls::Glyph::from(glaze_ui::icons::Icon::More), "More actions", false, true, Action::Menu(menu));
+    c.y = more.bottom + b.px(10.0);
+    if let Some(why) = blocked {
+        notice(b, c, why);
     }
     if w.error.is_none() {
-        if !w.active {
-            action_button(b, c, "Use this wallpaper", Action::UseWallpaper(i));
-        }
         let theme = crate::panel::saving::theme_value(app, w);
         if w.kind.is_some_and(Kind::uses_fit) {
             let current = theme
@@ -400,24 +352,8 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                 .unwrap_or("cover");
             if w.editable() {
                 group(b, c, "", |b, c| {
-                    let source = (theme.pointer("/wallpaper/kind").and_then(Value::as_str)
-                        == Some("image"))
-                    .then(|| theme.pointer("/wallpaper/source").and_then(Value::as_str))
-                    .flatten()
-                    .map(|source| w.dir.join(source))
-                    .filter(|path| path.is_file());
-                    let image = source
-                        .as_ref()
-                        .or(w.preview.as_ref().or(w.video.as_ref()))
-                        .and_then(|path| app.images.borrow_mut().get(path, (640, 360)));
-                    crate::panel::specimens::fit_tiles(
-                        app,
-                        b,
-                        c,
-                        current,
-                        theme_edit(w, "/wallpaper/fit", "Fit"),
-                        image,
-                    );
+                    select(b, c, "Fit", json!(current), theme_edit(w, "/wallpaper/fit", "Fit"),
+                        FITS.iter().map(|(v, l)| (json!(v), (*l).to_owned())).collect());
                 });
             } else {
                 let fit = FITS
@@ -469,16 +405,6 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
                     "Your look applies until you add a look here."
                 },
             );
-            if w.editable() {
-                action_button(
-                    b,
-                    c,
-                    "Edit the look it brings",
-                    Action::Panel(Command::WallpaperLook(i)),
-                );
-            } else {
-                action_button(b, c, "Make a copy to edit", Action::CopyWallpaper(i));
-            }
         });
         if w.kind == Some(Kind::App) && w.editable() {
             group(b, c, "App", |b, c| {
@@ -552,24 +478,6 @@ pub fn details(app: &App, b: &mut B, c: &mut Col) {
             }
         });
     }
-    group(b, c, "", |b, c| {
-        action_button(b, c, "Show in folder", Action::Reveal(w.dir.clone()));
-        if w.editable() && !w.active {
-            let r = Rect::new(c.x, c.y + b.px(4.0), c.w, height(b, 30.0));
-            b.button(
-                key("panel-wallpaper-remove"),
-                r,
-                "Remove",
-                None,
-                glaze_ui::controls::ButtonKind::Ghost,
-                true,
-                Action::RemoveWallpaper(i),
-            );
-            c.y = r.bottom + b.px(8.0);
-        } else if w.editable() {
-            notice(b, c, "Choose another wallpaper before removing this one.");
-        }
-    });
 }
 
 pub fn can_add(app: &App) -> bool {

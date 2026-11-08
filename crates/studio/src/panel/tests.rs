@@ -935,24 +935,14 @@ fn built_in_wallpaper_fit_requires_an_explicit_copy() {
         .unwrap();
     super::run(&mut app, Command::Wallpaper(index));
     let built = super::build(&app, &mut ui.text);
-    assert!(
-        built
-            .targets
-            .iter()
-            .any(|t| t.action == Action::CopyWallpaper(index))
-    );
+    // The copy is offered in the details' "…" menu.
+    assert!(built.targets.iter().any(|t| matches!(&t.action, Action::Menu(items)
+        if items.iter().any(|item| matches!(item, crate::actions::MenuItem::Item { action, .. } if *action == Action::CopyWallpaper(index))))));
     assert!(
         !built.targets.iter().any(
             |t| matches!(&t.action,Action::Set(edit,_) if edit.path.ends_with("/wallpaper/fit"))
         )
     );
-    let copies: Vec<_> = built
-        .list
-        .hits
-        .iter()
-        .filter(|h| h.label.as_ref() == "Make a copy to edit")
-        .collect();
-    assert_eq!(copies.len(), 1);
 }
 
 #[test]

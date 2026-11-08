@@ -658,6 +658,20 @@ pub fn icon_button(b: &mut B, r: Rect, icon: Glyph, label: &str, enabled: bool, 
     }
 }
 
+/// A compact dropdown for toolbars: the current value and a chevron in a filled box. `action`
+/// opens its menu (`Action::Menu` or `Action::Choose`). Returns the width it took.
+pub fn dropdown(b: &mut B, k: glaze_ui::controls::Key, x: f32, y: f32, label: &str, value: &str, action: Action) -> f32 {
+    let style = font(b, 13.0, 500);
+    let w = b.measure(value, &style).0 + b.px(42.0);
+    let r = Rect::new(x, y, w, height(b, 32.0));
+    b.fill(r, b.px(radius::CONTROL), if b.hovered(k) { b.p.hover } else { b.p.fill });
+    text(b, Rect::new(r.left + b.px(12.0), r.top, w - b.px(36.0), r.height()), value, 13.0, 500, b.p.ink1, Align::Start);
+    b.icon(Rect::new(r.right - b.px(26.0), r.top, b.px(16.0), r.height()), glyph::CHEVRON_DOWN, 14.0, b.p.ink3);
+    b.hit(k, r, Role::ComboBox, &format!("{label} {value}"), action, Behavior::Click);
+    b.focus_ring(k, r, b.px(radius::CONTROL));
+    w
+}
+
 /// A 52-DIP row, or 64 with a caption. Values yield space to the label and ellipsize.
 pub fn row(
     b: &mut B,

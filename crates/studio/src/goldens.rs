@@ -99,7 +99,7 @@ fn keyboard_reaches_window_pages_search_and_history() {
         (0x35, Page::DesktopMenu),
         (0x36, Page::Windows),
         (0x37, Page::Connections),
-        (0xBC, Page::Settings),
+        (0xBC, Page::General), // Settings opens on its first tab.
         (0x48, Page::History),
     ] {
         app.key_with(vk, (true, false, false));
@@ -502,14 +502,11 @@ fn look_preview_segments_switch_pages_without_editing_documents() {
     let mut ui = Ui::new().unwrap();
     let mut app = window_app(true, &ui, (1280, 800));
     let before = crate::docs::DocId::ALL.map(|id| app.docs.doc(id).raw.clone());
-    for (page, selected, destination) in [
-        (Page::Look, 0usize, Page::Windows),
-        (Page::Windows, 1usize, Page::Look),
-    ] {
+    // Desktop and Windows are tabs under the page bar.
+    for (page, destination) in [(Page::Look, Page::Windows), (Page::Windows, Page::Look)] {
         app.run(Action::Panel(Command::Open(page)));
         let built = crate::view::build(&app, &mut ui);
-        let group = key("look-stage-scope");
-        let selected_key = key((group, selected));
+        let selected_key = key(("page-tab", page));
         let selected_id = built
             .targets
             .iter()
@@ -526,7 +523,7 @@ fn look_preview_segments_switch_pages_without_editing_documents() {
         let target = built
             .targets
             .iter()
-            .find(|target| target.key == key((group, 1 - selected)))
+            .find(|target| target.key == key(("page-tab", destination)))
             .unwrap();
         app.run(target.action.clone());
         assert_eq!(crate::panel::current_page(&app), destination);

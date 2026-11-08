@@ -280,6 +280,8 @@ pub fn run(app: &mut App, command: Command) {
         }
         Command::Open(page) => {
             app.overlay = None;
+            // The window shows Settings as tabs, so it opens on the first one.
+            let page = if page == Page::Settings && app.panel.as_ref().is_some_and(|state| state.windowed) { Page::General } else { page };
             if page == Page::FirstRun {
                 app.panel.as_ref().unwrap().first_run.borrow_mut().take();
                 first_run::begin(app);
@@ -462,7 +464,9 @@ pub fn run(app: &mut App, command: Command) {
         }
         Command::Wallpaper(i) => {
             app.nav.wallpaper = Some(i);
-            app.panel.as_mut().unwrap().page = Page::Wallpaper;
+            // The window shows a wallpaper's details beside the grid; the docked panel opens them.
+            let state = app.panel.as_mut().unwrap();
+            state.page = if state.windowed { Page::Wallpapers } else { Page::Wallpaper };
         }
         Command::WallpaperLook(i) => {
             if i < app.library.items.len() {
@@ -719,6 +723,19 @@ pub(crate) fn content(app: &App, b: &mut crate::ui::B, area: Rect, page: Page) -
         Rect::new(area.left, body.bottom, area.width(), app.px(footer)),
     );
     body
+}
+
+/// A side pane in the window: one page in its own scroll on a card, such as a wallpaper's
+/// details beside the grid. Banners and the footer belong to the main page beside it.
+pub(crate) fn pane(app: &App, b: &mut crate::ui::B, area: Rect, page: Page) {
+    b.fill(area, b.px(tokens::radius::CARD), b.p.panel);
+    let view = key(("studio-pane", page));
+    b.scroll(view, area, app.nav.scroll(view), Action::None, |b, top| {
+        let mut c = crate::ui::Col { x: area.left + b.px(16.0), y: top + b.px(16.0), w: area.width() - b.px(32.0), view };
+        pages::view(app, b, &mut c, page);
+        controls::boundaries(b);
+        c.y + b.px(16.0)
+    });
 }
 
 /// Reserve a top-bar band and 96 DIPs for a floating dock, within the primary work area.
