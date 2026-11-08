@@ -1,6 +1,6 @@
 # Scrollable tiling on Windows: can the animations be smooth and cheap?
 
-Spike for mypaper, 2026-11-08. Question: can a niri-style strip scroll / Overview animate
+Spike for Glaze, 2026-11-08. Question: can a niri-style strip scroll / Overview animate
 *other processes'* windows smoothly and cheaply, and how should off-view windows be kept?
 
 **Short answer.** Moving real foreign windows every frame works only for small counts and stays
@@ -42,7 +42,7 @@ cloak, and it is fragile.
   `GetDC(NULL)` + `BitBlt` (about 4.3 ms per read, so these passes run at about 50 Hz), and
   the colour edges were compared with the commanded positions. The pixels were only checked in
   memory for our own colours and never stored.
-- **Live desktop**: mypaper shell, T3 and other WinEvent/UIA clients were running throughout,
+- **Live desktop**: Glaze shell, T3 and other WinEvent/UIA clients were running throughout,
   so these are real-world numbers, not a clean lab. Process CPU from `GetProcessTimes` has
   15.6 ms granularity, so "ms/s" figures over 1–2 s carry about ±8 ms/s.
 - Raw output: `spike\report.txt` (run 1, elevated launcher, see the note at the end),
@@ -162,15 +162,15 @@ per thumbnail moves and scales its `rcDestination` (an Overview-like zoom and tr
 | `SW_HIDE` | 0 | 0 |
 | self-cloaked | 38 | 33 |
 
-  Costs: **+51 MB private for a D3D11 device** (mypaper's overlay doc measured +16 MB for a
+  Costs: **+51 MB private for a D3D11 device** (Glaze's overlay doc measured +16 MB for a
   device on wgpu's adapter, `crates/wallpaper/src/overlay/capture.rs`) and about +0.2 MB per
-  session. The first frame arrives after 83–282 ms (mypaper's overlay docs: 100–250 ms). Our
+  session. The first frame arrives after 83–282 ms (Glaze's overlay docs: 100–250 ms). Our
   CPU stayed within measurement noise for 11 sessions. **No yellow border**:
   `RequestAccessAsync(Borderless)` returned Allowed and `SetIsBorderRequired(false)` succeeded,
-  as mypaper's overlay already does (`capture.rs` `ask_borderless`). WGC only hands over
+  as Glaze's overlay already does (`capture.rs` `ask_borderless`). WGC only hands over
   textures, so we would composite them ourselves (DComp/wgpu), with GPU copies and our own
   device. That only pays off if the proxies need effects (rounded corners, shadows, blur),
-  which mypaper's overlay pipeline can already draw.
+  which Glaze's overlay pipeline can already draw.
 - **DirectComposition**: the documented DComp path to another window's content is only for
   *your own* layered child windows ([DWMWA_CLOAK note][dwma]; "How to animate the bitmap of a
   layered child window"). There is no public DComp visual for a foreign HWND. The shell's
@@ -230,13 +230,13 @@ on-screen):
   gap-shaped monitor layout contains areas that are on no monitor, so park beyond the bounding
   box itself.
 - **Cross-process `DWMWA_CLOAK` is refused**: `E_ACCESSDENIED (0x80070005)` from a
-  same-user, same-integrity process, and the window stayed uncloaked. This matches mypaper's
+  same-user, same-integrity process, and the window stayed uncloaked. This matches Glaze's
   own note in `crates/bars/src/taskbar.rs` (`veil`). The child cloaking *itself* worked.
 - **`IApplicationView::SetCloak`** (undocumented immersive-shell COM): komorebi's
   `HidingBehaviour::Cloak` (`komorebi/src/core/mod.rs`, `com/mod.rs`) and GlazeWM's default
   `hide_method: cloak` (`wm-platform/.../native_window.rs` `set_cloak(1, 2)`, which cites
   AltTabAccessor issue #1). Risks: the interface IIDs change between Windows builds; it needs
-  the ImmersiveShell service from Explorer; it depends on Explorer, which mypaper may replace;
+  the ImmersiveShell service from Explorer; it depends on Explorer, which Glaze may replace;
   and windows stay cloaked if the WM dies. komorebi keeps an on-disk record of the windows it
   cloaked to undo after a crash (`cloaked.rs`). GlazeWM also hides taskbar buttons separately.
   Not tested here (off-limits).
@@ -254,7 +254,7 @@ on-screen):
 - **UIPI**: a medium-integrity tiler cannot reposition elevated apps' windows
   **(unverified here)**; every run above was medium against medium.
 
-## 4. Where it lives in mypaper, and its budget
+## 4. Where it lives in Glaze, and its budget
 
 - **Budget** (`docs/performance.md`): CPU while paused 0.02 % per process; idle bars 0.2 %; no
   frame ticker at rest; shell resting 35–37 MiB private; "Hidden = free". The rule is to save
@@ -322,6 +322,6 @@ on-screen):
 
 Other sources: Chromium `ui/aura/native_window_occlusion_tracker_win.cc` (main, fetched
 2026-11-08); komorebi @72aa4c9 (`C:\mypaper-targets\tiling-research\src\komorebi`); GlazeWM
-@5709ad0; Whim @1e86b57; mypaper `docs/performance.md`, `docs/glass.md`,
+@5709ad0; Whim @1e86b57; Glaze `docs/performance.md`, `docs/glass.md`,
 `crates/desktop/src/win_events.rs`, `crates/bars/src/preview.rs`, `crates/bars/src/taskbar.rs`,
 `crates/wallpaper/src/overlay/{mod,capture}.rs`.

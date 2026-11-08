@@ -1,6 +1,6 @@
 # Scrollable / infinite-canvas tiling: Linux & macOS prior art
 
-Research slice for mypaper (native Rust Windows shell). Read on **2026-11-08** from primary sources: source code at pinned commits, official docs/wikis, maintainer comments in issues/discussions. Anything not traced to a primary source is marked **(unverified)**. Third-party press is used only for "who ships it" facts, and is labelled.
+Research slice for Glaze (native Rust Windows shell). Read on **2026-11-08** from primary sources: source code at pinned commits, official docs/wikis, maintainer comments in issues/discussions. Anything not traced to a primary source is marked **(unverified)**. Third-party press is used only for "who ships it" facts, and is labelled.
 
 ## Sources read (pinned)
 
@@ -20,7 +20,7 @@ Link shorthand below: `niri:` = `https://github.com/niri-wm/niri/blob/90d5c1bf73
 
 ---
 
-## 0. The ten findings that matter most for mypaper
+## 0. The ten findings that matter most for Glaze
 
 1. **niri is the reference design.** It is the only one that is a full compositor, so it can do things the extension and script WMs can't: it never shows off-screen windows, it batches resizes across windows into one atomic update, and it can freeze any client that takes more than 300 ms. Its rules are written down as [design principles](https://github.com/niri-wm/niri/blob/90d5c1bf7381/docs/wiki/Development:-Design-Principles.md) that are worth adopting as-is:
    - **Opening a window never resizes the others.**
@@ -52,7 +52,7 @@ Link shorthand below: `niri:` = `https://github.com/niri-wm/niri/blob/90d5c1bf73
    - **niri:** workspaces move to a surviving monitor and remember their *original* monitor, so reconnecting restores them. Opening a window on a workspace makes it adopt its current monitor (to avoid surprises). Windows survive having zero monitors.
    - **PaperWM:** shares one GNOME workspace pool across monitors.
    - **Karousel:** single-screen only.
-8. **Throttle off-screen windows.** niri sends frame callbacks to non-visible windows only ~1×/s. This saves power but made screencasts of off-screen windows stutter ([niri#539](https://github.com/niri-wm/niri/issues/539)). It fits mypaper's "net-negative resources" rule well.
+8. **Throttle off-screen windows.** niri sends frame callbacks to non-visible windows only ~1×/s. This saves power but made screencasts of off-screen windows stutter ([niri#539](https://github.com/niri-wm/niri/issues/539)). It fits Glaze's "net-negative resources" rule well.
 9. **2D canvases exist but are young.**
    - **driftwm** (Rust/Smithay, created 2026-02-22, ~1.9k★) is the serious one: windows at their real size on a 2D plane, the screen is a camera that pans and zooms, windows that snap together form implicit clusters, and each monitor is a separate viewport onto the same canvas.
    - **On Windows**, Apeiron and WinCanvas fake zoom with DWM thumbnails, because "Windows can't scale real windows".
@@ -267,7 +267,7 @@ Link shorthand below: `niri:` = `https://github.com/niri-wm/niri/blob/90d5c1bf73
 - windows with arbitrary min/max sizes and parent IDs, including parent loops;
 - gestures, struts, gaps, centring modes and tab-indicator positions.
 
-It asserts invariants after every op (`operations_dont_panic`, [`#L1777`](https://github.com/niri-wm/niri/blob/90d5c1bf7381/src/layout/tests.rs#L1777)), plus dozens of named regression cases (`large_max_size`, `parent_id_causes_loop`, `interactive_move_drop_on_other_output_during_animation`, …). The same model (pure layout state, synthetic clock) suits mypaper.
+It asserts invariants after every op (`operations_dont_panic`, [`#L1777`](https://github.com/niri-wm/niri/blob/90d5c1bf7381/src/layout/tests.rs#L1777)), plus dozens of named regression cases (`large_max_size`, `parent_id_causes_loop`, `interactive_move_drop_on_other_output_during_animation`, …). The same model (pure layout state, synthetic clock) suits Glaze.
 
 ### 1.14 Known pain points (from issues)
 
@@ -397,7 +397,7 @@ Source: [CPAN docs](https://metacpan.org/dist/App-papersway/view/bin/papersway).
 
 ### 2.6 komorebi `Scrolling` layout (Windows; verified to exist)
 
-This is the closest prior art to mypaper's platform: a tiling WM that has to work with ordinary Win32 windows.
+This is the closest prior art to Glaze's platform: a tiling WM that has to work with ordinary Win32 windows.
 
 - **History:** added 2025-05-17 (`b4e61b07` "feat(wm): add scrolling layout"); heavily reworked 2026-10-30 (shared `komorebi-scrolling` crate with property tests).
 - **Behaviour** ([docs](https://github.com/LGUG2Z/komorebi/blob/72aa4c97ad/docs/usage/scrolling-layout.md)):
@@ -460,7 +460,7 @@ This is the closest prior art to mypaper's platform: a tiling WM that has to wor
 
 "Best" is my recommendation for a Windows shell, given the prior art.
 
-| Case | niri | Others | Best behaviour for mypaper |
+| Case | niri | Others | Best behaviour for Glaze |
 |---|---|---|---|
 | **Dialogs (owned/transient)** | Float by default, centred over the parent tile, clamped to the work area; activated only if the parent is active; stacked above the parent; rule can tile them (then right of the parent) ([§1.5](#15-dialogs-popups-transientparented-windows-floating)) | PaperWM/Karousel never tile transients; Hyprland floats parent‖fixed-size; komorebi uses its global float rules | niri's rule: Win32 *owned* windows (`GW_OWNER`) and modal dialogs float centred over the owner, on the owner's workspace, z-ordered with it, gaining focus only if the owner had it. Later, try niri#1116: pin modals to the owner so they scroll with it |
 | **Popups, menus, tooltips** | Not windows; constrained horizontally to the window's own width, vertically to the work area; IME gets the parent area | n/a (the platform positions them) | On Win32, menus are separate top-levels (`#32768`, `WS_POPUP`, `WS_EX_TOOLWINDOW`): never manage them. If the owner is scrolled partly off-screen, make sure it lands fully on screen before menus open (auto-scroll on activation) |
@@ -481,7 +481,7 @@ This is the closest prior art to mypaper's platform: a tiling WM that has to wor
 | **User drags a title bar** | 256 px rubber band, then the window pops out of the layout, semi-transparent with an insert hint; right-click toggles floating vs tiling | Karousel `untileOnDrag` floats it; Hyprland: drop near a target's edge (30 %) = new column, else join the column; PaperWM.spoon lift modifier | niri's rubber band plus an insert hint, Hyprland's edge rule for dropping. On Windows, intercept `WM_ENTERSIZEMOVE` / move-size loops, or show a thumbnail proxy while dragging |
 | **Off-screen windows** | Not drawn; ~1 Hz frame callbacks | Clones (PaperWM); edge park (macOS, komorebi 5 px); hide if a monitor is adjacent (komorebi) | Windows *can* place windows off-monitor but shows them on any monitor they overlap. Cloak / hide or park them and render thumbnails for the scroll animation (Apeiron's trick); throttle them |
 | **Screen sharing an off-screen window** | Stutters at 1 Hz (#539) | — | Don't throttle windows that are being captured, if detectable (unverified on Win32) |
-| **Minimize** | Not supported (#3982) | PaperWM scratch hide = minimize; scroll: optional minimize to scratchpad | mypaper has a dock, so minimize must exist: take the column out of the strip and close the gap (niri's "focused window doesn't move" still applies) |
+| **Minimize** | Not supported (#3982) | PaperWM scratch hide = minimize; scroll: optional minimize to scratchpad | Glaze has a dock, so minimize must exist: take the column out of the strip and close the gap (niri's "focused window doesn't move" still applies) |
 | **Focus stealing** | xdg-activation tokens with a timeout; Smart: don't steal from fullscreen; `on-xdg-activate` rule | Hyprland `follow_min_visible` 0.4 for soft focus | Treat `SetForegroundWindow` from a background app as urgent (flash in the dock) unless the user just launched it |
 | **Focus-follows-mouse at edges** | CSD margins peek out, so accidental focus; `max-scroll-amount="0%"` | Hyprland: mouse-down never scrolls, click-up does | Never scroll on hover; scroll on click-up |
 | **Portrait monitors** | Requested (#1071) | Hyprland `direction` up/down; scroll per-output orientation | Per-output strip direction, cheap to add if the layout is axis-agnostic from the start |
@@ -545,7 +545,7 @@ Windows itself reserves 3/4-finger gestures. komorebi has to read the touchpad i
 
 These follow from the sources above. The Windows-specific claims are not verified here; another slice covers them.
 
-- mypaper is in the same position as PaperWM, the spoon and komorebi: it **can't stop windows from being visible** where they physically are. So:
+- Glaze is in the same position as PaperWM, the spoon and komorebi: it **can't stop windows from being visible** where they physically are. So:
   - (a) cloak or park off-strip windows;
   - (b) animate scrolling with **thumbnail proxies** (PaperWM clones, Apeiron's DWM thumbnails), not by moving real HWNDs each frame;
   - (c) move the real windows once, at rest.
@@ -561,4 +561,4 @@ These follow from the sources above. The Windows-specific claims are not verifie
 - Infinidesk and hevel feature details (from search summaries, not repos).
 - Non-KaOS/CachyOS distro niri editions (PikaOS, RakuOS, StratOS, Akira, RengeOS…).
 - niri's behaviour for a window opened *while the overview is open*: inferred from code, not observed.
-- Whether Win32 lets mypaper detect that a window is being captured (§3, screen-sharing row).
+- Whether Win32 lets Glaze detect that a window is being captured (§3, screen-sharing row).

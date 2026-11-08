@@ -165,7 +165,7 @@ impl Settings {
                 || (!b.ctrl && !b.shift && !b.alt && matches!(b.key, 0x41 | 0x4E | 0x45))
                 || (b.alt && matches!(b.key, 0x42 | 0x44 | 0x47 | 0x4D | 0x50 | 0x52 | 0x57))
             {
-                return Err("tiling shortcut conflicts with Windows, Game Bar, or mypaper");
+                return Err("tiling shortcut conflicts with Windows, Game Bar, or Glaze");
             }
             if self.keybindings[..i]
                 .iter()

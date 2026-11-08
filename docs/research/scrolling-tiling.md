@@ -1,7 +1,7 @@
-# Scrolling tiling for mypaper: can we replace Windows Snap with a niri-style strip?
+# Scrolling tiling for Glaze: can we replace Windows Snap with a niri-style strip?
 
 Study of scrollable / "infinite canvas" tiling (niri, PaperWM, Karousel, Hyprland's scrolling layout,
-driftwm) and whether mypaper can replace Windows' Snap with it on Win32, every edge case included.
+driftwm) and whether Glaze can replace Windows' Snap with it on Win32, every edge case included.
 
 - **Written:** 2026-11-08, on Windows 11 Pro 10.0.26300.
 - **Evidence:** three source notes beside this file. Each cites the file, doc page or issue it relies on, at
@@ -87,7 +87,7 @@ the overview's zoom instead of into the layout.
 | Receive three- and four-finger touchpad gestures | Windows keeps them for itself | Read the precision touchpad over Raw Input in our own process, as komorebi's whkd and LeopardWM do, and ask the user to set Windows' own gestures to "nothing" ([windows §3.23][wm3]) |
 | Scale real windows (driftwm zoom) | Impossible | The overview zooms thumbnails, which is how Apeiron does it |
 
-### 2.2 Architecture that fits mypaper's rules
+### 2.2 Architecture that fits Glaze's rules
 
 | Piece | Where | Notes |
 |---|---|---|
@@ -135,7 +135,7 @@ box, so the box itself is the boundary ([animation §3][af3]).
 
 ## 3. "And more": what we can do that the Linux ones don't
 
-1. **The wallpaper scrolls with the strip.** mypaper owns the wallpaper engine, so the background can
+1. **The wallpaper scrolls with the strip.** Glaze owns the wallpaper engine, so the background can
    parallax-pan with the view and zoom with the overview. niri gets this only for layer-shell backgrounds.
 2. **The dock and bar know the strip:**
    - a PaperWM-style position indicator in the top bar;
@@ -225,19 +225,19 @@ changes, and the tests touch only windows they created.
    the default.
 5. **Shell integration:** bar indicator, dock, wallpaper parallax, and touchpad gestures.
 
-[lx0]: scrolling-tiling/linux-prior-art.md#0-the-ten-findings-that-matter-most-for-mypaper
+[lx0]: scrolling-tiling/linux-prior-art.md#0-the-ten-findings-that-matter-most-for-glaze
 [lx11]: scrolling-tiling/linux-prior-art.md#11-model
 [lx113]: scrolling-tiling/linux-prior-art.md#113-how-niri-tests-the-layout
 [lx23]: scrolling-tiling/linux-prior-art.md#23-karousel-kde-kwin-script
 [lx27]: scrolling-tiling/linux-prior-art.md#27-2d-infinite-canvas-wms
 [lx28]: scrolling-tiling/linux-prior-art.md#28-who-ships-it-distros
 [lx3]: scrolling-tiling/linux-prior-art.md#3-edge-case-catalogue
-[wm0]: scrolling-tiling/windows-mechanics.md#0-the-findings-that-matter-most-for-mypaper
+[wm0]: scrolling-tiling/windows-mechanics.md#0-the-findings-that-matter-most-for-glaze
 [wm15]: scrolling-tiling/windows-mechanics.md#15-scrolling-layout
 [wm18]: scrolling-tiling/windows-mechanics.md#18-app-specific-configuration-188-apps-komorebi-application-specific-configurationapplicationsyaml
 [wm23]: scrolling-tiling/windows-mechanics.md#23-hooks-none-of-these-inject-except-seelens-tray-hook
 [wm3]: scrolling-tiling/windows-mechanics.md#3-win32-edge-case-catalogue
-[wm4]: scrolling-tiling/windows-mechanics.md#4-recommendations-for-mypaper-from-the-evidence-above
+[wm4]: scrolling-tiling/windows-mechanics.md#4-recommendations-for-glaze-from-the-evidence-above
 [af1]: scrolling-tiling/animation-feasibility.md#1-moving-real-foreign-windows-per-frame
 [af2]: scrolling-tiling/animation-feasibility.md#2-proxy-animation-dwm-thumbnails-in-our-overlay
 [af3]: scrolling-tiling/animation-feasibility.md#3-keeping-off-view-windows
