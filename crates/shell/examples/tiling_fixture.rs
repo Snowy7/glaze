@@ -513,6 +513,14 @@ fn child(output: &Path, count: usize) -> Result<()> {
     Ok(())
 }
 unsafe extern "system" fn window_proc(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    if msg == WM_APP + 92 {
+        CHILD_OUTPUT.with(|path| {
+            let _ = std::fs::write(path.borrow().join("hung-ready.txt"), "ready");
+        });
+        // Deliberately hang only this fixture child's UI thread, never another application.
+        std::thread::sleep(Duration::from_secs(2));
+        return LRESULT(0);
+    }
     if msg == WM_APP + 91 {
         // SAFETY: this is the fixture's own HWND, on its own thread. The app publishes its
         // late name as Firefox/JetBrains do, without another process generating the event.
@@ -777,6 +785,24 @@ fn exercise_cases(output: &Path, tiler: &mut Option<Tiler>, windows: &[Identity]
             .any(|(id, _)| *id == tray),
         "minimize restore was not admitted"
     );
+    unsafe {
+        PostMessageW(Some(controller.window()), WM_APP + 92, WPARAM(0), LPARAM(0))?;
+    }
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while !output.join("hung-ready.txt").exists() {
+        ensure!(Instant::now() < deadline, "hung fixture did not start");
+        pump(tiler, Duration::from_millis(20));
+    }
+    tiler.as_mut().unwrap().command(Op::Maximize);
+    pump(tiler, Duration::from_millis(300));
+    ensure!(
+        !glaze_shell::tiling::animation::busy(),
+        "hung client blocked native projection"
+    );
+    pump(tiler, Duration::from_secs(2));
+    verify_placements(tiler.as_ref().unwrap())?;
+    tiler.as_mut().unwrap().command(Op::Maximize);
+    pump(tiler, Duration::from_millis(300));
     let t = tiler.as_mut().unwrap();
     t.command(Op::MoveWorkspace(Direction::Down));
     t.command(Op::Overview);
