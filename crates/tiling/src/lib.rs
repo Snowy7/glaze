@@ -174,6 +174,8 @@ impl Layout {
     pub fn resize_column(&mut self, window: WindowId, logical_size: f64) -> Vec<Target> {
         if logical_size.is_finite() && logical_size > 0.0 {
             if let Some((mi, wi)) = self.locate(window) {
+                let before = self.focus_position(mi, wi);
+                let focused = self.monitors[mi].workspaces[wi].focused == Some(window);
                 let m = &mut self.monitors[mi];
                 let length = m.axis.length(m.area) / m.scale;
                 let w = &mut m.workspaces[wi];
@@ -182,7 +184,11 @@ impl Layout {
                         / (length - self.settings.gaps).max(1.0))
                     .clamp(0.05, 1.0);
                 }
-                self.fit(mi, wi);
+                if focused {
+                    self.fit(mi, wi);
+                } else if let Some(before) = before {
+                    self.preserve_focus(mi, wi, before);
+                }
             }
         }
         self.targets()
@@ -546,11 +552,17 @@ impl Layout {
     /// A refused resize raises the learned minimum; it never shrinks automatically.
     pub fn learn_minimum(&mut self, id: WindowId, along: f64) -> Vec<Target> {
         if let Some((mi, wi)) = self.locate(id) {
+            let before = self.focus_position(mi, wi);
+            let focused = self.monitors[mi].workspaces[wi].focused == Some(id);
             let w = &mut self.monitors[mi].workspaces[wi];
             if let Some(ci) = w.column(id) {
                 w.columns[ci].learned_min = w.columns[ci].learned_min.max(along);
             }
-            self.fit(mi, wi);
+            if focused {
+                self.fit(mi, wi);
+            } else if let Some(before) = before {
+                self.preserve_focus(mi, wi, before);
+            }
         }
         self.targets()
     }

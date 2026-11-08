@@ -161,6 +161,37 @@ fn minimum_wins_over_maximum() {
     assert_eq!(l.targets()[0].rect.w, 900.0);
 }
 #[test]
+fn a_left_clients_size_request_does_not_move_the_focused_window() {
+    let mut l = layout();
+    for id in 1..=3 {
+        open(&mut l, id);
+    }
+    let before = l
+        .targets()
+        .into_iter()
+        .find(|t| t.window == WindowId(3))
+        .unwrap()
+        .rect;
+    l.learn_minimum(WindowId(1), 900.0);
+    assert_eq!(
+        l.targets()
+            .into_iter()
+            .find(|t| t.window == WindowId(3))
+            .unwrap()
+            .rect,
+        before
+    );
+    l.resize_column(WindowId(2), 300.0);
+    assert_eq!(
+        l.targets()
+            .into_iter()
+            .find(|t| t.window == WindowId(3))
+            .unwrap()
+            .rect,
+        before
+    );
+}
+#[test]
 fn portrait_rotates_both_layout_axes() {
     let mut l = Layout::new(Settings::default());
     let r = Rect {
