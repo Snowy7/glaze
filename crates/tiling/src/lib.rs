@@ -796,7 +796,7 @@ impl Layout {
                     let heights = heights(c, m.axis, breadth, self.settings.gaps);
                     let mut across = cross_gap;
                     for (ti, t) in c.tiles.iter().enumerate() {
-                        let (a, b, len, br) = if c.mode != Mode::Normal {
+                        let (a, b, len, br) = if c.mode == Mode::Fullscreen {
                             (along, 0.0, m.axis.length(area) / m.scale, breadth)
                         } else {
                             (along, across, width, heights[ti])

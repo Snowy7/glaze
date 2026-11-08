@@ -209,6 +209,31 @@ fn drop_at_column_center_joins_and_edge_inserts() {
     assert_eq!(l.monitors[0].workspaces[0].columns[0].tiles.len(), 2);
     check(&l);
 }
+#[test]
+fn stacked_minima_are_allocated_before_weighted_heights() {
+    let mut l = layout();
+    l.insert(
+        WindowId(1),
+        Constraints {
+            min_h: 600.0,
+            ..Constraints::default()
+        },
+        None,
+        None,
+        true,
+    );
+    open(&mut l, 2);
+    l.command(Command::Consume);
+    let t = l.targets();
+    assert_eq!(
+        t.iter().find(|t| t.window == WindowId(1)).unwrap().rect.h,
+        600.0
+    );
+    assert_eq!(
+        t.iter().find(|t| t.window == WindowId(2)).unwrap().rect.h,
+        152.0
+    );
+}
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(128))]
     #[test]
