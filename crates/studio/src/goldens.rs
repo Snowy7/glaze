@@ -11,7 +11,7 @@ use crate::docs::Docs;
 use crate::library::Library;
 use crate::theme::Theme;
 
-fn check(image: &mypaper_ui::Image, path: &std::path::Path) -> anyhow::Result<()> {
+pub(crate) fn check(image: &mypaper_ui::Image, path: &std::path::Path) -> anyhow::Result<()> {
     // Keep Studio's documented blessing switch after the kit moved to its own repository.
     if std::env::var_os("MYPAPER_BLESS").is_some() {
         golden::write(image, path)

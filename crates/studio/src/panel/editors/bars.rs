@@ -1912,7 +1912,11 @@ mod tests {
             app.run(Action::Panel(Command::Open(Page::Dock)));
             let scheme = if dark { "dark" } else { "light" };
             let image = crate::goldens::shot(&mut app, &mut ui);
-            mypaper_ui::golden::check(&image, &baseline.join(format!("dock-visibility-1280x800-{scheme}.png"))).unwrap();
+            let file = format!("dock-visibility-1280x800-{scheme}.png");
+            if let Some(out) = std::env::var_os("MYPAPER_STUDIO_WINDOW_SHOTS") {
+                mypaper_ui::golden::write(&image, &std::path::PathBuf::from(out).join(&file)).unwrap();
+            }
+            crate::goldens::check(&image, &baseline.join(file)).unwrap();
             let choices = app.frame.targets.iter().find_map(|target| match &target.action {
                 Action::Choose(choices) if choices.edit.path.as_ref() == "/panel/dock-hide" => Some(choices.clone()),
                 _ => None,
@@ -1928,7 +1932,7 @@ mod tests {
             let list = mypaper_ui::menu::view(&items, &layout, None, &tokens);
             let size = layout.size();
             let image = mypaper_ui::render(&mut ui, &list, size.0 as u32 + 32, size.1 as u32 + 32).unwrap();
-            mypaper_ui::golden::check(&image, &baseline.join(format!("dock-visibility-choices-{scheme}.png"))).unwrap();
+            crate::goldens::check(&image, &baseline.join(format!("dock-visibility-choices-{scheme}.png"))).unwrap();
             for (i, mode) in [DockHide::Never, DockHide::WhenFilled, DockHide::Always].into_iter().enumerate() {
                 app.chose(&choices, i);
                 let flags = mode.flags();
