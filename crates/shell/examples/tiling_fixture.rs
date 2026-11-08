@@ -263,6 +263,11 @@ fn run(
                             y: from.y + 20.0,
                             ..from
                         },
+                        visual_to: Rect {
+                            x: from.x + 40.0,
+                            y: from.y + 20.0,
+                            ..from
+                        },
                         clip: glaze_desktop::monitors()
                             .into_iter()
                             .find(|m| {

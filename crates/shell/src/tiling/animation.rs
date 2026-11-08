@@ -55,6 +55,8 @@ pub struct Change {
     pub identity: Identity,
     pub from: Rect,
     pub to: Rect,
+    /// The drawing endpoint can be off-view on the left while the HWND is parked on the right.
+    pub visual_to: Rect,
     /// The proxy is cropped to its owning output, independently of the global parking rectangle.
     pub clip: Rect,
     pub border: [f64; 4],
@@ -167,7 +169,9 @@ fn projection_worker(jobs: Arc<Mutex<Jobs>>, cancel: Arc<AtomicBool>) {
         for change in &mut job.changes {
             if let Some((_, rect)) = positions.iter().find(|(id, _)| *id == change.identity) {
                 change.from = *rect;
-            } else if let Some(rect) = platform::frame(change.identity.window()) {
+            } else if let Some(rect) = platform::frame(change.identity.window())
+                && intersects(rect, change.clip)
+            {
                 change.from = rect;
             }
         }
@@ -271,6 +275,9 @@ fn lerp(a: Rect, b: Rect, t: f64) -> Rect {
         w: a.w + (b.w - a.w) * t,
         h: a.h + (b.h - a.h) * t,
     }
+}
+fn intersects(a: Rect, b: Rect) -> bool {
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 }
 /// Clip the destination and source together, preserving scale instead of squeezing the image.
 fn crop_projection(destination: Rect, clip: Rect, source: Rect) -> Option<(Rect, Rect)> {
@@ -404,17 +411,19 @@ fn run(
         if !change.identity.valid() {
             continue;
         }
-        let overlaps = |r: Rect| {
-            r.x + r.w > bounds.x
-                && r.y + r.h > bounds.y
-                && r.x < bounds.x + bounds.w
-                && r.y < bounds.y + bounds.h
+        let sweep = Rect {
+            x: change.from.x.min(change.visual_to.x),
+            y: change.from.y.min(change.visual_to.y),
+            w: (change.from.x + change.from.w).max(change.visual_to.x + change.visual_to.w)
+                - change.from.x.min(change.visual_to.x),
+            h: (change.from.y + change.from.h).max(change.visual_to.y + change.visual_to.h)
+                - change.from.y.min(change.visual_to.y),
         };
-        if !overlaps(change.from) && !overlaps(change.to) {
+        if !intersects(sweep, change.clip) {
             continue;
         }
-        let resizing =
-            (change.from.w - change.to.w).abs() > 2.0 || (change.from.h - change.to.h).abs() > 2.0;
+        let resizing = (change.from.w - change.visual_to.w).abs() > 2.0
+            || (change.from.h - change.visual_to.h).abs() > 2.0;
         let source = if resizing && platform::responsive(change.identity.window()) {
             match Snapshot::capture(
                 change.identity.window(),
@@ -505,7 +514,7 @@ fn run(
             let region = CreateRectRgn(0, 0, 0, 0);
             CombineRgn(Some(region), Some(overlay.source_region), None, RGN_COPY);
             for (thumbnail, c, crop) in &sources {
-                let r = lerp(c.from, c.to, t);
+                let r = lerp(c.from, c.visual_to, t);
                 let clipped = crop_projection(r, c.clip, platform::rect(*crop));
                 let geometry = clipped
                     .map(|(dest, source)| (native(dest, bounds), native(source, Rect::default())));
@@ -579,7 +588,7 @@ fn run(
             return Ok(Outcome::Replaced {
                 positions: changes
                     .iter()
-                    .map(|c| (c.identity, lerp(c.from, c.to, t)))
+                    .map(|c| (c.identity, lerp(c.from, c.visual_to, t)))
                     .collect(),
                 overlay,
             });

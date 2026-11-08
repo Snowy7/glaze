@@ -5,6 +5,7 @@ mod learned;
 mod overview;
 mod parking;
 mod platform;
+mod projection;
 use parking::{bounds, monitor_rect, park};
 mod rules;
 use anyhow::Result;
@@ -83,6 +84,7 @@ struct Managed {
     admission: platform::Admission,
     desktop: String,
     expected: Option<Rect>,
+    visual: Option<Rect>,
     moves: VecDeque<Instant>,
     offences: u8,
     minimized: bool,
@@ -398,6 +400,7 @@ impl Tiler {
                 admission,
                 desktop,
                 expected: None,
+                visual: None,
                 moves: VecDeque::new(),
                 offences: 0,
                 minimized: false,
@@ -1172,6 +1175,7 @@ impl Tiler {
             } else {
                 park(bounds, t.rect)
             };
+            let visual = projection::endpoint(layout, &t);
             changed |= w.expected.is_none_or(|old| !near(old, target));
             if !animation::busy() {
                 changed |=
@@ -1186,10 +1190,11 @@ impl Tiler {
             changes.push(animation::Change {
                 identity: w.admission.identity,
                 from: w
-                    .expected
+                    .visual
                     .or_else(|| platform::frame(hwnd(t.window)))
                     .unwrap_or(target),
                 to: target,
+                visual_to: visual,
                 clip: layout
                     .locate(t.window)
                     .map_or(bounds, |(mi, _)| layout.monitors[mi].full),
@@ -1198,6 +1203,7 @@ impl Tiler {
                 dpi_changed,
             });
             w.expected = Some(target);
+            w.visual = Some(visual);
         }
         if changed || changes.is_empty() {
             self.animation
