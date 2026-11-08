@@ -18,5 +18,5 @@ fn effect(frag: vec2f, uv: vec2f) -> vec4f {
         let score = variance.r + variance.g + variance.b;
         if score < minimum { minimum = score; chosen = mean; }
     }
-    return vec4f(mix(base.rgb, chosen, clamp(params.strength, 0.0, 1.0)), base.a);
+    return vec4f(chosen, base.a);
 }

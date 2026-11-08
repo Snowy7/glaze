@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "light",
-  "cost": 3.22,
+  "cost": 1.691,
   "cost_estimated": false,
   "description": "Restrained radial shafts gather only from bright parts of the photograph.",
   "id": "god-rays",
@@ -57,8 +57,12 @@
   ],
   "passes": [
     {
-      "scale": 1.0,
+      "scale": 0.25,
       "source": "god-rays.wgsl"
+    },
+    {
+      "scale": 1.0,
+      "source": "composite.wgsl"
     }
   ],
   "url": "https://github.com/Snowy7/mypaper"

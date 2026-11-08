@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "weather",
-  "cost": 0.954,
+  "cost": 0.804,
   "cost_estimated": false,
   "description": "Two softly focused flake planes, with independent depth, wind and fall speed.",
   "id": "snow",
@@ -37,7 +37,7 @@
       "type": "float"
     },
     {
-      "default": 1.8,
+      "default": 1.5,
       "id": "size",
       "label": "Flake size",
       "max": 4,

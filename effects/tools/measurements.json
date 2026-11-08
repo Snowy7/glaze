@@ -4,199 +4,199 @@
     {
       "animated": false,
       "category": "camera",
-      "gpu_ms": 1.5472,
+      "gpu_ms": 1.53768,
       "id": "bloom"
     },
     {
       "animated": true,
       "category": "camera",
-      "gpu_ms": 0.91996,
+      "gpu_ms": 0.9196,
       "id": "bokeh"
     },
     {
       "animated": false,
       "category": "camera",
-      "gpu_ms": 0.4368,
+      "gpu_ms": 0.43868,
       "id": "chromatic"
     },
     {
       "animated": true,
       "category": "weather",
-      "gpu_ms": 0.39312,
+      "gpu_ms": 0.49904,
       "id": "clouds"
     },
     {
       "animated": false,
       "category": "stylize",
-      "gpu_ms": 0.57972,
+      "gpu_ms": 0.58128,
       "id": "crt"
     },
     {
       "animated": false,
       "category": "camera",
-      "gpu_ms": 2.7596,
+      "gpu_ms": 2.76152,
       "id": "dof"
     },
     {
       "animated": true,
       "category": "weather",
-      "gpu_ms": 0.787,
+      "gpu_ms": 0.77264,
       "id": "drizzle"
     },
     {
       "animated": false,
       "category": "color",
-      "gpu_ms": 0.58972,
+      "gpu_ms": 0.56376,
       "id": "duotone"
     },
     {
       "animated": false,
       "category": "stylize",
-      "gpu_ms": 0.70328,
+      "gpu_ms": 0.67512,
       "id": "edge-glow"
     },
     {
       "animated": true,
       "category": "weather",
-      "gpu_ms": 0.7924,
+      "gpu_ms": 0.66324,
       "id": "fireflies"
     },
     {
       "animated": true,
       "category": "weather",
-      "gpu_ms": 0.78424,
+      "gpu_ms": 0.7706,
       "id": "fog"
     },
     {
       "animated": true,
       "category": "stylize",
-      "gpu_ms": 0.45284,
+      "gpu_ms": 0.43768,
       "id": "glitch"
     },
     {
       "animated": false,
       "category": "light",
-      "gpu_ms": 2.08212,
+      "gpu_ms": 0.70464,
       "id": "glow"
     },
     {
       "animated": false,
       "category": "light",
-      "gpu_ms": 3.22004,
+      "gpu_ms": 1.69112,
       "id": "god-rays"
     },
     {
       "animated": false,
       "category": "stylize",
-      "gpu_ms": 1.03436,
+      "gpu_ms": 1.03236,
       "id": "halftone"
     },
     {
       "animated": false,
       "category": "camera",
-      "gpu_ms": 2.60068,
+      "gpu_ms": 2.59476,
       "id": "lens-dirt"
     },
     {
       "animated": true,
       "category": "camera",
-      "gpu_ms": 0.75136,
+      "gpu_ms": 0.7342,
       "id": "light-leaks"
     },
     {
       "animated": true,
       "category": "weather",
-      "gpu_ms": 0.51828,
+      "gpu_ms": 0.51276,
       "id": "lightning"
     },
     {
       "animated": false,
       "category": "color",
-      "gpu_ms": 0.45784,
+      "gpu_ms": 0.44664,
       "id": "looks"
     },
     {
       "animated": false,
       "category": "stylize",
-      "gpu_ms": 1.96412,
+      "gpu_ms": 2.16332,
       "id": "paint"
     },
     {
       "animated": true,
       "category": "motion",
-      "gpu_ms": 0.79796,
+      "gpu_ms": 0.77852,
       "id": "parallax"
     },
     {
       "animated": false,
       "category": "stylize",
-      "gpu_ms": 0.3236,
+      "gpu_ms": 0.3362,
       "id": "pixelate"
     },
     {
       "animated": false,
       "category": "color",
-      "gpu_ms": 1.09724,
+      "gpu_ms": 1.08056,
       "id": "posterize"
     },
     {
       "animated": true,
       "category": "motion",
-      "gpu_ms": 0.54908,
+      "gpu_ms": 0.54608,
       "id": "ripple"
     },
     {
       "animated": false,
       "category": "color",
-      "gpu_ms": 0.68276,
+      "gpu_ms": 0.67744,
       "id": "sharpen"
     },
     {
       "animated": true,
       "category": "motion",
-      "gpu_ms": 0.852,
+      "gpu_ms": 0.84924,
       "id": "shimmer"
     },
     {
       "animated": true,
       "category": "weather",
-      "gpu_ms": 0.9538,
+      "gpu_ms": 0.80404,
       "id": "snow"
     },
     {
       "animated": true,
       "category": "weather",
-      "gpu_ms": 0.87696,
+      "gpu_ms": 0.86344,
       "id": "stars"
     },
     {
       "animated": false,
       "category": "light",
-      "gpu_ms": 1.32716,
+      "gpu_ms": 1.32412,
       "id": "sun-flare"
     },
     {
       "animated": true,
       "category": "motion",
-      "gpu_ms": 0.86544,
+      "gpu_ms": 0.86696,
       "id": "sway"
     },
     {
       "animated": false,
       "category": "camera",
-      "gpu_ms": 2.25244,
+      "gpu_ms": 2.24936,
       "id": "tiltshift"
     },
     {
       "animated": true,
       "category": "color",
-      "gpu_ms": 0.567,
+      "gpu_ms": 0.55976,
       "id": "time-of-day"
     },
     {
       "animated": true,
       "category": "motion",
-      "gpu_ms": 0.32124,
+      "gpu_ms": 0.32492,
       "id": "zoom-pan"
     }
   ],

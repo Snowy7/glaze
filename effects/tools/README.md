@@ -40,9 +40,10 @@ The engine agent's rain, blur, color, vignette and grain packages are validated 
 their manifests, costs and shaders are never modified by the tool.
 
 All library shaders are original MIT-licensed mypaper code; the package URL identifies the source.
-Each package's `CREDITS.txt` carries the MIT notice and separate CC BY 3.0 photo attribution
-for its preview. No upstream rain or snow shader is used. `measurements.json` records the
-checked-in costs from the final full-library iGPU run.
+Each package's `CREDITS.txt` carries the MIT notice and its preview's separate photo attribution.
+The curated sources are the CC BY skyline and forest and public-domain NASA photographs.
+No upstream rain or snow shader is used. `measurements.json` records the
+checked-in default costs from the iGPU runs, including targeted remeasurements after revisions.
 
 `time-of-day` uses `paper.clock_hours`, supplied by the engine, including after pause/resume.
 The effect never substitutes elapsed animation time for the wall clock. Still effects retain
@@ -51,3 +52,37 @@ The effect never substitutes elapsed animation time for the wall clock. Still ef
 `--check-bloom-identity` sets bloom strength to zero, supplies a different untouched base,
 and compares the GPU output to the sharp preceding layer input with a one-byte tolerance.
 Bloom blurs highlights in two half-scale Gaussian passes, then composites over `layer_input`.
+
+## Curated gallery previews
+
+`gallery.json` records a recipe for every card: source photograph, crop, representative time,
+clock hour and any showcase parameter overrides. Most cards use the effect defaults. Light
+positions are aligned to the source; Film looks demonstrates its noir option; the five engine
+effects use stronger showcase settings without changing their manifests or shaders. A `detail`
+crop is taken after rendering, so fine grain and sharpening remain visible in a thumbnail.
+Each owned package retains the software license and the correct source-photo credit.
+
+```powershell
+cargo run --manifest-path effects/tools/Cargo.toml -- --render --include-reference --no-previews --update-costs --out C:/mypaper-targets/effects-sheet/v2-city
+py effects/tools/render_gallery.py --lab C:/mypaper-targets/effects-lab/debug/mypaper-effects-lab.exe --ffmpeg <ffmpeg.exe>
+py effects/tools/contact_sheet.py C:/mypaper-targets/effects-sheet/v2-city --output C:/mypaper-targets/effects-sheet/contact-sheet-v2.jpg
+```
+
+Gallery generation writes all 38 `preview.jpg` files at 320 x 180, a `preview-grid-v2.jpg`
+beside the captures, and full-resolution renders plus input photos and recipes in `gallery-v2/`.
+`--only id,id` iterates a few cards; `--grid-only` rebuilds the grid from the checked-in images.
+Use the city, forest and daytime captures to judge defaults separately from showcase presets.
+All captures and measurements stay offscreen and never start the live wallpaper engine.
+
+The lab's `--include-reference` explicitly includes rain, blur, color, vignette and grain for
+rendering or finite checks, while `--update-costs` still never edits those five manifests.
+`--params '{...}'` supplies showcase overrides; combining nonempty overrides with
+`--update-costs` is rejected so published costs always describe defaults. `--time <seconds>`
+pins animation time, independent of `--clock-hours`. JPEG captures use quality 95.
+
+Clouds computes its fractal field at quarter resolution and composites over the sharp input.
+Dream glow uses two quarter-resolution Gaussian passes and a full-resolution screen blend.
+God-rays integrates 32 samples at quarter resolution, then diffuses the light field over the
+sharp input at full resolution.
+Paint uses its original Kuwahara filter at half resolution, then blends at full resolution.
+All three composite over `layer_input`, preserving the sharp input at zero strength.

@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "stylize",
-  "cost": 0.324,
+  "cost": 0.336,
   "cost_estimated": false,
   "description": "Aspect-correct square pixels with optional subtle cell borders.",
   "id": "pixelate",

@@ -2,7 +2,7 @@
   "animated": false,
   "author": "mypaper",
   "category": "stylize",
-  "cost": 1.964,
+  "cost": 2.163,
   "cost_estimated": false,
   "description": "A compact four-region Kuwahara filter smooths interiors while retaining painted contours.",
   "id": "paint",
@@ -32,6 +32,10 @@
     {
       "scale": 0.5,
       "source": "paint.wgsl"
+    },
+    {
+      "scale": 1.0,
+      "source": "composite.wgsl"
     }
   ],
   "url": "https://github.com/Snowy7/mypaper"

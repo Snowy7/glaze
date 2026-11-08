@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "motion",
-  "cost": 0.798,
+  "cost": 0.779,
   "cost_estimated": false,
   "description": "The image leans toward the cursor, using scene depth or a luminance-based depth cue.",
   "id": "parallax",

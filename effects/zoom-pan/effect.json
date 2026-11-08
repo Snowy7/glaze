@@ -2,7 +2,7 @@
   "animated": true,
   "author": "mypaper",
   "category": "motion",
-  "cost": 0.321,
+  "cost": 0.325,
   "cost_estimated": false,
   "description": "A slow, seamless Ken Burns move with enough overscan to hide the edges.",
   "id": "zoom-pan",

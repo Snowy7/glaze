@@ -6,16 +6,19 @@ from PIL import Image, ImageDraw, ImageFont
 
 parser = argparse.ArgumentParser()
 parser.add_argument('captures', type=Path)
+parser.add_argument('--output', type=Path, help='Master sheet path (category sheets stay beside captures)')
 args = parser.parse_args()
 root = Path(__file__).resolve().parent.parent
 effects = sorted((json.loads(p.read_text(encoding='utf8')) for p in root.glob('*/effect.json')
-                  if p.parent.name not in {'rain', 'blur', 'color', 'vignette', 'grain'}
-                  and (args.captures / (p.parent.name + '.jpg')).exists()),
+                  if (args.captures / (p.parent.name + '.jpg')).exists()),
                  key=lambda m: (m['category'], m['id']))
 before = Image.open(args.captures / 'before.jpg').convert('RGB').resize((320, 180), Image.Resampling.LANCZOS)
 timing_path = args.captures / 'timings.json'
 photo = str(json.loads(timing_path.read_text())['photo']) if timing_path.exists() else ''
-if 'snow-forest' in photo:
+if 'daytime' in photo or 'earth-orbit' in photo:
+    credit = 'Earth Views Extended Cut for Earth Day 2021 (1 s) / NASA (JSC) / public domain / cropped, resized and effect-processed'
+    source = 'https://images.nasa.gov/details/jsc2021m000138_4K_Earth_Views_Extended_Cut_for_Earth_Day_%202021_210422-4KMP4'
+elif 'snow-forest' in photo:
     credit = 'Spring frame (105 s) / Blender Foundation, Andy Goralczyk / CC BY 4.0 / cropped, resized and effect-processed'
     source = 'https://studio.blender.org/films/spring/'
 else:
@@ -43,7 +46,9 @@ def sheet(items, pairs, name):
         image.paste(after, (x+324, y+28))
     draw.text((16, height-34), credit, font=small, fill='#9eafc1')
     draw.text((16, height-18), source, font=small, fill='#9eafc1')
-    target = args.captures / (name+'.jpg')
+    # Category names can also be effect IDs (notably color); never overwrite a capture.
+    filename = 'contact-sheet.jpg' if name == 'contact-sheet' else 'category-' + name + '.jpg'
+    target = args.output if name == 'contact-sheet' and args.output else args.captures / filename
     image.save(target, quality=94)
     print(target)
 

@@ -34,7 +34,10 @@ fn main() -> Result<()> {
     let photo = PathBuf::from(option("--photo", "themes/rain-city-amber/media/city.jpg"));
     let only = option("--only", "");
     let values: BTreeMap<String, Value> = serde_json::from_str(&option("--params", "{}"))?;
-    anyhow::ensure!(!update || values.is_empty(), "costs must be measured at defaults");
+    anyhow::ensure!(
+        !update || values.is_empty(),
+        "costs must be measured at defaults"
+    );
     let lab = if rendering || finite || bloom_identity {
         Some(Lab::new(
             &photo,
@@ -43,7 +46,10 @@ fn main() -> Result<()> {
                 .parse::<f32>()?
                 .clamp(0.0, 24.0),
             bloom_identity,
-            args.windows(2).find(|w| w[0] == "--time").map(|w| w[1].parse()).transpose()?,
+            args.windows(2)
+                .find(|w| w[0] == "--time")
+                .map(|w| w[1].parse())
+                .transpose()?,
         )?)
     } else {
         None
@@ -181,7 +187,7 @@ fn main() -> Result<()> {
 /// Keep unchanged thumbnails intact, including when a gallery has their files mapped open.
 fn save_jpeg(image: &image::RgbImage, path: &Path) -> Result<()> {
     let mut bytes = Vec::new();
-    image::codecs::jpeg::JpegEncoder::new(&mut bytes).encode(
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 95).encode(
         image.as_raw(),
         image.width(),
         image.height(),
@@ -538,7 +544,8 @@ impl Lab {
                     h,
                     w * 0.63,
                     h * 0.42,
-                    self.time.unwrap_or_else(|| capture_time(manifest, id, values, frame)),
+                    self.time
+                        .unwrap_or_else(|| capture_time(manifest, id, values, frame)),
                     f32::from_bits(frame),
                     self.clock_hours,
                     0.0,

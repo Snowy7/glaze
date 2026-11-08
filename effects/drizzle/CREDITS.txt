@@ -21,9 +21,10 @@ SOFTWARE.
 Source: https://github.com/Snowy7/mypaper
 
 Preview photograph: separate license
-preview.jpg is adapted from "Hong Kong Skyline Restitch - Dec 2007"
-by David Iliff (Diliff), licensed CC BY 3.0.
-Source: https://commons.wikimedia.org/wiki/File:Hong_Kong_Skyline_Restitch_-_Dec_2007.jpg
-License: https://creativecommons.org/licenses/by/3.0/
-Changes: cropped to 16:9, resized to 320 x 180 and processed with this effect.
+preview.jpg is adapted from "Spring, forest frame at 105 s"
+by Blender Foundation; director Andy Goralczyk, CC BY 4.0.
+Source: https://studio.blender.org/films/spring/
+License: https://creativecommons.org/licenses/by/4.0/
+Changes: cropped, resized to 320 x 180 and processed with this effect.
+Recipe (crop, frame and any showcase settings): ../tools/gallery.json.
 The photo's separate attribution and license must be retained with the preview.

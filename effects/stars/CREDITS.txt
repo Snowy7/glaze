@@ -21,9 +21,10 @@ SOFTWARE.
 Source: https://github.com/Snowy7/mypaper
 
 Preview photograph: separate license
-preview.jpg is adapted from "Hong Kong Skyline Restitch - Dec 2007"
-by David Iliff (Diliff), licensed CC BY 3.0.
-Source: https://commons.wikimedia.org/wiki/File:Hong_Kong_Skyline_Restitch_-_Dec_2007.jpg
-License: https://creativecommons.org/licenses/by/3.0/
-Changes: cropped to 16:9, resized to 320 x 180 and processed with this effect.
+preview.jpg is adapted from "Orbital sunrise, iss028e007274"
+by NASA (ISS Expedition 28, JSC), NASA public domain.
+Source: https://images.nasa.gov/details/iss028e007274
+License: https://www.nasa.gov/nasa-brand-center/images-and-media/
+Changes: cropped, resized to 320 x 180 and processed with this effect.
+Recipe (crop, frame and any showcase settings): ../tools/gallery.json.
 The photo's separate attribution and license must be retained with the preview.
