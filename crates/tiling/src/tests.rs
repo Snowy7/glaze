@@ -517,6 +517,29 @@ fn fullscreen_returns_to_original_column_and_width() {
     assert_eq!(w.columns[1].width, 2.0 / 3.0);
 }
 #[test]
+fn a_background_fullscreen_return_preserves_the_focused_columns_position() {
+    let mut l = layout();
+    open(&mut l, 1);
+    open(&mut l, 2);
+    l.command(Command::Center);
+    let before = l
+        .targets()
+        .into_iter()
+        .find(|t| t.window == WindowId(2))
+        .unwrap()
+        .rect;
+    let saved = l.suspend(WindowId(1)).unwrap();
+    l.resume(saved, false);
+    assert_eq!(
+        l.targets()
+            .into_iter()
+            .find(|t| t.window == WindowId(2))
+            .unwrap()
+            .rect,
+        before
+    );
+}
+#[test]
 fn native_fullscreen_returns_to_its_original_stack_and_tab() {
     let mut l = layout();
     open(&mut l, 1);

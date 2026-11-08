@@ -1177,6 +1177,7 @@ impl Layout {
         let active = self.monitors[mi].active;
         self.focused_monitor = Some(self.monitors[mi].id.clone());
         self.monitors[mi].active = self.monitors[mi].workspaces[wi].id;
+        let before = self.focus_position(mi, wi);
         self.insert(
             saved.window,
             saved.constraints,
@@ -1214,7 +1215,11 @@ impl Layout {
                     w.columns.insert(saved.column.min(w.columns.len()), c);
                 }
             }
-            self.fit(mi, wi);
+            if !activate && let Some(before) = before {
+                self.preserve_focus(mi, wi, before);
+            } else {
+                self.fit(mi, wi);
+            }
         }
         if !activate {
             self.focused_monitor = previous;
