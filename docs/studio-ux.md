@@ -29,7 +29,7 @@ The UI says **wallpaper**, never "theme" (D1): a wallpaper is a folder that can 
 
 **First run.** On a fresh install (no settings files yet) Studio opens onboarding full screen in
 its own One UI, dark: a near-black page, large rounded cards, pill buttons. Every display fades to
-black (: plain layered "curtain" windows) and the welcome builds itself on the main
+black (`onboarding.rs`: plain layered "curtain" windows) and the welcome builds itself on the main
 one: the mark, the words, three feature tiles wiping in, then Get started. The steps follow, words
 on the left and choices on the right like Windows' own setup: **Your taskbar** (mypaper's bars,
 keep Windows', or just the wallpaper), then optional **Pick a look**, **Your top bar** and **Your
@@ -39,9 +39,9 @@ set**. Steps that don't apply to the taskbar choice are skipped. Only the taskba
 Continue; nothing else changes unless picked, and starters never change the wallpaper. Picks apply
 at once and undo; Back never edits; **Skip setup** and Esc keep what's set. At the end the main
 display fades out, Studio becomes its normal window and the displays fade back in. Only the intro
-animates, so onboarding costs nothing while you read.  shows it
+animates, so onboarding costs nothing while you read. `mypaper-studio --onboarding` shows it
 again on a set-up PC. The docked panel shows the same steps with its own footer. Code:
-, .
+`panel/first_run.rs`, `onboarding.rs`.
 
 ## 2. Navigation
 
