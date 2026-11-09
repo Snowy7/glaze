@@ -126,7 +126,16 @@ Run payload\docs\release-test.md on a second PC before calling this release qual
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = Join-Path $OutputDirectory ($name + '.zip')
     if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
-    [IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip, [IO.Compression.CompressionLevel]::Optimal, $false)
+    # .NET Framework's CreateFromDirectory writes backslash names under PowerShell 5.1.
+    # Use standard ZIP separators so Explorer and other extractors agree on the layout.
+    $archive = [IO.Compression.ZipFile]::Open($zip, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($file in Get-ChildItem -LiteralPath $stage -Recurse -File) {
+            $relative = $file.FullName.Substring($stage.Length + 1).Replace('\', '/')
+            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file.FullName, $relative,
+                [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
+    } finally { $archive.Dispose() }
     $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
     "$hash  $name.zip" | Set-Content -LiteralPath ($zip + '.sha256') -Encoding ASCII
     Write-Host "$zip ($((Get-Item -LiteralPath $zip).Length) bytes), SHA256 $hash"
