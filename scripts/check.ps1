@@ -72,12 +72,6 @@ try {
     if ($env:GLAZE_BLESS -or $env:STILLKIT_BLESS) { throw 'Unset GLAZE_BLESS and STILLKIT_BLESS before checking goldens' }
     # Cranelift can abort a whole Windows test binary when one assertion fails.
     $env:CARGO_PROFILE_DEV_CODEGEN_BACKEND = 'llvm'
-    # Studio creates draft themes during tests. Keep them away from the live desktop's
-    # config/theme watchers, with a fresh profile for each check process.
-    $profile = Join-Path $Target "check-profile-$PID"
-    $env:APPDATA = Join-Path $profile 'Roaming'
-    $env:LOCALAPPDATA = Join-Path $profile 'Local'
-    New-Item -ItemType Directory -Path $env:APPDATA, $env:LOCALAPPDATA -Force | Out-Null
     $patchFile = Join-Path $Target 'stillkit-patch.toml'
     $stillkitCrate = (Join-Path $StillkitPath 'crates\stillkit').Replace('\', '/')
     [IO.File]::WriteAllText($patchFile, "[patch.`"https://github.com/Snowy7/stillkit`"]`nstillkit = { path = `"$stillkitCrate`" }`n")
@@ -89,6 +83,12 @@ try {
     # Workspace runtime tests consume these components, so build them before running tests.
     # The release wrapper also builds hello-ts against the host's canonical WIT.
     Invoke-Gate 'WASM plugins (Rust and TypeScript)' $repo 'wasm-build' powershell @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'release\build-plugins.ps1'), '-Target', (Join-Path $Target 'wasm-build'))
+    # Keep dependency setup on its normal pnpm store, then isolate Rust tests and host checks.
+    # Studio creates drafts that must not enter the live desktop's config/theme watchers.
+    $profile = Join-Path $Target "check-profile-$PID"
+    $env:APPDATA = Join-Path $profile 'Roaming'
+    $env:LOCALAPPDATA = Join-Path $profile 'Local'
+    New-Item -ItemType Directory -Path $env:APPDATA, $env:LOCALAPPDATA -Force | Out-Null
     Invoke-Gate 'Glaze workspace tests' $repo 'build' cargo @('--config', $patchFile, 'test', '--workspace', '--no-fail-fast')
     # These component crates have native unit tests. hello and weather/component are WASM-only
     # and have no tests; the build above validates them on their actual target.
