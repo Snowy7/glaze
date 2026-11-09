@@ -1,7 +1,7 @@
 # One brief desktop action: atomic config replacement and a change in a theme subdirectory.
 # Restores the exact config bytes if nothing else wrote them; otherwise restores only our FPS.
 $ErrorActionPreference = 'Stop'
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 if (-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) { throw 'Desktop is busy' }
 $path = Join-Path $env:APPDATA 'glaze\config.json'
 $probe = $null

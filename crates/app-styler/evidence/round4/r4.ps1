@@ -18,7 +18,7 @@ $log = Join-Path $root "$Variant.log"
 $dir = Join-Path $env:LOCALAPPDATA 'glaze\app-styler'
 $probe = Join-Path $root 'probe-bin\glaze-styler.exe'
 $design = 'C:\glaze-targets\app-styler\release\glaze-styler.exe'
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 function Note([string]$m) { $l = '{0} {1}' -f (Get-Date -Format 'HH:mm:ss'), $m; Append-Line $log $l }
 function Take-Lock { for ($i = 0; $i -lt 240; $i++) { if (New-Item -ItemType Directory $lock -ErrorAction SilentlyContinue) { return }; Start-Sleep -Milliseconds 500 }; throw 'lock busy' }
 function Drop-Lock { if (Test-Path -LiteralPath $lock) { Remove-Item -LiteralPath $lock -Recurse -Force } }

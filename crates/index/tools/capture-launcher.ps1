@@ -2,7 +2,7 @@
 # shared desktop lock; no user window is minimized, moved, closed, or typed into.
 param([string]$Query = 'folder:wallpaper', [string]$Out = 'D:\Coding\projects\desktop\wallpaper\crates\index\evidence\launcher-index.png')
 $ErrorActionPreference = 'Stop'
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $lockDeadline = [DateTime]::UtcNow.AddMinutes(2)
 while (-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) {
   if ([DateTime]::UtcNow -ge $lockDeadline) { throw 'Desktop lock stayed busy; capture skipped' }
@@ -88,6 +88,6 @@ public static class IndexCapture {
 } finally {
   if ($flyout -and [IndexCapture]::GetForegroundWindow() -eq $flyout) { [IndexCapture]::SendMessage($flyout,0x100,[IntPtr]::new(27),[IntPtr]::Zero) | Out-Null }
   if ($cursorBefore) { [IndexCapture]::SetCursorPos($cursorBefore.x,$cursorBefore.y) | Out-Null }
-  if ([IO.Path]::GetFullPath($lock) -ne 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock') { throw 'Invalid desktop lock' }
+  if ([IO.Path]::GetFullPath($lock) -ne (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')) { throw 'Invalid desktop lock' }
   [IO.Directory]::Delete($lock)
 }

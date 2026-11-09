@@ -2,7 +2,7 @@
 # byte for byte in finally; the theme under test is a disposable copy outside the checkout.
 param([string]$Repo = 'D:\Coding\projects\desktop\wallpaper')
 $ErrorActionPreference = 'Stop'
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 if (-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) { throw 'Desktop lock busy; retry later' }
 $configPath = Join-Path $env:APPDATA 'glaze\config.json'
 $barsPath = Join-Path $env:APPDATA 'glaze\bars.json'

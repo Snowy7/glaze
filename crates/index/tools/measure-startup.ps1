@@ -3,7 +3,7 @@ param([switch]$Restart, [int]$Seconds = 180, [string]$Output = 'startup.json')
 $ErrorActionPreference = 'Stop'
 $exe = Join-Path (Resolve-Path "$PSScriptRoot/../../..").Path 'target/release/glaze-index.exe'
 $configPath = Join-Path $env:APPDATA 'glaze/config.json'
-$lockPath = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lockPath = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $old = Get-Process glaze-index -ErrorAction SilentlyContinue | Where-Object Path -eq $exe | Select-Object -First 1
 $oldId = if ($old) { $old.Id } else { 0 }
 $original = [bool](Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json).experimental.file_index

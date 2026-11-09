@@ -34,7 +34,7 @@ lock, leave the desktop restored, kill headless browsers) still applies.
   `powershell -NoProfile -File scripts/deploy-local.ps1` (takes the desktop lock, restarts
   Glaze, re-registers identity). Other agents' committed and uncommitted work ships too; that's
   fine.
-- Use the desktop lock (`C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock`) for any
+- Use the desktop lock (`%LOCALAPPDATA%\Temp\glaze-tools\desktop.lock`) for any
   synthetic input or screenshots, hold it briefly, and leave Glaze running the latest build when
   you release it. The lock is a **directory**: take it with `New-Item -ItemType Directory` (fails if
   it exists), release it with `Remove-Item -Recurse`. Never create it as a file: a file blocks every

@@ -308,7 +308,7 @@ actual Settings in [dark](../crates/tweaks/evidence/style-sync/liquid-dark-setti
 9,159–9,196 pixels matching their expected RGB within two channel values. Native reference windows
 were owned, nonactivating and closed after capture; no clicks/keys, user-window movement or focus
 changes were used. Full captures and their [hashes](../crates/tweaks/evidence/style-sync/full-capture-hashes.json)
-are retained in `C:\Users\you\AppData\Local\Temp\glaze-tools\style-sync-full`; only compact crops are committed.
+are retained in `%LOCALAPPDATA%\Temp\glaze-tools\style-sync-full`; only compact crops are committed.
 
 DWM's [colour attributes](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwmwindowattribute)
 are documented for setting, and their getters returned no colour on this build, so colour paint

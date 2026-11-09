@@ -4,7 +4,7 @@ Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md` (lock rules: one action
 `docs/performance.md`, `docs/bars.md` (the bars-parity handoff in b727049), and the memory notes summarised
 in `docs/ui.md` about wakes. Tools: `GLAZE_WAKES=1` wake report (see `crates/shell` for how it's
 enabled), `C:\glaze-targets\dockprof` (no-admin sampler, sweep scripts),
-`C:\Users\you\AppData\Local\Temp\glaze-tools\measure.ps1`.
+`%LOCALAPPDATA%\Temp\glaze-tools\measure.ps1`.
 
 ## Goal
 

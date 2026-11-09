@@ -4,7 +4,7 @@ param([Parameter(Mandatory)][string]$Case, [string]$Out = "C:\glaze-targets\safe
       [string]$RestoreExe = "C:\glaze-targets\safety\release\glaze-core.exe")
 $ErrorActionPreference = "Stop"
 $live = "D:\Coding\projects\desktop\wallpaper\target\release\glaze-core.exe"
-$lock = "C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock"
+$lock = (Join-Path $env:LOCALAPPDATA "Temp\glaze-tools\desktop.lock")
 $probe = Join-Path $PSScriptRoot "state.ps1"
 function Snap($label) {
   $line = & powershell -NoProfile -ExecutionPolicy Bypass -File $probe -Label $label -ProbePid $script:probePid

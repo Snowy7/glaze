@@ -5,7 +5,7 @@
 param([string]$From = "C:\glaze-targets\main\release", [switch]$ValidateOnly)
 $ErrorActionPreference = "Stop"
 $repo = Split-Path $PSScriptRoot -Parent
-$lock = "C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock"
+$lock = (Join-Path $env:LOCALAPPDATA "Temp\glaze-tools\desktop.lock")
 $destination = Join-Path $repo 'target\release'
 $names = "glaze-core", "glaze-wallpaper", "glaze-shell", "glaze-studio"
 function Start-DesktopCore {
@@ -165,6 +165,6 @@ public static class DeployQuit { [DllImport("user32.dll")] public static extern 
   if (-not (Get-Process glaze-core -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath "$destination\glaze-core.exe")) {
     Start-DesktopCore
   }
-  if ([IO.Path]::GetFullPath($lock) -ne 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock') { throw 'Invalid desktop lock path' }
+  if ([IO.Path]::GetFullPath($lock) -ne (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')) { throw 'Invalid desktop lock path' }
   [IO.Directory]::Delete($lock)
 }

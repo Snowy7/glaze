@@ -1,7 +1,7 @@
 # Runs the opt-in DWM live tests against owned probe windows: a medium-integrity one (styled,
 # then made full-monitor) and an elevated one (must never be touched). Under the desktop lock.
 $ErrorActionPreference = "Stop"
-$lock = "C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock"
+$lock = (Join-Path $env:LOCALAPPDATA "Temp\glaze-tools\desktop.lock")
 $probe = "C:\glaze-targets\safety\probe\probe-host.exe"
 $test = Get-ChildItem C:\glaze-targets\safety\debug\build\glaze-tweaks -Recurse -Filter "glaze_tweaks-*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 function Wait-Pid($file) { for ($i = 0; $i -lt 80 -and -not (Test-Path $file); $i++) { Start-Sleep -Milliseconds 100 }; [int](Get-Content $file) }

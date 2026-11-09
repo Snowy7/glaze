@@ -28,3 +28,10 @@ an archived stillkit checkout, with only your changes applied. This excludes oth
 uncommitted edits. Junction the live themes directory only if archived media is unavailable.
 Use a fresh snapshot directory or refresh source timestamps when replacing a snapshot;
 restoring older timestamps can make Cargo reuse a stale test binary.
+
+## Desktop lock
+
+Tools that change or restart the desktop share `%LOCALAPPDATA%\Temp\glaze-tools\desktop.lock`.
+Create the directory atomically, wait while another tool owns it, and delete only your own lock
+after cleanup. PowerShell resolves it with `Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock'`;
+Rust resolves `LOCALAPPDATA` at runtime.

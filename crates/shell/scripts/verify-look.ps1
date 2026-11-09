@@ -2,10 +2,10 @@ param([string]$From='C:\glaze-targets\main\release\examples\glaze-look-fixture.e
 $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $evidence=Join-Path $repo 'crates/shell/evidence/look-settings'
-$testRoot='C:\Users\you\AppData\Local\Temp\glaze-tools\look-fixture'
+$testRoot=(Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\look-fixture')
 $configRoot=Join-Path $testRoot 'appdata\glaze'
 $runRoot='C:\glaze-targets\look-fixture'
-$lock='C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock=(Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $realConfig=Join-Path $env:APPDATA 'glaze\config.json'
 $beforeHash=(Get-FileHash -LiteralPath $realConfig -Algorithm SHA256).Hash
 New-Item -ItemType Directory -Force $evidence,$configRoot,$runRoot | Out-Null
@@ -105,9 +105,9 @@ try {
  [IO.Directory]::Delete($lock);$held=$false
  # Give other agents a turn; measure.ps1 owns the lock itself.
  Start-Sleep -Seconds 30
- & powershell -NoProfile -File 'C:\Users\you\AppData\Local\Temp\glaze-tools\measure.ps1' -Label 'look-settings' -Seconds 20
+ & powershell -NoProfile -File (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\measure.ps1') -Label 'look-settings' -Seconds 20
  if($LASTEXITCODE -ne 0){throw 'measure.ps1 failed'}
- Copy-Item -LiteralPath 'C:\Users\you\AppData\Local\Temp\glaze-tools\measure-look-settings.json' -Destination (Join-Path $evidence 'idle.json') -Force
+ Copy-Item -LiteralPath (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\measure-look-settings.json') -Destination (Join-Path $evidence 'idle.json') -Force
  Copy-Item -LiteralPath (Join-Path $configRoot 'revisions.jsonl') -Destination (Join-Path $evidence 'revisions.jsonl') -Force
  $sameWindows=$true
  $firstWindows=@($observations[0].revision.surfaces | ForEach-Object {$_.hwnd}) -join ','

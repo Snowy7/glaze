@@ -8,7 +8,7 @@ param(
     [string]$ReportPath = 'C:\glaze-targets\studio-panel\memory-r9.json'
 )
 $ErrorActionPreference = 'Stop'
-. 'C:\Users\you\.t3\worktrees\wallpaper\t3-d748810f\crates\studio\src\panel\live_check.ps1' -Exe $Exe -Shots $Shots -FunctionsOnly
+. (Join-Path $PSScriptRoot 'live_check.ps1') -Exe $Exe -Shots $Shots -FunctionsOnly
 
 function SettingsHashes {
     $result=@{}
@@ -258,7 +258,7 @@ try {
     $changed=@($before.Keys|Where-Object{$before[$_] -ne $after[$_]})
     if($script:errorTask){$script:errorTask.Result|Set-Content -LiteralPath (Join-Path $Shots "$prefix-process-r9.log") -Encoding utf8}
     $success=$success -and !$changed.Count -and !$componentChanges.Count
-    $report=@{exe=$Exe;exeSha256=(Get-FileHash -LiteralPath $Exe -Algorithm SHA256).Hash;profile="release";head=(git -C "C:\Users\you\.t3\worktrees\wallpaper\t3-d748810f" rev-parse HEAD);capturedAt=(Get-Date).ToUniversalTime().ToString("o");workingSetBudgetMB=50;tourCompleted=$tourCompleted;success=$success;peakBudgetMet=($finalMemory.peakWorkingSetBytes -le 50MB);process=$script:process.Id;closed=$script:process.HasExited;exitCode=$script:process.ExitCode;existing=$existing;automationEnumeration='cached-properties-only; actions reacquire one live target';passes=$Passes;scrolls=$script:scrolls;componentsBefore=$componentsBefore;componentsAfter=$componentsAfter;componentChanges=$componentChanges;visited=$script:visited;memory=$script:memory;finalMemory=$finalMemory;peakWorkingSetBytes=$finalMemory.peakWorkingSetBytes;peakWorkingSetMB=$finalMemory.peakWorkingSetMB;gpuVendorDrivers=$drivers;captures=$captures;uia=$uia;changedUserSettings=$changed}
+    $report=@{exe=$Exe;exeSha256=(Get-FileHash -LiteralPath $Exe -Algorithm SHA256).Hash;profile="release";head=(git -C $PSScriptRoot rev-parse HEAD);capturedAt=(Get-Date).ToUniversalTime().ToString("o");workingSetBudgetMB=50;tourCompleted=$tourCompleted;success=$success;peakBudgetMet=($finalMemory.peakWorkingSetBytes -le 50MB);process=$script:process.Id;closed=$script:process.HasExited;exitCode=$script:process.ExitCode;existing=$existing;automationEnumeration='cached-properties-only; actions reacquire one live target';passes=$Passes;scrolls=$script:scrolls;componentsBefore=$componentsBefore;componentsAfter=$componentsAfter;componentChanges=$componentChanges;visited=$script:visited;memory=$script:memory;finalMemory=$finalMemory;peakWorkingSetBytes=$finalMemory.peakWorkingSetBytes;peakWorkingSetMB=$finalMemory.peakWorkingSetMB;gpuVendorDrivers=$drivers;captures=$captures;uia=$uia;changedUserSettings=$changed}
     $report|ConvertTo-Json -Depth 8|Set-Content -LiteralPath (Join-Path $Shots "$prefix-verify-r9.json") -Encoding utf8
     $report|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $ReportPath -Encoding utf8
     $report|ConvertTo-Json -Depth 8

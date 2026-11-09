@@ -1,7 +1,7 @@
 # Read-only capture of the deployed calendar widget. Never activates a window or injects input.
 param([string]$Out = "$env:TEMP\glaze-calendar-live.png")
 $ErrorActionPreference = 'Stop'
-$calendarCaptureLock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$calendarCaptureLock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $calendarCaptureOwned = $false
 Add-Type -AssemblyName System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
