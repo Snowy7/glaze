@@ -133,10 +133,10 @@ pub fn fixture() -> Snapshot {
     let limits = vec![
         limit("codex", "Codex", "you@example.com", "Weekly", 730, Some(4 * 24 * 60 + 19 * 60)),
         limit("claudeAgent", "Claude", "you@example.com", "Weekly", 430, days(3)),
-        limit("claudeAgent", "Claude", "you@example.com", "Weekly", 860, days(3)),
+        limit("claudeAgent", "Claude", "sn@studio.example", "Weekly", 860, days(3)),
         limit("claudeAgent", "Claude", "you@example.com", "Weekly", 430, days(3)),
         limit("claudeAgent", "Claude", "you@example.com", "Weekly · Fable", 0, days(3)),
-        limit("claudeAgent", "Claude", "you@example.com", "Weekly · Fable", 0, days(3)),
+        limit("claudeAgent", "Claude", "sn@studio.example", "Weekly · Fable", 0, days(3)),
     ];
     snapshot(Availability::Live, threads, details, limits, Some(history()))
 }
@@ -310,10 +310,10 @@ fn settled_snoozed_and_archived_threads_never_show() {
 fn identical_reports_collapse_and_duplicate_labels_stay_apart() {
     let json = serde_json::to_string(&faces()["limits"]["large"]).unwrap();
     // Two Claude accounts by their names (never initials), the duplicate report folded away.
-    assert_eq!(json.matches("Weekly · snowy7").count(), 1, "{json}");
+    assert_eq!(json.matches("Weekly · you").count(), 1, "{json}");
     assert_eq!(json.matches("Weekly · sn\"").count(), 1, "{json}");
     let edges = edge_faces();
     let many = serde_json::to_string(&edges["many"]["limits"]["large"]).unwrap();
-    assert!(many.contains("snowy7 (2)"), "{many}");
+    assert!(many.contains("you (2)"), "{many}");
     assert!(many.contains("4 more accounts"), "{many}");
 }

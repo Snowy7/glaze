@@ -457,7 +457,7 @@
                   "color": "warning",
                   "fraction": 0.050000011920928955,
                   "kind": "meter",
-                  "label": "5-hour · snowy7",
+                  "label": "5-hour · you",
                   "note": "resets in 40m",
                   "value": "5% left"
                 }
@@ -471,7 +471,7 @@
             {
               "fraction": 0.800000011920929,
               "kind": "meter",
-              "label": "5-hour · snowy7 (2)",
+              "label": "5-hour · you (2)",
               "note": "resets in 40m",
               "value": "80% left"
             },
@@ -566,7 +566,7 @@
                   "color": "warning",
                   "fraction": 0.050000011920928955,
                   "kind": "meter",
-                  "label": "5-hour · snowy7",
+                  "label": "5-hour · you",
                   "note": "resets in 40m",
                   "value": "5% left"
                 }
@@ -577,7 +577,7 @@
             {
               "fraction": 0.800000011920929,
               "kind": "meter",
-              "label": "5-hour · snowy7 (2)",
+              "label": "5-hour · you (2)",
               "note": "resets in 40m",
               "value": "80% left"
             },
@@ -1773,7 +1773,7 @@
             {
               "fraction": 0.5699999928474426,
               "kind": "meter",
-              "label": "Weekly · snowy7",
+              "label": "Weekly · you",
               "note": "resets in 3d",
               "value": "57% left"
             },
@@ -1870,7 +1870,7 @@
             {
               "fraction": 0.5699999928474426,
               "kind": "meter",
-              "label": "Weekly · snowy7",
+              "label": "Weekly · you",
               "note": "resets in 3d",
               "value": "57% left"
             },
