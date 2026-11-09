@@ -99,7 +99,7 @@ fn keyboard_reaches_window_pages_search_and_history() {
         (0x35, Page::DesktopMenu),
         (0x36, Page::Windows),
         (0x37, Page::Connections),
-        (0xBC, Page::Settings),
+        (0xBC, Page::General), // Settings opens on its first tab.
         (0x48, Page::History),
     ] {
         app.key_with(vk, (true, false, false));
@@ -204,6 +204,7 @@ fn inspector_drag_is_bounded_remembered_and_does_not_edit_the_desktop() {
     use glaze_ui::{Button, Event, Point, Pointer};
     let mut ui = Ui::new().unwrap();
     let mut app = window_app(true, &ui, (1280, 800));
+    app.run(Action::Panel(crate::panel::Command::Open(crate::panel::Page::Windows)));
     let before = [
         crate::docs::DocId::Config,
         crate::docs::DocId::Bars,
@@ -502,14 +503,11 @@ fn look_preview_segments_switch_pages_without_editing_documents() {
     let mut ui = Ui::new().unwrap();
     let mut app = window_app(true, &ui, (1280, 800));
     let before = crate::docs::DocId::ALL.map(|id| app.docs.doc(id).raw.clone());
-    for (page, selected, destination) in [
-        (Page::Look, 0usize, Page::Windows),
-        (Page::Windows, 1usize, Page::Look),
-    ] {
+    // Desktop and Windows are tabs under the page bar.
+    for (page, destination) in [(Page::Look, Page::Windows), (Page::Windows, Page::Look)] {
         app.run(Action::Panel(Command::Open(page)));
         let built = crate::view::build(&app, &mut ui);
-        let group = key("look-stage-scope");
-        let selected_key = key((group, selected));
+        let selected_key = key(("page-tab", page));
         let selected_id = built
             .targets
             .iter()
@@ -526,7 +524,7 @@ fn look_preview_segments_switch_pages_without_editing_documents() {
         let target = built
             .targets
             .iter()
-            .find(|target| target.key == key((group, 1 - selected)))
+            .find(|target| target.key == key(("page-tab", destination)))
             .unwrap();
         app.run(target.action.clone());
         assert_eq!(crate::panel::current_page(&app), destination);
@@ -548,19 +546,7 @@ fn window_layout_keeps_the_stage_inspector_band_and_footer_fixed() {
         ((1920, 1080), false, 576.0),
     ] {
         let mut app = window_app(true, &ui, size);
-        app.run(Action::Panel(Command::Open(Page::AddWidget)));
-        let built = crate::view::build(&app, &mut ui);
-        let interactive: Vec<_> = built
-            .list
-            .hits
-            .iter()
-            .filter(|hit| hit.id < u32::MAX / 2)
-            .map(|hit| hit.id)
-            .collect();
-        assert_eq!(
-            interactive,
-            (1..=built.targets.len() as u32).collect::<Vec<_>>()
-        );
+        app.run(Action::Panel(Command::Open(Page::Windows)));
         let r = crate::view::regions(&app);
         let (column, live) = crate::view::content_regions(&app);
         assert_eq!(r.rail, rail);
@@ -568,106 +554,35 @@ fn window_layout_keeps_the_stage_inspector_band_and_footer_fixed() {
         assert_eq!(column.width(), inspector_width);
         assert_eq!(r.bar.height(), 48.0);
         assert_eq!(r.sidebar.width(), if rail { 56.0 } else { 208.0 });
-        let cancel = built
-            .targets
-            .iter()
-            .rev()
-            .find(|t| t.action == Action::Panel(Command::Open(Page::Widgets)))
-            .unwrap();
+        // Adding a widget is a reading page whose footer stays pinned at the bottom.
+        app.run(Action::Panel(Command::Open(Page::AddWidget)));
+        let built = crate::view::build(&app, &mut ui);
+        let interactive: Vec<_> = built.list.hits.iter().filter(|hit| hit.id < u32::MAX / 2).map(|hit| hit.id).collect();
+        assert_eq!(interactive, (1..=built.targets.len() as u32).collect::<Vec<_>>());
+        let r = crate::view::regions(&app);
+        let (column, live) = crate::view::content_regions(&app);
+        assert!(live.is_none());
+        let cancel = built.targets.iter().rev().find(|t| t.action == Action::Panel(Command::Open(Page::Widgets))).unwrap();
         assert!(cancel.rect.left >= column.left);
         assert_eq!(cancel.rect.bottom, r.body.bottom - 16.0);
-        assert!(
-            !built
-                .targets
-                .iter()
-                .any(|t| t.action == Action::Panel(Command::Done))
-        );
+        assert!(!built.targets.iter().any(|t| t.action == Action::Panel(Command::Done)));
     }
 }
 
 #[test]
-fn stage_selection_and_zoom_only_change_navigation_and_keep_the_inspector_in_place() {
-    use crate::{
-        actions::Bar,
-        panel::{Command, Page},
-    };
+fn desktop_pages_are_reading_pages_that_offer_edit_mode() {
+    use crate::panel::{Command, Page};
     let mut ui = Ui::new().unwrap();
     let mut app = window_app(true, &ui, (1280, 800));
-    let before = app.docs.doc(crate::docs::DocId::Widgets).raw.clone();
-    let inspector = crate::view::regions(&app).inspector.unwrap();
-    let built = crate::view::build(&app, &mut ui);
-    let viewport = crate::view::regions(&app).stage.unwrap();
-    let desktop = built.targets.iter().find(|target| target.key == glaze_ui::controls::key("stage-wallpaper")).unwrap().rect;
-    let chips = built.targets.iter().filter(|target| {
-        target.scroll == Some(glaze_ui::controls::key("window-stage"))
-            && matches!(target.action, Action::Panel(Command::Display(_)))
-    }).map(|target| target.rect).collect::<Vec<_>>();
-    assert_eq!(chips.len(), app.monitors.len());
-    assert!(chips.iter().all(|rect| rect.top > desktop.bottom));
-    assert!(((desktop.left + desktop.right) / 2.0 - (viewport.left + viewport.right) / 2.0).abs() <= 1.0);
-    assert!(((desktop.top + chips[0].bottom) / 2.0 - (viewport.top + viewport.bottom) / 2.0).abs() <= 1.0);
-    let clock = built
-        .targets
-        .iter()
-        .find(|target| target.action == Action::SelectWidget(Some("clock-1".into())))
-        .unwrap()
-        .action
-        .clone();
-    app.run(clock);
-    assert_eq!(app.panel.as_ref().unwrap().page, Page::Widget);
-    app.run(Action::Panel(Command::StageZoom(true)));
-    let built = crate::view::build(&app, &mut ui);
-    assert_eq!(crate::view::regions(&app).inspector.unwrap(), inspector);
-    let stage = crate::view::regions(&app).stage.unwrap();
-    for target in built
-        .targets
-        .iter()
-        .filter(|target| target.scroll == Some(glaze_ui::controls::key("window-stage")))
-    {
-        if let Some(visible) = target.visible {
-            assert!(
-                visible.left >= stage.left
-                    && visible.top >= stage.top
-                    && visible.right <= stage.right
-                    && visible.bottom <= stage.bottom
-            );
-        }
+    for page in [Page::Root, Page::Look, Page::Widgets, Page::Bars, Page::Top] {
+        app.run(Action::Panel(Command::Open(page)));
+        let built = crate::view::build(&app, &mut ui);
+        assert!(crate::view::regions(&app).stage.is_none(), "{page:?} has no desktop picture");
+        assert!(built.targets.iter().any(|t| t.action == Action::Panel(Command::EditDesktop(true))), "{page:?} offers edit mode");
     }
-    app.run(Action::Panel(Command::Open(Page::Top)));
-    assert_eq!(app.nav.bar, Some(Bar::Top));
-    assert!(app.panel.as_ref().unwrap().stage_actual);
-    let built = crate::view::build(&app, &mut ui);
-    let slot = crate::actions::Slot {
-        bar: Bar::Top,
-        list: "right",
-        index: 6,
-    };
-    let module = built
-        .targets
-        .iter()
-        .find(|target| target.action == Action::SelectModule(Some(slot.clone())))
-        .unwrap()
-        .action
-        .clone();
-    app.run(module);
-    assert_eq!(crate::panel::current_page(&app), Page::Module);
-    assert_eq!(
-        crate::panel::editors::selected_module_name(&app).as_deref(),
-        Some("Date and clock")
-    );
-    assert_eq!(crate::view::regions(&app).inspector.unwrap(), inspector);
-    assert_eq!(app.docs.doc(crate::docs::DocId::Widgets).raw, before);
-    assert!(!app.docs.can_undo());
     app.run(Action::ArrangeOnDesktop);
     assert_eq!(crate::panel::current_page(&app), Page::Widgets);
     assert!(!app.docs.can_undo());
-    app.texts
-        .insert(crate::actions::FieldId::Palette, "Arrange widgets".into());
-    assert!(
-        !crate::search::results(&app)
-            .iter()
-            .any(|entry| entry.action == Action::ArrangeOnDesktop)
-    );
     for page in [
         Page::Connections,
         Page::Settings,
@@ -683,10 +598,12 @@ fn stage_selection_and_zoom_only_change_navigation_and_keep_the_inspector_in_pla
         app.run(Action::Panel(Command::Open(page)));
         let r = crate::view::regions(&app);
         assert!(r.stage.is_none() && r.inspector.is_none());
-        assert!(crate::view::content_regions(&app).0.width() <= app.px(1200.0));
+        let (host, _) = crate::view::content_regions(&app);
+        assert!(crate::view::column(&app, host, page).1 <= app.px(1200.0));
     }
 }
 
+/// Additional frame checks#[test]
 /// Additional frame checks for the rail, native-size selection, and creation/restore footers.
 #[test]
 fn render_window_interaction_states() {
@@ -698,20 +615,17 @@ fn render_window_interaction_states() {
     let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
     let mut ui = Ui::new().unwrap();
     for dark in [true, false] {
-        for (page, name, size, actual) in [
-            (Page::Widget, "widget-100", (1280, 800), true),
-            (Page::Module, "module-100", (1280, 800), true),
-            (Page::General, "large-text", (1280, 800), false),
-            (Page::DesktopMenu, "desktop-menu", (1280, 800), false),
-            (Page::AddWidget, "add-widget-rail", (960, 640), false),
-            (Page::AddWidget, "gallery-weather", (1280, 800), false),
-            (Page::Widget, "faces", (1280, 800), false),
-            (Page::BarDesign, "bar-presets", (1280, 800), false),
-            (Page::History, "history-restore", (1280, 800), false),
+        for (page, name, size) in [
+            (Page::General, "large-text", (1280, 800)),
+            (Page::DesktopMenu, "desktop-menu", (1280, 800)),
+            (Page::AddWidget, "add-widget-rail", (960, 640)),
+            (Page::AddWidget, "gallery-weather", (1280, 800)),
+            (Page::Widget, "faces", (1280, 800)),
+            (Page::BarDesign, "bar-presets", (1280, 800)),
+            (Page::History, "history-restore", (1280, 800)),
         ] {
             let mut app = window_app(dark, &ui, size);
             app.run(Action::Panel(Command::Open(page)));
-            app.panel.as_mut().unwrap().stage_actual = actual;
             app.nav.widget = Some("clock-1".into());
             if name == "gallery-weather" {
                 app.texts.insert(crate::actions::FieldId::WidgetSearch, "weather".into());
@@ -765,35 +679,6 @@ fn render_window_interaction_states() {
 }
 
 #[test]
-fn stage_drag_snaps_rejects_overlap_and_undoes_as_one_change() {
-    use crate::panel::{Command, Page};
-    use glaze_ui::{Button, Event, Point, Pointer};
-    let mut ui = Ui::new().unwrap();
-    let mut app = window_app(true, &ui, (1280, 800));
-    app.run(Action::Panel(Command::Open(Page::Widgets)));
-    shot(&mut app, &mut ui);
-    let target = app.frame.targets.iter().find(|t| t.action == Action::SelectWidget(Some("clock-1".into()))).unwrap();
-    assert!(matches!(target.behavior, glaze_ui::controls::Behavior::Drag));
-    let origin = Point::new(target.rect.left + target.rect.width() / 2.0, target.rect.top + target.rect.height() / 2.0);
-    let (grid, scale) = app.stage.borrow().content.grid.unwrap();
-    let cell = ((grid.cell[0] + grid.gap) as f32 * scale, (grid.cell[1] + grid.gap) as f32 * scale);
-    let pointer = |dx: f32, dy: f32| Pointer { at: Point::new(origin.x + dx * cell.0, origin.y + dy * cell.1), screen: (0, 0) };
-    let before = app.docs.doc(crate::docs::DocId::Widgets).raw.clone();
-    let history_before = app.panel.as_ref().unwrap().history.borrow().entries.len();
-    app.event(Event::Press(pointer(0.0, 0.0), Button::Left));
-    app.event(Event::Move(pointer(0.0, 2.0)));
-    assert_eq!(crate::editing::widgets::layout(&app).get("clock-1").unwrap().cell, [0, 0]);
-    app.event(Event::Move(pointer(4.0, 0.0)));
-    app.event(Event::Move(pointer(5.0, 0.0)));
-    assert_eq!(crate::editing::widgets::layout(&app).get("clock-1").unwrap().cell, [5, 0]);
-    app.event(Event::Release(pointer(5.0, 0.0), Button::Left));
-    assert_eq!(app.docs.undo_count(), 1);
-    assert_eq!(app.panel.as_ref().unwrap().history.borrow().entries.len(), history_before + 1);
-    app.run(Action::Undo);
-    assert_eq!(app.docs.doc(crate::docs::DocId::Widgets).raw, before);
-}
-
-#[test]
 fn render_studio_refinements() {
     use crate::panel::{Command, Page};
     use crate::docs::{DocId, Op};
@@ -802,7 +687,7 @@ fn render_studio_refinements() {
     let baseline = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/window");
     let mut ui = Ui::new().unwrap();
     for dark in [true, false] {
-        for (page, name) in [(Page::Look, "wide-sidebar"), (Page::Look, "look-color"), (Page::Bars, "bars-focused"), (Page::Connections, "connections-rows"), (Page::Widgets, "widgets-arranging"), (Page::Look, "sidebar-resizing")] {
+        for (page, name) in [(Page::Windows, "wide-sidebar"), (Page::Look, "look-color"), (Page::Bars, "bars-focused"), (Page::Connections, "connections-rows"), (Page::Windows, "sidebar-resizing")] {
             let mut app = window_app(dark, &ui, (1920, 1080));
             app.run(Action::Panel(Command::Open(page)));
             app.apply("Sidebar width", vec![Op { doc: DocId::Studio, path: crate::view::INSPECTOR_SETTING.into(), value: Some(json!(680.0)) }]);
@@ -821,15 +706,6 @@ fn render_studio_refinements() {
                 shot(&mut app, &mut ui);
                 app.panel.as_mut().unwrap().window.inspector_drag = Some(580.0);
             }
-            if name == "widgets-arranging" {
-                use glaze_ui::{Button, Event, Point, Pointer};
-                shot(&mut app, &mut ui);
-                let target = app.frame.targets.iter().find(|target| target.action == Action::SelectWidget(Some("clock-1".into()))).unwrap().rect;
-                let (grid, scale) = app.stage.borrow().content.grid.unwrap();
-                let pointer = |dx| Pointer { at: Point::new(target.left + target.width() / 2.0 + dx, target.top + target.height() / 2.0), screen: (0, 0) };
-                app.event(Event::Press(pointer(0.0), Button::Left));
-                app.event(Event::Move(pointer((grid.cell[0] + grid.gap) as f32 * scale * 4.0)));
-            }
             app.toast = None;
             let image = shot(&mut app, &mut ui);
             let file = format!("{name}-1920x1080-{}.png", if dark { "dark" } else { "light" });
@@ -837,28 +713,4 @@ fn render_studio_refinements() {
             check(&image, &baseline.join(&file)).unwrap();
         }
     }
-}
-
-#[test]
-fn dragging_onto_display_chip_transfers_and_undoes_the_layout() {
-    use crate::{panel::{Command, Page}, docs::DocId};
-    use glaze_ui::{Button, Event, Point, Pointer};
-    let mut ui = Ui::new().unwrap();
-    let mut app = window_app(true, &ui, (1280, 800));
-    app.run(Action::Panel(Command::Open(Page::Widgets)));
-    shot(&mut app, &mut ui);
-    let before = app.docs.doc(DocId::Widgets).raw.clone();
-    let widget = app.frame.targets.iter().find(|t| t.action == Action::SelectWidget(Some("clock-1".into()))).unwrap().rect;
-    let destination = (app.nav.display + 1) % app.monitors.len();
-    let chip = app.frame.targets.iter().find(|t| t.action == Action::Panel(Command::Display(destination))).unwrap().rect;
-    let pointer = |r: glaze_ui::Rect| Pointer { at: Point::new(r.left + r.width() / 2.0, r.top + r.height() / 2.0), screen: (0, 0) };
-    app.event(Event::Press(pointer(widget), Button::Left));
-    app.event(Event::Move(pointer(chip)));
-    app.event(Event::Release(pointer(chip), Button::Left));
-    assert_eq!(app.nav.display, destination);
-    let layout = crate::editing::widgets::layout(&app);
-    assert_eq!(layout.get("clock-1").unwrap().monitor, app.monitors[destination].device);
-    assert_eq!(app.docs.undo_count(), 1);
-    app.run(Action::Undo);
-    assert_eq!(app.docs.doc(DocId::Widgets).raw, before);
 }

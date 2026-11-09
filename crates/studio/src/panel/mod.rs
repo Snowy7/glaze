@@ -153,7 +153,10 @@ pub struct State {
     pub window: crate::view::State,
     /// The standalone frame borrows desktop previews without panel picking or placement.
     pub windowed: bool,
-    pub stage_actual: bool,
+    /// Edit mode: the window became the docked panel over the cleared desktop.
+    pub editing: bool,
+    /// Asks the window's loop to enter (`true`) or leave (`false`) edit mode.
+    pub edit_request: Option<bool>,
     pub chooser: std::cell::RefCell<choosers::State>,
     reclaim_heap: std::cell::Cell<bool>,
     raster: measure::Raster,
@@ -197,7 +200,8 @@ pub enum Command {
     SidebarSettings,
     ResizeInspector,
     Open(Page),
-    StageZoom(bool),
+    /// Enter or leave edit mode on the desktop.
+    EditDesktop(bool),
     Back,
     Done,
     PickWidget(String),
@@ -264,7 +268,6 @@ pub fn run(app: &mut App, command: Command) {
         Command::Sidebar => crate::view::toggle_sidebar(app),
         Command::SidebarSettings => crate::view::toggle_settings(app),
         Command::ResizeInspector => {}, // Pointer drags are handled by App; no click action.
-        Command::StageZoom(actual) => app.panel.as_mut().unwrap().stage_actual = actual,
         Command::PickFont(edit, current) => pickers::open_font(app, edit, current),
         Command::Design(bar) => {
             app.nav.bar = bar;
@@ -280,6 +283,8 @@ pub fn run(app: &mut App, command: Command) {
         }
         Command::Open(page) => {
             app.overlay = None;
+            // The window shows Settings as tabs, so it opens on the first one.
+            let page = if page == Page::Settings && app.panel.as_ref().is_some_and(|state| state.windowed) { Page::General } else { page };
             if page == Page::FirstRun {
                 app.panel.as_ref().unwrap().first_run.borrow_mut().take();
                 first_run::begin(app);
@@ -375,7 +380,10 @@ pub fn run(app: &mut App, command: Command) {
             }
             state.history.borrow_mut().selected = None;
         }
+        // In edit mode Done goes back to the window; the docked panel closes.
+        Command::Done if app.panel.as_ref().unwrap().editing => app.panel.as_mut().unwrap().edit_request = Some(false),
         Command::Done => app.quit = true,
+        Command::EditDesktop(on) => app.panel.as_mut().unwrap().edit_request = Some(on),
         Command::Disconnect(id) => editors::disconnect(app, &id),
         Command::Connect(id) => editors::connect(app, &id),
         Command::MoveModuleTo(bar, zone) => editors::move_module(app, bar, zone),
@@ -462,7 +470,9 @@ pub fn run(app: &mut App, command: Command) {
         }
         Command::Wallpaper(i) => {
             app.nav.wallpaper = Some(i);
-            app.panel.as_mut().unwrap().page = Page::Wallpaper;
+            // The window shows a wallpaper's details beside the grid; the docked panel opens them.
+            let state = app.panel.as_mut().unwrap();
+            state.page = if state.windowed { Page::Wallpapers } else { Page::Wallpaper };
         }
         Command::WallpaperLook(i) => {
             if i < app.library.items.len() {
@@ -511,6 +521,14 @@ pub fn on_key(app: &mut App, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) ->
     if editors::widgets::on_key(app, vk, ctrl, shift, alt) { return true; }
     if choosers::on_key(app, vk, ctrl, shift, alt) { return true; }
     if vk == 0x1B && choosers::end(app) { app.dirty = true; return true; }
+    // Esc leaves edit mode from one of its four places; deeper pages go back first.
+    if vk == 0x1B && !ctrl && !alt && app.field.is_none() && app.panel.as_ref().is_some_and(|s| {
+        s.editing && matches!(s.page, Page::Root | Page::Wallpapers | Page::Look | Page::Widgets | Page::Bars)
+    }) {
+        app.panel.as_mut().unwrap().edit_request = Some(false);
+        app.dirty = true;
+        return true;
+    }
     if !ctrl && !alt && crate::builder::on_key(app, vk) { return true; }
     if pick_client::on_key(app, vk) {
         return true;
@@ -628,6 +646,10 @@ pub(crate) fn save_status(app: &App, page: Page) -> &'static str {
             crate::docs::ReadIssue::Malformed { .. } => "Read only",
         };
     }
+    // The wallpaper editor's status is its draft's, not the settings files'.
+    if crate::builder::is_page(page) && crate::builder::unsaved(app) {
+        return "Wallpaper not saved";
+    }
     let state = app.panel.as_ref().unwrap();
     if !state.save_errors.borrow().is_empty() || !state.theme_errors.borrow().is_empty()
         || matches!(app.docs.saved, crate::docs::Saved::Failed(_)) {
@@ -648,7 +670,12 @@ pub fn build(app: &App, text: &mut Text) -> Built {
     b.fill(window, 0.0, p.chrome);
     let header = Rect::new(0.0, 0.0, window.width(), b.px(48.0));
     pages::header(app, &mut b, header, page);
-    let body = content(app, &mut b, Rect::new(0.0, header.bottom, window.width(), window.height() - header.height()), page);
+    let mut top = header.bottom;
+    if app.panel.as_ref().unwrap().editing {
+        let bar = Rect::new(0.0, top, window.width(), b.px(72.0));
+        top = edit_bar(&mut b, bar, page);
+    }
+    let body = content(app, &mut b, Rect::new(0.0, top, window.width(), window.height() - top), page);
     pages::toast(app, &mut b, window);
     controls::flash_hovered_display(app, &b);
     choosers::finish(app);
@@ -661,6 +688,24 @@ pub fn build(app: &App, text: &mut Text) -> Built {
         regions: vec![header, body],
         overlay_from: if app.overlay.is_some() { 0 } else { usize::MAX },
     }
+}
+
+/// Edit mode's four places, and why Alt+Tab does nothing. Returns where the page starts.
+fn edit_bar(b: &mut crate::ui::B, r: Rect, page: Page) -> f32 {
+    const PLACES: [(Page, &str); 4] = [(Page::Wallpapers, "Wallpaper"), (Page::Look, "Look"), (Page::Widgets, "Widgets"), (Page::Bars, "Bars")];
+    let mut place = page;
+    while !PLACES.iter().any(|(p, _)| *p == place) && place != Page::Root {
+        place = place.parent().unwrap_or(Page::Root);
+    }
+    let labels: Vec<_> = PLACES.iter().map(|(_, l)| *l).collect();
+    let tabs = Rect::new(r.left + b.px(16.0), r.top + b.px(4.0), r.width() - b.px(32.0), b.px(32.0));
+    b.segmented(key("edit-places"), tabs, &labels, PLACES.iter().position(|(p, _)| *p == place), "Edit", true, |i| {
+        Action::Panel(Command::Open(PLACES[i].0))
+    });
+    let hint = Rect::new(tabs.left, tabs.bottom + b.px(6.0), tabs.width(), b.px(20.0));
+    let ink = b.p.ink3;
+    controls::text(b, hint, "Alt+Tab and the Windows key are off while you edit · Esc or Done to leave", 11.0, 400, ink, glaze_ui::controls::Align::Start);
+    r.bottom
 }
 
 pub(crate) fn current_page(app: &App) -> Page {
@@ -696,13 +741,15 @@ pub(crate) fn content(app: &App, b: &mut crate::ui::B, area: Rect, page: Page) -
         (area.bottom - failures.y - app.px(footer)).max(0.0),
     );
     let view = key(("studio-panel", page));
+    // The window places a readable column inside the full-width page; the docked panel is
+    // narrow already.
+    let (x, w) = if app.panel.as_ref().is_some_and(|state| state.windowed) {
+        crate::view::column(app, area, page)
+    } else {
+        (area.left + b.px(16.0), body.width() - b.px(32.0))
+    };
     b.scroll(view, body, app.nav.scroll(view), Action::None, |b, top| {
-        let mut c = crate::ui::Col {
-            x: area.left + b.px(16.0),
-            y: top + b.px(24.0),
-            w: body.width() - b.px(32.0),
-            view,
-        };
+        let mut c = crate::ui::Col { x, y: top + b.px(24.0), w, view };
         controls::save_banner(app, b, &mut c, page);
         if !app.system.running() {
             controls::notice(b, &mut c, "Changes apply when Glaze starts.");
@@ -719,6 +766,19 @@ pub(crate) fn content(app: &App, b: &mut crate::ui::B, area: Rect, page: Page) -
         Rect::new(area.left, body.bottom, area.width(), app.px(footer)),
     );
     body
+}
+
+/// A side pane in the window: one page in its own scroll on a card, such as a wallpaper's
+/// details beside the grid. Banners and the footer belong to the main page beside it.
+pub(crate) fn pane(app: &App, b: &mut crate::ui::B, area: Rect, page: Page) {
+    b.fill(area, b.px(tokens::radius::CARD), b.p.panel);
+    let view = key(("studio-pane", page));
+    b.scroll(view, area, app.nav.scroll(view), Action::None, |b, top| {
+        let mut c = crate::ui::Col { x: area.left + b.px(16.0), y: top + b.px(16.0), w: area.width() - b.px(32.0), view };
+        pages::view(app, b, &mut c, page);
+        controls::boundaries(b);
+        c.y + b.px(16.0)
+    });
 }
 
 /// Reserve a top-bar band and 96 DIPs for a floating dock, within the primary work area.
@@ -799,9 +859,6 @@ pub fn fit_height(app: &mut App, surface: &glaze_ui::Surface, built: &Built) -> 
 pub fn before_action(app: &mut App, action: &Action) {
     if matches!(action, Action::LookReset) && let Some(panel) = &app.panel {
         app.nav.look_windows = panel.page == Page::Windows;
-    }
-    if app.panel.is_some() && matches!(action, Action::AddWidget(_) | Action::DuplicateWidget) {
-        editors::prepare_widget_grid(app);
     }
     if matches!(action, Action::AddWallpaper | Action::Panel(Command::Open(Page::AddWallpaper))) {
         app.texts.remove(&FieldId::Text(crate::docs::DocId::Studio, "/add_use_now".into()));

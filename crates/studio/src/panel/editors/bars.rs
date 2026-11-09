@@ -334,7 +334,7 @@ pub fn overview(app: &App, b: &mut B, c: &mut Col) {
         ),
     );
     crate::panel::controls::displays(app, b, c);
-    crate::panel::controls::icon_group(b, c, "Desktop bars", glyph::BARS, |b, c| {
+    group(b, c, "Desktop bars", |b, c| {
         for (bar, page, label) in [
             (Bar::Top, Page::Top, "Top bar"),
             (Bar::Dock, Page::Dock, "Dock"),
@@ -369,7 +369,7 @@ pub fn overview(app: &App, b: &mut B, c: &mut Col) {
         );
         c.y = taskbar.y;
     });
-    crate::panel::controls::icon_group(b, c, "Design", glyph::LOOK, |b, c| {
+    group(b, c, "Design", |b, c| {
         row(
             b,
             c,
@@ -382,7 +382,7 @@ pub fn overview(app: &App, b: &mut B, c: &mut Col) {
         );
     });
     display_differences(app, b, c);
-    if more(app, b, c, "Panels and Windows' taskbar") {
+    if more(app, b, c, "Panels and taskbar icons") {
         group(b, c, "", |b, c| {
             row(
                 b,
@@ -1396,7 +1396,7 @@ pub fn add(app: &App, b: &mut B, c: &mut Col) {
         .plugins
         .installed
         .iter()
-        .filter(|plugin| super::connections::visible_plugin(plugin))
+        .filter(|plugin| super::connections::visible_plugin(plugin) && super::connections::connected(app, &plugin.id))
         .flat_map(|plugin| plugin.bars.iter().map(move |module| (plugin, module)))
         .filter(|(plugin, module)| {
             !present.contains(&format!("custom:{}--{}", plugin.id, module.id).as_str())

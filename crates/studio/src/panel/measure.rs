@@ -182,7 +182,6 @@ pub(super) fn release_page_resources(app: &crate::app::App, text: &mut glaze_ui:
     let mut images = app.images.borrow_mut();
     images.clear_page();
     drop(images);
-    app.stage.borrow_mut().clear_pictures();
     text.clear_cache();
     // Native thumbnail/icon providers are page-owned too. COM unloads only libraries
     // whose objects and calls have all been released; active UI factories stay live.

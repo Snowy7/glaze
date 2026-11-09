@@ -75,6 +75,7 @@ fn queued_shortcut_keeps_modifiers_until_studio_handles_the_key() {
         surface,
         menu: None,
         picking: None,
+        edit: None,
         frame: None,
         onboarding: None,
     }));

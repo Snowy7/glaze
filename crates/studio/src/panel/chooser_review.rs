@@ -193,7 +193,7 @@ fn render_chooser_review() {
         let layout = crate::editing::widgets::layout(&app);
         let own = crate::panel::widget_look::appearance(&app, &layout.instances[0], Style::Liquid);
         app.run(Action::Set(
-            Edit::new(DocId::Widgets, "/instances/0/appearance", "Its own look"),
+            Edit::new(DocId::Widgets, "/instances/0/appearance", "Use a different look"),
             own,
         ));
         shot(&mut app, &mut ui, "clock-own-material", None, dark);
@@ -211,7 +211,7 @@ fn render_chooser_review() {
             Edit::new(
                 DocId::Widgets,
                 format!("/instances/{index}/appearance"),
-                "Its own look",
+                "Use a different look",
             ),
             own,
         ));
@@ -447,6 +447,8 @@ fn render_retained_plugin_face_and_transparent_widget() {
         ).unwrap();
         app.registry.widgets.clear();
         app.registry.widgets.insert(id.into(), glaze_widgets::registry::Installed { manifest });
+        // Its plugin is set up and running: only then are its faces offered.
+        app.plugins.snapshot.plugins.insert("t3".into(), glaze_widgets::plugin_manager::Metrics { status: "Live".into(), ..Default::default() });
         super::begin(&app);
         app.panel.as_ref().unwrap().chooser.borrow_mut().plugin_faces = Some(json!({
             id: {"title":"Running now","icon":"terminal","status":"live","face":trees["running"]["small"]}
