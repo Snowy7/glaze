@@ -338,7 +338,7 @@ with `scripts/build-plugins.ps1` when upgrading the plugin contract.
   third-party licence. [THIRD-PARTY-NOTICES-crates.md](THIRD-PARTY-NOTICES-crates.md) has the full
   licence text of every Rust crate in the programs and bundled plugins.
 
-Glaze itself has no public licence yet.
+Glaze itself is MIT licensed; see [LICENSE](LICENSE).
 
 ## Documentation
 
