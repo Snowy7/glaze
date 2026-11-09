@@ -1,8 +1,8 @@
 # Third-party notices
 
 Glaze includes software and content made by others. Each item keeps its own licence, which this
-file and the files it points to reproduce. This file covers third-party material only; it does not
-license Glaze's own code.
+file and the files it points to reproduce. Glaze's own code is under the MIT licence in
+[LICENSE](LICENSE).
 
 | What | Licences | Full notices |
 |---|---|---|
