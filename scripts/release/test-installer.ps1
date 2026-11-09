@@ -61,7 +61,17 @@ try {
     Move-Item -LiteralPath $savedCore -Destination $core
 }
 function Read-Host { param($Prompt) ''; }
-& "$install\uninstall.ps1"
+# Legacy helpers are named weather/rss, so shutdown must use executable location, not a
+# glaze-* name filter. This helper has no children and does nothing except wait.
+$helperExe = Join-Path $install 'fixture-helper.exe'
+Add-Type -TypeDefinition 'public static class GlazeLegacyStopFixture { public static void Main() { System.Threading.Thread.Sleep(60000); } }' `
+    -OutputAssembly $helperExe -OutputType ConsoleApplication
+$helper = Start-Process -FilePath $helperExe -PassThru -WindowStyle Hidden
+$null = $helper.Handle
+try { & "$install\uninstall.ps1" }
+finally { if (-not $helper.HasExited) { $helper.Kill(); $helper.WaitForExit() } }
+if ($helper.ExitCode -eq 0) { throw 'Expected the sleeping legacy helper to be stopped.' }
+Write-Host 'PASS helper without glaze name stopped by install path'
 if ((Test-Path -LiteralPath $install) -or -not (Test-Path -LiteralPath $config)) { throw 'Default uninstall did not preserve settings.' }
 Write-Host 'PASS empty deletion answer retained user data'
 & "$source\install.ps1" -Isolated -ProfileRoot $profile -InstallDirectory $install

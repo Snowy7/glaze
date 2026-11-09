@@ -38,7 +38,8 @@ function Assert-OrdinaryUser {
 
 function Get-InstallProcesses([string]$Directory) {
     $base = (Get-FullPath $Directory) + '\'
-    @(Get-Process -Name 'glaze-*' -ErrorAction SilentlyContinue | Where-Object {
+    # Legacy weather/rss commands do not have a glaze- prefix. Ownership is their exe path.
+    @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
         $_.Path -and $_.Path.StartsWith($base, [StringComparison]::OrdinalIgnoreCase)
     })
 }
