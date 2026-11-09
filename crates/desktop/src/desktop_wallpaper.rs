@@ -189,7 +189,13 @@ impl<B: Backend> Wallpapers<B> {
             if !ours {
                 return false;
             }
-            let restored = self.backend.set_wallpaper(id, original);
+            let mut restored = self.backend.set_wallpaper(id, original);
+            if restored.is_err() && !original.is_empty() && !Path::new(original).exists() {
+                // The original file is gone (deleted, or a still from before the rename), so it
+                // can never come back; Windows' own default beats keeping the journal forever.
+                log::warn!("{id}: the original wallpaper {original} no longer exists");
+                restored = self.backend.set_wallpaper(id, &windows_default());
+            }
             if let Err(e) = &restored {
                 failures.push(format!("{id}: {e:#}"));
             }
@@ -294,6 +300,16 @@ pub fn restore_in(base: &Path) -> Result<bool> {
         return Ok(false);
     }
     Wallpapers::native_in(base)?.restore()
+}
+
+/// Windows' stock wallpaper, or a solid color (empty) if this edition doesn't have one. What a
+/// monitor gets back when its original file was deleted.
+fn windows_default() -> String {
+    std::env::var_os("WINDIR")
+        .map(|dir| PathBuf::from(dir).join(r"Web\Wallpaper\Windows\img0.jpg"))
+        .filter(|path| path.exists())
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 /// `%LOCALAPPDATA%\glaze`.
@@ -474,6 +490,8 @@ mod tests {
         replaceable: bool,
         /// Monitors whose `SetWallpaper` fails.
         broken: Vec<String>,
+        /// Files `SetWallpaper` can't find.
+        missing: Vec<String>,
         sets: usize,
     }
 
@@ -484,6 +502,9 @@ mod tests {
         fn set_wallpaper(&mut self, id: &str, path: &str) -> Result<()> {
             if self.broken.iter().any(|b| b == id) {
                 bail!("Explorer said no");
+            }
+            if self.missing.iter().any(|m| m == path) {
+                bail!("the file does not exist");
             }
             self.sets += 1;
             self.slots
@@ -534,6 +555,7 @@ mod tests {
             position: 4,
             replaceable: true,
             broken: Vec::new(),
+            missing: Vec::new(),
             sets: 0,
         };
         Wallpapers::new(fake, base.join(JOURNAL), base.join(SNAPSHOT_DIR))
@@ -638,6 +660,20 @@ mod tests {
         assert!(w.restore().unwrap());
         assert_eq!(shown(&w, SECOND), OTHER);
         assert!(!w.pending());
+    }
+
+    #[test]
+    fn a_deleted_original_falls_back_to_the_windows_default_instead_of_failing_forever() {
+        let mut w = wallpapers("deleted-original");
+        let gone = r"C:\Glaze-test-nowhere\old-snapshot.jpg";
+        w.backend.slots[0].wallpaper = gone.into();
+        let one = still(&w, "1.jpg");
+        w.apply(FIRST, &one).unwrap();
+        w.backend.missing.push(gone.into());
+
+        assert!(w.restore().unwrap());
+        assert_eq!(shown(&w, FIRST), windows_default());
+        assert!(!w.pending(), "an original that can't come back isn't kept");
     }
 
     #[test]
