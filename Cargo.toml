@@ -22,7 +22,7 @@ glaze-tweaks = { path = "crates/tweaks" }
 glaze-bars = { path = "crates/bars" }
 # The UI library, its own repo since 2026-11-07. .cargo/config.toml patches it to the sibling
 # checkout at D:/Coding/projects/desktop/stillkit, so both change together on this PC.
-glaze-ui = { package = "stillkit", git = "https://github.com/Snowy7/stillkit", rev = "e8db92773c860fc7e99ddb2cf58666e394684f15" }
+glaze-ui = { package = "stillkit", git = "https://github.com/Snowy7/stillkit", rev = "8bbe1fdfc21e3deb10c26a021d9ec55e5ffe0e3e" }
 
 anyhow = "1"
 bytemuck = { version = "1", features = ["derive"] }
@@ -70,4 +70,4 @@ opt-level = "s"
 
 [patch.crates-io]
 # stillkit's vendored adapter; Cargo applies only this workspace's patches.
-accesskit_windows = { git = "https://github.com/Snowy7/stillkit", rev = "e8db92773c860fc7e99ddb2cf58666e394684f15" }
+accesskit_windows = { git = "https://github.com/Snowy7/stillkit", rev = "8bbe1fdfc21e3deb10c26a021d9ec55e5ffe0e3e" }
