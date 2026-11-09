@@ -1,0 +1,48 @@
+{
+    "files_running_before_deploy":  false,
+    "stale_guard_passed":  true,
+    "configs":  [
+                    {
+                        "config":  "config.json",
+                        "sha256":  "86B0A1BA8255FE65C71081BA562F632BF4401427CB797CBB51BBA56D2E590F14",
+                        "byte_exact":  true
+                    },
+                    {
+                        "config":  "files.json",
+                        "sha256":  "EF496353FF298CB7AF01B08ACB160018E16EDEAF70B5E48AAC65DFC6D46A0DD1",
+                        "byte_exact":  true
+                    },
+                    {
+                        "config":  "bars.json",
+                        "sha256":  "241F746ADE7A5D1C329422C1A6191268C51D4E2C0DEFCBD1DED943BB928EB81A",
+                        "byte_exact":  true
+                    },
+                    {
+                        "config":  "studio.json",
+                        "sha256":  "EE06E5CA923B66C9FFDDE1F9EA7DFAECC3EE5FBA293E134C758824CD1923B24F",
+                        "byte_exact":  true
+                    }
+                ],
+    "binaries":  [
+                     {
+                         "matches_build":  true,
+                         "sha256":  "EFA4E2AEB300081D783339C121E49AF8123005584AE494442CFA5EA47A5B489A",
+                         "binary":  "glaze-files"
+                     },
+                     {
+                         "matches_build":  true,
+                         "sha256":  "E7B2FEB7587346D0008E79D83BBDE63BE61E0274A34FC552D6F03AD33E55D8A4",
+                         "binary":  "glaze-wallpaper"
+                     },
+                     {
+                         "matches_build":  true,
+                         "sha256":  "D37573A84E970E3FFEDB6F6EE7634611FA74FA190905071D934FFFC7251BE8FE",
+                         "binary":  "glaze-shell"
+                     },
+                     {
+                         "matches_build":  true,
+                         "sha256":  "356C1B4859E054A4A3FF7C146A8F2AEB5B38F63AC038DB18646F2AED6781AD83",
+                         "binary":  "glaze-studio"
+                     }
+                 ]
+}

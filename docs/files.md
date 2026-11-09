@@ -31,6 +31,17 @@ including `DwmFlush`, comparing the former Close/Open lifecycle with Visibility 
 The [This PC capture](../crates/files/evidence/drive-glass/this-pc.png) and
 [corner detail](../crates/files/evidence/drive-glass/hover-corner.png) use the production view
 in a no-activate fixture, verified by PrintWindow and UIA on its own PID.
+The [production Files check](../crates/files/evidence/drive-glass/live-resume.json) returned its
+retained frame in 9.9 ms after hiding and 7.5 ms after minimizing, without activation and with
+the same plate HWND. Plate discovery verifies the engine PID, class and client property;
+it tolerates hidden IME helpers between the client and its backdrop.
+
+The final shared release deployment passed the stale-input guard and matched all four deployed
+binary hashes. All four config backups were restored byte for byte
+([deployment verification](../crates/files/evidence/drive-glass/deployed.json)). Shell private
+memory was 20.95 MiB before / 20.69 MiB after. The 30-second CPU samples were 0.16% / 0.36% of one
+core amid concurrent dock changes; this does **not** establish the full shell performance gate.
+Bar redraw median/p95 and menu-open/startup/wake budgets still need an isolated comparison.
 
 ## Browsing
 
