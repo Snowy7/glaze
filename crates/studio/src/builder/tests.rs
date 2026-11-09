@@ -161,6 +161,8 @@ fn render_builder_window_goldens() {
             let mut app = crate::goldens::window_app(dark, &ui, size);
             begin(&mut app, None).unwrap();
             import(&mut app, &repo.join("themes/spring-forest/loop.mp4"), false).unwrap();
+            let source = active(&app).unwrap().dir.join(raw(&app)["wallpaper"]["base"]["source"].as_str().unwrap());
+            app.images.borrow_mut().fixture_source(source, repo.join("themes/spring-forest/preview.jpg"));
             app.set(&edit(&app, "/name", "Name"), json!("Spring stream"));
             shoot(&mut app, &mut ui, "create-video");
             drop(app);

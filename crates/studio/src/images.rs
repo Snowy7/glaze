@@ -42,9 +42,17 @@ pub struct Images {
     generation: Arc<std::sync::atomic::AtomicU64>,
     /// Goldens decode synchronously, with their own WIC factory.
     sync: Option<Decoder>,
+    #[cfg(test)]
+    fixture_sources: HashMap<PathBuf, PathBuf>,
 }
 
 impl Images {
+    /// OS thumbnail providers choose their own frame and cache size. Goldens use fixed
+    /// artwork; the poster integration test still exercises the real shell provider.
+    #[cfg(test)]
+    pub fn fixture_source(&mut self, path: PathBuf, source: PathBuf) {
+        self.fixture_sources.insert(path, source);
+    }
     /// Panel pages keep only stills requested by the frame that was actually presented.
     pub fn begin_frame(&mut self) {
         self.frame_start = Some(self.clock);
@@ -209,6 +217,8 @@ impl Images {
             Some(decoder) => decoder,
             None => self.sync.insert(Decoder::new().ok()?),
         };
+        #[cfg(test)]
+        let path = self.fixture_sources.get(path).map_or(path, PathBuf::as_path);
         let decoded = decode(decoder, path, max);
         let source_size = decoded.as_ref().map(|(_, size)| *size);
         let image = decoded.map(|(image, _)| Arc::new(image));
