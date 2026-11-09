@@ -109,31 +109,25 @@ fn icon_cell() -> [f64; 2] {
     ]
 }
 
-/// `ops` moved by `(dx, dy)`.
+/// `ops` moved by `(dx, dy)`, without text fields (native windows, not pixels).
+/// stillkit's `Op::translate` moves each op, so a new op never needs a case here.
 pub fn offset(ops: &[Op], dx: f32, dy: f32) -> impl Iterator<Item = Op> + '_ {
-    let r = move |r: Rect| r.offset(dx, dy);
-    let p = move |p: Point| Point::new(p.x + dx, p.y + dy);
-    ops.iter().filter_map(move |op| {
-        Some(match op.clone() {
-            Op::Arc { center, radius, start, sweep, width, color } => Op::Arc { center: p(center), radius, start, sweep, width, color },
-            Op::Image { rect, image, opacity, source } => Op::Image { rect: r(rect), image, opacity, source },
-            Op::RoundedImage { rect, image, opacity, source, radius } => Op::RoundedImage { rect: r(rect), image, opacity, source, radius },
-            Op::TextField { .. } => return None,
-            Op::Fill { rect, radius, color } => Op::Fill { rect: r(rect), radius, color },
-            Op::Continuous { rect, radius, smoothing, width, color } => Op::Continuous { rect: r(rect), radius, smoothing, width, color },
-            Op::Icon { rect, icon, weight, color } => Op::Icon { rect: r(rect), icon, weight, color },
-            Op::Stroke { rect, radius, width, color } => Op::Stroke { rect: r(rect), radius, width, color },
-            Op::Line { from, to, width, color } => Op::Line { from: p(from), to: p(to), width, color },
-            Op::Text { rect, text, style, color } => Op::Text { rect: r(rect), text, style, color },
-            Op::Emphasis {rect,text,style,color,italic,strike} => Op::Emphasis {rect:r(rect),text,style,color,italic,strike},
-            Op::Clipped {rect,ops}=>Op::Clipped {rect:r(rect),ops:offset(&ops,dx,dy).collect::<Vec<_>>().into()},
-            Op::RoundedClipped {rect,radius,ops}=>Op::RoundedClipped {rect:r(rect),radius,ops:offset(&ops,dx,dy).collect::<Vec<_>>().into()},
-            Op::Shadow { rect, radius, spread, drop, color } => Op::Shadow { rect: r(rect), radius, spread, drop, color },
-            Op::SoftShadow { rect, radius, blur, offset, spread, color } => Op::SoftShadow { rect: r(rect), radius, blur, offset, spread, color },
-            Op::Clip { rect } => Op::Clip { rect: r(rect) },
-            Op::Hole { rect } => Op::Hole { rect: r(rect) },
-            Op::Unclip => Op::Unclip,
-        })
+    ops.iter().filter_map(move |op| match op {
+        Op::TextField { .. } => None,
+        Op::Clipped { rect, ops } => Some(Op::Clipped {
+            rect: rect.offset(dx, dy),
+            ops: offset(ops, dx, dy).collect::<Vec<_>>().into(),
+        }),
+        Op::RoundedClipped { rect, radius, ops } => Some(Op::RoundedClipped {
+            rect: rect.offset(dx, dy),
+            radius: *radius,
+            ops: offset(ops, dx, dy).collect::<Vec<_>>().into(),
+        }),
+        op => {
+            let mut op = op.clone();
+            op.translate(dx, dy);
+            Some(op)
+        }
     })
 }
 
