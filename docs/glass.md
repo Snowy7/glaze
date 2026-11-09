@@ -2,8 +2,8 @@
 
 Glaze's desktop glass (bar islands, widgets and Studio's previews) is drawn by the
 engine with **liquid-rust** (<https://github.com/al1h3n/liquid-rust>, by al1h3n, MIT OR
-Apache-2.0), vendored in `crates/liquid-rust` (see its `VENDORED.md` for the commit and the few
-marked `Glaze:` changes). Its look is calibrated against Apple's iOS 26/27 Figma kit, and we
+Apache-2.0), carried in stillkit as `stillkit-glass` (see its `UPSTREAM-CHANGES.md` for the commit
+and the few marked changes). Its look is calibrated against Apple's iOS 26/27 Figma kit, and we
 keep its shaders, pipeline and parameter values as they are. Over application windows,
 menus, flyouts and bars prefer native DWM frost, described below.
 

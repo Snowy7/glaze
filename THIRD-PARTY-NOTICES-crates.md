@@ -163,7 +163,7 @@ crate offers a choice of licences (for example `MIT OR Apache-2.0`), Glaze uses 
 | [libc](https://github.com/rust-lang/libc) | 0.2.191 | MIT OR Apache-2.0 |
 | [libloading](https://github.com/nagisa/rust_libloading/) | 0.8.9 | ISC |
 | [libm](https://github.com/rust-lang/compiler-builtins) | 0.2.16 | MIT |
-| [liquid-rust](https://github.com/al1h3n/liquid-rust) | 0.2.5 (vendored) | MIT OR Apache-2.0 |
+| [liquid-rust](https://github.com/al1h3n/liquid-rust) as stillkit-glass | 0.2.5 (vendored in stillkit) | MIT OR Apache-2.0 |
 | [litemap](https://github.com/unicode-org/icu4x) | 0.8.3 | Unicode-3.0 |
 | [litrs](https://github.com/LukasKalbertodt/litrs) | 1.0.1 | MIT OR Apache-2.0 |
 | [lock_api](https://github.com/Amanieu/parking_lot) | 0.4.14 | MIT OR Apache-2.0 |
@@ -1487,7 +1487,7 @@ Apache License
 
 ### Apache License 2.0 (Apache-2.0)
 
-Used by: liquid-rust 0.2.5 (vendored)
+Used by: stillkit-glass (liquid-rust 0.2.5, vendored in stillkit)
 
 ````text
 Apache License
@@ -6121,7 +6121,7 @@ THE SOFTWARE.
 
 ### MIT License (MIT)
 
-Used by: liquid-rust 0.2.5 (vendored)
+Used by: stillkit-glass (liquid-rust 0.2.5, vendored in stillkit)
 
 ````text
 MIT License

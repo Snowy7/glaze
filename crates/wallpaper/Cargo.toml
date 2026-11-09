@@ -16,8 +16,8 @@ glaze-desktop.workspace = true
 glaze-fswatch.workspace = true
 glaze-theme = { workspace = true, features = ["check"] }
 glaze-tweaks.workspace = true
-# All Liquid Glass (plates and overlays): a vendored copy of al1h3n/liquid-rust.
-liquid-rust = { path = "../liquid-rust" }
+# All Liquid Glass (plates and overlays): stillkit-glass, stillkit's copy of al1h3n/liquid-rust.
+stillkit-glass.workspace = true
 
 anyhow.workspace = true
 bytemuck.workspace = true

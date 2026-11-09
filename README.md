@@ -23,8 +23,8 @@
 
 - **Every wallpaper kind** on one wgpu engine: shaders, images, slideshows, hardware-decoded video,
   glTF scenes, web pages and external renderers.
-- **Liquid Glass** on every surface, drawn by the engine with the vendored
-  [liquid-rust](https://github.com/al1h3n/liquid-rust), always live to what's behind it.
+- **Liquid Glass** on every surface, drawn by the engine with
+  stillkit-glass ([liquid-rust](https://github.com/al1h3n/liquid-rust) in stillkit), always live to what's behind it.
 - **Native shell** on software Direct2D: no WebView or hardware GPU device. Windows preferences and
   frame styling are journaled and undone on quit, on the panic hotkey and
   after a crash.
@@ -59,7 +59,7 @@ settings, per wallpaper too; `auto` renders on the card that drives your screens
 </p>
 
 The bars, dock, widgets, flyouts and menus all sit on glass that the engine draws with
-**liquid-rust**: a squircle lens refracts the backdrop (Snell's law, η 1.5), with light frost, a
+**stillkit-glass** (liquid-rust): a squircle lens refracts the backdrop (Snell's law, η 1.5), with light frost, a
 directional rim light and a soft shadow. Thin glass such as the 24 pt bar gets a shallow lens with a
 flat face. Clarity (clear to tinted), blur, refraction, highlight and tint are adjustable per family
 (bars, widgets, menus). Over app windows, menus, flyouts and covered bar surfaces use native DWM
@@ -236,8 +236,7 @@ glaze-studio       the settings app (software Direct2D); runs only while open
 |---|---|
 | `crates/core` | Supervisor, tray, panic hotkey, styling lifecycle |
 | `crates/wallpaper` | The engine: sources, frame pacing, glass passes, overlays |
-| `crates/liquid-rust` | Vendored Liquid Glass renderer |
-| `crates/ui` | The UI kit: surfaces, display lists, text, icons, components, themes |
+| [stillkit](https://github.com/Snowy7/stillkit) | The UI library (as `glaze-ui`) and its Liquid Glass renderer, `stillkit-glass` |
 | `crates/shell` | Bars, dock, flyouts, desktop menu, widget views, integrations views |
 | `crates/widgets` · `crates/bars` · `crates/integrations` | Services: catalog, layout, storage, plugins; app bars and tray; integration providers |
 | `crates/studio` | Glaze Studio |
@@ -323,9 +322,9 @@ with `scripts/build-plugins.ps1` when upgrading the plugin contract.
 
 ## Credits and licences
 
-- **[liquid-rust](https://github.com/al1h3n/liquid-rust)** by al1h3n, MIT OR Apache-2.0, vendored in
-  [crates/liquid-rust](crates/liquid-rust) with both licence texts and the few marked changes
-  ([VENDORED.md](crates/liquid-rust/VENDORED.md)). Its look is calibrated against Apple's Liquid
+- **[liquid-rust](https://github.com/al1h3n/liquid-rust)** by al1h3n, MIT OR Apache-2.0, carried in
+  stillkit as [stillkit-glass](https://github.com/Snowy7/stillkit/tree/main/crates/stillkit-glass)
+  with both licence texts and the few marked changes (`UPSTREAM-CHANGES.md`). Its look is calibrated against Apple's Liquid
   Glass kit.
 - **Wallpapers:** each bundled theme's author, source and licence is in
   [themes/CREDITS.md](themes/CREDITS.md), with the source audit in
