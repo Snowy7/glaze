@@ -123,7 +123,7 @@ Run payload\docs\release-test.md on a second PC before calling this release qual
     })
     [ordered]@{ product = 'Glaze'; version = '0.1.0'; architecture = 'x64'; files = $files } |
         ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $payload 'release-files.json') -Encoding UTF8
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
     $zip = Join-Path $OutputDirectory ($name + '.zip')
     if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
     # .NET Framework's CreateFromDirectory writes backslash names under PowerShell 5.1.
