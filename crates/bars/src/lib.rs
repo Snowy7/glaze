@@ -18,6 +18,7 @@ pub mod glyphs;
 pub mod hooks;
 pub mod icon_pack;
 pub mod icons;
+pub mod jump_list;
 pub mod media;
 pub mod network;
 pub mod presets;

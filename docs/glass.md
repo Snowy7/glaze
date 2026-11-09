@@ -1,12 +1,22 @@
 # Liquid Glass
 
-All of Glaze's glass (bar islands, widgets, flyouts, menus, Studio's previews) is drawn by the
+Glaze's desktop glass (bar islands, widgets and Studio's previews) is drawn by the
 engine with **liquid-rust** (<https://github.com/al1h3n/liquid-rust>, by al1h3n, MIT OR
 Apache-2.0), vendored in `crates/liquid-rust` (see its `VENDORED.md` for the commit and the few
 marked `Glaze:` changes). Its look is calibrated against Apple's iOS 26/27 Figma kit, and we
-keep its shaders, pipeline and parameter values as they are.
+keep its shaders, pipeline and parameter values as they are. Over application windows,
+menus, flyouts and bars prefer native DWM frost, described below.
 
 ## The model (Apple's Liquid Glass, as liquid-rust draws it)
+
+For menus, flyouts and dock/bar portions covering application windows, the shell prefers the
+UI kit's Windows 11 host-backdrop brush. DWM supplies real backdrop frost behind software-D2D
+layered content, with a flat widget tint and rounded composition clip (no gloss, outline or
+square blur halo). This uses no capture session or hardware rendering device in the shell.
+The existing engine overlay remains the fallback where system transparency is unavailable.
+Desktop widgets continue using the wallpaper engine's plates. The no-activate
+`dock_menu_evidence` example and `scripts/capture-dock-menu-evidence.ps1` verify the production
+material and menu view over an opaque fixture window, with synthetic destination labels.
 
 1. **Lensing, not blur, carries the look.** The backdrop is refracted through a squircle bevel
    (Snell's law, η 1.5). Content bends strongly at the rim and lies flat in the middle. The bevel

@@ -91,6 +91,19 @@ overrides. Theme `bars.appearance` supplies the appearance under `bars.json`'s a
 
 ### Native styles
 
+Dock right-click menus read the app's native Windows jump list on a worker when opened.
+Pinned destinations, Recent/Frequent, custom categories and Tasks are submenus above the app's
+launch, Pin/Unpin and Close commands. Shell links retain their complete serialized target,
+arguments, working directory and shell properties; Windows executes them. Missing lists show
+only the basic commands. AutomaticDestinations are read as memory-backed OLE storage, including
+DestList versions 1–4 and 6; CustomDestinations use bounded shell-link framing. Destination paths
+are never logged. Frequent/Recent submenus show up to twelve unpinned entries.
+
+Windows taskbar pins seed the dock only when `dock.pinned` is absent. An explicit list is owned
+by the user and does not continuously import newly pinned taskbar apps. Pins always render,
+including while stopped. Two explicit AppUserModelIDs must match before windows can merge into
+a pin; a shared Chromium executable alone cannot merge a browser and its PWAs.
+
 The bars are drawn with the UI kit ([ui.md › The kit](ui.md#the-kit)): `bars/look.rs` makes one
 kit `Theme` per bar, and `bars/view.rs` draws the top bar, islands, dock, tray, workspace dots,
 media, clock, status text and tooltips with `kit::Frame` from it. `look.style` and `look.family`

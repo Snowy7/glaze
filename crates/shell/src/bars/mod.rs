@@ -65,14 +65,36 @@ use windows::Win32::{
 
 #[derive(Clone)]
 enum Command {
-    AppActions(Box<(providers::apps::Item, Rect, Monitor)>),
-    Activate(isize),
+    Jump(providers::jump_list::Launch),
     Close(isize),
     CloseAll(Vec<isize>),
     Launch(String),
     Pin(Pinned),
     Unpin(String),
     EmptyTrash,
+}
+struct JumpPending {
+    rx: std::sync::mpsc::Receiver<Vec<providers::jump_list::Section>>,
+    basic: Vec<Entry<Command>>,
+    point: (i32, i32),
+    tokens: glaze_ui::Tokens,
+}
+
+fn jump_entries(sections: Vec<providers::jump_list::Section>) -> Vec<Entry<Command>> {
+    sections
+        .into_iter()
+        .map(|section| Entry::Submenu {
+            label: section.name,
+            items: section
+                .items
+                .into_iter()
+                .map(|item| match item {
+                    Some(item) => Entry::action(&item.name, Command::Jump(item.launch)),
+                    None => Entry::Separator,
+                })
+                .collect(),
+        })
+        .collect()
 }
 struct Press {
     bar: usize,
@@ -103,6 +125,7 @@ pub struct Bars {
     ticker: Ticker,
     images: view::Images,
     menu: Option<Menu<Command>>,
+    jump_pending: Option<JumpPending>,
     tray_menu: Option<tray_menu::Host>,
     press: Option<Press>,
     watches: Vec<glaze_fswatch::Watch>,
@@ -185,6 +208,7 @@ impl Bars {
             ticker: Ticker::new()?,
             images: Default::default(),
             menu: None,
+            jump_pending: None,
             tray_menu: None,
             press: None,
             watches: vec![],
@@ -451,6 +475,21 @@ impl Bars {
     /// All drawing is gated by data changes or active animation. The ticker cancels at rest.
     pub fn tick(&mut self, ui: &mut Ui) {
         let mut at = tick_start();
+        if let Some(sections) = self
+            .jump_pending
+            .as_ref()
+            .and_then(|p| p.rx.try_recv().ok())
+        {
+            let pending = self.jump_pending.take().unwrap();
+            if self.menu.as_ref().is_some_and(Menu::is_open) {
+                let mut entries = jump_entries(sections);
+                if !entries.is_empty() {
+                    entries.push(Entry::Separator);
+                }
+                entries.extend(pending.basic);
+                self.open_menu(ui, entries, pending.point, &pending.tokens);
+            }
+        }
         if let Some(menu) = &mut self.tray_menu {
             menu.process(ui);
         }
@@ -1734,13 +1773,9 @@ impl Bars {
                     }
                     Trigger::Middle => system::open(item.path),
                     Trigger::Right => {
-                        let mut entries: Vec<_> = item
-                            .windows
-                            .iter()
-                            .map(|w| Entry::action(&w.title, Command::Activate(w.hwnd)))
-                            .collect();
+                        let mut entries: Vec<_> = Vec::new();
                         entries.push(Entry::action(
-                            "New window",
+                            &item.name,
                             Command::Launch(item.path.clone()),
                         ));
                         entries.push(if item.pinned {
@@ -1754,21 +1789,53 @@ impl Bars {
                                 }),
                             )
                         });
-                        entries.extend(item.windows.iter().map(|w| {
-                            Entry::action(&format!("Close {}", w.title), Command::Close(w.hwnd))
-                        }));
+                        if item.windows.len() == 1 {
+                            entries.push(Entry::action(
+                                "Close window",
+                                Command::Close(item.windows[0].hwnd),
+                            ));
+                        }
                         if item.windows.len() > 1 {
                             entries.push(Entry::action(
                                 "Close all windows",
                                 Command::CloseAll(item.windows.iter().map(|w| w.hwnd).collect()),
                             ));
                         }
-                        entries.push(Entry::action(
-                            "Recent items and app actions",
-                            Command::AppActions(Box::new((item.clone(), anchor, monitor.clone()))),
-                        ));
                         let tokens = self.bars[index].tokens.menu(&ui.text);
+                        let (tx, rx) = std::sync::mpsc::channel();
+                        let app = item.clone();
+                        // SAFETY: read only thread id, used solely to wake our message queue.
+                        let thread =
+                            unsafe { windows::Win32::System::Threading::GetCurrentThreadId() };
+                        let pending = if std::thread::Builder::new()
+                            .name("jump-list".into())
+                            .spawn(move || {
+                                let sections = providers::jump_list::load(&app);
+                                if tx.send(sections).is_ok() {
+                                    // SAFETY: wake our own UI thread, without any input injection.
+                                    let _ = unsafe {
+                                        windows::Win32::UI::WindowsAndMessaging::PostThreadMessageW(
+                                            thread,
+                                            providers::wake::WM_WAKE,
+                                            Default::default(),
+                                            Default::default(),
+                                        )
+                                    };
+                                }
+                            })
+                            .is_ok()
+                        {
+                            Some(JumpPending {
+                                rx,
+                                basic: entries.clone(),
+                                point,
+                                tokens: tokens.clone(),
+                            })
+                        } else {
+                            None
+                        };
                         self.open_menu(ui, entries, point, &tokens);
+                        self.jump_pending = pending;
                     }
                     _ => {}
                 }
@@ -1845,6 +1912,7 @@ impl Bars {
         point: (i32, i32),
         tokens: &glaze_ui::Tokens,
     ) {
+        self.jump_pending = None;
         if self.menu.is_none() {
             self.menu = Menu::new("Dock commands").ok();
         }
@@ -1901,9 +1969,6 @@ impl Bars {
     }
     fn command(&mut self, command: Command) {
         match command {
-            Command::Activate(w) => {
-                system::activate(system::hwnd(w));
-            }
             Command::Close(w) => system::close(system::hwnd(w)),
             Command::CloseAll(windows) => {
                 for w in windows {
@@ -1911,7 +1976,7 @@ impl Bars {
                 }
             }
             Command::Launch(path) => system::open(path),
-            Command::AppActions(data) => crate::integrations::open_app(&data.0, data.1, &data.2),
+            Command::Jump(launch) => launch.open(),
             Command::EmptyTrash => trash::empty(),
             Command::Pin(pin) => self.edit_pins(|pins| {
                 if !pins.iter().any(|p| p.path.eq_ignore_ascii_case(&pin.path)) {

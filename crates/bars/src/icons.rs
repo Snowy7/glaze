@@ -23,7 +23,7 @@ use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
     CoTaskMemFree, IPersistFile, STGM_READ,
 };
-use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
+use windows::Win32::UI::Shell::PropertiesSystem::{GPS_DEFAULT, IPropertyStore, SHGetPropertyStoreFromParsingName};
 use windows::Win32::UI::Shell::{
     FOLDERID_CommonPrograms, FOLDERID_Programs, IShellItem, IShellItemImageFactory, IShellLinkW,
     KF_FLAG_DEFAULT, SHCreateItemFromParsingName, SHGetKnownFolderPath, SIGDN_NORMALDISPLAY,
@@ -311,13 +311,20 @@ pub(crate) fn resolve_link(path: &str) -> (Option<String>, Option<String>) {
             }
             (target, _) => target,
         };
-        let aumid = link.cast::<IPropertyStore>().ok().and_then(|store| {
-            let value = store.GetValue(&PKEY_AppUserModel_ID).ok()?;
-            let text: PWSTR = PropVariantToStringAlloc(&value).ok()?;
-            let id = text.to_string().ok();
-            CoTaskMemFree(Some(text.0.cast()));
-            id.filter(|id| !id.is_empty())
-        });
+        // The file's shell property handler also supplies implicit identities (Explorer's
+        // namespace shortcut has no filesystem target or stored ShellLink AppID).
+        let aumid = SHGetPropertyStoreFromParsingName::<_, _, IPropertyStore>(
+                &HSTRING::from(path), None, GPS_DEFAULT,
+            )
+            .or_else(|_| link.cast::<IPropertyStore>())
+            .ok()
+            .and_then(|store| {
+                let value = store.GetValue(&PKEY_AppUserModel_ID).ok()?;
+                let text: PWSTR = PropVariantToStringAlloc(&value).ok()?;
+                let id = text.to_string().ok();
+                CoTaskMemFree(Some(text.0.cast()));
+                id.filter(|id| !id.is_empty())
+            });
         (target, aumid)
     }
 }

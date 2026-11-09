@@ -76,6 +76,7 @@ unsafe extern "system" fn follow(
     // SAFETY: preserve the surface's original handling before following its final z-order.
     let result = unsafe { DefSubclassProc(client, msg, wp, lp) };
     if restack {
+        glaze_ui::platform::windows::glass::system().follow(client);
         move_glass(client);
     }
     if msg == WM_NCDESTROY {

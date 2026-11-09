@@ -62,8 +62,8 @@ The bars, dock, widgets, flyouts and menus all sit on glass that the engine draw
 **liquid-rust**: a squircle lens refracts the backdrop (Snell's law, η 1.5), with light frost, a
 directional rim light and a soft shadow. Thin glass such as the 24 pt bar gets a shallow lens with a
 flat face. Clarity (clear to tinted), blur, refraction, highlight and tint are adjustable per family
-(bars, widgets, menus). Over app windows, flyouts get the same glass from a Windows Graphics Capture
-crop. Bars and widgets also get live glass over `web` and `app` wallpapers, with capture released
+(bars, widgets, menus). Over app windows, menus, flyouts and covered bar surfaces use native DWM
+backdrop frost, with captured engine glass as fallback. Bars and widgets also get live glass over `web` and `app` wallpapers, with capture released
 when covered. See [docs/glass.md](docs/glass.md#glass-over-web-and-app-wallpapers-p14-6-november-2026).
 
 ### Top bar and dock

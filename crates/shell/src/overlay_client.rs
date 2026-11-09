@@ -1,11 +1,9 @@
-//! The shell's end of the engine's glass overlays (docs/engine-notes.md, "Glass overlays"): the
-//! thread's [`Backdrop`], which sends each popup's `Open`, `Place`, `Material` and `Close` to
-//! the engine's request window. Open/close use `WM_COPYDATA`; changing geometry and material
-//! overwrite a shared snapshot and post a coalesced wake, without waiting for the engine.
+//! Popup glass: DWM's native host backdrop over real application windows, with the engine's
+//! captured overlays as fallback. Both live under the software-rendered layered surface.
 //!
 //! The wire is the engine's own `request.rs`, compiled here as is, so both ends always agree.
-//! Every popup is `Layer::Popup`. When no engine answers, [`Backdrop::available`] is false and
-//! the views draw a fill of their own.
+//! Engine fallback popups use `Layer::Popup`. When neither provider is available, views draw
+//! their opaque fallback fill.
 
 #[allow(
     dead_code,
@@ -29,14 +27,89 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use self::request::{Channel, Layer, Material, Reply, Request};
 
-/// Sends this thread's glass requests to the engine from now on.
+/// Installs native popup frost with an engine fallback for this UI thread.
 pub fn install() {
-    glaze_ui::glass::install(Rc::new(Client::default()));
+    glaze_ui::glass::install(Rc::new(PopupBackdrop::default()));
+}
+
+/// Flat popup frost samples DWM's actual backdrop, including application windows. Keep the
+/// engine available for systems without host-backdrop support. Widgets keep their plates.
+struct PopupBackdrop {
+    system: Rc<glaze_ui::platform::windows::system_backdrop::SystemBackdrop>,
+    engine: Client,
+    native: RefCell<Vec<HWND>>,
+}
+
+impl Default for PopupBackdrop {
+    fn default() -> Self {
+        Self {
+            system: glaze_ui::platform::windows::glass::system(),
+            engine: Client::default(),
+            native: RefCell::default(),
+        }
+    }
+}
+
+impl Backdrop for PopupBackdrop {
+    fn available(&self) -> bool {
+        self.system.available() || self.engine.available()
+    }
+    fn open(&self, client: HWND, shape: Shape, radius: f32, material: &GlassMaterial) -> bool {
+        self.open_styled(client, shape, radius, material, &GlassStyle::default())
+    }
+    fn open_styled(
+        &self,
+        client: HWND,
+        shape: Shape,
+        radius: f32,
+        material: &GlassMaterial,
+        style: &GlassStyle,
+    ) -> bool {
+        if self.system.open(client, shape, radius, material) {
+            self.native.borrow_mut().push(client);
+            stack::open(client);
+            true
+        } else {
+            self.engine
+                .open_styled(client, shape, radius, material, style)
+        }
+    }
+    fn place(&self, client: HWND, shape: Shape, radius: f32) {
+        if self.native.borrow().contains(&client) {
+            self.system.place(client, shape, radius);
+        } else {
+            self.engine.place(client, shape, radius);
+        }
+    }
+    fn material(&self, client: HWND, material: &GlassMaterial) {
+        if self.native.borrow().contains(&client) {
+            self.system.material(client, material);
+        } else {
+            self.engine.material(client, material);
+        }
+    }
+    fn style(&self, client: HWND, style: &GlassStyle) {
+        if !self.native.borrow().contains(&client) {
+            self.engine.style(client, style);
+        }
+    }
+    fn close(&self, client: HWND) {
+        if self.native.borrow().contains(&client) {
+            self.system.close(client);
+            self.native.borrow_mut().retain(|h| *h != client);
+            stack::close(client);
+        } else {
+            self.engine.close(client);
+        }
+    }
 }
 
 /// Starts WGC before a possible click. The bounded engine calls run on a worker so input
 /// delivery never waits for capture setup. Closing immediately keeps only its 3 s warmth.
 pub fn warm(client: HWND, shape: Shape) {
+    if glaze_ui::platform::windows::glass::system().available() {
+        return;
+    }
     let client = client.0 as isize;
     let _ = std::thread::Builder::new()
         .name("glass-hover".into())
@@ -282,7 +355,10 @@ mod tests {
     #[test]
     fn overlay_keeps_the_resolved_stained_tint_strength() {
         let material = GlassMaterial {
-            clarity: 0.78, blur: 12.0, refraction: 0.6, highlight: 0.55,
+            clarity: 0.78,
+            blur: 12.0,
+            refraction: 0.6,
+            highlight: 0.55,
             tint: glaze_ui::Rgba::rgb8([200, 141, 60], 0.22),
         };
         assert_eq!(wire(&material).tint, [200, 141, 60, 56]);
