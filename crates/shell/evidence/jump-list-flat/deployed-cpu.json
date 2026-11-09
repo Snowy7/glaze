@@ -1,0 +1,10 @@
+{
+    "phase":  "deployed",
+    "pid":  6712,
+    "seconds":  30.0115871,
+    "cpuMs":  781.25,
+    "processorCount":  16,
+    "machinePercent":  0.16269757689689127,
+    "singleCorePercent":  2.6031612303502603,
+    "workingSetMB":  79.4
+}
