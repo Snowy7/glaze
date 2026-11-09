@@ -14,34 +14,9 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use crate::sources::blit::Blitter;
 use crate::window::Window;
 
-/// A device can be absent only during recovery. All old references must be released before
-/// D3D12CreateDevice can reopen the adapter's removed device; callers must not draw meanwhile.
-pub struct DeviceSlot<T>(Option<T>);
-
-impl<T> From<T> for DeviceSlot<T> {
-    fn from(device: T) -> Self {
-        Self(Some(device))
-    }
-}
-
-impl<T> DeviceSlot<T> {
-    pub fn get(&self) -> Option<&T> {
-        self.0.as_ref()
-    }
-    pub fn clear(&mut self) {
-        self.0 = None;
-    }
-    pub fn replace(&mut self, device: T) {
-        self.0 = Some(device);
-    }
-}
-
-impl<T> std::ops::Deref for DeviceSlot<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        self.0.as_ref().expect("drawing during device recovery")
-    }
-}
+#[path = "device_slot.rs"]
+mod device_slot;
+pub use device_slot::DeviceSlot;
 
 pub struct Gpu {
     // Kept alive for as long as the surfaces made from it.
@@ -103,7 +78,8 @@ impl Opening {
 /// glass costs 2.5-2.9 ms per screen on the AMD iGPU against 0.1 ms on the RTX
 /// (docs/glass.md). Integrated and high-performance pick by power class, as Windows does.
 fn pick_adapter(instance: &wgpu::Instance, preference: GpuPreference) -> Result<wgpu::Adapter> {
-    if preference == GpuPreference::Auto
+    if !force_warp()
+        && preference == GpuPreference::Auto
         && let Some(display) = glaze_desktop::display_gpu::display_adapter()
     {
         let adapters = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::DX12));
@@ -118,6 +94,11 @@ fn pick_adapter(instance: &wgpu::Instance, preference: GpuPreference) -> Result<
     Ok(pollster::block_on(
         instance.request_adapter(&adapter_options(None, preference)),
     )?)
+}
+
+/// Diagnostic software rendering for clean installs and GPU-independent reproduction.
+fn force_warp() -> bool {
+    std::env::var_os("GLAZE_FORCE_WARP").is_some_and(|value| value == "1")
 }
 
 /// The DXGI adapter LUID behind a wgpu adapter.
@@ -144,7 +125,7 @@ fn adapter_options<'a, 'w>(
             GpuPreference::Auto => wgpu::PowerPreference::None,
         },
         compatible_surface: surface,
-        force_fallback_adapter: false,
+        force_fallback_adapter: force_warp(),
         apply_limit_buckets: false,
     }
 }
@@ -274,6 +255,11 @@ impl Gpu {
             queue,
             preference,
         } = opening.wait().expect("a DX12 GPU");
+        log::info!(
+            "GPU headless: {} ({:?})",
+            adapter.get_info().name,
+            adapter.get_info().device_type
+        );
         let format = wgpu::TextureFormat::Bgra8Unorm;
         let blit = Blitter::new(&device, format);
         Self {

@@ -124,6 +124,14 @@ README-ready text (replace the memory paragraph under "What keeps it light"):
 > a loaded, idle wallpaper shows 4-7 MB of working set in Task Manager (committed memory is
 > 290-430 MB, of which the driver stack is most).
 
+## Diagnostic software adapter
+
+`GLAZE_FORCE_WARP=1` forces the DX12 fallback (Microsoft Basic Render Driver / CPU), including
+headless `--preview` children and the frame labs. It bypasses `auto`'s display-adapter shortcut;
+unset or any value other than `1` retains normal selection. The headless adapter is logged.
+This is an install/debug check, not an automatic performance fallback or a media-codec emulator.
+Verified with offscreen Aurora and an image/effect stack on 9 November 2026.
+
 ## EXIF orientation
 
 `wic.rs` reads the orientation (tag 274) through `IWICMetadataQueryReader`, trying

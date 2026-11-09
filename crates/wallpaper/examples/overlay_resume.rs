@@ -17,35 +17,12 @@ use windows::{
     },
     core::w,
 };
+#[path = "../src/device_slot.rs"]
+mod gpu;
 #[path = "../src/material.rs"]
 mod material;
 #[path = "../src/overlay/mod.rs"]
 mod overlay;
-mod gpu {
-    pub struct DeviceSlot<T>(Option<T>);
-    impl<T> From<T> for DeviceSlot<T> {
-        fn from(value: T) -> Self {
-            Self(Some(value))
-        }
-    }
-    impl<T> DeviceSlot<T> {
-        pub fn get(&self) -> Option<&T> {
-            self.0.as_ref()
-        }
-        pub fn clear(&mut self) {
-            self.0 = None;
-        }
-        pub fn replace(&mut self, value: T) {
-            self.0 = Some(value);
-        }
-    }
-    impl<T> std::ops::Deref for DeviceSlot<T> {
-        type Target = T;
-        fn deref(&self) -> &T {
-            self.0.as_ref().expect("device unavailable")
-        }
-    }
-}
 use overlay::{
     Gpu, Overlays,
     request::{Layer, Material, Request},

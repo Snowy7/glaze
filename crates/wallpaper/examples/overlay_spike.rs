@@ -39,6 +39,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SetCursorPos, TranslateMessage, WM_APP, WindowFromPoint,
 };
 
+#[path = "../src/device_slot.rs"]
+#[allow(dead_code)]
+mod gpu;
 #[path = "../src/material.rs"]
 #[allow(dead_code)]
 mod material;
