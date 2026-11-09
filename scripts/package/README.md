@@ -1,5 +1,10 @@
 # Desktop package identity
 
+For the end-user zip and per-user installer, see [docs/release.md](../../docs/release.md).
+Release uninstall calls `glaze-core --restore` successfully before invoking `unregister.ps1
+-WindowsRestored`; that avoids reparsing retained user config just to undo folder routing again.
+The default standalone unregister command retains its existing folder-routing restore step.
+
 This is a sparse MSIX: only its manifest and three small identity images are packaged. Core and
 shell stay in the external installation folder and keep ordinary Win32 runtime behavior. Their
 embedded `<msix>` entries must match `AppxManifest.xml` exactly. No service, background task,

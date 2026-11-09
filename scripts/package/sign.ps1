@@ -20,10 +20,12 @@ if ($CertificateThumbprint) {
             -KeyUsage DigitalSignature -KeyExportPolicy NonExportable -HashAlgorithm SHA256 `
             -NotAfter (Get-Date).AddYears(2) -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
     }
-    # Trust just this public leaf for this user, never a root or the machine store. No PFX is exported.
+    # Always export the public leaf, including repeated builds with an existing trusted key.
+    # The release installer needs it on another PC. No private key/PFX is exported.
+    $public = Join-Path (Split-Path $PackagePath -Parent) 'glaze-development.cer'
+    Export-Certificate -Cert $certificate -FilePath $public -Force | Out-Null
+    # Trust just this public leaf for this user, never a root or the machine store.
     if (-not (Test-Path -LiteralPath "Cert:\CurrentUser\TrustedPeople\$($certificate.Thumbprint)")) {
-        $public = Join-Path (Split-Path $PackagePath -Parent) 'glaze-development.cer'
-        Export-Certificate -Cert $certificate -FilePath $public | Out-Null
         Import-Certificate -FilePath $public -CertStoreLocation Cert:\CurrentUser\TrustedPeople | Out-Null
     }
 }

@@ -1,13 +1,17 @@
 # Removes this user's package registration only. The exes and development signing key remain.
-param([string]$AppDirectory = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'target\release'))
+param(
+    [string]$AppDirectory = (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'target\release'),
+    # Release uninstall passes this only after glaze-core --restore has exited successfully.
+    [switch]$WindowsRestored
+)
 . "$PSScriptRoot\common.ps1"
 # Restore opt-in folder associations before removing identity or an installed app directory.
 # The Files CLI also switches its config flag off, so a later core launch cannot re-enable it.
 $files = Join-Path $AppDirectory 'glaze-files.exe'
-if (Test-Path -LiteralPath $files) {
+if (-not $WindowsRestored -and (Test-Path -LiteralPath $files)) {
     $restore = Start-Process -FilePath $files -ArgumentList '--restore-routing' -Wait -PassThru -WindowStyle Hidden
     if ($restore.ExitCode -ne 0) { throw 'Folder routing could not be restored; package registration was left intact.' }
-} elseif (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'glaze\undo-folders.json')) {
+} elseif (-not $WindowsRestored -and (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'glaze\undo-folders.json'))) {
     throw 'Restore folder routing with glaze-files --restore-routing before unregistering this installation.'
 }
 $installed = Get-AppxPackage -Name (Get-PackageManifest).Package.Identity.Name

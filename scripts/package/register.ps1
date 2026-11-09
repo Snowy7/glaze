@@ -47,7 +47,9 @@ if ($Development) {
     $hash = (Get-FileHash -LiteralPath $PackagePath -Algorithm SHA256).Hash
     $layout = Join-Path $env:LOCALAPPDATA "glaze\identity\$($manifest.Package.Identity.Version)\$hash"
     if (-not (Test-Path -LiteralPath (Join-Path $layout 'AppxManifest.xml'))) {
-        Invoke-PackageTool (Get-SdkTool 'makeappx.exe') @('unpack', '/o', '/nv', '/p', $PackagePath, '/d', $layout)
+        # A release user's PC needs no Windows SDK. The signed MSIX is a ZIP archive.
+        New-Item -ItemType Directory -Path $layout -Force | Out-Null
+        [IO.Compression.ZipFile]::ExtractToDirectory($PackagePath, $layout)
     }
     Add-AppxPackage -Register -Path (Join-Path $layout 'AppxManifest.xml') -ExternalLocation $ExternalLocation
 } else {
