@@ -157,7 +157,7 @@ Settings for each live in Studio. See [docs/widgets.md](docs/widgets.md) and
 ### Studio
 
 <p align="center">
-  <img src="docs/media/readme/studio-home.jpg" alt="Glaze Studio: Home" width="85%">
+  <img src="docs/media/readme/studio-home.jpg" alt="Glaze Studio: Your desktop, with the wallpaper, look, bars, widgets and desktop menu" width="85%">
 </p>
 
 Studio is the native settings app, on the same UI kit as the shell. It opens in about 250 ms, uses
@@ -331,9 +331,12 @@ with `scripts/build-plugins.ps1` when upgrading the plugin contract.
   [themes/CREDITS.md](themes/CREDITS.md), with the source audit in
   [docs/research/wallpaper-sources.md](docs/research/wallpaper-sources.md). Some are
   **non-commercial** and marked so there.
-- **Icons:** [Lucide](https://lucide.dev) outlines, ISC
-  ([licence](crates/ui/icons/LICENSE-lucide)), and Windows' Segoe Fluent Icons for the Fluent style.
-- Rust crates are listed in [Cargo.lock](Cargo.lock), each under its own licence.
+- **Icons:** [Lucide](https://lucide.dev) outlines, ISC (licence in
+  [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md#icons-and-fonts)), and Windows' Segoe Fluent Icons
+  for the Fluent style.
+- **Everything else:** [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) summarizes every
+  third-party licence. [THIRD-PARTY-NOTICES-crates.md](THIRD-PARTY-NOTICES-crates.md) has the full
+  licence text of every Rust crate in the programs and bundled plugins.
 
 Glaze itself has no public licence yet.
 
