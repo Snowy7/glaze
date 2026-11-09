@@ -129,7 +129,7 @@ pub struct VideoSource {
     planes: Option<Planes>,
     /// The decoder's shared slots, when frames stay on the GPU.
     shared: Option<share::Reader>,
-    /// What `render` draws; `None` until the first frame arrives.
+    /// What `render` draws; primed before construction returns.
     shown: Option<Shown>,
     // Field order matters: `queue` drops first, closing the channel a
     // blocked worker waits on, and `shared` releases every slot; this then
@@ -171,7 +171,7 @@ impl VideoSource {
         let speed = f64::from(config.speed);
         // New frames arrive at the video's rate times speed; drawing faster only repeats them.
         let rate = f64::from(config.fps).min(stream.fps * speed);
-        Ok(Self {
+        let mut source = Self {
             queue: Queue::new(stream.frames, stream.recycle),
             fit: config.fit,
             speed,
@@ -181,7 +181,17 @@ impl VideoSource {
             shared,
             shown: None,
             _decoder: stream.thread,
-        })
+        };
+        // spawn waits (at most ten seconds) until the first decoded frame is in the channel.
+        // Bind/upload it now: offscreen snapshots may render before their first update tick.
+        source.update(gpu, Duration::ZERO);
+        ensure!(
+            source.shown.is_some(),
+            "video decoder supplied no first frame"
+        );
+        // The caller's first clock reading, rather than load time, starts playback.
+        source.queue.origin = None;
+        Ok(source)
     }
 
     /// Uploads a frame copied through memory; returns its bind group.

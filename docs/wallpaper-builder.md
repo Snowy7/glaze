@@ -239,3 +239,11 @@ It renders the draft offscreen and rewrites `<file.jpg>` atomically (`.tmp`, the
 on every change to the draft folder or a used effect folder, and at `--fps` while the stack moves.
 Its own output, `*.tmp`, `*.log`, `preview.*` and `CREDITS.md` changes do not reload it. Studio
 ends it by ending the process.
+
+Video sources return from loading with their first decoded frame already bound/uploaded
+(decoder startup is bounded to 10 seconds). The first output is therefore a real video frame,
+including when an offscreen caller renders before its first update. No CLI or JPEG format change.
+
+For diagnostic software rendering, set `GLAZE_FORCE_WARP=1` before launching the child.
+It forces wgpu's DX12 fallback adapter and bypasses the display-GPU preference. Other values
+leave normal adapter selection in effect. This does not emulate missing Windows media codecs.
