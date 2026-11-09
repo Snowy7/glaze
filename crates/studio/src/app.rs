@@ -116,6 +116,7 @@ pub struct Field {
 
 /// Messages from Studio's worker threads and the file watcher.
 pub enum Msg {
+    DesktopRestored(Result<crate::system::RestoreResult, String>),
     PluginPrepared(Result<glaze_widgets::plugin_manager::Package, String>),
     PluginInstalled(Result<String, String>),
     Files(Vec<crate::watch::Change>),
@@ -1386,6 +1387,15 @@ impl App {
     /// A message from a worker or the watcher.
     pub fn message(&mut self, msg: Msg) {
         match msg {
+            Msg::DesktopRestored(result) => {
+                let summary = match &result {
+                    Ok(result) => result.summary().to_owned(),
+                    Err(_) => "Couldn't restore the Windows desktop. See Recovery in Troubleshoot.".into(),
+                };
+                self.system.restore = crate::system::Restore::Finished(result);
+                if !self.fixture { self.system.refresh(); }
+                self.toast(summary, None);
+            }
             Msg::PluginPrepared(result) => {
                 self.plugins.busy = None;
                 match result {
@@ -1497,7 +1507,20 @@ impl App {
                 Ok(()) => self.toast(format!("Restarting the {part}"), None),
                 Err(e) => self.alert(format!("{e:#}")),
             },
-            Action::RestoreDesktop => crate::system::restore_desktop(),
+            Action::RestoreDesktop => {
+                if matches!(self.system.restore, crate::system::Restore::Running) { return; }
+                let Some(inbox) = self.inbox.clone() else {
+                    return self.alert("Restore is unavailable until Studio has finished opening.");
+                };
+                self.system.restore = crate::system::Restore::Running;
+                self.toast("Restoring Windows desktop…", None);
+                let thread = self.thread;
+                std::thread::spawn(move || {
+                    let result = crate::system::restore_desktop().map_err(|error| format!("{error:#}"));
+                    let _ = inbox.send(Msg::DesktopRestored(result));
+                    crate::wake(thread);
+                });
+            }
             Action::CopyDiagnostics => {
                 let text = crate::system::diagnostics(self);
                 crate::system::copy_text(&text);

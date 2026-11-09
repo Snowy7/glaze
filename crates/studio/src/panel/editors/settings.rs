@@ -438,7 +438,25 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
                     c,
                     "Ctrl Alt Shift Backspace restores the Windows desktop from anywhere.",
                 );
-                action_button(b, c, "Restore Windows desktop", Action::RestoreDesktop);
+                let running = matches!(app.system.restore, crate::system::Restore::Running);
+                let r = Rect::new(c.x, c.y + b.px(6.0), c.w, height(b, 30.0));
+                button(b, r, if running { "Restoring Windows desktop…" } else { "Restore Windows desktop" },
+                    None, false, !running, Action::RestoreDesktop);
+                c.y = r.bottom + b.px(8.0);
+                if let crate::system::Restore::Finished(result) = &app.system.restore {
+                    match result {
+                        Ok(result) => {
+                            notice(b, c, result.summary());
+                            if !result.report.restored.is_empty() {
+                                notice(b, c, &format!("Restored: {}.", result.report.restored.join(", ")));
+                            }
+                            for failure in &result.report.failed {
+                                notice(b, c, &format!("{}: {}", failure.step, failure.error));
+                            }
+                        }
+                        Err(error) => notice(b, c, &format!("Couldn't restore the Windows desktop: {error}")),
+                    }
+                }
                 let options = RESET_PARTS
                     .iter()
                     .enumerate()

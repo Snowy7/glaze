@@ -177,6 +177,12 @@ its hit (role, label, state); the adapter loads on the first screen-reader reque
 Windows' light or dark (or Settings › Appearance), text size and contrast themes (tokens map to
 system colors). Nothing animates, and state is never shown by color alone.
 
+Troubleshoot's **Restore Windows desktop** runs the installed, executable-adjacent
+`glaze-core.exe --restore` on a worker, including when core is stopped. It never synthesizes
+keyboard input. The button is disabled while running; Recovery keeps the command's result,
+including each failed step. A complete restore, partial restore and inability to stop Glaze
+have distinct messages, following [the restore contract](restore.md).
+
 ## 8. Cost
 
 Measured on the development laptop, release build, 2026-11-05:
