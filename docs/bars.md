@@ -92,17 +92,26 @@ overrides. Theme `bars.appearance` supplies the appearance under `bars.json`'s a
 ### Native styles
 
 Dock right-click menus read the app's native Windows jump list on a worker when opened.
-Pinned destinations, Recent/Frequent, custom categories and Tasks are submenus above the app's
+Pinned destinations, Recent/Frequent, custom categories and Tasks are flat sections with muted,
+non-interactive headers above the app's
 launch, Pin/Unpin and Close commands. Shell links retain their complete serialized target,
 arguments, working directory and shell properties; Windows executes them. Missing lists show
 only the basic commands. AutomaticDestinations are read as memory-backed OLE storage, including
 DestList versions 1–4 and 6; CustomDestinations use bounded shell-link framing. Destination paths
-are never logged. Frequent/Recent submenus show up to twelve unpinned entries.
+are never logged. Frequent/Recent show up to ten unpinned entries; pinned destinations are not truncated.
 
 Rows load their shell icons on the same worker after the first list delivery, at the menu's
 physical DPI size. Serialized links honor `IconLocation` before falling back to their target;
 shell items use `IShellItemImageFactory`. A bounded session cache keys icons by destination/link
-and size. The second delivery updates open rows and submenus without replaying opening motion.
+and size. The second delivery updates open rows without replaying opening motion. Jump lists use a fixed
+280 design-pixel width and ellipsize long labels. They omit per-window rows and redundant New
+window commands (the app launch row and native Tasks provide those actions).
+
+Bar menus attach to the rendered icon and stay outside the current visible bar bounds, including
+magnified icons and reveal transforms. They open away from each dock edge with a six-pixel scaled
+gap, clamp to the monitor work area, and retain that edge as asynchronous rows arrive. Tray and
+bar flyout menus use the same placement. Empty categories are omitted, matching [Windows taskbar
+guidance](https://learn.microsoft.com/en-us/windows/win32/shell/taskbar-extensions).
 
 Windows taskbar pins seed the dock only when `dock.pinned` is absent. An explicit list is owned
 by the user and does not continuously import newly pinned taskbar apps. Pins always render,

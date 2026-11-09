@@ -1,5 +1,6 @@
 //! Native top bar and dock. Windows services live in `glaze-bars`; UI and motion live here.
 mod bar;
+pub mod jump_menu;
 pub(crate) mod icons;
 pub(crate) mod look;
 mod maximized;
@@ -90,24 +91,7 @@ fn jump_icon(icon: &providers::jump_list::Icon) -> glaze_ui::MenuIcon {
 }
 
 fn jump_entries(sections: Vec<providers::jump_list::Section>) -> Vec<Entry<Command>> {
-    sections
-        .into_iter()
-        .map(|section| Entry::Submenu {
-            label: section.name,
-            items: section
-                .items
-                .into_iter()
-                .map(|item| match item {
-                    Some(item) => {
-                        let row = Entry::action(&item.name, Command::Jump(item.launch));
-                        match item.icon.as_deref() { Some(icon) => row.with_icon(jump_icon(icon)), None => row }
-                    },
-                    None => Entry::Separator,
-                })
-                .collect(),
-        })
-        .map(|row| row.with_icon(glaze_ui::MenuIcon::Glyph('\u{E8B7}')))
-        .collect()
+    jump_menu::rows(sections,Command::Jump)
 }
 struct Press {
     bar: usize,
@@ -138,6 +122,7 @@ pub struct Bars {
     ticker: Ticker,
     images: view::Images,
     menu: Option<Menu<Command>>,
+    menu_anchor: Option<(SurfaceId,Option<u32>)>,
     jump_pending: Option<JumpPending>,
     tray_menu: Option<tray_menu::Host>,
     press: Option<Press>,
@@ -221,6 +206,7 @@ impl Bars {
             ticker: Ticker::new()?,
             images: Default::default(),
             menu: None,
+            menu_anchor: None,
             jump_pending: None,
             tray_menu: None,
             press: None,
@@ -302,6 +288,11 @@ impl Bars {
     /// Resolved configuration shared with the shell's panels.
     pub fn config(&self) -> &BarsConfig {
         &self.config
+    }
+
+    /// A popup outside the currently rendered bar that contains this screen point.
+    pub fn menu_attachment_at(&self,point:(i32,i32))->Option<glaze_ui::menu::Attachment> {
+        self.bars.iter().find_map(|bar|bar.menu_attachment(point).map(|(a,_)|a))
     }
     /// Resolve launcher shortcut pins on the existing STA icon worker, just like dock pins.
     pub fn describe_pin(&mut self, path: &str) -> Option<providers::icons::Described> {
@@ -506,7 +497,7 @@ impl Bars {
             if update.complete { self.jump_pending = None; }
         }
         if let Some(menu) = &mut self.tray_menu {
-            menu.process(ui);
+            menu.process(ui,|point|self.bars.iter().find_map(|bar|bar.menu_attachment(point).map(|(a,_)|a)));
         }
         at = tick_spent("tray_menu", at);
         let now = Instant::now();
@@ -746,6 +737,10 @@ impl Bars {
         if let Err(e) = self.paint(ui, now) {
             log::error!("painting bars: {e:#}");
         }
+        if self.menu.as_ref().is_some_and(Menu::is_open)
+            && let Some((source,hit))=self.menu_anchor
+            && let Some((attachment,_))=self.bars.iter().find(|b|b.surface.id()==source).and_then(|b|b.menu_attachment_for(hit,None))
+            && let Some(menu)=&mut self.menu {let _=menu.reanchor(ui,attachment);}
         tick_spent("paint", at);
     }
 
@@ -1794,10 +1789,10 @@ impl Bars {
                             Command::Launch(item.path.clone()),
                         ));
                         entries.push(if item.pinned {
-                            Entry::action("Unpin", Command::Unpin(item.path.clone())).with_icon(glaze_ui::MenuIcon::Glyph('\u{E718}'))
+                            Entry::action("Unpin from taskbar", Command::Unpin(item.path.clone())).with_icon(glaze_ui::MenuIcon::Glyph('\u{E718}'))
                         } else {
                             Entry::action(
-                                "Pin",
+                                "Pin to taskbar",
                                 Command::Pin(Pinned {
                                     path: item.path.clone(),
                                     name: Some(item.name.clone()),
@@ -1932,6 +1927,9 @@ impl Bars {
         tokens: &glaze_ui::Tokens,
     ) {
         self.jump_pending = None;
+        let attached=self.bars.iter().find_map(|b|b.menu_attachment(point).map(|(a,hit)|(b.surface.id(),hit,a)));
+        self.menu_anchor=attached.map(|(id,hit,_)|(id,hit));
+        let jump=entries.iter().any(|e|matches!(e.plain(),Entry::Action{command:Command::Pin(_)|Command::Unpin(_),..}));
         if self.menu.is_none() {
             self.menu = Menu::new("Dock commands").ok();
         }
@@ -1952,9 +1950,10 @@ impl Bars {
                 self.system.animations,
                 config.performance.active(glaze_desktop::on_battery()),
             );
-            let popup = dock
+            let mut popup = dock
                 .and_then(|b| b.tokens.popup.clone())
                 .unwrap_or_else(|| tokens.clone());
+            if jump { jump_menu::style(&mut popup); }
             let performance = config.performance.active(glaze_desktop::on_battery());
             menu.set_interaction_timings(
                 motion::resolve(
@@ -1983,7 +1982,12 @@ impl Bars {
                     )),
                 },
             );
-            let _ = menu.open(ui, entries, point, screen_at(point.0, point.1), tokens);
+            menu.set_width(jump.then_some(280.0));
+            if let Some((_,_,attachment))=attached {
+                let _=menu.open_attached(ui,entries,attachment,screen_at(point.0,point.1),tokens);
+            } else {
+                let _ = menu.open(ui, entries, point, screen_at(point.0, point.1), tokens);
+            }
         }
     }
     fn command(&mut self, command: Command) {

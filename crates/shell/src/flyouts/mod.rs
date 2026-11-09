@@ -767,13 +767,13 @@ impl Flyouts {
                         self.menu = glaze_ui::Menu::new("App commands").ok();
                     }
                     if let Some(menu) = &mut self.menu {
-                        let _ = menu.open(
-                            ui,
-                            entries,
-                            point,
-                            glaze_ui::screen_at(point.0, point.1),
-                            &glaze_ui::Tokens::default(),
-                        );
+                        let source=((open.anchor.left+open.anchor.right) as i32/2,(open.anchor.top+open.anchor.bottom) as i32/2);
+                        if let Some(mut attachment)=bars.menu_attachment_at(source) {
+                            attachment.item=open.hit;
+                            let _=menu.open_attached(ui,entries,attachment,glaze_ui::screen_at(point.0,point.1),&glaze_ui::Tokens::default());
+                        }else{
+                            let _=menu.open(ui,entries,point,glaze_ui::screen_at(point.0,point.1),&glaze_ui::Tokens::default());
+                        }
                     }
                 }
             }

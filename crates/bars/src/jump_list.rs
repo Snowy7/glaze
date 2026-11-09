@@ -543,7 +543,7 @@ pub fn load(app: &crate::apps::Item) -> Vec<Section> {
                 })
             })
         });
-        items.truncate(12);
+        items.truncate(10);
         if !items.is_empty() {
             sections.push(Section {
                 name: if kind == 1 { "Frequent" } else { "Recent" }.into(),

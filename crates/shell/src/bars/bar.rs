@@ -1101,6 +1101,40 @@ impl Bar {
         (x, y)
     }
 
+    /// Popup geometry from the last presented pixels/hits, including magnification and reveal.
+    pub fn menu_attachment(&self,point:(i32,i32))->Option<(glaze_ui::menu::Attachment,Option<u32>)> {
+        self.menu_attachment_for(None,Some(point))
+    }
+
+    pub fn menu_attachment_for(&self,hit:Option<u32>,point:Option<(i32,i32)>)->Option<(glaze_ui::menu::Attachment,Option<u32>)> {
+        use glaze_ui::menu::{Attachment,Side};
+        let mut bounds:Option<Rect>=None;
+        let mut item=None;let mut selected=hit;
+        for (index,surface) in std::iter::once(&self.surface).chain(&self.islands).enumerate() {
+            if !surface.is_visible(){continue;}
+            let origin=surface.origin();
+            let screen=|r:Rect|r.offset(origin.0 as f32,origin.1 as f32);
+            let body=if self.kind==BarKind::Dock {
+                self.frame.shapes.iter().map(|(r,_)|*r).reduce(|a,b|a.union(b))
+            }else{self.frame.shapes.get(index).map(|(r,_)|*r)};
+            if let Some(body)=body {
+                let offset=self.offsets.get(index).copied().unwrap_or_default();
+                let local=body.offset(-offset.x,-offset.y);
+                let r=screen(self.presentation_transforms.get(index).map_or(local,|t|t.rect(local)));
+                bounds=Some(bounds.map_or(r,|b|b.union(r)));
+            }
+            for h in &surface.shown().hits {
+                let r=screen(h.rect);bounds=Some(bounds.map_or(r,|b|b.union(r)));
+                if hit==Some(h.id) || point.is_some_and(|p|r.contains(Point::new(p.0 as f32,p.1 as f32))) {item=Some(r);selected=Some(h.id);}
+            }
+        }
+        let bar=bounds?;
+        if let Some(p)=point && !bar.contains(Point::new(p.0 as f32,p.1 as f32)){return None;}
+        let item=item.unwrap_or_else(||point.map_or(bar,|p|Rect::new(p.0 as f32,p.1 as f32,1.0,1.0)));
+        let side=match edge(self.kind,&self.config){Edge::Bottom=>Side::Above,Edge::Top=>Side::Below,Edge::Left=>Side::Right,Edge::Right=>Side::Left};
+        Some((Attachment{item,bar,side,gap:(6.0*self.scale()).round() as i32},selected))
+    }
+
     pub fn plates(&self) -> Vec<Plate> {
         if !self.shows_content() {
             return vec![];

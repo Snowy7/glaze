@@ -19,10 +19,10 @@ public static class GlazeMenuCapture {
 $state = Get-Content -LiteralPath (Join-Path $Folder 'ready.json') -Raw | ConvertFrom-Json
 $fixtureProcess = Get-Process -Id $state.pid
 if ($fixtureProcess.ProcessName -ne 'dock_menu_evidence') { throw 'Not our evidence process' }
-$canvas = New-Object Drawing.Bitmap 960,600
+$canvas = New-Object Drawing.Bitmap ([int]$state.rect[2]),([int]$state.rect[3])
 $graphics = [Drawing.Graphics]::FromImage($canvas)
 $graphics.Clear([Drawing.Color]::Gray)
-$windows = @($state.backdrop,$state.frost,$state.menu,$state.submenu) | Where-Object { $_ }
+$windows = @($state.backdrop,$state.dockFrost,$state.dock,$state.frost,$state.menu,$state.submenu) | Where-Object { $_ }
 $report = @()
 foreach ($handle in $windows) {
   $hwnd = [IntPtr][long]$handle
@@ -49,12 +49,12 @@ $canvas.Dispose()
 # PrintWindow cannot read DirectComposition pixels. The visual proof crops only the opaque
 # fixture rectangle. Refuse a capture if any point belongs to a different process; never save
 # another app's content. UIA/PrintWindow above provide the independent ownership/role checks.
-$proof = New-Object Drawing.Bitmap 960,600
+$proof = New-Object Drawing.Bitmap ([int]$state.rect[2]),([int]$state.rect[3])
 $proofGraphics = [Drawing.Graphics]::FromImage($proof)
 $proofGraphics.Clear([Drawing.Color]::Gray)
 try {
-  for ($y=0; $y -lt 600; $y+=8) {
-    for ($x=0; $x -lt 960; $x+=8) {
+  for ($y=0; $y -lt $state.rect[3]; $y+=8) {
+    for ($x=0; $x -lt $state.rect[2]; $x+=8) {
       $point = New-Object GlazeMenuCapture+Point
       $point.X = $state.rect[0]+$x; $point.Y = $state.rect[1]+$y
       $owner = [uint32]0

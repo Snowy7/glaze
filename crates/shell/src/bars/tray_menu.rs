@@ -54,20 +54,19 @@ impl Host {
             caller: None,
         })
     }
-    pub fn process(&mut self, ui: &mut Ui) {
+    pub fn process(&mut self, ui: &mut Ui, attachment:impl Fn((i32,i32))->Option<glaze_ui::menu::Attachment>) {
         for (caller, request) in REQUESTS.with_borrow_mut(std::mem::take) {
             self.finish(0);
             self.menu.close();
             self.caller = Some((caller, request.nonce));
             // The bar's theme, as the dock's and the desktop's menus.
             let tokens = super::look::menu_tokens(&ui.text);
-            if let Err(e) = self.menu.open(
-                ui,
-                entries(request.items),
-                request.point,
-                glaze_ui::screen_at(request.point.0, request.point.1),
-                &tokens,
-            ) {
+            let screen=glaze_ui::screen_at(request.point.0,request.point.1);
+            let opened=match attachment(request.point) {
+                Some(anchor)=>self.menu.open_attached(ui,entries(request.items),anchor,screen,&tokens),
+                None=>self.menu.open(ui,entries(request.items),request.point,screen,&tokens),
+            };
+            if let Err(e) = opened {
                 log::warn!("tray menu: {e:#}");
                 self.finish(0);
             }
