@@ -1,6 +1,6 @@
 # Brief: app-styler round 4 (no leak in Explorer)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/windows-styling.md` › "App styler", and
+Read `plans/native/LIVE.md`, `docs/windows-styling.md` › "App styler", and
 round 3's report (`crates/app-styler/evidence/round3`, commits 19a5b7c..a2e1f99). You own
 `crates/app-styler`. The flag is **off** and stays off unless this round ends clean.
 

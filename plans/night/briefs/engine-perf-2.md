@@ -1,6 +1,6 @@
 # Brief: engine-perf round 2 (hidden = free)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, the engine sections of `docs/performance.md`
+Read `plans/native/LIVE.md`, the engine sections of `docs/performance.md`
 and `docs/engine-notes.md`, and round 1's commits (`git log -- crates/wallpaper crates/glass-ipc
 crates/liquid-rust`). Same ownership as round 1 (`briefs/engine-perf.md`).
 

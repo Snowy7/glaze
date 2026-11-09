@@ -19,9 +19,9 @@ Repository/branch: `D:\Coding\projects\desktop\wallpaper`, `native`, shared chec
 | Live native calendar | Captured and inspected at 415×313 after deployment, using PrintWindow under the desktop lock. Month layout, date, controls and new Calendars action render. No events were available from the current real Windows store. |
 | Real Discord | Discord was running; its retained Windows notification count was 0. No developer app, bot credentials or RPC/tester grant was configured. No message or voice-setting action was sent. The minimized Discord window could not provide a useful screenshot and was left untouched. |
 
-The native fixture sheets were inspected directly: `golden-personal/discord.png` (including call,
-setup and bot composition), `calendar.png` (month, agenda and sources) and `custom-fixture.png`
-(text/stat/list/gauge). They use labelled fixture data, not the user's Discord account.
+The native fixture sheets were inspected directly: `calendar.png` (month, agenda and sources)
+and `custom-fixture.png` (text/stat/list/gauge). The obsolete Discord sheet has been removed;
+its current synthetic fixture is `plugins/discord/golden/sizes.png`.
 
 ## Remaining qualification limits
 

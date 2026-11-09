@@ -1,6 +1,6 @@
 # Brief: engine-perf (hill-climb)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, then `docs/performance.md` (Native engine
+Read `plans/native/LIVE.md`, then `docs/performance.md` (Native engine
 scenarios, Engine hillclimb) and `docs/glass.md`.
 
 ## Goal

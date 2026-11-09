@@ -1,6 +1,6 @@
 # Brief: app-styler round 2 (make it look good, prove it's safe)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/windows-styling.md` › "App styler",
+Read `plans/native/LIVE.md`, `docs/windows-styling.md` › "App styler",
 and the first round's report below. You own `crates/app-styler` and its doc section; additive only in
 `crates/theme` / `crates/config` / `crates/inject`. Not `crates/studio`.
 

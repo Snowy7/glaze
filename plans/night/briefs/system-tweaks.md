@@ -1,6 +1,6 @@
 # Brief: system-tweaks (games, dev, Explorer speed: supported, reversible settings)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `crates/tweaks/src/lib.rs` and `undo.rs`
+Read `plans/native/LIVE.md`, `crates/tweaks/src/lib.rs` and `undo.rs`
 (the journal), `docs/windows-styling.md`, and `docs/research/explorer-and-files.md` §7 and §8 (what
 measurably helps, what doesn't, what needs admin).
 

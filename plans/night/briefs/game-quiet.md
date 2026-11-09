@@ -1,6 +1,6 @@
 # Brief: game-quiet (Glaze costs nothing while a game runs)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/system.md` (the game-activity signal:
+Read `plans/native/LIVE.md`, `docs/system.md` (the game-activity signal:
 `classify`, `GameWatcher`, `read`, `watch`, `Owner::handle()`), `docs/research/explorer-and-files.md` §8
 ("What zero overhead requires from Glaze"), `docs/plugins.md` (helper lifecycle, timers, budgets),
 `docs/performance.md` ("Hidden = free" for the engine).

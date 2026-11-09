@@ -1,6 +1,6 @@
 # Brief: shell-idle (hill-climb the shell to zero)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md` (lock rules: one action at a time),
+Read `plans/native/LIVE.md` (lock rules: one action at a time),
 `docs/performance.md`, `docs/bars.md` (the bars-parity handoff in b727049), and the memory notes summarised
 in `docs/ui.md` about wakes. Tools: `GLAZE_WAKES=1` wake report (see `crates/shell` for how it's
 enabled), `C:\glaze-targets\dockprof` (no-admin sampler, sweep scripts),

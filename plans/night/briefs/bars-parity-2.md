@@ -1,6 +1,6 @@
 # Brief: bars-parity round 2 (send the new glass knobs, close C06-C14)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/bars.md` (round 1 handoff, b727049),
+Read `plans/native/LIVE.md`, `docs/bars.md` (round 1 handoff, b727049),
 `docs/glass.md` › "Finer knobs on the wire" (engine commits e351d93, a28aae2, c955673, 9e0a0db), the
 shell-idle section of `docs/performance.md` (don't undo its wins), and the partial rows C06, C07, C10,
 C12, C13, C14 in `plans/native/parity.md`.

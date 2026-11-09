@@ -1,6 +1,6 @@
 # Brief: files-app (our own file browser, experimental)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/ui.md` (The kit), `docs/glass.md`,
+Read `plans/native/LIVE.md`, `docs/ui.md` (The kit), `docs/glass.md`,
 and `docs/research/explorer-and-files.md` §1 and §3 (why: Explorer's file list and nav tree are
 DirectUI/Win32 and can't be restyled without paint hooks; a browser we own can look however the user
 wants, with no injection).

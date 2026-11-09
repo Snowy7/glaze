@@ -1,6 +1,6 @@
 # Brief: app-styler round 5 (style only processes that end)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/windows-styling.md` › "App styler", and
+Read `plans/native/LIVE.md`, `docs/windows-styling.md` › "App styler", and
 round 4's evidence (`crates/app-styler/evidence/round4/README.md`, commits 0eb5c89, c775527, 54af732).
 You own `crates/app-styler`, additive `crates/config`, and the matching docs.
 

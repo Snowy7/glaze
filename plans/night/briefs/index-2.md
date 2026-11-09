@@ -1,6 +1,6 @@
 # Brief: index round 2 (small while you type)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/index.md` and its evidence (round 1,
+Read `plans/native/LIVE.md`, `docs/index.md` and its evidence (round 1,
 up to 8b45c29). Same ownership as round 1 (`briefs/index.md`). Not `crates/shell` beyond the launcher's
 index call site.
 

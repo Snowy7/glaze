@@ -323,7 +323,7 @@ not continuously busy, but a controlled quiescent comparison remains needed. The
 startup sample (2.24%, 33 MB) is retained separately as `measure-bars-after-startup.json` and is
 not called idle. No performance improvement is claimed from these unlike desktop states.
 
-Studio follow-ups are recorded in `plans/night/2026-11-06.md`: expose the now-consumed appearance
+Studio follow-ups include exposing the now-consumed appearance
 and state controls, separate motion leaves and show/open styles, and inheritance resets. At this
 first-round handoff, renderer knobs and Windows style synchronization remained pending; the
 round-two section above and C25 record their later implementations and remaining contracts.
