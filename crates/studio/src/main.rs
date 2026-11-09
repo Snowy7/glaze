@@ -219,6 +219,7 @@ impl Studio {
                 .ok();
         }
         let Some(menu) = self.menu.as_mut() else { return };
+        menu.set_no_activate(std::env::args().any(|arg| arg == "--no-activate"));
         let p = panel::palette_for(&self.app);
         let mut tokens = p.theme().tokens();
         // A popover over the window: the card fill, Studio's selected wash, no hairline in dark.
@@ -235,7 +236,7 @@ impl Studio {
         let screen = glaze_ui::menu::screen_at(at.x, at.y);
         let scale = screen.dpi.max(96) as f32 / 96.0 * tokens.scale.clamp(0.5, 2.0);
         let width = glaze_ui::menu::layout(&items, &tokens, scale, &mut self.ui.text).size().0;
-        at.x += rect.width() as i32 - width;
+        if rect.width() > 0.0 { at.x += rect.width() as i32 - width; }
         match menu.open(&mut self.ui, items, (at.x, at.y), screen, &tokens) {
             Ok(()) => self.picking = Some(picking),
             Err(e) => log::error!("select menu: {e:#}"),
@@ -260,7 +261,7 @@ impl Studio {
             let front = GetForegroundWindow();
             let mut pid = 0;
             GetWindowThreadProcessId(front, Some(&mut pid));
-            if front.is_invalid() || pid == std::process::id() {
+            if !std::env::args().any(|arg| arg == "--no-activate") && (front.is_invalid() || pid == std::process::id()) {
                 let _ = SetForegroundWindow(self.surface.hwnd());
             }
         }

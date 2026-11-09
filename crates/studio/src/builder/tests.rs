@@ -44,6 +44,89 @@ fn fixture(dark: bool, ui: &glaze_ui::Ui) -> App {
     app
 }
 
+#[test]
+fn canvas_move_is_one_undo_step_and_capture_loss_cancels() {
+    use glaze_ui::{Button, Event, Point, Pointer};
+    let mut ui = glaze_ui::Ui::new().unwrap();
+    let mut app = fixture(true, &ui);
+    let image = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/icon-32.png");
+    import(&mut app, &image, true).unwrap();
+    crate::goldens::shot(&mut app, &mut ui);
+    let canvas = canvas::geometry(&app, crate::view::regions(&app).stage.unwrap());
+    let pointer = |x, y| Pointer { at: Point { x: canvas.left + canvas.width() * x, y: canvas.top + canvas.height() * y }, screen: (0, 0) };
+    let before = raw(&app);
+    app.event(Event::Press(pointer(0.2, 0.2), Button::Left));
+    app.event(Event::Move(pointer(0.3, 0.4)));
+    let during = raw(&app);
+    assert_ne!(during, before);
+    app.event(Event::Move(pointer(0.4, 0.5)));
+    app.event(Event::Release(pointer(0.4, 0.5), Button::Left));
+    let after = raw(&app);
+    assert!((after["wallpaper"]["layers"][3]["rect"][0].as_f64().unwrap() - 0.3).abs() < 0.0001);
+    app.run(Action::Undo);
+    assert_eq!(raw(&app), before);
+    app.run(Action::Redo);
+    assert_eq!(raw(&app), after);
+    app.event(Event::Press(pointer(0.4, 0.5), Button::Left));
+    app.event(Event::Move(pointer(0.6, 0.7)));
+    app.event(Event::CaptureLost);
+    assert_eq!(raw(&app), after);
+}
+
+#[test]
+fn wallpaper_card_menu_has_the_same_keyboard_and_pointer_actions() {
+    use glaze_ui::{Button, Event, Point, Pointer};
+    let mut ui = glaze_ui::Ui::new().unwrap();
+    let mut app = crate::goldens::window_app(true, &ui, (1440, 960));
+    app.run(Action::Panel(crate::panel::Command::Open(Page::Wallpapers)));
+    crate::goldens::shot(&mut app, &mut ui);
+    let target = app.frame.targets.iter().find(|t| matches!(t.action, Action::Panel(crate::panel::Command::Wallpaper(_)))).unwrap().clone();
+    app.input.focus = Some(target.key);
+    app.key_with(0x79, (false, true, false));
+    let keyboard = app.menu.take().unwrap().1;
+    assert!(matches!(&keyboard[0], crate::actions::MenuItem::Item { label, action: Action::Panel(crate::panel::Command::Builder(Command::Edit(_))), .. } if label == "Edit"));
+    let at = Point { x: target.rect.left + 4.0, y: target.rect.top + 4.0 };
+    app.event(Event::Press(Pointer { at, screen: (0, 0) }, Button::Right));
+    assert_eq!(app.menu.take().unwrap().1, keyboard);
+}
+
+#[test]
+fn imported_video_has_a_poster_before_the_preview_child_starts() {
+    let mut ui = glaze_ui::Ui::new().unwrap();
+    let mut app = crate::goldens::window_app(true, &ui, (1440, 960));
+    begin(&mut app, None).unwrap();
+    let video = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../themes/spring-forest/loop.mp4");
+    import(&mut app, &video, false).unwrap();
+    let value = raw(&app);
+    let path = active(&app).unwrap().dir.join(value["wallpaper"]["base"]["source"].as_str().unwrap());
+    assert!(!active(&app).unwrap().dir.join("preview.jpg").exists());
+    let poster = app.images.borrow_mut().get(&path, (640, 360)).expect("Windows video thumbnail");
+    assert!(poster.width > 32 && poster.height > 32);
+    let shot = crate::goldens::shot(&mut app, &mut ui);
+    let out = std::env::var_os("GLAZE_STUDIO_WINDOW_SHOTS").map(PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("glaze-studio-shots"));
+    glaze_ui::golden::write(&shot, &out.join("video-poster.png")).unwrap();
+}
+
+#[test]
+fn opening_the_gallery_keeps_the_decoded_canvas() {
+    let mut ui = glaze_ui::Ui::new().unwrap();
+    let mut app = fixture(true, &ui);
+    let snapshot = active(&app).unwrap().dir.join("preview.jpg");
+    let photo = active(&app).unwrap().dir.join(raw(&app)["wallpaper"]["base"]["source"].as_str().unwrap());
+    std::fs::copy(photo, &snapshot).unwrap();
+    crate::goldens::shot(&mut app, &mut ui);
+    let r = canvas::geometry(&app, crate::view::regions(&app).stage.unwrap());
+    let size = (r.width() as u32, r.height() as u32);
+    let before = app.images.borrow_mut().get(&snapshot, size).unwrap();
+    execute(&mut app, Command::Gallery).unwrap();
+    crate::goldens::shot(&mut app, &mut ui);
+    assert!(std::sync::Arc::ptr_eq(&before, &app.images.borrow_mut().get(&snapshot, size).unwrap()));
+    execute(&mut app, Command::CloseGallery).unwrap();
+    crate::goldens::shot(&mut app, &mut ui);
+    assert!(std::sync::Arc::ptr_eq(&before, &app.images.borrow_mut().get(&snapshot, size).unwrap()));
+}
+
 /// The editor's states, each in both themes at two window sizes:
 /// `GLAZE_BLESS=1` updates tests/golden/window; review copies go to the shots folder.
 #[test]

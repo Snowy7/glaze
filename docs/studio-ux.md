@@ -115,8 +115,28 @@ Every change is written as you make it, through one document store (`docs.rs`):
   only while Studio is asking, so it costs nothing when Studio is closed. Without an engine that
   answers, previews draw a flat stand-in tint and say "Glass shows when Glaze is running".
 - **Wallpapers** show their preview picture (video: the shell's thumbnail), decoded off the UI
-  thread into a 20 MB cache (`images.rs`).
+  thread at display size. The picture budget is 2 MB normally and 24 MB while Create is open;
+  only visible cards request pictures (`images.rs`).
 - **Peek (Ctrl D)** hides Studio until the next key or click, to check the real desktop.
+
+### Creating wallpapers
+
+Every wallpaper card has a right-click menu: Edit, Duplicate, Apply, and Delete for your own
+wallpapers. Delete uses the existing Recycle Bin action and is disabled for the active wallpaper.
+The menu key or Shift+F10 opens the same menu from a focused card; Edit is its first action.
+
+Create's canvas uses the preview child's normal JPEG contract. The child renders near canvas
+size, at 5 fps below 960 pixels wide and 10 fps on larger canvases. WIC decodes on the picture
+worker; delivery replaces the previous frame without clearing the page or compacting the heap
+per frame. Unchanged files do not decode, and hidden or minimized windows skip preview reads.
+A video uses Windows' shell thumbnail until a decoded engine frame is ready, so the first JPEG
+does not replace the poster with an empty pending image.
+
+Drag an image or model on the canvas to select and move it. Its outline follows immediately;
+the preview follows at its normal frame rate. Positions are normalized screen fractions with
+a top-left origin, matching the stack contract. A background photo has a draggable focus
+crosshair. Position and focus controls stay in sync. Releasing commits one undo step; Escape
+or lost capture cancels the move.
 
 ## 6. Look, and Windows styling as part of it (D2)
 
@@ -170,6 +190,19 @@ Measured on the development laptop, release build, 2026-11-05:
 
 UI Automation loads on the first screen-reader request, not before the first paint. Text layouts
 are cached for the few hundred labels on screen (`Text::set_capacity`).
+
+Preview check, 2026-11-09, release build at 1280 × 800: process CPU sampled over 21 seconds
+per screen, expressed as a percentage of one core. The same moving wallpaper and preview
+engine were used before and after; the small canvas now requests 640 × 360 at 5 fps.
+
+| Moving preview | Before | After |
+|---|---:|---:|
+| Editor | 3.04% | 2.38% |
+| Effects gallery | 7.73% | 3.05% |
+
+The existing worker already decoded off the UI thread. Removing per-frame heap compaction,
+requesting replacement decodes without an extra paint, and matching preview size/rate reduced
+the remaining cost. These measurements cover the small canvas; larger canvases retain 10 fps.
 
 ## 9. Code map
 

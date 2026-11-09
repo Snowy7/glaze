@@ -1,6 +1,7 @@
 //! Wallpaper composition. Drafts are ordinary, hidden theme folders; edits use Studio's
 //! document history, while imported assets remain local to the draft until Save.
 mod drop_target;
+mod canvas;
 mod preview;
 mod storage;
 #[cfg(test)]
@@ -37,6 +38,7 @@ pub struct Editor {
     preview_stamp: Option<std::time::SystemTime>,
     validation_key: Option<u64>,
     drag: Option<usize>,
+    canvas_drag: Option<canvas::Drag>,
     /// Your own stack being edited: Save writes back here. `None` saves a new theme.
     pub origin: Option<PathBuf>,
     /// The draft as opened, for Revert.
@@ -184,10 +186,9 @@ pub fn validate_theme(text: &str) -> Result<()> {
 fn effects(dir: &Path) -> Vec<Effect> {
     // Later roots win. A theme's packaged copies come first, so built-ins (and their fixes)
     // win over old snapshots, as in the engine's `stack::effect_search`.
-    let mut roots = vec![
-        dir.join("effects"),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../effects"),
-    ];
+    let mut roots = vec![dir.join("effects")];
+    #[cfg(any(debug_assertions, test))]
+    roots.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../effects"));
     if let Ok(exe) = std::env::current_exe()
         && let Some(parent) = exe.parent()
     {
@@ -302,6 +303,7 @@ fn begin(app: &mut App, from: Option<usize>) -> Result<()> {
             preview_stamp: None,
             validation_key: None,
             drag: None,
+            canvas_drag: None,
             images_budget: app.images.borrow().budget(),
             origin: origin.clone(),
             initial: app.docs.doc(doc).raw.clone(),
@@ -990,9 +992,17 @@ pub fn tick(app: &mut App) {
     }
     let version = app.docs.version;
     state(app).next_poll = now + Duration::from_millis(100);
+    if app.window.is_some_and(|window| {
+        // SAFETY: read-only queries of our own window.
+        unsafe { !windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(window).as_bool()
+            || windows::Win32::UI::WindowsAndMessaging::IsIconic(window).as_bool() }
+    }) {
+        state(app).next_poll = now + Duration::from_millis(500);
+        return;
+    }
     if active(app).unwrap().version != version {
         let doc = active(app).unwrap().doc;
-        if matches!(app.drag, Some(crate::app::Drag::Slider { .. })) {
+        if matches!(app.drag, Some(crate::app::Drag::Slider { .. })) || active(app).unwrap().canvas_drag.is_some() {
             if let Err(error) = app.docs.preview_live(doc) {
                 app.alert(format!("Preview: {error:#}"));
             }
@@ -1009,6 +1019,13 @@ pub fn tick(app: &mut App) {
         app.dirty = true;
     }
     let dir = active(app).unwrap().dir.clone();
+    if let Some(area) = crate::view::regions(app).stage {
+        let canvas = canvas::geometry(app, area);
+        let width = ((canvas.width().ceil() as u32 + 127) / 128 * 128).clamp(320, 1280);
+        let height = (width as f32 * canvas.height() / canvas.width().max(1.0)).round().max(1.0) as u32;
+        let fps = if canvas.width() < 960.0 { 5 } else { 10 };
+        state(app).preview.configure((width, height), fps);
+    }
     let old_error = active(app).unwrap().preview.error.clone();
     state(app).preview.tick(&dir);
     if active(app).unwrap().preview.error != old_error {
@@ -1026,14 +1043,17 @@ pub fn tick(app: &mut App) {
         }
     }
     hover_preview(app, now);
+    if crate::panel::current_page(app) == Page::Shader {
+        validate_code(app);
+        return;
+    }
     let snapshot = active(app).unwrap().dir.join("preview.jpg");
     let stamp = std::fs::metadata(&snapshot).ok().and_then(|m| m.modified().ok());
     if stamp != active(app).unwrap().preview_stamp {
         state(app).preview_stamp = stamp;
         // Only the canvas picture is decoded again; it stays on screen until the new one lands.
         // (Clearing the whole cache here blanked every picture at the engine's 10 fps.)
-        app.images.borrow_mut().reload(&snapshot);
-        app.dirty = true;
+        if !app.images.borrow_mut().reload(&snapshot) { app.dirty = true; }
     }
     validate_code(app);
 }
@@ -1298,6 +1318,7 @@ fn estimate(stack: &glaze_theme::StackWallpaper, effects: &[Effect], pixels: f64
 
 /// Reordering consumes only events addressed to our own layer handles.
 pub fn event(app: &mut App, event: &glaze_ui::Event) -> bool {
+    if canvas::event(app, event) { return true; }
     use glaze_ui::{Button, Event};
     if active(app).is_none() {
         return false;

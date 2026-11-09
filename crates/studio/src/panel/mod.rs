@@ -719,9 +719,14 @@ pub(crate) fn prepare_page(app: &App, text: &mut Text) -> Page {
     history::observe(app);
     let page = current_page(app);
     let state = app.panel.as_ref().unwrap();
-    if state.specimen_page.replace(Some(page)) != Some(page) {
+    let previous = state.specimen_page.replace(Some(page));
+    if previous != Some(page) {
         state.specimens.borrow_mut().clear();
-        measure::leave_page(app, text);
+        // The gallery and editor share one live canvas. Retain its last decoded frame;
+        // presented() retires only the thumbnails that actually leave the viewport.
+        if !previous.is_some_and(crate::builder::is_page) || !crate::builder::is_page(page) {
+            measure::leave_page(app, text);
+        }
     }
     page
 }

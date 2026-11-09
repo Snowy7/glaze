@@ -347,7 +347,8 @@ fn background(app: &App, b: &mut B, c: &mut Col, base: &Value) {
         let row = Rect::new(c.x, c.y, c.w, b.px(52.0));
         let thumb = Rect::new(row.left, row.top + b.px(2.0), b.px(80.0), b.px(48.0));
         b.fill(thumb, b.px(8.0), swatch(base, b.p.well));
-        match base_picture(app, base).and_then(|p| app.images.borrow_mut().get(&p, (thumb.width() as u32, thumb.height() as u32))) {
+        let visible = b.clip_rect().is_none_or(|clip| thumb.bottom >= clip.top && thumb.top <= clip.bottom);
+        match visible.then(|| base_picture(app, base)).flatten().and_then(|p| app.images.borrow_mut().get(&p, (thumb.width() as u32, thumb.height() as u32))) {
             Some(image) => crate::stage::image_round(b, thumb, &image, 1.0, b.px(8.0)),
             None if !matches!(kind.as_str(), "color" | "gradient") => b.icon(thumb, icon, 18.0, b.p.ink2),
             None => {}
@@ -364,6 +365,10 @@ fn background(app: &App, b: &mut B, c: &mut Col, base: &Value) {
                 fit(b, c, base["fit"].as_str().unwrap_or("cover"));
                 if kind == "image" {
                     anchor(b, c, &base["focus"]);
+                    for (i, label) in ["Horizontal focus", "Vertical focus"].into_iter().enumerate() {
+                        slider(app, b, c, format!("/wallpaper/base/focus/{i}"), label,
+                            base["focus"][i].as_f64().unwrap_or(0.5), 0.0, 1.0, 0.01);
+                    }
                 }
             }
             "color" => color(app, b, c, "/wallpaper/base/color".into(), "Colour", &base["color"]),
@@ -525,7 +530,8 @@ fn layer_row(app: &App, b: &mut B, c: &mut Col, i: usize, layer: &Value, selecte
         Some("image") => layer["source"].as_str().map(|s| active(app).unwrap().dir.join(s)),
         _ => None,
     };
-    match picture.and_then(|p| app.images.borrow_mut().get(&p, (thumb.width() as u32, thumb.height() as u32))) {
+    let visible = b.clip_rect().is_none_or(|clip| thumb.bottom >= clip.top && thumb.top <= clip.bottom);
+    match picture.filter(|_| visible).and_then(|p| app.images.borrow_mut().get(&p, (thumb.width() as u32, thumb.height() as u32))) {
         Some(image) => crate::stage::image_round(b, thumb, &image, if on { 1.0 } else { 0.4 }, b.px(7.0)),
         None => b.icon(thumb, if layer["kind"] == "model" { glyph::SCENE } else { glyph::LAYERS }, 14.0, b.p.ink2),
     }
@@ -819,15 +825,7 @@ pub fn stage(app: &App, b: &mut B, area: Rect) -> bool {
         return true;
     }
     let value = raw(app);
-    let canvas = crate::stage::frame(
-        app,
-        Rect::new(
-            area.left + b.px(28.0),
-            area.top + b.px(24.0),
-            area.width() - b.px(56.0),
-            area.height() - b.px(88.0),
-        ),
-    );
+    let canvas = super::canvas::geometry(app, area);
     let radius = b.px(14.0);
     let base = &value["wallpaper"]["base"];
     if editor.fresh {
@@ -842,21 +840,23 @@ pub fn stage(app: &App, b: &mut B, area: Rect) -> bool {
     let snapshot = editor.dir.join("preview.jpg");
     let engine_frame = snapshot.is_file();
     // Until the engine's first frame: the base's own picture, then its colour.
-    let path = engine_frame.then_some(snapshot).or_else(|| match base["kind"].as_str() {
-        Some("image") => base["source"].as_str().map(|p| editor.dir.join(p)),
-        Some("theme") => theme_item(app, base).and_then(|w| w.preview.clone()),
+    let poster = || match base["kind"].as_str() {
+        Some("image" | "video") => base["source"].as_str().map(|p| editor.dir.join(p)),
+        Some("theme") => theme_item(app, base).and_then(|w| w.preview.clone().or(w.video.clone())),
         _ => None,
-    });
-    let image = path.as_ref().and_then(|p| {
+    };
+    let size = (canvas.width() as u32, canvas.height() as u32);
+    let image = engine_frame.then(|| app.images.borrow_mut().get(&snapshot, size)).flatten().or_else(|| poster().and_then(|p| {
         app.images
             .borrow_mut()
-            .get(p, (canvas.width() as u32, canvas.height() as u32))
-    });
+            .get(&p, size)
+    }));
     b.fill(canvas, radius, swatch(base, b.p.well));
     if let Some(image) = image {
         crate::stage::image_round(b, canvas, &image, 1.0, radius);
     }
     b.stroke(canvas, radius, b.px(1.0), b.p.edge);
+    super::canvas::overlay(app, b, canvas);
     let (mw, mh) = app
         .display()
         .map_or((1920, 1080), |m| (m.rect.width, m.rect.height));

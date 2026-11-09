@@ -12,8 +12,19 @@ pub struct Preview {
     child: Option<Child>,
     attempted: Option<(PathBuf, Option<SystemTime>)>,
     pub error: Option<String>,
+    options: Option<((u32, u32), u32)>,
 }
 impl Preview {
+    /// Match the canvas, bucketed by the caller so resizing does not churn children.
+    pub fn configure(&mut self, size: (u32, u32), fps: u32) {
+        if self.options == Some((size, fps)) { return; }
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        self.options = Some((size, fps));
+        self.attempted = None;
+    }
     /// Restart after an engine update; an older engine is tried only once per executable.
     pub fn tick(&mut self, dir: &Path) {
         if let Some(child) = &mut self.child {
@@ -40,7 +51,8 @@ impl Preview {
             return;
         }
         self.attempted = Some((exe.clone(), stamp));
-        match spawn(&exe, dir) {
+        let (size, fps) = self.options.unwrap_or(((1280, 720), 10));
+        match spawn(&exe, dir, size, fps) {
             Ok(child) => {
                 self.child = Some(child);
                 self.error = None;
@@ -71,17 +83,15 @@ fn engine_exe() -> Option<PathBuf> {
             paths.push(parent.join("glaze-wallpaper.exe"));
         }
     }
+    #[cfg(debug_assertions)]
     paths.push(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../target/release/glaze-wallpaper.exe"),
     );
-    paths.push(PathBuf::from(
-        r"C:\glaze-targets\main\release\glaze-wallpaper.exe",
-    ));
     paths.into_iter().find(|p| p.is_file())
 }
 
-fn spawn(exe: &Path, dir: &Path) -> Result<Child> {
+fn spawn(exe: &Path, dir: &Path, size: (u32, u32), fps: u32) -> Result<Child> {
     let log = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .context("LOCALAPPDATA is unavailable")?
@@ -94,7 +104,7 @@ fn spawn(exe: &Path, dir: &Path) -> Result<Child> {
         .arg(dir)
         .arg("--out")
         .arg(dir.join("preview.jpg"))
-        .args(["--size", "1280x720", "--fps", "10"])
+        .args(["--size", &format!("{}x{}", size.0, size.1), "--fps", &fps.to_string()])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(stderr)

@@ -345,6 +345,34 @@ impl App {
         self.frame.targets.iter().find(|t| t.key == key)
     }
 
+    /// Pointer and keyboard share the wallpaper card's kit menu and existing actions.
+    fn wallpaper_menu(&mut self, target: Option<Target<Action>>, at: Option<Point>) -> bool {
+        let Some(target) = target else { return false };
+        let index = match target.action {
+            Action::Panel(crate::panel::Command::Wallpaper(i))
+            | Action::Panel(crate::panel::Command::Builder(crate::builder::Command::Edit(i)))
+            | Action::SelectWallpaper(i) | Action::UseWallpaper(i) => i,
+            _ => return false,
+        };
+        let Some(wallpaper) = self.library.items.get(index) else { return false };
+        use crate::actions::MenuItem;
+        let mut rows = vec![
+            MenuItem::new("Edit", Action::Panel(crate::panel::Command::Builder(crate::builder::Command::Edit(index))))
+                .enabled(crate::builder::cannot_edit(wallpaper).is_none()),
+            MenuItem::new("Duplicate", Action::CopyWallpaper(index)).enabled(wallpaper.error.is_none()),
+            MenuItem::new("Apply", Action::UseWallpaper(index)).enabled(wallpaper.error.is_none()),
+        ];
+        if wallpaper.editable() {
+            rows.extend([MenuItem::Separator, MenuItem::new("Delete", Action::RemoveWallpaper(index)).enabled(!wallpaper.active)]);
+        }
+        self.input.focus = Some(target.key);
+        self.input.focus_visible = at.is_none();
+        self.nav.wallpaper = Some(index);
+        self.menu = Some((at.map_or(target.rect, |p| Rect::new(p.x, p.y, 0.0, 0.0)), rows));
+        self.dirty = true;
+        true
+    }
+
     /// Handles one window event. Sets `dirty` when the next frame differs.
     pub fn event(&mut self, event: Event) {
         if crate::panel::event(self, &event) { return; }
@@ -364,6 +392,9 @@ impl App {
                 }
             }
             Event::Press(p, Button::Right) => {
+                if self.wallpaper_menu(self.target_at(p.at).cloned(), Some(p.at)) {
+                    return;
+                }
                 // Right-clicking the bare wallpaper on Home: the desktop menu's settings.
                 if self.nav.page() == Page::Home
                     && let Some(Action::Nav(Page::Wallpapers)) = self.target_at(p.at).map(|t| t.action.clone())
@@ -634,6 +665,11 @@ impl App {
     /// One key press with its modifiers (Ctrl, Shift, Alt).
     pub fn key_with(&mut self, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) {
         self.dirty = true;
+        if self.field.is_none() && (vk == 0x5D || (shift && vk == 0x79)) {
+            if self.wallpaper_menu(self.input.focus.and_then(|k| self.target(k)).cloned(), None) {
+                return;
+            }
+        }
         if self.panel.is_some() && crate::panel::on_key(self, vk, (ctrl, shift, alt)) {
             return;
         }
