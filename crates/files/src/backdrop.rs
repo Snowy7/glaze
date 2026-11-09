@@ -32,6 +32,7 @@ struct Plate {
     material: Material,
     channel: Channel,
     overlay: Cell<Option<HWND>>,
+    visible: Cell<bool>,
 }
 impl Plate {
     fn request(&self) -> Request {
@@ -125,6 +126,41 @@ impl Client {
         self.plates.borrow().iter().any(|p| p.client == hwnd)
     }
 
+    pub fn visibility(&self, client: HWND, visible: bool) {
+        self.remember_overlay(client);
+        let change = self
+            .plates
+            .borrow()
+            .iter()
+            .find(|p| p.client == client)
+            .filter(|p| p.visible.replace(visible) != visible)
+            .map(|p| p.overlay.get());
+        if let Some(overlay) = change {
+            // The verified plate already holds its last frame. Show it on this UI thread
+            // before the engine can be delayed restarting capture under load.
+            if let Some(overlay) = overlay {
+                // SAFETY: this is the verified engine plate for this owned client only.
+                unsafe {
+                    let _ = ShowWindow(overlay, if visible { SW_SHOWNOACTIVATE } else { SW_HIDE });
+                }
+            }
+            self.send(&Request::Visibility { client, visible });
+        }
+    }
+
+    pub fn ready(&self, client: HWND) -> bool {
+        self.remember_overlay(client);
+        self.plates
+            .borrow()
+            .iter()
+            .find(|p| p.client == client)
+            .and_then(|p| p.overlay.get())
+            // SAFETY: a read-only value property on the verified engine plate.
+            .is_some_and(|h| unsafe {
+                !GetPropW(h, windows::core::w!("glaze.glass.ready")).is_invalid()
+            })
+    }
+
     /// At creation the engine puts its glass directly under the requesting HWND. Remember that
     /// exact adjacent window, checking its class and process; never guess among other plates.
     pub fn remember_overlay(&self, client: HWND) {
@@ -200,6 +236,7 @@ impl Backdrop for Client {
             material: material_wire(material),
             channel,
             overlay: Cell::new(None),
+            visible: Cell::new(true),
         };
         let request = plate.request();
         plate.channel.write(&request);

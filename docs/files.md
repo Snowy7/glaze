@@ -14,6 +14,23 @@ The window follows the active panel style, light/dark scheme, accent, font and m
 wire and a software alpha canvas in our own window; solid styles and an unavailable engine use
 the kit's opaque surface. No vendor GPU device is created in Files. `--light` and `--dark` are
 run-only appearance overrides, useful when checking a look without changing the desktop.
+`--no-activate` opens a test instance without changing keyboard focus.
+
+Hiding or minimizing Files suspends its overlay capture without unregistering the plate or
+discarding its last composition surface. Restore shows that retained frame immediately,
+then starts capture again; it does not replay the initial glass fade. Before the first glass
+frame, the software canvas shows the theme's flat surface tint. An engine readiness message
+replaces it with glass once, without polling. Edge hover/pressed washes are clipped by stillkit
+to the same surface radius.
+
+The input-free [resume comparison](../crates/files/evidence/drive-glass/resume.json) uses three
+trials per condition, hiding for 3.8 seconds so the former capture path is cold. Median first
+glass was 304.4 ms idle / 534.3 ms with four busy CPU workers; the retained frame appeared in
+7.1 / 5.7 ms, and fresh glass in 47.3 / 48.8 ms. These are owned 640×420 overlay measurements
+including `DwmFlush`, comparing the former Close/Open lifecycle with Visibility suspension.
+The [This PC capture](../crates/files/evidence/drive-glass/this-pc.png) and
+[corner detail](../crates/files/evidence/drive-glass/hover-corner.png) use the production view
+in a no-activate fixture, verified by PrintWindow and UIA on its own PID.
 
 ## Browsing
 
@@ -27,6 +44,10 @@ run-only appearance overrides, useful when checking a look without changing the 
   Pictures, This PC, mounted drives and pinned folders are available in the sidebar.
 - Details has Name, Date modified, Type and Size columns. Click a heading to sort; drag a
   heading boundary to resize. Folders stay together and names use natural ordering.
+- This PC always uses quiet drive tiles, with a capacity bar and available/total space.
+  Each drive's `GetDiskFreeSpaceExW` query runs on an independent one-shot worker, so a
+  slow network mapping or removable device cannot delay other capacities or navigation.
+  The accent bar turns red at 90% used; unavailable media says **Space unavailable**.
 - Icons requests shell thumbnails through `IShellItemImageFactory`. Shell display names, type
   descriptions and icons are also fetched in the background. A bounded 384-entry decoration
   cache, additionally capped at 16 MiB, keeps scrolling from retaining thumbnails for every

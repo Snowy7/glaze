@@ -59,6 +59,43 @@ pub struct Location {
     pub parent: Option<String>,
     pub filesystem: bool,
 }
+impl Location {
+    pub fn is_this_pc(&self) -> bool {
+        self.path
+            .eq_ignore_ascii_case("::{20D04FE0-3AEA-1069-A2D8-08002B30309D}")
+    }
+}
+
+pub fn drive_root(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() == 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'\\' | b'/')
+}
+
+/// May wait on media or a remote server. Call only on a dedicated background worker.
+pub fn drive_space(path: &str) -> Option<crate::model::DriveSpace> {
+    use windows::Win32::{
+        Storage::FileSystem::GetDiskFreeSpaceExW,
+        System::Diagnostics::Debug::{SEM_FAILCRITICALERRORS, SetThreadErrorMode},
+    };
+    let (mut free, mut total) = (0, 0);
+    // SAFETY: this worker owns its error mode; all output locals and the terminated path
+    // outlive the call. Missing media must never open a system error dialog.
+    let result = unsafe {
+        let _ = SetThreadErrorMode(SEM_FAILCRITICALERRORS, None);
+        GetDiskFreeSpaceExW(
+            &HSTRING::from(path),
+            Some(&mut free),
+            Some(&mut total),
+            None,
+        )
+    };
+    result
+        .ok()
+        .map(|()| crate::model::DriveSpace { free, total })
+}
 
 pub fn resolve(path: &str, base: Option<&str>) -> Result<Location> {
     let path = path.trim().trim_matches('"');

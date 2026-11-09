@@ -85,7 +85,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     let theme = &app.theme;
     let color = theme.color;
     let mut f = Frame::new(&mut ui.text, theme, s, &app.interaction);
-    f.surface(bounds, glass);
+    f.surface(bounds, glass && app.backdrop.ready(app.surface.hwnd()));
     let (title, rest) = bounds.take_top(px(46.0), 0.0);
     let (tabs, rest) = rest.take_top(px(40.0), 0.0);
     let (navigation, rest) = rest.take_top(px(58.0), 0.0);
@@ -462,10 +462,14 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     f.quiet_icon_button(MORE, more, Icon::More, "More actions", true, false);
 
     let (heading, content) = main.take_top(px(44.0), 0.0);
+    let this_pc = app
+        .location
+        .as_ref()
+        .is_some_and(shell::Location::is_this_pc);
     let content = content.inset(Insets::xy(inset, px(3.0)));
     let widths = column_widths(app, content.width());
     let mut boundaries = Vec::new();
-    if app.preferences.view == View::Details {
+    if !this_pc && app.preferences.view == View::Details {
         f.separator(
             heading.left + inset,
             heading.right - inset,
@@ -530,7 +534,12 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     }
     .unwrap_or(1)
     .max(1);
-    let (row_height, columns) = if app.preferences.view == View::Details {
+    let (row_height, columns) = if this_pc {
+        (
+            px(100.0),
+            (content.width() / px(300.0)).floor().max(1.0) as usize,
+        )
+    } else if app.preferences.view == View::Details {
         (px(34.0), 1)
     } else {
         (
@@ -617,7 +626,65 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
                 } else {
                     Icon::File
                 };
-                if app.preferences.view == View::Details {
+                if this_pc {
+                    let inner = rect.inset(Insets::xy(px(14.0), px(12.0)));
+                    let (icon_rect, text) = inner.take_left(px(36.0), px(14.0));
+                    if let Some(image) = image {
+                        f.push(Op::Image {
+                            rect: Rect::new(
+                                icon_rect.left,
+                                icon_rect.top + px(5.0),
+                                px(32.0),
+                                px(32.0),
+                            ),
+                            image: image.clone(),
+                            opacity: 1.0,
+                            source: None,
+                        });
+                    } else {
+                        f.icon(icon_rect, Icon::Layers, 30.0, color.secondary);
+                    }
+                    f.text_in(
+                        Rect::new(text.left, text.top, text.width(), px(26.0)),
+                        name,
+                        TextRole::Body,
+                        label_color,
+                        Align::Start,
+                    );
+                    if shell::drive_root(&entry.path) {
+                        let space = app.drive_spaces.get(&entry.path);
+                        let bar = Rect::new(text.left, text.top + px(34.0), text.width(), px(5.0));
+                        f.fill(bar, px(2.0), color.fill);
+                        if let Some(Some(space)) = space {
+                            f.fill(
+                                Rect::new(
+                                    bar.left,
+                                    bar.top,
+                                    bar.width() * space.used(),
+                                    bar.height(),
+                                ),
+                                px(2.0),
+                                if space.used() >= 0.9 {
+                                    color.destructive
+                                } else {
+                                    color.accent
+                                },
+                            );
+                        }
+                        let label = match space {
+                            Some(Some(space)) => space.label(),
+                            Some(None) => "Space unavailable".into(),
+                            None => "Checking space…".into(),
+                        };
+                        f.text_in(
+                            Rect::new(text.left, text.top + px(44.0), text.width(), px(22.0)),
+                            &label,
+                            TextRole::Footnote,
+                            color.secondary,
+                            Align::Start,
+                        );
+                    }
+                } else if app.preferences.view == View::Details {
                     let icon_rect =
                         Rect::new(rect.left + px(8.0), rect.top + px(6.0), px(20.0), px(20.0));
                     if let Some(image) = image {

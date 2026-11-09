@@ -13,6 +13,28 @@ pub struct Entry {
     pub hidden: bool,
 }
 
+/// Space available to this user (quotas included), queried independently for each drive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DriveSpace {
+    pub free: u64,
+    pub total: u64,
+}
+impl DriveSpace {
+    pub fn used(self) -> f32 {
+        if self.total == 0 {
+            return 0.0;
+        }
+        (1.0 - self.free.min(self.total) as f64 / self.total as f64) as f32
+    }
+    pub fn label(self) -> String {
+        format!(
+            "{} free of {}",
+            size_label(self.free),
+            size_label(self.total)
+        )
+    }
+}
+
 /// Index aggregates can be lower bounds; an excluded tree has no measured byte count.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Size {
@@ -310,6 +332,32 @@ impl Preferences {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drive_capacity_is_bounded_and_reports_available_and_total_space() {
+        let space = DriveSpace {
+            free: 10 * 1024 * 1024 * 1024,
+            total: 100 * 1024 * 1024 * 1024,
+        };
+        assert!((space.used() - 0.9).abs() < 0.0001);
+        assert_eq!(space.label(), "10.0 GB free of 100.0 GB");
+        assert_eq!(
+            DriveSpace {
+                free: 100,
+                total: 0
+            }
+            .used(),
+            0.0
+        );
+        assert_eq!(
+            DriveSpace {
+                free: 200,
+                total: 100
+            }
+            .used(),
+            0.0
+        );
+    }
     #[test]
     fn selection_replacement_preserves_focus_and_range_by_path() {
         let rows = |names: &[&str]| {

@@ -21,6 +21,10 @@ use windows::Win32::{
 pub const WAKE: u32 = WM_APP + 171;
 
 pub enum Reply {
+    DriveSpace {
+        path: String,
+        space: Option<crate::model::DriveSpace>,
+    },
     Changed {
         path: String,
     },
@@ -102,6 +106,7 @@ impl Backend {
         let epoch = Arc::new(AtomicU64::new(0));
         let query = Arc::new(AtomicU64::new(0));
         let (out, current, active_query) = (sender.clone(), epoch.clone(), query.clone());
+        let pending_drives = Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
         std::thread::Builder::new()
             .name("files-folders".into())
             .spawn(move || {
@@ -147,6 +152,27 @@ impl Backend {
                                     return Ok(());
                                 }
                                 entries.sort_by(|a, b| sort.compare(a, b));
+                                // Each root gets its own one-shot worker: a stalled network or
+                                // removable drive cannot hold up the listing or other drives.
+                                for entry in entries.iter().filter(|e| shell::drive_root(&e.path)) {
+                                    let path = entry.path.clone();
+                                    if !pending_drives.lock().unwrap().insert(path.clone()) {
+                                        continue;
+                                    }
+                                    let (out, pending) = (out.clone(), pending_drives.clone());
+                                    let failed_path = path.clone();
+                                    if std::thread::Builder::new()
+                                        .name("files-drive-space".into())
+                                        .spawn(move || {
+                                            let space = shell::drive_space(&path);
+                                            pending.lock().unwrap().remove(&path);
+                                            send(&out, hwnd, Reply::DriveSpace { path, space });
+                                        })
+                                        .is_err()
+                                    {
+                                        pending_drives.lock().unwrap().remove(&failed_path);
+                                    }
+                                }
                                 send(
                                     &out,
                                     hwnd,

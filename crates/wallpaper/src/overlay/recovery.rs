@@ -12,6 +12,7 @@ pub(super) struct Desired {
     pub radius: f32,
     pub material: Material,
     pub style: Style,
+    pub visible: bool,
 }
 
 impl Desired {
@@ -55,6 +56,7 @@ impl Requests {
                     radius,
                     material,
                     style: Style::DEFAULT,
+                    visible: true,
                 });
             }
         } else if let Some(o) = existing {
@@ -62,6 +64,7 @@ impl Requests {
                 Request::Place { rect, radius, .. } => (o.rect, o.radius) = (rect, radius),
                 Request::Material { material, .. } => o.material = material,
                 Request::Style { style, .. } => o.style = style,
+                Request::Visibility { visible, .. } => o.visible = visible,
                 _ => {}
             }
         }

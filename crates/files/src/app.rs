@@ -159,6 +159,7 @@ pub struct App {
     pub geometry: Geometry,
     pub drag: Option<Drag>,
     pub sizes: HashMap<String, crate::model::Size>,
+    pub drive_spaces: HashMap<String, Option<crate::model::DriveSpace>>,
     pub decorations: HashMap<(String, i32), Option<Decoration>>,
     pending_images: HashSet<(String, i32)>,
     image_order: VecDeque<(String, i32)>,
@@ -265,6 +266,7 @@ impl App {
             geometry: Geometry::default(),
             drag: None,
             sizes: HashMap::new(),
+            drive_spaces: HashMap::new(),
             decorations: HashMap::new(),
             pending_images: HashSet::new(),
             image_order: VecDeque::new(),
@@ -329,6 +331,14 @@ impl App {
     pub fn prepare_backdrop(&mut self, bounds: Rect) -> bool {
         use glaze_ui::glass::{Backdrop, Shape};
         let hwnd = self.surface.hwnd();
+        // Minimize can report an empty/offscreen client area. Keep its real geometry,
+        // alpha canvas and plate registration; only the engine capture goes to sleep.
+        let visible = !unsafe { IsIconic(hwnd) }.as_bool() && self.surface.is_visible();
+        if !self.first_frame && !visible {
+            self.backdrop.visibility(hwnd, false);
+            return self.glass_active;
+        }
+        self.backdrop.visibility(hwnd, true);
         let material = self.theme.glass.filter(|_| {
             // SAFETY: the surface owns this HWND; IsIconic only queries its state.
             !unsafe { IsIconic(hwnd) }.as_bool()
@@ -1577,6 +1587,9 @@ impl App {
         while let Ok(reply) = self.backend.replies.try_recv() {
             changed = true;
             match reply {
+                Reply::DriveSpace { path, space } => {
+                    self.drive_spaces.insert(path, space);
+                }
                 Reply::Changed { path } => {
                     self.cache.invalidate(&path);
                     if self

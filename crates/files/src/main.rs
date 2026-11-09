@@ -43,10 +43,12 @@ fn run() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
     let mut path = String::new();
     let mut scheme = None;
+    let mut no_activate = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--light" => scheme = Some(Scheme::Light),
             "--dark" => scheme = Some(Scheme::Dark),
+            "--no-activate" => no_activate = true,
             "--restore-routing" => {
                 let mut config = glaze_config::Config::load()?;
                 config.experimental.files_default = false;
@@ -73,6 +75,8 @@ fn run() -> anyhow::Result<()> {
     set_window_icons(app.surface.hwnd(), app.surface.scale())?;
     let hwnd = app.surface.hwnd().0 as usize;
     let reload = WM_APP + 172;
+    // SAFETY: a process-independent, pointer-free engine readiness notification.
+    let glass_ready = unsafe { RegisterWindowMessageW(windows::core::w!("glaze.glass.ready")) };
     let mut watches = Vec::new();
     for path in [
         glaze_config::path(),
@@ -88,7 +92,20 @@ fn run() -> anyhow::Result<()> {
         })?);
     }
     view::draw(&mut app, &mut ui)?;
-    app.surface.show_active(false);
+    if no_activate {
+        // SAFETY: only this app's HWND changes; automated checks must never take focus.
+        unsafe {
+            let hwnd = app.surface.hwnd();
+            SetWindowLongPtrW(
+                hwnd,
+                GWL_EXSTYLE,
+                GetWindowLongPtrW(hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE.0 as isize,
+            );
+        }
+        app.surface.show();
+    } else {
+        app.surface.show_active(false);
+    }
     let state = std::rc::Rc::new(std::cell::RefCell::new((app, ui)));
     let weak = std::rc::Rc::downgrade(&state);
     native::set_geometry_hook(Some(Box::new(move || {
@@ -115,7 +132,7 @@ fn run() -> anyhow::Result<()> {
                     state.borrow_mut().0.reload_look()?;
                     redraw = true;
                 }
-                if message.message == backdrop::CHANGED {
+                if message.message == backdrop::CHANGED || message.message == glass_ready {
                     redraw = true;
                 }
                 let _ = TranslateMessage(&message);

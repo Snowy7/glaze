@@ -31,11 +31,11 @@ use windows::Win32::Graphics::Dxgi::Common::{
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GetWindow, GW_HWNDNEXT, HTTRANSPARENT, LWA_ALPHA, MA_NOACTIVATE,
-    RegisterClassExW, SWP_NOACTIVATE, SWP_NOCOPYBITS, SWP_NOSIZE, SWP_SHOWWINDOW,
-    SetLayeredWindowAttributes, SetPropW, SetWindowPos, WINDOW_EX_STYLE, WM_MOUSEACTIVATE, WM_NCHITTEST,
-    WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW,
-    WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GW_HWNDNEXT, GetWindow, HTTRANSPARENT,
+    LWA_ALPHA, MA_NOACTIVATE, RegisterClassExW, SWP_NOACTIVATE, SWP_NOCOPYBITS, SWP_NOSIZE,
+    SWP_SHOWWINDOW, SetLayeredWindowAttributes, SetPropW, SetWindowPos, WINDOW_EX_STYLE,
+    WM_MOUSEACTIVATE, WM_NCHITTEST, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+    WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 use windows::core::{PCWSTR, w};
 use windows_core::Interface;
@@ -71,6 +71,19 @@ impl Drop for Owned {
 }
 
 impl OverlayWindow {
+    pub fn visibility(&self, visible: bool) {
+        // SAFETY: only this owned, nonactivating overlay is shown or hidden.
+        unsafe {
+            let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindow(
+                self.hwnd.0,
+                if visible {
+                    windows::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE
+                } else {
+                    windows::Win32::UI::WindowsAndMessaging::SW_HIDE
+                },
+            );
+        }
+    }
     /// Creates the window over `frame`, invisible until [`fade_in`](Self::fade_in).
     pub fn new(dcomp: &IDCompositionDesktopDevice, layer: Layer, frame: Rect) -> Result<Self> {
         register();
@@ -172,7 +185,13 @@ impl OverlayWindow {
         // A client can be raised without moving. Its UI-thread subclass follows this handle
         // in the same message, keeping engine glass paired without a capture or GPU pass.
         // SAFETY: a value property on our own window, removed by Windows when it is destroyed.
-        unsafe { SetPropW(self.hwnd.0, w!("glaze.glass.client"), Some(HANDLE(client.0)))? };
+        unsafe {
+            SetPropW(
+                self.hwnd.0,
+                w!("glaze.glass.client"),
+                Some(HANDLE(client.0)),
+            )?
+        };
         move_under(self.hwnd.0, client, frame, false)?;
         self.set_clip(plate, radius, smoothing)
     }
@@ -292,7 +311,14 @@ impl OverlayWindow {
 /// moves it. Also called from the request window's procedure: that is how a `Place` moves the
 /// glass in the same frame as the client, before the engine's loop runs.
 pub fn move_under(hwnd: HWND, client: HWND, frame: Rect, keep_size: bool) -> Result<()> {
-    let mut flags = SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_SHOWWINDOW;
+    let mut flags = SWP_NOACTIVATE | SWP_NOCOPYBITS;
+    // SAFETY: read-only checks of the client; hidden/minimized clients must never expose a plate.
+    if unsafe {
+        windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(client).as_bool()
+            && !windows::Win32::UI::WindowsAndMessaging::IsIconic(client).as_bool()
+    } {
+        flags |= SWP_SHOWWINDOW;
+    }
     if keep_size {
         flags |= SWP_NOSIZE;
     }
@@ -318,9 +344,15 @@ pub fn above(upper: HWND, lower: HWND) -> bool {
     // Bound traversal in case another process changes the chain during these queries.
     for _ in 0..4096 {
         // SAFETY: read-only z-order query; destroyed handles terminate the walk.
-        let Ok(next) = (unsafe { GetWindow(at, GW_HWNDNEXT) }) else { return false };
-        if next == lower { return true; }
-        if next == upper { return false; }
+        let Ok(next) = (unsafe { GetWindow(at, GW_HWNDNEXT) }) else {
+            return false;
+        };
+        if next == lower {
+            return true;
+        }
+        if next == upper {
+            return false;
+        }
         at = next;
     }
     false

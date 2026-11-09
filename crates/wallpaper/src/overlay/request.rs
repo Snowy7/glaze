@@ -151,6 +151,8 @@ pub enum Request {
     /// Sets the overlay's finer knobs and fade. An engine older than it refuses it (and only
     /// it): the rest of the wire is unchanged.
     Style { client: HWND, style: Style },
+    /// Retains the last composition frame and registration while capture sleeps.
+    Visibility { client: HWND, visible: bool },
 }
 
 impl Request {
@@ -161,6 +163,7 @@ impl Request {
             | Self::Material { client, .. }
             | Self::Close { client }
             | Self::Style { client, .. } => client,
+            Self::Visibility { client, .. } => client,
         }
     }
 }
@@ -216,6 +219,7 @@ const PLACE: u32 = 2;
 const MATERIAL: u32 = 3;
 const CLOSE: u32 = 4;
 const STYLE: u32 = 5;
+const VISIBILITY: u32 = 6;
 
 impl From<&Request> for Wire {
     fn from(request: &Request) -> Self {
@@ -248,6 +252,10 @@ impl From<&Request> for Wire {
                 wire.material = material;
             }
             Request::Close { .. } => wire.kind = CLOSE,
+            Request::Visibility { visible, .. } => {
+                wire.kind = VISIBILITY;
+                wire.layer = u32::from(visible);
+            }
             Request::Style { style, .. } => {
                 wire.kind = STYLE;
                 wire.style = style;
@@ -298,6 +306,10 @@ impl Wire {
                 material: self.material,
             },
             CLOSE => Request::Close { client },
+            VISIBILITY if self.layer <= 1 => Request::Visibility {
+                client,
+                visible: self.layer != 0,
+            },
             STYLE if self.style.valid() => Request::Style {
                 client,
                 style: self.style,
@@ -438,6 +450,14 @@ mod tests {
             },
             Request::Material { client, material },
             Request::Close { client },
+            Request::Visibility {
+                client,
+                visible: false,
+            },
+            Request::Visibility {
+                client,
+                visible: true,
+            },
             Request::Style {
                 client,
                 style: Style {
