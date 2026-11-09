@@ -353,6 +353,56 @@ fn params_as_studio_writes_them_change_the_render() {
     assert!(noir < teal * 0.5, "noir chroma {noir:.3} vs default {teal:.3}");
 }
 
+/// Tonal coverage must follow the input, including a low-key photo and preceding effects.
+#[test]
+fn halftone_preserves_dark_and_busy_input_tones() {
+    com();
+    let gpu = Gpu::headless().expect("a DX12 GPU");
+    let size = (960, 540);
+    let print = layer("halftone", Value::Null);
+    for (name, under) in [
+        ("city", String::new()),
+        (
+            "dark",
+            layer("color", serde_json::json!({"exposure": -2.0})),
+        ),
+        ("fog", layer("fog", Value::Null)),
+        ("light-leaks", layer("light-leaks", Value::Null)),
+    ] {
+        let base = frame(&gpu, &mut photo_stack(&gpu, &under), size);
+        let layers = if under.is_empty() {
+            print.clone()
+        } else {
+            format!("{under},{print}")
+        };
+        let out = frame(&gpu, &mut photo_stack(&gpu, &layers), size);
+        let s = stats(&out, &base, size);
+        let input = mean(&lumas(&base));
+        eprintln!(
+            "halftone {name}: input {input:.3}, output {:.3}, correlation {:.3}",
+            s.mean, s.correlation
+        );
+        if let Some(dir) = std::env::var_os("GLAZE_ENGINE_EVIDENCE").map(PathBuf::from) {
+            std::fs::create_dir_all(&dir).unwrap();
+            crate::snapshot::save_jpeg(
+                &gpu,
+                size,
+                &base,
+                &dir.join(format!("halftone-{name}-input.jpg")),
+            )
+            .unwrap();
+            crate::snapshot::save_jpeg(&gpu, size, &out, &dir.join(format!("halftone-{name}.jpg")))
+                .unwrap();
+        }
+        assert!(
+            (s.mean - input).abs() < 0.025,
+            "{name}: paper replaced the tone range: {input:.3} -> {:.3}",
+            s.mean
+        );
+        assert!(s.correlation > 0.85, "{name}: print lost the image: {s:?}");
+    }
+}
+
 fn theme_stack(gpu: &Gpu, dir: &Path, layers: Value) -> StackSource {
     let json = serde_json::json!({"name":"base test", "wallpaper":{"kind":"stack",
         "base":{"kind":"theme", "theme":dir}, "layers":layers}});
@@ -500,6 +550,30 @@ fn video_base_has_pixels_before_the_first_update() {
         [0.0; 2],
     );
     assert!(mean(&lumas(&pixels)) > 0.02);
+}
+
+#[test]
+fn gallery_event_times_catch_lightning_and_glitch() {
+    com();
+    let gpu = Gpu::headless().expect("a DX12 GPU");
+    let recipes: Value = serde_json::from_str(
+        &std::fs::read_to_string(repo().join("effects/tools/gallery.json")).unwrap(),
+    )
+    .unwrap();
+    let size = (960, 540);
+    let base = frame(&gpu, &mut photo_stack(&gpu, ""), size);
+    for id in ["lightning", "glitch"] {
+        let recipe = &recipes["effects"][id];
+        let time = Duration::from_secs_f64(recipe["time"].as_f64().expect("pinned event time"));
+        let mut source = photo_stack(&gpu, &layer(id, recipe["params"].clone()));
+        let out = stack_preview::render(&gpu, &mut source, size, time, 1, [0.0; 2]);
+        let s = stats(&out, &base, size);
+        eprintln!("gallery {id}: {s:?}");
+        assert!(
+            s.change > 0.003 && s.touched > 0.03,
+            "{id} missed its event: {s:?}"
+        );
+    }
 }
 
 /// Renders the gallery jobs `effects/tools/render_gallery.py` prepared: each folder of
