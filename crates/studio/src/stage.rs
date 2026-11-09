@@ -131,6 +131,7 @@ pub fn offset(ops: &[Op], dx: f32, dy: f32) -> impl Iterator<Item = Op> + '_ {
             Op::Shadow { rect, radius, spread, drop, color } => Op::Shadow { rect: r(rect), radius, spread, drop, color },
             Op::SoftShadow { rect, radius, blur, offset, spread, color } => Op::SoftShadow { rect: r(rect), radius, blur, offset, spread, color },
             Op::Clip { rect } => Op::Clip { rect: r(rect) },
+            Op::Hole { rect } => Op::Hole { rect: r(rect) },
             Op::Unclip => Op::Unclip,
         })
     })

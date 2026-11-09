@@ -48,7 +48,7 @@ pub fn scale_picture(ops: &mut [glaze_ui::Op], scale: f32) {
     };
     for op in ops {
         match op {
-            Op::Image { rect: r, .. } | Op::Clip { rect: r } | Op::TextField { rect: r, .. } => {
+            Op::Image { rect: r, .. } | Op::Clip { rect: r } | Op::Hole { rect: r } | Op::TextField { rect: r, .. } => {
                 rect(r)
             }
             Op::RoundedImage {

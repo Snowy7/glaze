@@ -161,8 +161,8 @@ impl Client {
             })
     }
 
-    /// At creation the engine puts its glass directly under the requesting HWND. Remember that
-    /// exact adjacent window, checking its class and process; never guess among other plates.
+    /// Find this client's exact plate by its engine-owned identity. Hidden IME/helper windows
+    /// can sit between the client and plate even though their visible z-order is adjacent.
     pub fn remember_overlay(&self, client: HWND) {
         let Some(engine) = self.engine() else {
             return;
@@ -179,21 +179,36 @@ impl Client {
         {
             return;
         }
-        // SAFETY: this is a read-only z-order query for the live client window.
-        if let Ok(next) = unsafe { GetWindow(client, GW_HWNDNEXT) } {
-            let (mut engine_pid, mut overlay_pid) = (0, 0);
+        let mut engine_pid = 0;
+        // SAFETY: read-only process query of the live engine handle.
+        unsafe {
+            GetWindowThreadProcessId(engine, Some(&mut engine_pid));
+        }
+        let mut next = client;
+        for _ in 0..4096 {
+            // SAFETY: a bounded read-only walk; an invalid/destroyed handle ends it.
+            let Ok(window) = (unsafe { GetWindow(next, GW_HWNDNEXT) }) else {
+                break;
+            };
+            if window == client {
+                break;
+            }
+            next = window;
+            let mut overlay_pid = 0;
             let mut class = [0u16; 64];
             // SAFETY: both handles are queried into writable process-ID locals.
             unsafe {
-                GetWindowThreadProcessId(engine, Some(&mut engine_pid));
                 GetWindowThreadProcessId(next, Some(&mut overlay_pid));
             }
             // SAFETY: the bounded class buffer is writable for the class-name query.
             let length = unsafe { GetClassNameW(next, &mut class) }.max(0) as usize;
             if engine_pid == overlay_pid
                 && String::from_utf16_lossy(&class[..length]) == "glaze.wallpaper.glass"
+                // SAFETY: this value property identifies the client without following pointers.
+                && unsafe { GetPropW(next, windows::core::w!("glaze.glass.client")) }.0 == client.0
             {
                 plate.overlay.set(Some(next));
+                break;
             }
         }
     }
