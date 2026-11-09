@@ -206,6 +206,61 @@ pub struct Choices {
     pub current: Option<Value>,
 }
 
+/// A row of an action menu ("…" buttons, Change, dropdowns that run commands), opened as the
+/// kit's native menu anchored under its control. Choosing a row runs its action.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MenuItem {
+    Item {
+        label: String,
+        /// A Segoe Fluent Icons glyph for the leading column.
+        icon: Option<char>,
+        /// `Some(true)` marks the current choice of a group.
+        checked: Option<bool>,
+        enabled: bool,
+        action: Action,
+    },
+    Submenu { label: String, items: Vec<MenuItem> },
+    Separator,
+}
+
+impl MenuItem {
+    pub fn new(label: impl Into<String>, action: Action) -> Self {
+        Self::Item { label: label.into(), icon: None, checked: None, enabled: true, action }
+    }
+    /// One choice of a group: checked while it is the current value.
+    pub fn choice(label: impl Into<String>, on: bool, action: Action) -> Self {
+        Self::Item { label: label.into(), icon: None, checked: Some(on), enabled: true, action }
+    }
+    pub fn icon(mut self, glyph: char) -> Self {
+        if let Self::Item { icon, .. } = &mut self {
+            *icon = Some(glyph);
+        }
+        self
+    }
+    pub fn enabled(mut self, on: bool) -> Self {
+        if let Self::Item { enabled, .. } = &mut self {
+            *enabled = on;
+        }
+        self
+    }
+}
+
+/// Segoe Fluent Icons code points for menu rows.
+pub mod menu_icon {
+    pub const COPY: char = '\u{E8C8}';
+    pub const DELETE: char = '\u{E74D}';
+    pub const UP: char = '\u{E74A}';
+    pub const DOWN: char = '\u{E74B}';
+    pub const UNDO: char = '\u{E7A7}';
+    pub const CODE: char = '\u{E943}';
+    pub const PHOTO: char = '\u{E91B}';
+    pub const VIDEO: char = '\u{E714}';
+    pub const COLOR: char = '\u{E790}';
+    pub const SHADER: char = '\u{E943}';
+    pub const SCENE: char = '\u{E81E}';
+    pub const INFO: char = '\u{E946}';
+}
+
 /// Text fields Studio keeps (windowless RichEdit), by what they edit.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FieldId {
@@ -262,6 +317,8 @@ pub enum Action {
     Unset(Edit),
     /// Opens a select's menu.
     Choose(Choices),
+    /// Opens an action menu under the control that ran it.
+    Menu(Vec<MenuItem>),
     Field(FieldId),
     // Wallpapers
     SelectWallpaper(usize),

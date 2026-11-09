@@ -368,22 +368,10 @@ fn cards(
                     }
                     b.announce(&format!("Previewing {name} · Click to apply"), id);
                 }
-                if *applied {
-                    b.icon(
-                        Rect::new(
-                            rect.right - b.px(20.0),
-                            label.top,
-                            b.px(20.0),
-                            height(b, 22.0),
-                        ),
-                        crate::theme::glyph::CHECK,
-                        13.0,
-                        b.p.ink1,
-                    );
-                }
             }
             if *applied {
                 super::controls::card_selection(b, pic);
+                super::controls::applied_badge(b, pic);
             }
             b.hit_checked(
                 k,
@@ -429,37 +417,29 @@ pub fn current(
     let x = c.x + picture_width + b.px(12.0);
     text(
         b,
-        Rect::new(x, c.y + height(b, 4.0), c.right() - x, height(b, 22.0)),
+        Rect::new(x, c.y + (h - height(b, 22.0)) / 2.0, c.right() - x - b.px(110.0), height(b, 22.0)),
         &format!("{label} · {name}"),
         13.0,
         500,
         b.p.ink1,
         Align::Start,
     );
-    let change = Rect::new(x, c.y + height(b, 29.0), c.right() - x, height(b, 30.0));
-    let k = key((id, "change"));
-    text(
+    // The same trailing secondary button as other Change actions.
+    let label_w = b.measure(if expanded { "Done" } else { "Change" }, &super::controls::font(b, 13.0, 500)).0 + b.px(28.0);
+    let change = Rect::new(c.right() - label_w, c.y + (h - height(b, 32.0)) / 2.0, label_w, height(b, 32.0));
+    super::controls::button(
         b,
         change,
-        if expanded {
-            "Close choices"
-        } else {
-            "Change…"
-        },
-        12.0,
-        400,
-        b.p.ink2,
-        Align::Start,
-    );
-    b.hit(
-        k,
-        rect,
-        Role::Button,
-        &format!("Change {label}: {name}"),
+        if expanded { "Done" } else { "Change" },
+        None,
+        false,
+        true,
         Action::More(id),
-        Behavior::Click,
     );
-    b.focus_ring(k, rect, b.px(radius::CONTROL));
+    // Read aloud (and found by search) as what it changes, not just "Change".
+    if let Some(hit) = b.list.hits.last_mut() {
+        hit.label = format!("Change {label}: {name}").into();
+    }
     c.y = rect.bottom + b.px(6.0);
     if expanded {
         let start = b.targets.len();
@@ -554,12 +534,7 @@ pub fn tiles(
             );
             if *applied {
                 super::controls::card_selection(b, pic);
-                b.icon(
-                    Rect::new(rect.right - b.px(20.0), top, b.px(20.0), height(b, 22.0)),
-                    crate::theme::glyph::CHECK,
-                    13.0,
-                    b.p.ink1,
-                );
+                super::controls::applied_badge(b, pic);
             }
             b.hit_checked(
                 k,

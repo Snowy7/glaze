@@ -10,10 +10,10 @@ pub mod settings;
 pub mod wallpapers;
 pub mod widgets;
 
-use glaze_ui::Point;
+
 
 use crate::actions::{Action, Page};
-use crate::app::{App, Drag};
+use crate::app::App;
 
 /// Actions the app core leaves to the pages.
 pub fn run(app: &mut App, action: Action) {
@@ -218,18 +218,3 @@ pub fn key(app: &mut App, vk: u16, shift: bool) -> bool {
     }
 }
 
-pub fn drag_to(app: &mut App, drag: Drag, p: Point) {
-    match drag {
-        Drag::Widget { .. } => widgets::drag_to(app, drag, p),
-        Drag::Module { .. } => bars::drag_to(app, drag, p),
-        _ => {}
-    }
-}
-
-pub fn drop_drag(app: &mut App, drag: Drag) {
-    match drag {
-        Drag::Widget { .. } => widgets::drop_drag(app, drag),
-        Drag::Module { .. } => bars::drop_drag(app, drag),
-        _ => {}
-    }
-}

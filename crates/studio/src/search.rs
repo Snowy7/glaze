@@ -125,6 +125,10 @@ fn all(app: &App) -> Vec<Entry> {
         });
     }
     for (id, installed) in &app.registry.widgets {
+        // A plugin's widgets are offered once it is set up (Connections lists the rest).
+        if id.split_once("--").is_some_and(|(plugin, _)| !crate::panel::editors::connected(app, plugin)) {
+            continue;
+        }
         out.push(Entry {
             title: format!("{} widget", installed.manifest.name),
             section: "Add to the desktop".into(),

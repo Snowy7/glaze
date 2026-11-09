@@ -10,7 +10,6 @@ use crate::actions::{Action, Bar};
 use crate::app::{App, Overlay};
 use crate::docs::DocId;
 use crate::panel::{Command, Page};
-use crate::stage::{Item, Show, What};
 use crate::theme::glyph;
 use crate::ui::B;
 
@@ -18,6 +17,8 @@ use crate::ui::B;
 const SIDEBAR_SETTING: &str = "/frame/sidebar_collapsed";
 const SETTINGS_SECTION: &str = "/frame/settings_collapsed";
 pub const INSPECTOR_SETTING: &str = "/frame/inspector_width";
+/// The tab strip's height under the page bar, in DIPs.
+const TAB_STRIP: f32 = 44.0;
 const COLLAPSE_TIME: std::time::Duration = std::time::Duration::from_millis(160);
 
 #[derive(Debug, Default)]
@@ -125,21 +126,47 @@ pub struct Regions {
     pub rail: bool,
 }
 
+/// Pages with a picture beside them: the wallpaper editor's canvas, and app windows in your
+/// look. What is on the desktop is edited on the desktop itself (edit mode), and the desktop
+/// menu previews itself on its page, so those are plain reading pages.
 pub fn has_stage(page: Page) -> bool {
-    !matches!(
-        page,
-        Page::Settings
-            | Page::General
-            | Page::Performance
-            | Page::Keyboard
-            | Page::Troubleshoot
-            | Page::About
-            | Page::Connections
-            | Page::Connection
-            | Page::History
-            | Page::Search
-            | Page::FirstRun
-    )
+    matches!(page, Page::Windows | Page::Create | Page::Effects | Page::Shader)
+}
+
+/// Pages about what's on the desktop; they offer edit mode.
+pub fn on_desktop(page: Page) -> bool {
+    matches!(page, Page::Root | Page::Look | Page::Widgets | Page::Widget | Page::Bars | Page::Top | Page::Dock | Page::Module | Page::BarDesign)
+}
+
+/// How wide a page's column may grow: rows stay close to their values, two-column settings
+/// keep both columns readable, and wide pages (a grid with details) take the window.
+fn reading_width(app: &App, page: Page) -> f32 {
+    if wide(page) {
+        f32::MAX
+    } else if SETTINGS.contains(&page) && page != Page::DesktopMenu {
+        app.px(1024.0)
+    } else {
+        app.px(920.0)
+    }
+}
+
+/// Where a page's column sits in `area` (x and width): at the left gutter, or centered once
+/// the window has room to spare.
+pub fn column(app: &App, area: Rect, page: Page) -> (f32, f32) {
+    let room = area.width() - app.px(32.0);
+    let width = room.min(reading_width(app, page));
+    let spare = if area.width() > app.px(1200.0) { (room - width) / 2.0 } else { 0.0 };
+    (area.left + app.px(16.0) + spare, width)
+}
+
+/// Pages that use the whole width: a grid with a details pane beside it.
+fn wide(page: Page) -> bool {
+    page == Page::Wallpapers
+}
+
+/// The details pane beside a wide page's grid.
+pub fn detail_width(app: &App, area: Rect) -> f32 {
+    (area.width() * 0.32).clamp(app.px(340.0), app.px(460.0))
 }
 
 pub fn inspector_width(app: &App) -> f32 {
@@ -150,19 +177,6 @@ pub fn inspector_width(app: &App) -> f32 {
         .filter(|width| width.is_finite()).unwrap_or(default);
     let max = (app.size.0 as f32 / app.scale - sidebar_width(app) - 360.0).clamp(300.0, 720.0);
     app.px(width.clamp(300.0, max))
-}
-
-/// During frame motion reuse one stage raster; shell views and glass are rebuilt on settle.
-pub fn resizing(app: &App) -> bool {
-    app.panel.as_ref().is_some_and(|s| s.window.sidebar.is_some() || s.window.inspector_drag.is_some())
-}
-
-fn stage_show(app: &App) -> Show {
-    match crate::panel::current_page(app) {
-        Page::Bars | Page::Top | Page::Dock | Page::Module | Page::BarDesign | Page::AddModule => Show::Bars,
-        Page::Widgets | Page::Widget | Page::AddWidget => Show::Widgets,
-        _ => Show::Desktop,
-    }
 }
 
 pub fn regions(app: &App) -> Regions {
@@ -176,12 +190,13 @@ pub fn regions(app: &App) -> Regions {
         h - app.px(8.0),
     );
     let bar = Rect::new(side, main.top, main.width(), app.px(48.0));
-    let body = Rect::new(side, bar.bottom, main.width(), h - bar.bottom);
+    let strip = tabs(crate::panel::current_page(app)).map_or(0.0, |_| app.px(TAB_STRIP));
+    let body = Rect::new(side, bar.bottom + strip, main.width(), h - bar.bottom - strip);
     let staged = has_stage(crate::panel::current_page(app));
     let inspector = staged.then(|| {
         Rect::new(
             main.right - inspector_width(app),
-            bar.bottom,
+            body.top,
             inspector_width(app),
             body.height(),
         )
@@ -209,9 +224,11 @@ pub fn regions(app: &App) -> Regions {
 pub fn content_regions(app: &App) -> (Rect, Option<Rect>) {
     let r = regions(app);
     let content = r.inspector.unwrap_or_else(|| {
-        let width = (r.body.width() - app.px(32.0)).min(app.px(1200.0));
+        // The page spans the body so its scrollbar sits at the window's edge; its column is
+        // placed inside it (see [`column`]).
+        let width = r.body.width() - app.px(32.0);
         Rect::new(
-            r.body.left + (r.body.width() - width) / 2.0,
+            r.body.left + app.px(16.0),
             r.body.top + app.px(16.0),
             width,
             r.body.height() - app.px(16.0),
@@ -230,131 +247,6 @@ pub struct Built {
     pub overlay_from: usize,
 }
 
-/// Prepare at the display's scale for 100%, or at the fitted picture's scale for Fit.
-fn prepare_stage(app: &App, ui: &mut glaze_ui::Ui, viewport: Rect) -> Rect {
-    let actual = app.panel.as_ref().unwrap().stage_actual;
-    let show = stage_show(app);
-    let mut frame = if show == Show::Bars && !actual {
-        let height = app.px(280.0).min(viewport.height() - app.px(48.0));
-        Rect::new(viewport.left, viewport.top + (viewport.height() - height - app.px(48.0)) / 2.0, viewport.width(), height)
-    } else if actual {
-        let (w, h) = app.display().map_or((1280.0, 720.0), |m| {
-            let dpi = m.dpi as f32 / 96.0;
-            (m.rect.width as f32 / dpi, m.rect.height as f32 / dpi)
-        });
-        Rect::new(viewport.left, viewport.top, app.px(w), app.px(h))
-    } else {
-        // Reserve the chips beneath the desktop and center the whole composition.
-        let available = Rect::new(
-            viewport.left,
-            viewport.top,
-            viewport.width(),
-            viewport.height() - app.px(48.0),
-        );
-        crate::stage::frame(app, available)
-    };
-    if resizing(app) && app.stage.borrow().content.size.0 > 0 {
-        if app.stage.borrow().picture.is_none() {
-            let size = app.stage.borrow().content.size;
-            let p = crate::panel::palette_for(app);
-            let mut b = crate::ui::builder(&mut ui.text, &p, &app.theme.ty, app.scale, &app.input);
-            crate::stage::draw(app, &mut b, Rect::new(0.0, 0.0, size.0 as f32, size.1 as f32), show, |_| Action::None);
-            let list = b.list;
-            if let Ok(image) = glaze_ui::render(ui, &list, size.0, size.1) {
-                app.stage.borrow_mut().picture = Some(std::sync::Arc::new(image));
-            }
-        }
-        return frame;
-    }
-    app.stage.borrow_mut().picture = None;
-    crate::stage::prepare(
-        app,
-        ui,
-        (frame.width() as u32, frame.height() as u32),
-        show,
-    );
-    if actual {
-        let cache = app.stage.borrow();
-        let center = cache
-            .content
-            .items
-            .iter()
-            .find(|item| selected(app, &item.what))
-            .map_or(
-                Point::new(frame.width() / 2.0, frame.height() / 2.0),
-                |item| {
-                    Point::new(
-                        (item.rect.left + item.rect.right) / 2.0,
-                        (item.rect.top + item.rect.bottom) / 2.0,
-                    )
-                },
-            );
-        frame = Rect::new(
-            (viewport.left + viewport.width() / 2.0 - center.x).clamp(
-                (viewport.right - frame.width()).min(viewport.left),
-                viewport.left,
-            ),
-            (viewport.top + viewport.height() / 2.0 - center.y).clamp(
-                (viewport.bottom - frame.height()).min(viewport.top),
-                viewport.top,
-            ),
-            frame.width(),
-            frame.height(),
-        );
-    }
-    frame
-}
-
-/// Display chips stay with the desktop they switch, below its fitted picture.
-fn stage_controls(app: &App, b: &mut B, picture: Rect, viewport: Rect) {
-    let order = crate::panel::controls::display_order(app);
-    let labels: Vec<_> = order
-        .iter()
-        .map(|&i| crate::panel::controls::display_name(app, i))
-        .collect();
-    let labels: Vec<_> = labels.iter().map(String::as_str).collect();
-    let width = b.segmented_width(&labels).min(viewport.width());
-    let rect = Rect::new(
-        viewport.left + (viewport.width() - width) / 2.0,
-        (picture.bottom + b.px(16.0)).min(viewport.bottom - b.px(32.0)),
-        width,
-        b.px(32.0),
-    );
-    b.segmented(
-        key("stage-displays"),
-        rect,
-        &labels,
-        order.iter().position(|&i| i == app.nav.display),
-        "Stage display",
-        true,
-        |i| Action::Panel(Command::Display(order[i])),
-    );
-}
-
-fn selected(app: &App, what: &What) -> bool {
-    let page = crate::panel::current_page(app);
-    match what {
-        What::Widget(id) => (page == Page::Widget || matches!(&app.drag, Some(crate::app::Drag::Widget { instance, .. }) if instance == id)) && app.nav.widget.as_ref() == Some(id),
-        What::Module(slot) => page == Page::Module && app.nav.module.as_ref() == Some(slot),
-        What::Bar(bar) => {
-            matches!(page, Page::Top | Page::Dock | Page::BarDesign) && app.nav.bar == Some(*bar)
-        }
-    }
-}
-
-fn stage_pick(item: Option<&Item>) -> Action {
-    match item.map(|item| &item.what) {
-        None => Action::Panel(Command::Open(Page::Wallpapers)),
-        Some(What::Widget(id)) => Action::SelectWidget(Some(id.clone())),
-        Some(What::Module(slot)) => Action::SelectModule(Some(slot.clone())),
-        Some(What::Bar(bar)) => Action::Panel(Command::Open(if *bar == Bar::Top {
-            Page::Top
-        } else {
-            Page::Dock
-        })),
-    }
-}
-
 pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
     let page = crate::panel::prepare_page(app, &mut ui.text);
     if page == Page::FirstRun && matches!(app.overlay, Some(Overlay::FirstRun { .. })) {
@@ -362,7 +254,6 @@ pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
     }
     let r = regions(app);
     let (host, _) = content_regions(app);
-    let picture = r.stage.map(|viewport| prepare_stage(app, ui, viewport));
     let p = crate::panel::palette_for(app);
     let ty = app.theme.ty.clone();
     let mut b = crate::ui::builder(&mut ui.text, &p, &ty, app.scale, &app.input);
@@ -393,38 +284,18 @@ pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
         ),
     ];
     page_bar(app, &mut b, r, &mut chrome);
+    if let Some((list, open)) = tabs(page) {
+        // The tabs start where the page's column does.
+        let start = if r.stage.is_none() { column(app, host, page).0 - app.px(12.0) } else { r.bar.left + app.px(8.0) };
+        tab_strip(&mut b, Rect::new(r.bar.left, r.bar.bottom, r.bar.width(), r.body.top - r.bar.bottom), start, list, open);
+    }
     let mut focus_regions = vec![r.sidebar, r.bar];
-    if let (Some(viewport), Some(picture)) = (r.stage, picture) {
+    if let Some(viewport) = r.stage {
         b.scroll(key("window-stage"), viewport, 0.0, Action::None, |b, _| {
             if crate::builder::stage(app, b, viewport) { return viewport.bottom; }
-            if page == Page::Windows {
-                crate::panel::specimens::window_stage(app, b, viewport);
-                b.hit(
-                    key("window-look-preview"),
-                    viewport,
-                    Role::Image,
-                    "Windows look preview",
-                    Action::None,
-                    Behavior::Click,
-                );
-                return viewport.bottom;
-            }
-            if page == Page::DesktopMenu {
-                crate::panel::specimens::backdrop(app, b, viewport);
-                stage_menu(app, b, viewport);
-                return viewport.bottom;
-            }
-            let items = crate::stage::draw(app, b, picture, stage_show(app), stage_pick);
-            for item in items.iter().filter(|item| selected(app, &item.what)) {
-                crate::stage::outline(b, item.rect, item.radius, false);
-            }
-            if let Some(item) = items.iter().find(|item| selected(app, &item.what)) {
-                stage_tag(b, item, viewport);
-            }
-            if !app.system.running() {
-                off_card(b, picture, viewport);
-            }
-            stage_controls(app, b, picture, viewport);
+            // App windows in your look.
+            crate::panel::specimens::window_stage(app, b, viewport);
+            b.hit(key("window-look-preview"), viewport, Role::Image, "Windows look preview", Action::None, Behavior::Click);
             viewport.bottom
         });
         focus_regions.push(viewport);
@@ -432,7 +303,16 @@ pub fn build(app: &App, ui: &mut glaze_ui::Ui) -> Built {
     if let Some(inspector) = r.inspector {
         b.fill(inspector, 0.0, p.bg);
     }
-    crate::panel::content(app, &mut b, host, page);
+    if wide(page) {
+        // Grid, then the selected item's details in a pane at the right.
+        let detail = detail_width(app, host);
+        let list = Rect::new(host.left, host.top, host.width() - detail - b.px(16.0), host.height());
+        crate::panel::content(app, &mut b, list, page);
+        let pane = Rect::new(list.right + b.px(16.0), host.top + b.px(16.0), detail, host.height() - b.px(32.0));
+        crate::panel::pane(app, &mut b, pane, Page::Wallpaper);
+    } else {
+        crate::panel::content(app, &mut b, host, page);
+    }
     if let Some(inspector) = r.inspector {
         let handle = Rect::new(inspector.left - b.px(4.0), inspector.top, b.px(8.0), inspector.height());
         let k = key("inspector-resize");
@@ -610,31 +490,11 @@ fn sidebar(app: &App, b: &mut B, r: Regions) {
                 nav_item(app, b, Rect::new(x, y, width, row_height), page, r.rail);
                 y += step;
             }
-            let settings_collapsed = app.get(DocId::Studio, SETTINGS_SECTION).and_then(Value::as_bool) == Some(true);
-            if r.rail {
-                y += b.px(12.0);
-            } else {
-                let header = Rect::new(x, y + b.px(6.0), width, b.px(30.0 * b.t.text_scale));
-                let k = key("sidebar-settings");
-                if settings_collapsed && SETTINGS.contains(&nav_place(app)) {
-                    b.fill(header, b.px(radius::CONTROL), p.selected);
-                } else {
-                    b.wash(k, header, b.px(radius::CONTROL));
-                }
-                let font = b.font(Font::Caption);
-                let ink = if b.hovered(k) { p.ink1 } else { p.ink3 };
-                b.text_in(Rect::new(x + b.px(10.0), header.top, width - b.px(36.0), header.height()), "Settings", &font, ink, Align::Start);
-                b.icon(Rect::new(header.right - b.px(26.0), header.top, b.px(16.0), header.height()), if settings_collapsed { glyph::CHEVRON_RIGHT } else { glyph::CHEVRON_DOWN }, 13.0, ink);
-                b.hit_checked(k, header, Role::Button, "Settings section", Some(!settings_collapsed), Action::Panel(Command::SidebarSettings), Behavior::Click);
-                b.focus_ring(k, header, b.px(radius::CONTROL));
-                y = header.bottom;
-            }
-            if r.rail || !settings_collapsed {
-                for page in SETTINGS {
-                    nav_item(app, b, Rect::new(x, y, width, row_height), page, r.rail);
-                    y += step;
-                }
-            }
+            // Settings is one place; its pages are tabs.
+            y += b.px(if r.rail { 12.0 } else { 8.0 });
+            b.hline(x + b.px(4.0), x + width - b.px(4.0), y - b.px(5.0), p.line);
+            nav_item(app, b, Rect::new(x, y, width, row_height), Page::Settings, r.rail);
+            y += step;
             y
         },
     );
@@ -646,13 +506,61 @@ fn nav_place(app: &App) -> Page {
     if active == Page::Windows {
         active = Page::Look;
     }
-    if active == Page::Settings {
-        active = Page::General;
-    }
-    while !PLACES.contains(&active) && !SETTINGS.contains(&active) {
+    while !PLACES.contains(&active) && !SETTINGS.contains(&active) && active != Page::Settings {
         active = active.parent().unwrap_or(Page::Root);
     }
-    active
+    if SETTINGS.contains(&active) { Page::Settings } else { active }
+}
+
+/// Whether a page is one of a set of tabs (the tab names it).
+pub fn tabbed(page: Page) -> bool {
+    tabs(page).is_some()
+}
+
+/// Sibling pages shown as tabs under the page bar, and the one that is open.
+fn tabs(page: Page) -> Option<(&'static [(Page, &'static str)], Page)> {
+    const SETTINGS_TABS: [(Page, &str); 6] = [
+        (Page::General, "General"),
+        (Page::Performance, "Performance"),
+        (Page::DesktopMenu, "Desktop menu"),
+        (Page::Keyboard, "Keyboard"),
+        (Page::Troubleshoot, "Troubleshoot"),
+        (Page::About, "About"),
+    ];
+    const LOOK_TABS: [(Page, &str); 2] = [(Page::Look, "Desktop"), (Page::Windows, "Windows")];
+    let open = if page == Page::Settings { Page::General } else { page };
+    if SETTINGS_TABS.iter().any(|(p, _)| *p == open) {
+        Some((&SETTINGS_TABS, open))
+    } else if matches!(page, Page::Look | Page::Windows) {
+        Some((&LOOK_TABS, page))
+    } else {
+        None
+    }
+}
+
+/// The tab strip under the page bar.
+fn tab_strip(b: &mut B, rect: Rect, start: f32, tabs: &[(Page, &str)], open: Page) {
+    let font = b.font(Font::Body);
+    let mut x = start;
+    let h = b.px(30.0);
+    let y = rect.top + (rect.height() - h) / 2.0;
+    for (page, label) in tabs {
+        let w = b.measure(label, &font).0 + b.px(26.0);
+        let r = Rect::new(x, y, w, h);
+        let k = key(("page-tab", *page));
+        let on = *page == open;
+        if on {
+            b.fill(r, h / 2.0, b.p.selected);
+        } else {
+            b.wash(k, r, h / 2.0);
+        }
+        let style = crate::panel::controls::font(b, 13.0, if on { 600 } else { 500 });
+        b.text_in(r, label, &style, if on || b.hovered(k) { b.p.ink1 } else { b.p.ink3 }, Align::Center);
+        b.hit_checked(k, r, Role::Tab, label, Some(on), Action::Panel(Command::Open(*page)), Behavior::Click);
+        b.focus_ring(k, r, h / 2.0);
+        x = r.right + b.px(4.0);
+    }
+    b.hline(rect.left + b.px(16.0), rect.right - b.px(16.0), rect.bottom - 1.0, b.p.line);
 }
 
 fn nav_item(app: &App, b: &mut B, rect: Rect, page: Page, rail: bool) {
@@ -699,7 +607,8 @@ fn nav_item(app: &App, b: &mut B, rect: Rect, page: Page, rail: bool) {
         Role::Tab,
         window_title(page),
         Some(current),
-        Action::Panel(Command::Open(page)),
+        // Settings opens on its first tab.
+        Action::Panel(Command::Open(if page == Page::Settings { Page::General } else { page })),
         Behavior::Click,
     );
     b.focus_ring(k, rect, b.control_radius(rect));
@@ -859,6 +768,8 @@ fn status_block(app: &App, b: &mut B, rect: Rect, rail: bool) {
 fn parent(app: &App, page: Page) -> Option<Page> {
     match page {
         Page::Windows => Some(Page::Look),
+        // Every Settings tab sits under Settings in the breadcrumbs.
+        page if SETTINGS.contains(&page) => Some(Page::Settings),
         Page::Module | Page::AddModule | Page::BarDesign => Some(match app.nav.bar {
             Some(Bar::Dock) => Page::Dock,
             Some(Bar::Top) => Page::Top,
@@ -891,9 +802,10 @@ fn page_title(app: &App, page: Page) -> String {
     window_title(page).to_owned()
 }
 
+/// Pages you drilled into get one back button, before the breadcrumbs. Tabs don't.
 pub fn header_back(app: &App) -> bool {
     let page = crate::panel::current_page(app);
-    !PLACES.contains(&page) && !SETTINGS.contains(&page) && page != Page::Settings
+    !PLACES.contains(&page) && !SETTINGS.contains(&page) && page != Page::Settings && !tabbed(page)
 }
 
 fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) {
@@ -944,6 +856,13 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
         );
     }
     let page = crate::panel::current_page(app);
+    // What's on the desktop is edited on the desktop itself.
+    if on_desktop(page) {
+        let label = "Edit on desktop";
+        let w = b.measure(label, &b.font(Font::Body)).0 + b.px(28.0);
+        right -= w + b.px(10.0);
+        crate::panel::controls::button(b, Rect::new(right, y, w, b.px(28.0)), label, None, true, true, Action::Panel(Command::EditDesktop(true)));
+    }
     let status = crate::panel::save_status(app, page);
     let caption = b.font(Font::Caption);
     let sw = b.measure(status, &caption).0 + b.px(12.0);
@@ -956,35 +875,7 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
         Align::Start,
     );
     b.announce(status, app.docs.version);
-    let mut end = r
-        .inspector
-        .map_or(right - b.px(12.0), |inspector| inspector.left - b.px(12.0));
-    if r.stage.is_some() {
-        let zoom = Rect::new(end - b.px(104.0), y, b.px(104.0), b.px(28.0));
-        b.segmented(
-            key("stage-zoom"),
-            zoom,
-            &["Fit", "100%"],
-            Some(usize::from(app.panel.as_ref().unwrap().stage_actual)),
-            "Stage zoom",
-            true,
-            |i| Action::Panel(Command::StageZoom(i == 1)),
-        );
-        end = zoom.left - b.px(8.0);
-        if matches!(page, Page::Look | Page::Windows) {
-            let scope = Rect::new(end - b.px(160.0), y, b.px(160.0), b.px(28.0));
-            b.segmented(
-                key("look-stage-scope"),
-                scope,
-                &["Desktop", "Windows"],
-                Some(usize::from(page == Page::Windows)),
-                "Look preview",
-                true,
-                |i| Action::Panel(Command::Open(if i == 0 { Page::Look } else { Page::Windows })),
-            );
-            end = scope.left - b.px(8.0);
-        }
-    }
+    let end = right - b.px(12.0);
     let mut x = bar.left + b.px(12.0);
     let toggle = Rect::new(x, y, b.px(28.0), b.px(28.0));
     let k = key("sidebar-toggle");
@@ -996,7 +887,10 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
     b.hit(k, toggle, Role::Button, if collapsed(app) { "Expand sidebar (Ctrl+B)" } else { "Collapse sidebar (Ctrl+B)" }, Action::Panel(Command::Sidebar), Behavior::Click);
     b.focus_ring(k, toggle, b.px(radius::CONTROL));
     x += b.px(36.0);
-    let top_level = PLACES.contains(&page) || SETTINGS.contains(&page) || page == Page::Settings;
+    if header_back(app) {
+        b.icon_button(key("window-back"), Rect::new(x, y, b.px(28.0), b.px(28.0)), glyph::CHEVRON_LEFT, "Back", false, true, Action::Panel(Command::Back));
+        x += b.px(32.0);
+    }
     let mut crumbs = vec![page];
     let mut next = parent(app, page);
     while let Some(level) = next.filter(|level| *level != Page::Root) {
@@ -1006,10 +900,6 @@ fn page_bar(app: &App, b: &mut B, r: Regions, chrome: &mut Vec<(Rect, Chrome)>) 
     crumbs.reverse();
     for (index, level) in crumbs.iter().enumerate() {
         let current = index + 1 == crumbs.len();
-        if current && !top_level && matches!(page, Page::Create | Page::Effects | Page::Shader | Page::FirstRun) {
-            b.icon_button(key("window-back"), Rect::new(x, y, b.px(28.0), b.px(28.0)), glyph::CHEVRON_LEFT, "Back", false, true, Action::Panel(Command::Back));
-            x += b.px(32.0);
-        }
         let title = page_title(app, *level);
         let font = b.font(if current { Font::Strong } else { Font::Caption });
         let width = (b.measure(&title, &font).0 + b.px(12.0)).min((end - x).max(0.0));
@@ -1150,138 +1040,9 @@ pub fn sheet(app: &App, b: &mut B, title: &str, width: f32, height: f32) -> Rect
     )
 }
 
-/// Labels stay within the stage and use the same dark plate over light or dark imagery.
-fn stage_tag(b: &mut B, item: &Item, viewport: Rect) {
-    let font = b.font(Font::Caption);
-    let width = (b.measure(&item.label, &font).0 + b.px(16.0)).min(viewport.width() - b.px(16.0));
-    let beside = item.rect.right + b.px(8.0);
-    let (x, y) = if beside + width <= viewport.right - b.px(8.0) {
-        (
-            beside,
-            item.rect.top + (item.rect.height() - b.px(24.0)) / 2.0,
-        )
-    } else {
-        (
-            item.rect.left.clamp(
-                viewport.left + b.px(8.0),
-                viewport.right - width - b.px(8.0),
-            ),
-            item.rect.bottom + b.px(8.0),
-        )
-    };
-    let y = y.clamp(viewport.top + b.px(8.0), viewport.bottom - b.px(32.0));
-    let rect = Rect::new(x, y, width, b.px(24.0));
-    b.fill(
-        rect,
-        b.px(radius::SMALL),
-        glaze_ui::Rgba::new(0.04, 0.04, 0.04, 0.9),
-    );
-    b.text_in(
-        Rect::new(x + b.px(8.0), y, width - b.px(16.0), rect.height()),
-        &item.label,
-        &font,
-        glaze_ui::Rgba::new(0.95, 0.95, 0.95, 1.0),
-        Align::Start,
-    );
-}
-
-fn off_card(b: &mut B, picture: Rect, viewport: Rect) {
-    let visible = glaze_ui::controls::intersect(picture, viewport).unwrap_or(viewport);
-    let width = b.px(340.0).min(viewport.width() - b.px(32.0));
-    let rect = Rect::new(
-        viewport.left + (viewport.width() - width) / 2.0,
-        visible.top + (visible.height() - b.px(100.0)) / 2.0,
-        width,
-        b.px(100.0),
-    );
-    b.elevated(rect, b.px(b.kit.radius.card));
-    let title = b.font(Font::Title2);
-    let caption = b.font(Font::Caption);
-    b.text_in(
-        Rect::new(
-            rect.left + b.px(16.0),
-            rect.top + b.px(16.0),
-            rect.width() - b.px(32.0),
-            b.px(28.0),
-        ),
-        "Glaze is off",
-        &title,
-        b.p.ink1,
-        Align::Center,
-    );
-    b.text_in(
-        Rect::new(
-            rect.left + b.px(12.0),
-            rect.top + b.px(50.0),
-            rect.width() - b.px(24.0),
-            b.px(26.0),
-        ),
-        "Changes apply when Glaze starts",
-        &caption,
-        b.p.ink3,
-        Align::Center,
-    );
-}
-
-/// A drawing of the configured desktop menu; its commands never execute inside the stage.
-fn stage_menu(app: &App, b: &mut B, picture: Rect) {
-    use glaze_shell::preview::menu;
-    let config = app
-        .get(DocId::Config, "/desktop_menu")
-        .and_then(|value| serde_json::from_value(value.clone()).ok())
-        .unwrap_or_default();
-    let mut tokens = menu::tokens(
-        &crate::app::theme_name(&app.docs).unwrap_or_default(),
-        b.text,
-    );
-    tokens.shadow = false;
-    let entries = menu::build(
-        &config,
-        menu::ViewState {
-            icons_visible: true,
-            ..Default::default()
-        },
-    );
-    let layout = glaze_ui::menu::layout(&entries, &tokens, b.s, b.text);
-    let list = glaze_ui::menu::view(&entries, &layout, None, &tokens);
-    let x = picture.left + (picture.width() - layout.width) / 2.0;
-    let y = picture.top + (picture.height() - layout.height) / 2.0;
-    b.list.ops.extend(crate::stage::offset(&list.ops, x, y));
-    b.hit(
-        key("stage-menu"),
-        Rect::new(x, y, layout.width, layout.height),
-        Role::Image,
-        "Desktop menu preview",
-        Action::None,
-        Behavior::Click,
-    );
-}
-
 #[cfg(test)]
 mod layout_tests {
     use super::*;
-
-    #[test]
-    fn sidebar_motion_reuses_one_stage_picture_until_settled() {
-        let mut ui = glaze_ui::Ui::new().unwrap();
-        let mut app = crate::goldens::window_app(true, &ui, (1280, 800));
-        build(&app, &mut ui);
-        let size = app.stage.borrow().content.size;
-        app.panel.as_mut().unwrap().window.sidebar = Some(Transition {
-            start: std::time::Instant::now(), from: 208.0, to: 56.0,
-        });
-        build(&app, &mut ui);
-        let picture = app.stage.borrow().picture.clone().unwrap();
-        for _ in 0..8 {
-            let built = build(&app, &mut ui);
-            assert_eq!(app.stage.borrow().content.size, size);
-            assert!(std::sync::Arc::ptr_eq(&picture, app.stage.borrow().picture.as_ref().unwrap()));
-            assert!(built.list.ops.iter().any(|op| matches!(op, glaze_ui::Op::RoundedImage { image, .. } if std::sync::Arc::ptr_eq(&picture, image))));
-        }
-        app.panel.as_mut().unwrap().window.sidebar = None;
-        build(&app, &mut ui);
-        assert!(app.stage.borrow().picture.is_none());
-    }
 
     #[test]
     fn settings_grow_and_groups_reflow_without_horizontal_overflow() {
@@ -1313,7 +1074,8 @@ mod layout_tests {
                         app.nav.widget = Some("clock-1".into());
                     }
                     let (host, stage) = content_regions(&app);
-                    assert!(host.width() <= 1200.0);
+                    // Reading columns stay readable; wide pages put a details pane beside their grid.
+                    assert!(column(&app, host, page).1 <= 1200.0 || wide(page));
                     if let Some(stage) = stage {
                         assert!(stage.width() > host.width());
                     }

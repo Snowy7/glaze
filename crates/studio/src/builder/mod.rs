@@ -167,6 +167,10 @@ pub fn edit(app: &App, path: impl Into<String>, label: &str) -> Edit {
 fn state(app: &mut App) -> &mut Editor {
     app.panel.as_mut().unwrap().builder.as_mut().unwrap()
 }
+/// The draft differs from what was last saved, or was never saved.
+pub fn unsaved(app: &App) -> bool {
+    active(app).is_some_and(|editor| editor.saved.as_ref() != Some(&raw(app)))
+}
 pub fn is_page(page: Page) -> bool {
     matches!(page, Page::Create | Page::Effects | Page::Shader)
 }
