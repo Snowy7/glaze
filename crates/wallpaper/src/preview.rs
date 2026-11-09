@@ -23,7 +23,7 @@
 
 use anyhow::{Context, Result, bail};
 use bytemuck::{Pod, Zeroable};
-use liquid_rust as lr;
+use stillkit_glass as lr;
 use glaze_glass_ipc::Material;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Memory::{

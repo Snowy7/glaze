@@ -26,7 +26,7 @@ The all-native rewrite. The shell (top bar, dock, flyouts, menus, widgets) and S
 
 ### Liquid Glass
 
-- The bars, dock, widgets, flyouts and menus sit on Liquid Glass drawn by the wallpaper engine with the vendored liquid-rust (by al1h3n, MIT OR Apache-2.0): a refracting lens, light frost, a directional rim light and a soft shadow.
+- The bars, dock, widgets, flyouts and menus sit on Liquid Glass drawn by the wallpaper engine with stillkit-glass, stillkit's copy of liquid-rust (by al1h3n, MIT OR Apache-2.0): a refracting lens, light frost, a directional rim light and a soft shadow.
 - Clarity (clear to tinted), blur, refraction, highlight and tint are adjustable for everything at once or per family (bars, widgets, menus).
 - Five styles apply to every surface in light and dark: Liquid (Liquid Glass, the default), One UI (frosted), Fluent (acrylic), Solid and Mono (no glass).
 - Thin glass, such as a 24 pt menu bar, gets a shallow lens with a flat face, so labels don't sit on the highlight.

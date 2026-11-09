@@ -13,7 +13,7 @@
 //! crop into an sRGB texture and the glass back out of one: two copies of a small texture.
 
 use anyhow::Result;
-use liquid_rust as lr;
+use stillkit_glass as lr;
 use glaze_desktop::Rect;
 
 use super::capture::{CaptureDevice, Crop};

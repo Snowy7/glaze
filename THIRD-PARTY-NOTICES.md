@@ -7,7 +7,7 @@ file and the files it points to reproduce. Glaze's own code is under the MIT lic
 | What | Licences | Full notices |
 |---|---|---|
 | 313 Rust crates in the programs and bundled plugins | Permissive only: MIT, Apache-2.0, BSD, ISC, Zlib, Unicode-3.0, CC0-1.0, CDLA-Permissive-2.0 | [THIRD-PARTY-NOTICES-crates.md](THIRD-PARTY-NOTICES-crates.md) |
-| Vendored code: liquid-rust, accesskit_windows | MIT OR Apache-2.0 | [below](#vendored-code), and in the crates file |
+| Vendored code: liquid-rust (as stillkit-glass), accesskit_windows | MIT OR Apache-2.0 | [below](#vendored-code), and in the crates file |
 | Lucide icons | ISC | [below](#icons-and-fonts) |
 | Bundled wallpapers (`themes/`) | CC BY 4.0, CC BY 3.0, MIT, NASA media; **8 themes are CC BY-NC-SA 3.0** | [themes/CREDITS.md](themes/CREDITS.md), [themes/catalog.json](themes/catalog.json), [themes/licenses/](themes/licenses/) |
 | Wallpaper effects (`effects/`) | Glaze originals; **`rain` is CC BY-NC-SA 3.0**; preview photos CC BY 3.0, CC BY 4.0, NASA | `effects/<name>/CREDITS.txt` |
@@ -36,9 +36,9 @@ Every crate is under a permissive licence. None is GPL, LGPL, AGPL or MPL. Notab
 ## Vendored code
 
 - **liquid-rust** by al1h3n ([upstream](https://github.com/al1h3n/liquid-rust), crate version
-  0.2.5): MIT OR Apache-2.0. It is vendored in `crates/liquid-rust` with both licence texts
-  (`LICENSE-MIT`, `LICENSE-APACHE`) and a list of local changes (`VENDORED.md`). Changes are marked
-  `Glaze:` in the source. It draws the Liquid Glass. Its shader uses Inigo Quilez's quadratic smooth
+  0.2.5): MIT OR Apache-2.0. It is carried in stillkit as `stillkit-glass` with both licence texts
+  (`LICENSE-MIT`, `LICENSE-APACHE`) and a list of local changes (`UPSTREAM-CHANGES.md`). Changes
+  are marked in the source. It draws the Liquid Glass. Its shader uses Inigo Quilez's quadratic smooth
   minimum, as upstream does.
 - **accesskit_windows** 0.35 by the AccessKit authors ([upstream](https://github.com/AccessKit/accesskit)):
   MIT OR Apache-2.0. It is vendored in stillkit at `crates/stillkit/vendor/accesskit_windows`, with
