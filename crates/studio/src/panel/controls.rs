@@ -633,15 +633,7 @@ pub fn button(
         b.focus_ring(k, r, b.control_radius(r));
     } else {
         // Keep deferred actions discoverable to screen readers without making them focus stops.
-        b.list.hits.push(glaze_ui::Hit {
-            id: u32::MAX - b.list.hits.len() as u32,
-            rect: r,
-            role: Role::Button,
-            label: label.into(),
-            enabled: false,
-            actionable: false,
-            checked: None,
-        });
+        b.list.hits.push(glaze_ui::Hit::new(u32::MAX - b.list.hits.len() as u32, r, Role::Button, label, false, None));
     }
 }
 
@@ -664,15 +656,7 @@ pub fn icon_button(b: &mut B, r: Rect, icon: Glyph, label: &str, enabled: bool, 
         b.hit(k, r, Role::Button, label, action, Behavior::Click);
         b.focus_ring(k, r, b.control_radius(r));
     } else {
-        b.list.hits.push(glaze_ui::Hit {
-            id: u32::MAX - b.list.hits.len() as u32,
-            rect: r,
-            role: Role::Button,
-            label: label.into(),
-            enabled: false,
-            actionable: false,
-            checked: None,
-        });
+        b.list.hits.push(glaze_ui::Hit::new(u32::MAX - b.list.hits.len() as u32, r, Role::Button, label, false, None));
     }
 }
 
