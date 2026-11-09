@@ -39,8 +39,8 @@ Params: omitted, `null`, or `{}`. Result (all fields always present):
   "lat": 59.9139,
   "lon": 10.7522,
   "accuracy_m": 75,
-  "name": "Al Mirqab",
-  "region": "Oslo",
+  "name": "Sentrum",
+  "region": "Oslo County",
   "country": "Norway",
   "source": "windows"
 }

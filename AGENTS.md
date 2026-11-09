@@ -35,3 +35,9 @@ Tools that change or restart the desktop share `%LOCALAPPDATA%\Temp\glaze-tools\
 Create the directory atomically, wait while another tool owns it, and delete only your own lock
 after cleanup. PowerShell resolves it with `Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock'`;
 Rust resolves `LOCALAPPDATA` at runtime.
+
+## Golden images
+
+Set `GLAZE_BLESS=1` for fixture updates. Since the UI extraction, image comparisons delegated
+to stillkit also require `STILLKIT_BLESS=1`. Run only the affected golden tests in an isolated
+APPDATA/LOCALAPPDATA profile, inspect every changed PNG, and unset both flags before the full gate.

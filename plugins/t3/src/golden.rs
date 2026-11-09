@@ -156,7 +156,7 @@ pub fn edges() -> Vec<(&'static str, Snapshot)> {
         None,
     );
     let mut many_limits = Vec::new();
-    for (i, account) in ["a.very.long.address.for.work@an-extremely-long-company-domain.example", "alex@home.example", "alex@work.example", "ops@team.example", "ci@team.example", "bot@team.example"].iter().enumerate() {
+    for (i, account) in ["a.very.long.address.for.work@an-extremely-long-company-domain.example", "you@home.example", "you@work.example", "ops@team.example", "ci@team.example", "bot@team.example"].iter().enumerate() {
         many_limits.push(limit("claudeAgent", "Claude", account, "Weekly", 150 + i as u32 * 140, Some(30 * (i as i64 + 1))));
     }
     // The same label twice with different numbers: two orgs behind one login.

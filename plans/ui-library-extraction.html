@@ -52,7 +52,7 @@
 <div class="answer">
   <p><strong>What:</strong> move <code>crates/ui</code> into its own repo, keep Glaze building from it, then grow it into a general UI library: a declarative element tree, a shared animation runtime, one component set, and backends for Windows, macOS and Linux.</p>
   <p><strong>Recommendation:</strong> keep our strongest property as a rule on every OS: <em>no GPU device in the process, and nothing drawn when nothing changes</em>. That is why our bar idles at 8.5 MB and 0 wakes, while Rune's hello app measured 159 MB and loaded the NVIDIA driver on this PC. The element tree compiles down to today's <code>DisplayList</code>, so damage-only redraw and existing code keep working throughout.</p>
-  <p><strong>Decided (v2):</strong> the library is <code>stillkit</code>, in <code>Snowy7/stillkit</code>, private until 0.1. Linux work runs on <code>m6u</code>. Glaze's <code>main</code> stays untouched for now: the switch-over lives on a separate branch. Still open: the renderer for macOS and Linux, decided from the phase 2 spikes.</p>
+  <p><strong>Decided (v2):</strong> the library is <code>stillkit</code>, in <code>Snowy7/stillkit</code>, private until 0.1. Linux work runs on a Linux workstation. Glaze's <code>main</code> stays untouched for now: the switch-over lives on a separate branch. Still open: the renderer for macOS and Linux, decided from the phase 2 spikes.</p>
 </div>
 
 <h2>Where it stands today</h2>
@@ -257,7 +257,7 @@ tx.set_theme(Theme::one_ui(..))                      // live switch; colours spr
   <li><strong>macOS spike:</strong> its draft favours CoreGraphics + CoreText.</li>
 </ul>
 
-<h3 id="linux">Linux spike (m6u, GNOME 50.1 Wayland)</h3>
+<h3 id="linux">Linux spike (GNOME 50.1 Wayland)</h3>
 <p><span class="tag fact">Measured</span>Same Control Center panel, release builds, real GNOME session. Full report: <code>docs/research/linux-spike/report.md</code> in stillkit.</p>
 <table>
   <tr><th></th><th>Private, 10 s / end</th><th>Full draw 1× / 2× (median)</th><th>One label</th><th>First commit</th></tr>
@@ -303,7 +303,7 @@ tx.set_theme(Theme::one_ui(..))                      // live switch; colours spr
     <li>Live tests:
       <ul>
         <li>the macOS checklist (docs/ui.md);</li>
-        <li>Linux typing and AT-SPI on m6u;</li>
+        <li>Linux typing and AT-SPI on the Linux workstation;</li>
         <li>Glaze's live before/after against <code>main</code> before its branch merges.</li>
       </ul>
     </li>
@@ -363,7 +363,7 @@ tx.set_theme(Theme::one_ui(..))                      // live switch; colours spr
   <tr><th></th><th>Decision</th><th>Options</th></tr>
   <tr><td><span class="tag fact">Decided</span></td><td>Name</td><td><code>stillkit</code></td></tr>
   <tr><td><span class="tag fact">Decided</span></td><td>GitHub owner and visibility</td><td><code>Snowy7/stillkit</code>, private until 0.1</td></tr>
-  <tr><td><span class="tag fact">Decided</span></td><td>Linux test machine</td><td><code>m6u</code> (Ubuntu 26.04 GNOME, Radeon 760M)</td></tr>
+  <tr><td><span class="tag fact">Decided</span></td><td>Linux test machine</td><td>Ubuntu 26.04 GNOME, Radeon 760M</td></tr>
   <tr><td><span class="tag fact">Decided</span></td><td>Glaze's <code>main</code></td><td>left alone for now; the switch-over is on branch <code>t3/0d9e3250</code></td></tr>
   <tr><td><span class="tag open">Your OK</span></td><td>Renderer on Linux (spike done)</td><td>Recommended: <code>vello_cpu</code> 0.3 with its bitmap atlas off, cosmic-text + fontconfig, raw wayland-client + wl_shm. See <a href="#linux">Linux spike</a>.</td></tr>
   <tr><td><span class="tag open">After its spike</span></td><td>Renderer on macOS</td><td>CoreGraphics + CoreText, or the Linux choice; pending the macOS spike</td></tr>
