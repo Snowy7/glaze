@@ -3,8 +3,10 @@
 
 use std::time::{Duration, Instant};
 
-use windows::Win32::Foundation::{CloseHandle, LPARAM, WPARAM};
-use windows::Win32::System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject};
+use windows::Win32::Foundation::{CloseHandle, LPARAM, WAIT_OBJECT_0, WPARAM};
+use windows::Win32::System::Threading::{
+    OpenProcess, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowExW, GetShellWindow, GetWindowThreadProcessId, HWND_MESSAGE, PostMessageW, WM_CLOSE,
 };
@@ -50,10 +52,12 @@ pub fn ask_to_close() -> bool {
 }
 
 /// A bars process left by an earlier run (it outlived a crashed core) would keep ours from
-/// starting and fight over the taskbar: ask it to exit, and wait for it. Returns whether there
-/// was one.
+/// starting and fight over the taskbar: ask it to exit (it restores the taskbar), and wait for
+/// it. One that hangs past [`GRACE`] is ended: it holds the taskbar journal's lease, and a hung
+/// shell must not keep Glaze from starting or `--restore` from finishing. Its journal stays on
+/// disk for the caller's replay. Returns whether there was one.
 pub fn stop_leftover() -> anyhow::Result<bool> {
-    // SAFETY: a lookup, a post and a wait on a handle we open and close here.
+    // SAFETY: a lookup, a post and waits on a handle we open and close here.
     unsafe {
         let Ok(host) = FindWindowExW(Some(HWND_MESSAGE), None, HOST_CLASS, PCWSTR::null()) else {
             return Ok(false);
@@ -61,16 +65,16 @@ pub fn stop_leftover() -> anyhow::Result<bool> {
         log::warn!("stopping the shell bars left by an earlier run");
         let mut pid = 0;
         GetWindowThreadProcessId(host, Some(&mut pid));
-        let process = OpenProcess(PROCESS_SYNCHRONIZE, false, pid)?;
+        let process = OpenProcess(PROCESS_SYNCHRONIZE | PROCESS_TERMINATE, false, pid)?;
         let _ = PostMessageW(Some(host), WM_CLOSE, WPARAM(0), LPARAM(0));
-        {
-            let exited = WaitForSingleObject(process, GRACE.as_millis() as u32);
-            let _ = CloseHandle(process);
-            anyhow::ensure!(
-                exited == windows::Win32::Foundation::WAIT_OBJECT_0,
-                "the previous shell has not exited; refusing to race its taskbar journal"
-            );
+        let mut exited = WaitForSingleObject(process, GRACE.as_millis() as u32) == WAIT_OBJECT_0;
+        if !exited {
+            log::warn!("the previous shell did not exit in {GRACE:?}; ending it");
+            exited = TerminateProcess(process, 1).is_ok()
+                && WaitForSingleObject(process, 2000) == WAIT_OBJECT_0;
         }
+        let _ = CloseHandle(process);
+        anyhow::ensure!(exited, "the previous shell (pid {pid}) could not be stopped");
         Ok(true)
     }
 }

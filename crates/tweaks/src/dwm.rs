@@ -3,7 +3,8 @@
 //! inside other processes.
 //!
 //! A visible app frame gets full styling; floating surfaces get dark mode only.
-//! Overlays and transparent indicators are untouched. A window must pass the
+//! Overlays, transparent indicators and full-screen apps ([`full_screen`]: games, video)
+//! are untouched, as are elevated and anti-cheat processes. A window must pass the
 //! process injection allowlist (`glaze_inject::evaluate`, with
 //! the signature check). Existing windows are styled when the [`Styler`]
 //! starts; WinEvents follow new windows and frame changes. A slow timer checks
@@ -431,27 +432,27 @@ fn window_class(hwnd: HWND) -> WindowClass {
         if !IsWindowVisible(hwnd).as_bool() || GetAncestor(hwnd, GA_PARENT) != GetDesktopWindow() {
             return WindowClass::Untouched;
         }
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
         let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
-        let mut covers_monitor = false;
-        if !IsZoomed(hwnd).as_bool() {
-            let mut rect = RECT::default();
-            let mut monitor = MONITORINFO {
-                cbSize: size_of::<MONITORINFO>() as u32,
-                ..Default::default()
-            };
-            covers_monitor = GetWindowRect(hwnd, &mut rect).is_ok()
-                && GetMonitorInfoW(
-                    MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
-                    &mut monitor,
-                )
-                .as_bool()
-                && rect.left <= monitor.rcMonitor.left
-                && rect.top <= monitor.rcMonitor.top
-                && rect.right >= monitor.rcMonitor.right
-                && rect.bottom >= monitor.rcMonitor.bottom;
-        }
+        let mut rect = RECT::default();
+        let mut monitor = MONITORINFO {
+            cbSize: size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        let covers_monitor = GetWindowRect(hwnd, &mut rect).is_ok()
+            && GetMonitorInfoW(
+                MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+                &mut monitor,
+            )
+            .as_bool()
+            && full_screen(
+                rect,
+                monitor.rcMonitor,
+                IsZoomed(hwnd).as_bool(),
+                style,
+            );
         classify_window(
-            GetWindowLongPtrW(hwnd, GWL_STYLE) as u32,
+            style,
             ex,
             GetWindow(hwnd, GW_OWNER).is_ok_and(|h| !h.is_invalid()),
             read(hwnd, DWMWA_CLOAKED).is_some_and(|v| v != 0),
@@ -459,6 +460,44 @@ fn window_class(hwnd: HWND) -> WindowClass {
         )
     }
 }
+/// A full-screen app: a window covering its whole monitor (exclusive or borderless full screen,
+/// games, video, presentations) that is not a maximized normal window. Maximized frames keep
+/// their caption and stay styled; a maximized window without one (how some games and players go
+/// borderless full screen) is full screen too. Such windows never receive a DWM write.
+fn full_screen(window: RECT, monitor: RECT, zoomed: bool, style: u32) -> bool {
+    let maximized_frame = zoomed && style & WS_CAPTION.0 == WS_CAPTION.0;
+    !maximized_frame
+        && crate::game_activity::covers_monitor(
+            [window.left, window.top, window.right, window.bottom],
+            [monitor.left, monitor.top, monitor.right, monitor.bottom],
+        )
+}
+
+/// Executables of anti-cheat services, clients and protected game builds. Defence in depth:
+/// only allowlisted, Microsoft-signed Windows apps are ever styled, so none of these could pass,
+/// but a future allowlist entry must never let Glaze touch a process an anti-cheat watches.
+const ANTI_CHEAT: &[&str] = &[
+    "easyanticheat.exe",
+    "easyanticheat_eos.exe",
+    "beservice.exe",
+    "beservice_x64.exe",
+    "vgc.exe",
+    "vgtray.exe",
+    "faceit.exe",
+    "faceitclient.exe",
+    "faceitservice.exe",
+];
+
+/// Is `image` an anti-cheat process, or a game build launched under one (`*_EAC.exe`,
+/// `*_BE.exe`, the names Easy Anti-Cheat and BattlEye give protected binaries)?
+fn anti_cheat(image: &Path) -> bool {
+    let Some(name) = image.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+    let name = name.to_ascii_lowercase();
+    ANTI_CHEAT.contains(&name.as_str()) || name.ends_with("_eac.exe") || name.ends_with("_be.exe")
+}
+
 /// Does the window's process pass the injection allowlist?
 fn process_allowed(hwnd: HWND, windows_dir: &Path) -> bool {
     allowed_process(hwnd, windows_dir).is_some()
@@ -498,6 +537,9 @@ fn evaluate_process(process: &Process, windows_dir: &Path) -> bool {
     let Some(image) = process.image() else {
         return false;
     };
+    if anti_cheat(&image) {
+        return false;
+    }
     let family = process.package_family();
     let mut target = Target {
         image: &image,
@@ -964,5 +1006,36 @@ mod tests {
         };
         assert!(!cache.verdict(reused, || false));
         assert!(!cache.verdict(reused, || panic!("negative verdicts are cached too")));
+    }
+
+    #[test]
+    fn full_screen_apps_are_left_alone_but_maximized_frames_are_not() {
+        let rect = |left, top, right, bottom| RECT { left, top, right, bottom };
+        let monitor = rect(-1920, 0, 0, 1080);
+        let popup = WS_POPUP.0;
+        let frame = WS_CAPTION.0 | WS_THICKFRAME.0;
+        // Exclusive or borderless full screen, including a maximized captionless window.
+        assert!(full_screen(monitor, monitor, false, popup));
+        assert!(full_screen(monitor, monitor, true, popup));
+        // A maximized normal window overhangs its monitor by its frame and stays styled.
+        assert!(!full_screen(rect(-1928, -8, 8, 1088), monitor, true, frame));
+        // A frame merely as large as the monitor, not maximized, is a full-screen app.
+        assert!(full_screen(rect(-1928, -8, 8, 1088), monitor, false, frame));
+        assert!(!full_screen(rect(-1920, 0, 0, 1040), monitor, false, popup));
+    }
+
+    #[test]
+    fn anti_cheat_processes_and_protected_game_builds_are_denied() {
+        for image in [
+            r"C:\Program Files (x86)\EasyAntiCheat\EasyAntiCheat.exe",
+            r"C:\Program Files\Riot Vanguard\vgc.exe",
+            r"C:\Games\Fortnite\FortniteClient-Win64-Shipping_EAC.exe",
+            r"C:\Games\PUBG\TslGame_BE.exe",
+            r"C:\Program Files\FACEIT\FACEIT.exe",
+        ] {
+            assert!(anti_cheat(Path::new(image)), "{image}");
+        }
+        assert!(!anti_cheat(Path::new(r"C:\Windows\explorer.exe")));
+        assert!(!anti_cheat(Path::new(r"C:\Tools\beacon.exe")));
     }
 }

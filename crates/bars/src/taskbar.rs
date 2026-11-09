@@ -795,6 +795,32 @@ mod tests {
     }
 
     #[test]
+    fn an_explorer_restart_is_hidden_again_and_still_restores_the_users_originals() {
+        let mut bar = taskbar("explorer-restart");
+        bar.apply(wanted(TaskbarMode::Hide, Some(Alignment::Left)))
+            .unwrap();
+        // Explorer restarts: new, visible taskbar windows (a different Shell_TrayWnd), while
+        // the persisted auto-hide and alignment survive. `TaskbarCreated` re-applies the mode.
+        bar.shell.hidden = false;
+        let writes = bar.shell.writes;
+        bar.apply(wanted(TaskbarMode::Hide, Some(Alignment::Left)))
+            .unwrap();
+        assert!(bar.shell.hidden, "the new taskbar is hidden again");
+        assert_eq!(bar.shell.writes, writes, "persisted settings need no writes");
+        assert_eq!(
+            bar.load().unwrap().unwrap(),
+            Journal {
+                appbar: Some(Was { was: ALWAYS_ON_TOP }),
+                hidden: true,
+                alignment: Some(Was { was: None }),
+            },
+            "the originals from before the first change are kept"
+        );
+        assert!(bar.restore().unwrap());
+        assert!(same_state(&bar.shell, &user_taskbar()));
+    }
+
+    #[test]
     fn the_journal_round_trips_and_a_corrupt_one_is_set_aside() {
         let journal = Journal {
             appbar: Some(Was { was: 2 }),

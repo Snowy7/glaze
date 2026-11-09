@@ -124,9 +124,7 @@ pub fn cli(mut args: impl Iterator<Item = String>) -> Option<ExitCode> {
     if args.next().as_deref() != Some("--autostart") {
         return None;
     }
-    // A windows-subsystem exe has no console of its own; reach the terminal it was started from.
-    ensure_std_handle(STD_OUTPUT_HANDLE);
-    ensure_std_handle(STD_ERROR_HANDLE);
+    ensure_console();
     let result = args.next().as_deref().map_or_else(
         || bail!("usage: glaze-core --autostart on|off|status"),
         run_command,
@@ -230,6 +228,13 @@ fn current_user() -> Result<String> {
 
 /// If a std handle is missing (GUI-subsystem exe started from a terminal), attaches to the
 /// parent's console and points the handle at it.
+/// A windows-subsystem exe has no console of its own: the CLI commands (`--autostart`,
+/// `--restore`) reach the terminal they were started from for their one line of output.
+pub(crate) fn ensure_console() {
+    ensure_std_handle(STD_OUTPUT_HANDLE);
+    ensure_std_handle(STD_ERROR_HANDLE);
+}
+
 fn ensure_std_handle(which: STD_HANDLE) {
     // SAFETY: plain handle queries; the opened console handle is leaked on purpose so it stays
     // valid for the life of the process.

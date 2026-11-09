@@ -3,6 +3,8 @@
 //!
 //! ```text
 //! glaze-core [THEME]
+//! glaze-core --restore            stop Glaze, undo every system change (docs/restore.md)
+//! glaze-core --autostart on|off|status
 //! ```
 //!
 //! The wallpaper follows `config.json` on its own (theme, pausing), so core
@@ -22,6 +24,7 @@ mod clean_env;
 mod companions;
 mod desktop_extras;
 mod restart;
+mod restore;
 mod styling;
 mod system;
 mod tray;
@@ -57,6 +60,10 @@ const PANIC_HOTKEY: i32 = 1;
 fn main() -> ExitCode {
     // `--autostart on|off|status` configures "Start with Windows" and exits (see autostart.rs).
     if let Some(code) = autostart::cli(std::env::args().skip(1)) {
+        return code;
+    }
+    // `--restore` stops a running Glaze and undoes every system change, with no UI (restore.rs).
+    if let Some(code) = restore::cli(std::env::args().skip(1)) {
         return code;
     }
     // Before any thread: everything Glaze launches inherits this environment (clean_env.rs).
