@@ -504,9 +504,9 @@ pub fn load(app: &crate::apps::Item) -> Vec<Section> {
     .as_deref()
     .and_then(custom_list)
     .unwrap_or_default();
-    let has_known = custom.iter().any(|c| c.known.is_some());
     let mut known = vec![];
-    if !has_known {
+    // Windows adds Recent by default only without a custom list; custom lists opt in.
+    if custom.is_empty() {
         known.push(2);
     }
     for category in custom {

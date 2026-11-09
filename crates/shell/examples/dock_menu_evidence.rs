@@ -177,22 +177,10 @@ fn run() -> Result<()> {
         color: Rgba::rgb8([52; 3], 0.65),
     });
     for i in 0..7 {
-        list.ops.push(Op::Text {
-            rect: Rect::new(
-                14.0 + i as f32 * 66.0,
-                if i == 3 { 0.0 } else { 28.0 },
-                52.0,
-                52.0,
-            ),
-            text: if i == 3 {
-                if helium { "\u{E774}" } else { "\u{E8B7}" }
-            } else {
-                "\u{E7C3}"
-            }
-            .into(),
-            style: glaze_ui::TextStyle::new("Segoe MDL2 Assets", if i == 3 { 48.0 } else { 35.0 }),
-            color: Rgba::rgb8([230; 3], 1.0),
-        });
+        let r=Rect::new(14.0+i as f32*66.0,if i==3{0.0}else{28.0},52.0,52.0);
+        if i==3 && let Some(icon)=app_icon.as_deref(){
+            list.ops.push(Op::Image{rect:r,image:std::sync::Arc::new(glaze_ui::Image{width:icon.width,height:icon.height,pixels:icon.pixels.clone()}),opacity:1.0,source:None});
+        }else{list.ops.push(Op::Fill{rect:r.inflate(-8.0),radius:8.0,color:Rgba::rgb8([160+i as u8*7;3],1.0)});}
     }
     dock.present(&mut ui, dock_origin, (480, 82), list)?;
     dock.set_glass_style(tokens.glass_style);
@@ -286,16 +274,17 @@ fn run() -> Result<()> {
     let _ = std::fs::remove_file(root.join("stop"));
     menu.close();pump(&mut menu,&mut ui,250);
     // The real Win32 wait has no ticker/deadline. Keep dock frost and the populated icon cache alive.
-    let start=Instant::now();let mut frames=0;let mut timers=0;let mut waits=0;
+    let start=Instant::now();let mut frames=0;let mut timers=0;let mut waits=0;let mut messages=std::collections::BTreeMap::<u32,u32>::new();let mut sent_only=0;
     while start.elapsed()<Duration::from_secs(10){
         let remaining=Duration::from_secs(10).saturating_sub(start.elapsed());
         unsafe {MsgWaitForMultipleObjectsEx(None,remaining.as_millis().max(1) as u32,QS_ALLINPUT,MWMO_INPUTAVAILABLE);}
         waits+=1;
-        let mut msg=MSG::default();
-        unsafe {while PeekMessageW(&mut msg,None,0,0,PM_REMOVE).as_bool(){if msg.message==WM_TIMER{timers+=1;}let _=TranslateMessage(&msg);DispatchMessageW(&msg);}}
+        let mut msg=MSG::default();let mut posted=0;
+        unsafe {while PeekMessageW(&mut msg,None,0,0,PM_REMOVE).as_bool(){*messages.entry(msg.message).or_default()+=1;posted+=1;if msg.message==WM_TIMER{timers+=1;}let _=TranslateMessage(&msg);DispatchMessageW(&msg);}}
+        if posted==0{sent_only+=1;}
         while let Some((_,event))=glaze_ui::next_event(){if matches!(event,Event::Frame){frames+=1;}}
     }
-    std::fs::write(root.join("idle.json"),serde_json::json!({"seconds":start.elapsed().as_secs_f64(),"frameEvents":frames,"timerMessages":timers,"waitReturns":waits,"menuOpen":menu.is_open(),"dockFrostAlive":native.window(dock.hwnd()).is_some(),"iconCachePopulated":app_icon.is_some()}).to_string())?;
+    std::fs::write(root.join("idle.json"),serde_json::json!({"seconds":start.elapsed().as_secs_f64(),"frameEvents":frames,"timerMessages":timers,"waitReturns":waits,"messages":messages,"sentOrTimeout":sent_only,"menuOpen":menu.is_open(),"dockFrostAlive":native.window(dock.hwnd()).is_some(),"iconCachePopulated":app_icon.is_some()}).to_string())?;
     ensure!(frames==0&&timers==0,"closed menu kept frame or timer work alive");
     Ok(())
 }

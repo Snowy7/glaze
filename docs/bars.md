@@ -99,6 +99,7 @@ arguments, working directory and shell properties; Windows executes them. Missin
 only the basic commands. AutomaticDestinations are read as memory-backed OLE storage, including
 DestList versions 1–4 and 6; CustomDestinations use bounded shell-link framing. Destination paths
 are never logged. Frequent/Recent show up to ten unpinned entries; pinned destinations are not truncated.
+Custom lists show Recent/Frequent only when the app explicitly requests them.
 
 Rows load their shell icons on the same worker after the first list delivery, at the menu's
 physical DPI size. Serialized links honor `IconLocation` before falling back to their target;
