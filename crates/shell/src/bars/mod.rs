@@ -74,10 +74,19 @@ enum Command {
     EmptyTrash,
 }
 struct JumpPending {
-    rx: std::sync::mpsc::Receiver<Vec<providers::jump_list::Section>>,
+    rx: std::sync::mpsc::Receiver<JumpUpdate>,
     basic: Vec<Entry<Command>>,
-    point: (i32, i32),
-    tokens: glaze_ui::Tokens,
+}
+struct JumpUpdate {
+    sections: Vec<providers::jump_list::Section>,
+    app_icon: Option<std::sync::Arc<providers::jump_list::Icon>>,
+    complete: bool,
+}
+
+fn jump_icon(icon: &providers::jump_list::Icon) -> glaze_ui::MenuIcon {
+    glaze_ui::MenuIcon::Image(std::sync::Arc::new(glaze_ui::Image {
+        width: icon.width, height: icon.height, pixels: icon.pixels.clone(),
+    }))
 }
 
 fn jump_entries(sections: Vec<providers::jump_list::Section>) -> Vec<Entry<Command>> {
@@ -89,11 +98,15 @@ fn jump_entries(sections: Vec<providers::jump_list::Section>) -> Vec<Entry<Comma
                 .items
                 .into_iter()
                 .map(|item| match item {
-                    Some(item) => Entry::action(&item.name, Command::Jump(item.launch)),
+                    Some(item) => {
+                        let row = Entry::action(&item.name, Command::Jump(item.launch));
+                        match item.icon.as_deref() { Some(icon) => row.with_icon(jump_icon(icon)), None => row }
+                    },
                     None => Entry::Separator,
                 })
                 .collect(),
         })
+        .map(|row| row.with_icon(glaze_ui::MenuIcon::Glyph('\u{E8B7}')))
         .collect()
 }
 struct Press {
@@ -475,20 +488,22 @@ impl Bars {
     /// All drawing is gated by data changes or active animation. The ticker cancels at rest.
     pub fn tick(&mut self, ui: &mut Ui) {
         let mut at = tick_start();
-        if let Some(sections) = self
+        if let Some(update) = self
             .jump_pending
             .as_ref()
             .and_then(|p| p.rx.try_recv().ok())
         {
-            let pending = self.jump_pending.take().unwrap();
+            let mut basic = self.jump_pending.as_ref().unwrap().basic.clone();
+            if let Some(icon) = update.app_icon.as_deref() { basic[0] = basic[0].clone().with_icon(jump_icon(icon)); }
             if self.menu.as_ref().is_some_and(Menu::is_open) {
-                let mut entries = jump_entries(sections);
+                let mut entries = jump_entries(update.sections);
                 if !entries.is_empty() {
                     entries.push(Entry::Separator);
                 }
-                entries.extend(pending.basic);
-                self.open_menu(ui, entries, pending.point, &pending.tokens);
+                entries.extend(basic);
+                if let Some(menu) = &mut self.menu { let _ = menu.update_entries(ui, entries); }
             }
+            if update.complete { self.jump_pending = None; }
         }
         if let Some(menu) = &mut self.tray_menu {
             menu.process(ui);
@@ -1779,7 +1794,7 @@ impl Bars {
                             Command::Launch(item.path.clone()),
                         ));
                         entries.push(if item.pinned {
-                            Entry::action("Unpin", Command::Unpin(item.path.clone()))
+                            Entry::action("Unpin", Command::Unpin(item.path.clone())).with_icon(glaze_ui::MenuIcon::Glyph('\u{E718}'))
                         } else {
                             Entry::action(
                                 "Pin",
@@ -1787,31 +1802,33 @@ impl Bars {
                                     path: item.path.clone(),
                                     name: Some(item.name.clone()),
                                 }),
-                            )
+                            ).with_icon(glaze_ui::MenuIcon::Glyph('\u{E718}'))
                         });
                         if item.windows.len() == 1 {
                             entries.push(Entry::action(
                                 "Close window",
                                 Command::Close(item.windows[0].hwnd),
-                            ));
+                            ).with_icon(glaze_ui::MenuIcon::Glyph('\u{E711}')));
                         }
                         if item.windows.len() > 1 {
                             entries.push(Entry::action(
                                 "Close all windows",
                                 Command::CloseAll(item.windows.iter().map(|w| w.hwnd).collect()),
-                            ));
+                            ).with_icon(glaze_ui::MenuIcon::Glyph('\u{E711}')));
                         }
                         let tokens = self.bars[index].tokens.menu(&ui.text);
                         let (tx, rx) = std::sync::mpsc::channel();
                         let app = item.clone();
+                        let icon_size = (16.0 * monitor.dpi as f32 / 96.0 * tokens.scale).round() as u32;
                         // SAFETY: read only thread id, used solely to wake our message queue.
                         let thread =
                             unsafe { windows::Win32::System::Threading::GetCurrentThreadId() };
                         let pending = if std::thread::Builder::new()
                             .name("jump-list".into())
                             .spawn(move || {
-                                let sections = providers::jump_list::load(&app);
-                                if tx.send(sections).is_ok() {
+                                let mut sections = providers::jump_list::load(&app);
+                                let send = |update| {
+                                    if tx.send(update).is_err() { return false; }
                                     // SAFETY: wake our own UI thread, without any input injection.
                                     let _ = unsafe {
                                         windows::Win32::UI::WindowsAndMessaging::PostThreadMessageW(
@@ -1821,15 +1838,17 @@ impl Bars {
                                             Default::default(),
                                         )
                                     };
-                                }
+                                    true
+                                };
+                                if !send(JumpUpdate { sections: sections.clone(), app_icon: None, complete: false }) { return; }
+                                let app_icon = providers::jump_list::load_icons(&mut sections, &app.path, icon_size);
+                                send(JumpUpdate { sections, app_icon, complete: true });
                             })
                             .is_ok()
                         {
                             Some(JumpPending {
                                 rx,
                                 basic: entries.clone(),
-                                point,
-                                tokens: tokens.clone(),
                             })
                         } else {
                             None

@@ -1,6 +1,9 @@
 //! Read-only Windows jump lists. Shell COM decodes and executes links; only container framing
 //! and DestList pin metadata are parsed here. Never log destinations (they are private).
 use std::path::{Path, PathBuf};
+#[path = "jump_icons.rs"]
+mod icons;
+pub use icons::{Icon, icon, load_icons};
 use windows::Win32::Storage::EnhancedStorage::{PKEY_AppUserModel_IsDestListSeparator, PKEY_Title};
 use windows::Win32::System::Com::StructuredStorage::{
     CreateILockBytesOnHGlobal, IStorage, PropVariantToBoolean, PropVariantToStringAlloc,
@@ -17,7 +20,7 @@ const MAX_BYTES: usize = 32 * 1024 * 1024;
 const MAX_ITEMS: u32 = 256;
 const LINK_CLSID: [u8; 16] = [1, 20, 2, 0, 0, 0, 0, 0, 192, 0, 0, 0, 0, 0, 0, 70];
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Launch {
     /// Preserve the entire shell link, including arguments, working directory and IDList.
     Link(Vec<u8>),
@@ -69,6 +72,7 @@ impl Launch {
 pub struct Item {
     pub name: String,
     pub launch: Launch,
+    pub icon: Option<std::sync::Arc<Icon>>,
     identity: String,
 }
 #[derive(Debug, Clone, Default)]
@@ -376,6 +380,7 @@ fn decode_link(bytes: Vec<u8>) -> Option<Option<Item>> {
         Some(Some(Item {
             name,
             launch: Launch::Link(bytes),
+            icon: None,
             identity,
         }))
     }
@@ -418,6 +423,7 @@ fn documents(id: &str, kind: APPDOCLISTTYPE) -> Vec<Option<Item>> {
                         out.push(Some(Item {
                             name,
                             launch: Launch::Item(path),
+                            icon: None,
                             identity,
                         }));
                     }

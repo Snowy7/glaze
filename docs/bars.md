@@ -99,6 +99,11 @@ only the basic commands. AutomaticDestinations are read as memory-backed OLE sto
 DestList versions 1–4 and 6; CustomDestinations use bounded shell-link framing. Destination paths
 are never logged. Frequent/Recent submenus show up to twelve unpinned entries.
 
+Rows load their shell icons on the same worker after the first list delivery, at the menu's
+physical DPI size. Serialized links honor `IconLocation` before falling back to their target;
+shell items use `IShellItemImageFactory`. A bounded session cache keys icons by destination/link
+and size. The second delivery updates open rows and submenus without replaying opening motion.
+
 Windows taskbar pins seed the dock only when `dock.pinned` is absent. An explicit list is owned
 by the user and does not continuously import newly pinned taskbar apps. Pins always render,
 including while stopped. Two explicit AppUserModelIDs must match before windows can merge into

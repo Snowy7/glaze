@@ -427,9 +427,13 @@ pub(crate) fn icon(
 
 /// The item's icon as top-down BGRA pixels.
 fn image(item: &IShellItem) -> Option<(u32, u32, Vec<u8>)> {
+    image_at(item, ICON_SIZE)
+}
+
+pub(crate) fn image_at(item: &IShellItem, pixels: i32) -> Option<(u32, u32, Vec<u8>)> {
     let size = SIZE {
-        cx: ICON_SIZE,
-        cy: ICON_SIZE,
+        cx: pixels,
+        cy: pixels,
     };
     // SAFETY: COM calls and GDI on a bitmap we own (deleted below); the buffer matches the
     // header we pass.

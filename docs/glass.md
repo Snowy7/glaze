@@ -9,7 +9,7 @@ menus, flyouts and bars prefer native DWM frost, described below.
 
 ## The model (Apple's Liquid Glass, as liquid-rust draws it)
 
-For menus, flyouts and dock/bar portions covering application windows, the shell prefers the
+For menus, flyouts and glass dock/bar surfaces, the shell prefers the
 UI kit's Windows 11 host-backdrop brush. DWM supplies real backdrop frost behind software-D2D
 layered content, with a flat widget tint and rounded composition clip (no gloss, outline or
 square blur halo). This uses no capture session or hardware rendering device in the shell.
@@ -17,6 +17,13 @@ The existing engine overlay remains the fallback where system transparency is un
 Desktop widgets continue using the wallpaper engine's plates. The no-activate
 `dock_menu_evidence` example and `scripts/capture-dock-menu-evidence.ps1` verify the production
 material and menu view over an opaque fixture window, with synthetic destination labels.
+
+Native frost keeps its composition window and host brush for each open surface. Constant
+layered alpha is initialized once; movement and magnification use geometry updates, never a
+transparent bitmap upload to the frost window. Content and frost visibility change in one
+deferred Win32 batch. Native menus/flyouts skip the engine's capture delay, and async jump-list
+rows/icons update in place without closing/reopening their windows. Native bar surfaces retain
+the same provider over both wallpaper and apps, and publish no duplicate engine plate.
 
 1. **Lensing, not blur, carries the look.** The backdrop is refracted through a squircle bevel
    (Snell's law, η 1.5). Content bends strongly at the rim and lies flat in the middle. The bevel

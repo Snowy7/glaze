@@ -51,6 +51,13 @@ impl Default for PopupBackdrop {
 }
 
 impl Backdrop for PopupBackdrop {
+    fn synchronous(&self) -> bool { self.system.available() }
+    fn visibility(&self, client: HWND, shown: bool) -> bool {
+        self.native.borrow().contains(&client) && self.system.visibility(client, shown)
+    }
+    fn opacity(&self, client: HWND, alpha: u8) {
+        if self.native.borrow().contains(&client) { self.system.opacity(client, alpha); }
+    }
     fn available(&self) -> bool {
         self.system.available() || self.engine.available()
     }

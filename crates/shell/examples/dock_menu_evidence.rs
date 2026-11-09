@@ -1,5 +1,6 @@
 //! No-input, no-activate popup evidence over an opaque, fixture-owned busy window.
 //! Destination labels are synthetic; real user destinations are never painted or logged.
+#![windows_subsystem = "windows"]
 use anyhow::Result;
 use glaze_ui::{DisplayList, Entry, Glass, Kind, Op, Rect, Rgba, Role, Surface, Tokens, Ui};
 use std::{
@@ -7,6 +8,13 @@ use std::{
     time::{Duration, Instant},
 };
 use windows::Win32::UI::WindowsAndMessaging::*;
+
+fn with_icon(row: Entry<()>, icon: Option<&glaze_bars::jump_list::Icon>) -> Entry<()> {
+    match icon {
+        Some(icon) => row.with_icon(glaze_ui::MenuIcon::Image(std::sync::Arc::new(glaze_ui::Image { width:icon.width,height:icon.height,pixels:icon.pixels.clone() }))),
+        None => row,
+    }
+}
 
 fn pump(ms: u64) {
     let until = Instant::now() + Duration::from_millis(ms);
@@ -116,7 +124,11 @@ fn main() -> Result<()> {
         aumid: None,
         exe: None,
     };
-    let sections = glaze_bars::jump_list::load(&app);
+    let (sections, app_icon) = std::thread::spawn(move || {
+        let mut sections = glaze_bars::jump_list::load(&app);
+        let app_icon = glaze_bars::jump_list::load_icons(&mut sections,&app.path,16);
+        (sections,app_icon)
+    }).join().unwrap();
     let counts: Vec<_> = sections
         .iter()
         .enumerate()
@@ -132,18 +144,19 @@ fn main() -> Result<()> {
         .collect();
     let mut entries: Vec<_> = counts
         .iter()
-        .map(|(name, count)| Entry::Submenu {
+        .enumerate()
+        .map(|(section, (name, count))| Entry::Submenu {
             label: name.clone(),
             items: (0..*count)
-                .map(|i| Entry::action(&format!("Example item {}", i + 1), ()))
+                .map(|i| with_icon(Entry::action(&format!("Example item {}", i + 1), ()),sections[section].items[i].as_ref().and_then(|i|i.icon.as_deref())))
                 .collect(),
-        })
+        }.with_icon(glaze_ui::MenuIcon::Glyph('\u{E8B7}')))
         .collect();
     entries.extend([
         Entry::Separator,
-        Entry::action(app_name, ()),
-        Entry::action("Unpin", ()),
-        Entry::action("Close window", ()),
+        with_icon(Entry::action(app_name, ()),app_icon.as_deref()),
+        Entry::action("Unpin", ()).with_icon(glaze_ui::MenuIcon::Glyph('\u{E718}')),
+        Entry::action("Close window", ()).with_icon(glaze_ui::MenuIcon::Glyph('\u{E711}')),
     ]);
     let selected = if helium {
         counts
@@ -181,7 +194,7 @@ fn main() -> Result<()> {
                     } else {
                         format!("Example pinned folder {}", i + 1)
                     };
-                    Entry::action(&label, ())
+                    with_icon(Entry::action(&label, ()),item.as_ref().and_then(|i|i.icon.as_deref()))
                 })
                 .collect()
         })
@@ -203,5 +216,6 @@ fn main() -> Result<()> {
         }
         pump(100);
     }
+    let _ = std::fs::remove_file(root.join("stop"));
     Ok(())
 }

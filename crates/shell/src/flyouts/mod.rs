@@ -983,10 +983,7 @@ impl Flyouts {
         } else {
             Duration::ZERO
         };
-        open.motion = self
-            .look
-            .opening
-            .enabled
+        open.motion = (self.look.opening.enabled && !glaze_ui::glass::synchronous())
             .then(|| self.look.opening.start(0.0, 1.0, Instant::now() + delay));
         if open.motion.is_some() && crate::bars::motion::reveal(open.motion_style).scales() {
             open.snapshot =

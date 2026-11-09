@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Folder)
+param([Parameter(Mandatory=$true)][string]$Folder, [switch]$KeepScratch)
 $ErrorActionPreference = 'Stop'
 # Read-only: PrintWindow and UIA are restricted to our no-activate fixture's process.
 Add-Type -AssemblyName System.Drawing, UIAutomationClient, UIAutomationTypes
@@ -36,7 +36,7 @@ foreach ($handle in $windows) {
   $dc = $g.GetHdc()
   try { $printed = [GlazeMenuCapture]::PrintWindow($hwnd,$dc,2) } finally { $g.ReleaseHdc($dc); $g.Dispose() }
   $graphics.DrawImageUnscaled($bitmap,($rect.Left-$state.rect[0]),($rect.Top-$state.rect[1]))
-  $bitmap.Save((Join-Path $Folder "window-$handle.png"),[Drawing.Imaging.ImageFormat]::Png)
+  if ($KeepScratch) { $bitmap.Save((Join-Path $Folder "window-$handle.png"),[Drawing.Imaging.ImageFormat]::Png) }
   $bitmap.Dispose()
   $element = [Windows.Automation.AutomationElement]::FromHandle($hwnd)
   $noActivate = ([GlazeMenuCapture]::GetWindowLongPtr($hwnd,-20).ToInt64() -band 0x08000000) -ne 0
@@ -44,7 +44,7 @@ foreach ($handle in $windows) {
   $report += @{ process=$owner; printed=$printed; noActivate=$noActivate; role=$element.Current.ControlType.ProgrammaticName; fixture=$element.Current.Name }
 }
 $graphics.Dispose()
-$canvas.Save((Join-Path $Folder 'dock-menu-printwindow.png'),[Drawing.Imaging.ImageFormat]::Png)
+if ($KeepScratch) { $canvas.Save((Join-Path $Folder 'dock-menu-printwindow.png'),[Drawing.Imaging.ImageFormat]::Png) }
 $canvas.Dispose()
 # PrintWindow cannot read DirectComposition pixels. The visual proof crops only the opaque
 # fixture rectangle. Refuse a capture if any point belongs to a different process; never save

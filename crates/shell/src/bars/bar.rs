@@ -930,7 +930,7 @@ impl Bar {
             self.offsets.push(offset);
             let glass = self
                 .material()
-                .filter(|_| self.covered(body))
+                .filter(|_| glaze_ui::glass::synchronous() || self.covered(body))
                 .map(|material| Glass {
                     body: transform.rect(body.offset(-offset.x, -offset.y)),
                     radius: radius * transform.scale(),
@@ -1113,7 +1113,7 @@ impl Bar {
             .shapes
             .iter()
             .enumerate()
-            .filter(|(_, (rect, _))| !self.covered(*rect) || !glaze_ui::glass::available())
+            .filter(|(_, (rect, _))| !glaze_ui::glass::synchronous() && (!self.covered(*rect) || !glaze_ui::glass::available()))
             .map(|(i, (rect, radius))| {
                 let window = if self.kind == BarKind::Top { i } else { 0 };
                 let offset = self.offsets.get(window).copied().unwrap_or_default();
