@@ -434,9 +434,10 @@ fn run(
         if result == WAIT_TIMEOUT {
             changed(pending.take());
         } else if result.0 == WAIT_OBJECT_0.0 + 1 {
-            let paths = read.complete()?;
+            // A lost/empty batch can leave a deleted directory handle armed. Reopen it.
+            let paths = read.complete()?.context("directory notification batch lost; reopen watch")?;
             read.arm(recursive)?; // Drain promptly, including while a callback runs.
-            pending.add(paths, root, names, Instant::now());
+            pending.add(Some(paths), root, names, Instant::now());
             // Continuous changes still deliver at the bounded latency, even if I/O always wins.
             if pending.timeout(debounce) == 0 {
                 changed(pending.take());
