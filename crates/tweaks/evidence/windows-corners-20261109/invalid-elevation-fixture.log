@@ -1,0 +1,30 @@
+cargo :     Updating git repository `https://github.com/Snowy7/stillkit`
+At line:2 char:375
++ ... evated.pid; cargo test -p glaze-tweaks --lib dwm::live_tests -- --ign ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Updating gi...nowy7/stillkit`:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    Updating crates.io index
+     Locking 1 package to highest Rust 1.101.0-nightly compatible version
+      Adding accesskit_windows v0.35.2 
+(https://github.com/Snowy7/stillkit?rev=e8db92773c860fc7e99ddb2cf58666e394684f15#e8db9277)
+   Compiling glaze-tweaks v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\tweaks)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.28s
+     Running unittests src\lib.rs 
+(C:\mypaper-targets\main\debug\build\glaze-tweaks/a747ca7900b60dbe\out\glaze_tweaks-a747ca7900b60dbe.exe)
+
+running 2 tests
+
+thread 'dwm::live_tests::elevated_window_is_untouched' (31228) panicked at crates\tweaks\src\dwm_live_test.rs:118:13:
+assertion `left == right` failed
+  left: Some(ProcessKey { pid: 11272, started: 134387007116834239 })
+ right: None
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+error: test failed, to rerun pass `-p glaze-tweaks --lib`
+
+Caused by:
+  process didn't exit successfully: 
+`C:\mypaper-targets\main\debug\build\glaze-tweaks/a747ca7900b60dbe\out\glaze_tweaks-a747ca7900b60dbe.exe 
+dwm::live_tests --ignored --nocapture --test-threads=1` (exit code: 0xe06d7363)
+test dwm::live_tests::elevated_window_is_untouched ... 
