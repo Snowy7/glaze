@@ -503,6 +503,8 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
     );
 }
 
+const ABOUT_LICENSE_TEXT: &str = "MIT licensed.";
+
 pub fn about(app: &App, b: &mut B, c: &mut Col) {
     page_title(app, b, c, "About", "Glaze Studio");
     columns(
@@ -514,13 +516,21 @@ pub fn about(app: &App, b: &mut B, c: &mut Col) {
                 notice(
                     b,
                     c,
-                    "MIT licensed. A native desktop, built with Rust and Direct2D.",
+                    &format!("{ABOUT_LICENSE_TEXT} A native desktop, built with Rust and Direct2D."),
                 );
                 notice(
                     b,
                     c,
                     "Studio keeps your desktop settings on this PC. Connections describe their own data use.",
                 );
+            });
+            group(b, c, "Data sources", |b, c| {
+                row(b, c, None, "Weather data by Open-Meteo.com", "", "CC BY 4.0", None,
+                    Action::Open("https://open-meteo.com/".into()));
+                row(b, c, None, "CC BY 4.0 licence", "", "Open-Meteo weather data", None,
+                    Action::Open("https://creativecommons.org/licenses/by/4.0/".into()));
+                row(b, c, None, "Crypto prices by CoinGecko", "", "coingecko.com", None,
+                    Action::Open("https://www.coingecko.com/".into()));
             });
         },
         |b, c| {
