@@ -11,6 +11,8 @@ New-Item -ItemType Directory -Path $Target -Force | Out-Null
 $failed = [Collections.Generic.List[string]]::new()
 $oldTarget = $env:CARGO_TARGET_DIR
 $oldBackend = $env:CARGO_PROFILE_DEV_CODEGEN_BACKEND
+$oldAppData = $env:APPDATA
+$oldLocalAppData = $env:LOCALAPPDATA
 
 function Invoke-Gate {
     param([string]$Name, [string]$Directory, [string]$BuildDirectory, [string]$Command, [string[]]$Arguments)
@@ -70,6 +72,12 @@ try {
     if ($env:GLAZE_BLESS -or $env:STILLKIT_BLESS) { throw 'Unset GLAZE_BLESS and STILLKIT_BLESS before checking goldens' }
     # Cranelift can abort a whole Windows test binary when one assertion fails.
     $env:CARGO_PROFILE_DEV_CODEGEN_BACKEND = 'llvm'
+    # Studio creates draft themes during tests. Keep them away from the live desktop's
+    # config/theme watchers, with a fresh profile for each check process.
+    $profile = Join-Path $Target "check-profile-$PID"
+    $env:APPDATA = Join-Path $profile 'Roaming'
+    $env:LOCALAPPDATA = Join-Path $profile 'Local'
+    New-Item -ItemType Directory -Path $env:APPDATA, $env:LOCALAPPDATA -Force | Out-Null
     $patchFile = Join-Path $Target 'stillkit-patch.toml'
     $stillkitCrate = (Join-Path $StillkitPath 'crates\stillkit').Replace('\', '/')
     [IO.File]::WriteAllText($patchFile, "[patch.`"https://github.com/Snowy7/stillkit`"]`nstillkit = { path = `"$stillkitCrate`" }`n")
@@ -88,18 +96,8 @@ try {
         Invoke-Gate "Plugin $plugin tests" $repo 'plugin-build' cargo @('test', '--manifest-path', "plugins\$plugin\Cargo.toml", '--no-fail-fast')
     }
 
-    $oldAppData = $env:APPDATA
-    $oldLocalAppData = $env:LOCALAPPDATA
-    try {
-        $env:APPDATA = Join-Path $Target 'plugin-profile\Roaming'
-        $env:LOCALAPPDATA = Join-Path $Target 'plugin-profile\Local'
-        New-Item -ItemType Directory -Path $env:APPDATA, $env:LOCALAPPDATA -Force | Out-Null
-        Invoke-Gate 'Plugin host linker compatibility' $repo 'build' cargo @('--config', $patchFile, 'run', '-p', 'glaze-plugins', '--', '--compile', (Join-Path $repo 'plugins'))
-        Invoke-Gate 'Hello plugin host lifecycle' $repo 'build' cargo @('--config', $patchFile, 'run', '-p', 'glaze-plugins', '--', '--bench', (Join-Path $repo 'plugins\hello'))
-    } finally {
-        $env:APPDATA = $oldAppData
-        $env:LOCALAPPDATA = $oldLocalAppData
-    }
+    Invoke-Gate 'Plugin host linker compatibility' $repo 'build' cargo @('--config', $patchFile, 'run', '-p', 'glaze-plugins', '--', '--compile', (Join-Path $repo 'plugins'))
+    Invoke-Gate 'Hello plugin host lifecycle' $repo 'build' cargo @('--config', $patchFile, 'run', '-p', 'glaze-plugins', '--', '--bench', (Join-Path $repo 'plugins\hello'))
 
     Invoke-Gate 'stillkit all-target check' $StillkitPath 'stillkit-build' cargo @('check', '-p', 'stillkit', '--all-targets', '--features', 'golden')
     Invoke-Gate 'stillkit workspace tests' $StillkitPath 'stillkit-build' cargo @('test', '--workspace', '--no-fail-fast', '--features', 'stillkit/golden,stillkit/serde')
@@ -109,6 +107,8 @@ try {
 } finally {
     $env:CARGO_TARGET_DIR = $oldTarget
     $env:CARGO_PROFILE_DEV_CODEGEN_BACKEND = $oldBackend
+    $env:APPDATA = $oldAppData
+    $env:LOCALAPPDATA = $oldLocalAppData
 }
 
 if ($failed.Count) {

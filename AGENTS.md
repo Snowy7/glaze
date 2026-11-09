@@ -20,6 +20,8 @@ must be on PATH or installed in `C:\Program Files\LLVM\bin`.
 for this run. `-Target` defaults to `CARGO_TARGET_DIR`, then `C:\glaze-targets\check`.
 Each suite gets a separate directory beneath it. Existing ignored live-desktop fixtures remain
 opt-in; the gate does not run them or bless golden images.
+APPDATA and LOCALAPPDATA use a fresh profile beneath the target directory for the entire gate,
+so test drafts and caches do not enter the running desktop's configuration directories.
 
 When agents share a checkout, run the script in a `git archive HEAD` snapshot of Glaze beside
 an archived stillkit checkout, with only your changes applied. This excludes other agents'
