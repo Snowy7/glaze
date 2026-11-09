@@ -1,0 +1,64 @@
+{
+    "label":  "baseline",
+    "pid":  432,
+    "case":  "plain",
+    "outputUnchanged":  true,
+    "threads":  [
+                    {
+                        "tid":  50056,
+                        "name":  "main",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  51652,
+                        "name":  "",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  51292,
+                        "name":  "",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  47208,
+                        "name":  "",
+                        "wakesPerSecond":  0.099909934191624278,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  43584,
+                        "name":  "D3D Background Thread 0",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  22148,
+                        "name":  "D3D Background Thread 1",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  4764,
+                        "name":  "D3D Background Thread 2",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  45784,
+                        "name":  "D3D Background Thread 3",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  31380,
+                        "name":  "fswatch-plain",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    }
+                ],
+    "mode":  "headless real StackSource, no coverage hold",
+    "seconds":  20.0180294
+}

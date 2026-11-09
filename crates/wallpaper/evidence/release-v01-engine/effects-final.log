@@ -1,0 +1,118 @@
+cargo :    Compiling glaze-wallpaper v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\wallpaper)
+At line:2 char:119
++ ... nce\after'; cargo test --release -p glaze-wallpaper --bins effects_re ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling gl...ates\wallpaper):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    Finished `release` profile [optimized] target(s) in 38.63s
+     Running unittests src\main.rs 
+(C:\glaze-targets\engine\release\build\glaze-wallpaper/f7eb42de40c41034\out\glaze_wallpaper-f7eb42de40c41034.exe)
+
+running 10 tests
+lab GPU: AMD Radeon(TM) Graphics
+test sources::stack::effects_real::bloom_at_zero_leaves_the_sharp_input_untouched ... ok
+lab GPU: AMD Radeon(TM) Graphics
+1920x1080        bloom: mean 0.458 spread 0.197 corr 0.99 change 0.0764 touched 0.813 
+1920x1080         blur: mean 0.357 spread 0.143 corr 1.00 change 0.0320 touched 0.545 
+1920x1080        bokeh: mean 0.366 spread 0.144 corr 0.99 change 0.0060 touched 0.101 
+1920x1080    chromatic: mean 0.357 spread 0.143 corr 1.00 change 0.0249 touched 0.542 
+1920x1080       clouds: mean 0.392 spread 0.151 corr 0.97 change 0.0270 touched 0.500 
+1920x1080        color: mean 0.344 spread 0.157 corr 1.00 change 0.0161 touched 0.661 
+1920x1080          crt: mean 0.281 spread 0.125 corr 0.90 change 0.0821 touched 0.907 
+1920x1080          dof: mean 0.358 spread 0.142 corr 1.00 change 0.0271 touched 0.437 
+1920x1080      drizzle: mean 0.365 spread 0.141 corr 1.00 change 0.0055 touched 0.064 
+1920x1080      duotone: mean 0.362 spread 0.164 corr 0.99 change 0.0604 touched 0.998 
+1920x1080    edge-glow: mean 0.409 spread 0.125 corr 0.96 change 0.0386 touched 0.454 
+1920x1080    fireflies: mean 0.362 spread 0.143 corr 1.00 change 0.0026 touched 0.033 
+1920x1080          fog: mean 0.443 spread 0.078 corr 0.84 change 0.0650 touched 0.560 
+1920x1080       glitch: mean 0.358 spread 0.143 corr 1.00 change 0.0000 touched 0.000 
+1920x1080         glow: mean 0.485 spread 0.209 corr 1.00 change 0.0930 touched 0.932 
+1920x1080     god-rays: mean 0.396 spread 0.144 corr 0.98 change 0.0281 touched 0.605 
+1920x1080        grain: mean 0.357 spread 0.143 corr 1.00 change 0.0085 touched 0.096 
+1920x1080     halftone: mean 0.359 spread 0.141 corr 1.00 change 0.1636 touched 0.987 
+1920x1080    lens-dirt: mean 0.366 spread 0.147 corr 0.99 change 0.0062 touched 0.104 
+1920x1080  light-leaks: mean 0.437 spread 0.119 corr 0.85 change 0.0592 touched 0.852 
+1920x1080    lightning: mean 0.358 spread 0.143 corr 1.00 change 0.0000 touched 0.000 
+1920x1080        looks: mean 0.390 spread 0.146 corr 1.00 change 0.0302 touched 1.000 
+1920x1080        paint: mean 0.343 spread 0.148 corr 1.00 change 0.0302 touched 0.518 
+1920x1080     parallax: mean 0.361 spread 0.144 corr 0.92 change 0.0733 touched 0.776 
+1920x1080     pixelate: mean 0.350 spread 0.145 corr 0.98 change 0.0503 touched 0.648 
+1920x1080    posterize: mean 0.354 spread 0.137 corr 0.99 change 0.0584 touched 0.834 
+1920x1080         rain: mean 0.335 spread 0.134 corr 1.00 change 0.0428 touched 0.775 
+1920x1080       ripple: mean 0.357 spread 0.143 corr 0.99 change 0.0413 touched 0.568 
+1920x1080      sharpen: mean 0.355 spread 0.144 corr 1.00 change 0.0203 touched 0.440 
+1920x1080      shimmer: mean 0.358 spread 0.143 corr 1.00 change 0.0190 touched 0.251 
+1920x1080         snow: mean 0.362 spread 0.142 corr 1.00 change 0.0036 touched 0.047 
+1920x1080        stars: mean 0.365 spread 0.148 corr 1.00 change 0.0052 touched 0.024 
+1920x1080    sun-flare: mean 0.390 spread 0.176 corr 0.94 change 0.0229 touched 0.294 
+1920x1080         sway: mean 0.358 spread 0.143 corr 1.00 change 0.0459 touched 0.578 
+1920x1080    tiltshift: mean 0.357 spread 0.142 corr 1.00 change 0.0276 touched 0.437 
+1920x1080  time-of-day: mean 0.372 spread 0.147 corr 1.00 change 0.0253 touched 0.855 
+1920x1080     vignette: mean 0.301 spread 0.135 corr 0.90 change 0.0445 touched 0.571 
+1920x1080     zoom-pan: mean 0.352 spread 0.144 corr 0.89 change 0.0816 touched 0.952 
+2560x1440        bloom: mean 0.459 spread 0.196 corr 0.99 change 0.0771 touched 0.814 
+2560x1440         blur: mean 0.357 spread 0.143 corr 1.00 change 0.0320 touched 0.543 
+2560x1440        bokeh: mean 0.366 spread 0.144 corr 0.99 change 0.0060 touched 0.101 
+2560x1440    chromatic: mean 0.357 spread 0.143 corr 1.00 change 0.0225 touched 0.510 
+2560x1440       clouds: mean 0.392 spread 0.151 corr 0.97 change 0.0270 touched 0.500 
+2560x1440        color: mean 0.344 spread 0.157 corr 1.00 change 0.0161 touched 0.661 
+2560x1440          crt: mean 0.281 spread 0.125 corr 0.90 change 0.0825 touched 0.908 
+2560x1440          dof: mean 0.358 spread 0.142 corr 1.00 change 0.0271 touched 0.436 
+2560x1440      drizzle: mean 0.365 spread 0.141 corr 1.00 change 0.0055 touched 0.064 
+2560x1440      duotone: mean 0.362 spread 0.164 corr 0.99 change 0.0604 touched 0.998 
+2560x1440    edge-glow: mean 0.409 spread 0.125 corr 0.96 change 0.0386 touched 0.455 
+2560x1440    fireflies: mean 0.362 spread 0.143 corr 1.00 change 0.0026 touched 0.033 
+2560x1440          fog: mean 0.443 spread 0.078 corr 0.84 change 0.0650 touched 0.560 
+2560x1440       glitch: mean 0.358 spread 0.143 corr 1.00 change 0.0000 touched 0.000 
+2560x1440         glow: mean 0.485 spread 0.208 corr 1.00 change 0.0930 touched 0.925 
+2560x1440     god-rays: mean 0.396 spread 0.144 corr 0.98 change 0.0283 touched 0.609 
+2560x1440        grain: mean 0.357 spread 0.143 corr 1.00 change 0.0085 touched 0.096 
+2560x1440     halftone: mean 0.359 spread 0.142 corr 1.00 change 0.1661 touched 0.987 
+2560x1440    lens-dirt: mean 0.366 spread 0.147 corr 0.99 change 0.0062 touched 0.104 
+2560x1440  light-leaks: mean 0.437 spread 0.119 corr 0.85 change 0.0592 touched 0.852 
+2560x1440    lightning: mean 0.358 spread 0.143 corr 1.00 change 0.0000 touched 0.000 
+2560x1440        looks: mean 0.390 spread 0.146 corr 1.00 change 0.0302 touched 1.000 
+2560x1440        paint: mean 0.342 spread 0.148 corr 1.00 change 0.0297 touched 0.514 
+2560x1440     parallax: mean 0.361 spread 0.144 corr 0.92 change 0.0738 touched 0.776 
+2560x1440     pixelate: mean 0.351 spread 0.145 corr 0.98 change 0.0516 touched 0.652 
+2560x1440    posterize: mean 0.354 spread 0.137 corr 0.99 change 0.0584 touched 0.834 
+2560x1440         rain: mean 0.335 spread 0.134 corr 1.00 change 0.0426 touched 0.772 
+2560x1440       ripple: mean 0.357 spread 0.143 corr 0.99 change 0.0419 touched 0.571 
+2560x1440      sharpen: mean 0.355 spread 0.144 corr 1.00 change 0.0182 touched 0.387 
+2560x1440      shimmer: mean 0.357 spread 0.143 corr 1.00 change 0.0193 touched 0.252 
+2560x1440         snow: mean 0.362 spread 0.142 corr 1.00 change 0.0036 touched 0.045 
+2560x1440        stars: mean 0.365 spread 0.148 corr 1.00 change 0.0052 touched 0.024 
+2560x1440    sun-flare: mean 0.390 spread 0.176 corr 0.94 change 0.0229 touched 0.294 
+2560x1440         sway: mean 0.358 spread 0.144 corr 1.00 change 0.0465 touched 0.580 
+2560x1440    tiltshift: mean 0.357 spread 0.142 corr 1.00 change 0.0276 touched 0.436 
+2560x1440  time-of-day: mean 0.372 spread 0.147 corr 1.00 change 0.0254 touched 0.855 
+2560x1440     vignette: mean 0.301 spread 0.135 corr 0.90 change 0.0445 touched 0.570 
+2560x1440     zoom-pan: mean 0.352 spread 0.144 corr 0.89 change 0.0822 touched 0.953 
+test sources::stack::effects_real::every_effect_keeps_the_photo_through_the_engine_at_1080p_and_1440p ... ok
+lab GPU: AMD Radeon(TM) Graphics
+gallery lightning: Stats { mean: 0.5829741, spread: 0.1489865, correlation: 0.9938272, change: 0.18115136, touched: 
+0.99980325 }
+gallery glitch: Stats { mean: 0.35761398, spread: 0.14345933, correlation: 0.9844337, change: 0.040247593, touched: 
+0.6514062 }
+test sources::stack::effects_real::gallery_event_times_catch_lightning_and_glitch ... ok
+test sources::stack::effects_real::gallery_renders ... ignored
+lab GPU: AMD Radeon(TM) Graphics
+halftone city: input 0.358, output 0.362, correlation 0.998
+halftone dark: input 0.161, output 0.170, correlation 0.998
+halftone fog: input 0.443, output 0.444, correlation 0.997
+halftone light-leaks: input 0.437, output 0.439, correlation 0.998
+test sources::stack::effects_real::halftone_preserves_dark_and_busy_input_tones ... ok
+lab GPU: AMD Radeon(TM) Graphics
+test sources::stack::effects_real::no_effect_writes_nan_or_infinity_at_any_param_extreme ... ok
+lab GPU: AMD Radeon(TM) Graphics
+test sources::stack::effects_real::params_as_studio_writes_them_change_the_render ... ok
+lab GPU: AMD Radeon(TM) Graphics
+test sources::stack::effects_real::scene_theme_base_renders_and_moves_through_stack_source ... ok
+lab GPU: AMD Radeon(TM) Graphics
+test sources::stack::effects_real::slideshow_theme_base_advances_beneath_an_animated_layer ... ok
+lab GPU: AMD Radeon(TM) Graphics
+test sources::stack::effects_real::video_base_has_pixels_before_the_first_update ... ok
+
+test result: ok. 9 passed; 0 failed; 1 ignored; 0 measured; 140 filtered out; finished in 18.53s
+

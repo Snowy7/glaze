@@ -124,6 +124,68 @@ README-ready text (replace the memory paragraph under "What keeps it light"):
 > a loaded, idle wallpaper shows 4-7 MB of working set in Task Manager (committed memory is
 > 290-430 MB, of which the driver stack is most).
 
+## Stack release checks (9 November 2026)
+
+The real `StackSource` tests in `sources/stack/effects_real.rs` now cover slideshow theme
+bases (holds and advancement beneath an animated layer), scene theme bases (nonblank and
+moving), and video rendering **before the first update**. The decoder already waited for a
+decoded frame; `VideoSource::new` did not upload/bind it until `update`. It now primes that frame
+before returning. A slideshow reported `OnChange` before its first update, so a stack could bake
+it permanently beneath an animated layer; theme bases now initialize their timeline before the
+stack decides where to bake. Preview CLI and JPEG format are unchanged.
+
+Halftone now converts local cell brightness to ink coverage, including joined dots and white
+holes in shadows. The former global range stretch and undersized maximum dots lifted the city
+photo's mean display luma from 0.358 to 0.538. At 960x540 the new means (input / output) are
+city 0.358 / 0.362, dark city 0.161 / 0.170, fog 0.443 / 0.444 and light leaks 0.437 / 0.439;
+spatial correlation is 0.997–0.998. Existing effect expectations were retained. A separate
+1920x1080 AMD iGPU timestamp run measured 1.143 ms incremental halftone cost (image/copy
+baseline 0.673 ms); this is not a performance improvement claim. Gallery lightning and glitch
+are pinned to 5.11 s and 6.98 s, verified to contain their events through FXC. Their cards and
+halftone's were regenerated with `effects/tools/render_gallery.py --release` and inspected.
+
+Materials without normal maps now have normal strength zero. The 8-bit fallback `(128,128,255)`
+is slightly tilted rather than mathematically neutral, which perturbed lighting at UV seams,
+including the planet rings. Fixed-view before/after planet renders were inspected; the original
+reported faint seam has not been conclusively reproduced, so its complete removal is unverified.
+
+### Still-stack wake audit
+
+Per-thread context-switch counters were sampled for 20 seconds after settling, using the repo's
+`NtQuerySystemInformation` wake-tool approach. These are wake proxies, including GPU waits and
+preemption, rather than frame counts or per-process CPU percentages. The headless preview uses
+the same source path without coverage holds, at 320x180 and a 30 fps cap:
+
+| Main-thread wakes/s | Baseline | Final | Output while sampled |
+|---|---:|---:|---|
+| Plain image | 0 | 0 | unchanged |
+| Image + still vignette stack | 0 | 0 | unchanged |
+| Image + moving rain stack | 240.1 | 134.1 | rewrites while moving |
+
+Moving preview numbers include synchronous GPU readback and JPEG encoding and vary with system
+load; no gain is inferred from their difference. All threads together on the still stack were
+0.050 / 0.050 wakes/s. Code inspection found no stack polling, error-file timer, clock timer or
+idle fps deadline: `OnChange` sleeps indefinitely; effect/config watches block on native I/O;
+`clock_hours` is read only when a frame is actually rendered. **No still scheduling patch was
+made:** the earlier 7.9 wakes/s source regression could not be reproduced.
+
+A separate existing-live-binary sample measured main-thread wakes/s of image 0.60, still stack
+2.40 and moving stack 7.19. Both displays were covered, so those numbers are not visible moving
+cadence or a new-binary before/after comparison. The still sample's `window-events` thread was
+10.64/s; unnamed device threads were 57.98 and 21.63/s. Window-event filtering belongs to
+`crates/desktop` and was left untouched. A visible desktop comparison remains for integration.
+Every test config was restored; final `config.json` matches its byte backup, SHA-256
+`BDCE564961BE7A9B2B4EF7D412C7FFAD9B8F738B34BC5505A8CD76540EA70A2D`, with theme `bg`.
+No deployment was performed by this agent. Later renders used isolated profiles exclusively.
+
+Evidence: [wake counters and image comparison](../crates/wallpaper/evidence/release-v01-engine/comparison.html),
+[raw summary](../crates/wallpaper/evidence/release-v01-engine/wake-summary.json), and
+[gallery before/after](../crates/wallpaper/evidence/release-v01-engine/gallery-before-after.png).
+Validation: 134 wallpaper bin tests passed, 16 dev tools ignored; the 9 effect/source checks
+passed, including all effects at 1080p/1440p and parameter extremes. Scoped example checks pass.
+Scoped Clippy completes with existing warnings; strict Clippy stops on the pre-existing
+`result_large_err` in `crates/theme/src/stack.rs`.
+
 ## Diagnostic software adapter
 
 `GLAZE_FORCE_WARP=1` forces the DX12 fallback (Microsoft Basic Render Driver / CPU), including

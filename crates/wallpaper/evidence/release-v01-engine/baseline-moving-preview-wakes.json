@@ -1,0 +1,76 @@
+{
+    "label":  "baseline",
+    "pid":  52648,
+    "case":  "moving",
+    "outputUnchanged":  false,
+    "threads":  [
+                    {
+                        "tid":  31632,
+                        "name":  "main",
+                        "wakesPerSecond":  240.11309476646832,
+                        "cpuMs":  859.375
+                    },
+                    {
+                        "tid":  48076,
+                        "name":  "",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  22612,
+                        "name":  "",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  13008,
+                        "name":  "",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  36272,
+                        "name":  "",
+                        "wakesPerSecond":  0.049961110022153206,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  26672,
+                        "name":  "D3D Background Thread 0",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  22988,
+                        "name":  "D3D Background Thread 1",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  53024,
+                        "name":  "D3D Background Thread 2",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  40856,
+                        "name":  "D3D Background Thread 3",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  6244,
+                        "name":  "fswatch-moving",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  20248,
+                        "name":  "fswatch-rain",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    }
+                ],
+    "mode":  "headless real StackSource, no coverage hold",
+    "seconds":  20.0155681
+}

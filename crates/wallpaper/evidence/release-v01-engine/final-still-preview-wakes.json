@@ -1,0 +1,76 @@
+{
+    "label":  "final",
+    "pid":  34892,
+    "case":  "still",
+    "outputUnchanged":  true,
+    "threads":  [
+                    {
+                        "tid":  34700,
+                        "name":  "main",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  46172,
+                        "name":  "",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  36588,
+                        "name":  "",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  51704,
+                        "name":  "",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  41708,
+                        "name":  "",
+                        "wakesPerSecond":  0.049946007117655643,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  46900,
+                        "name":  "D3D Background Thread 0",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  31900,
+                        "name":  "D3D Background Thread 1",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  22988,
+                        "name":  "D3D Background Thread 2",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  43860,
+                        "name":  "D3D Background Thread 3",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  51284,
+                        "name":  "fswatch-still",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    },
+                    {
+                        "tid":  51940,
+                        "name":  "fswatch-vignette",
+                        "wakesPerSecond":  0,
+                        "cpuMs":  0
+                    }
+                ],
+    "mode":  "headless real StackSource, no coverage hold",
+    "seconds":  20.021620499999997
+}
