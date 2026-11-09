@@ -1003,7 +1003,7 @@ mod probe {
     /// `cargo test -p glaze-shell shell_menu::probe -- --ignored --nocapture`: prints this
     /// machine's desktop menu as the worker sees it.
     #[test]
-    #[ignore]
+    #[ignore = "reads this machine's registered desktop shell extensions"]
     fn print_the_desktop_menu() {
         let menu = super::ShellMenu::start(16).unwrap();
         let started = std::time::Instant::now();
@@ -1051,7 +1051,7 @@ mod live {
     /// its View, Sort by, New and Open in submenus to `%TEMP%\glaze-desktop-menu-*.png`, as
     /// the shell draws them (at `GLAZE_MENU_SCALE`, default 1), and times building it.
     #[test]
-    #[ignore]
+    #[ignore = "renders this machine's desktop shell extensions; writes capture images"]
     fn draw_this_machines_desktop_menu() {
         let scale: f32 = std::env::var("GLAZE_MENU_SCALE")
             .ok()
