@@ -1,0 +1,40 @@
+{
+    "imports":  [
+                    "advapi32.dll",
+                    "api-ms-win-core-synch-l1-2-0.dll",
+                    "api-ms-win-core-winrt-l1-1-0.dll",
+                    "api-ms-win-crt-heap-l1-1-0.dll",
+                    "api-ms-win-crt-locale-l1-1-0.dll",
+                    "api-ms-win-crt-math-l1-1-0.dll",
+                    "api-ms-win-crt-runtime-l1-1-0.dll",
+                    "api-ms-win-crt-stdio-l1-1-0.dll",
+                    "api-ms-win-crt-string-l1-1-0.dll",
+                    "api-ms-win-shcore-scaling-l1-1-1.dll",
+                    "bcryptprimitives.dll",
+                    "combase.dll",
+                    "comctl32.dll",
+                    "d2d1.dll",
+                    "dwmapi.dll",
+                    "dwrite.dll",
+                    "gdi32.dll",
+                    "imm32.dll",
+                    "kernel32.dll",
+                    "ntdll.dll",
+                    "ole32.dll",
+                    "oleaut32.dll",
+                    "shell32.dll",
+                    "shlwapi.dll",
+                    "uiautomationcore.dll",
+                    "user32.dll",
+                    "vcruntime140.dll"
+                ],
+    "added":  [
+
+              ],
+    "removed":  [
+
+                ],
+    "forbidden":  [
+
+                  ]
+}

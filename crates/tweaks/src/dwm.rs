@@ -36,10 +36,11 @@ use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
 };
 use windows::Win32::Storage::Packaging::Appx::GetPackageFamilyName;
+use windows::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
 use windows::Win32::System::SystemInformation::GetWindowsDirectoryW;
 use windows::Win32::System::Threading::{
     GetProcessTimes, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
-    QueryFullProcessImageNameW,
+    QueryFullProcessImageNameW, OpenProcessToken,
 };
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -47,9 +48,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW, EVENT_OBJECT_STATECHANGE,
     EVENT_OBJECT_UNCLOAKED, EnumWindows, GA_PARENT, GW_OWNER, GWL_EXSTYLE, GWL_STYLE, GetAncestor,
     GetDesktopWindow, GetWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
-    IsWindow, IsWindowVisible, KillTimer, OBJID_WINDOW, SetTimer, WINEVENT_OUTOFCONTEXT,
+    IsWindow, IsWindowVisible, IsZoomed, KillTimer, OBJID_WINDOW, SetTimer, WINEVENT_OUTOFCONTEXT,
     WINEVENT_SKIPOWNPROCESS, WS_CAPTION, WS_CHILD, WS_EX_APPWINDOW, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX,
     WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU, WS_THICKFRAME,
 };
 use windows::core::{BOOL, PWSTR};
@@ -63,6 +64,9 @@ thread_local! {
     /// installed the hook, so no lock is required.
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
     static ALLOWLIST: RefCell<ProcessCache> = RefCell::new(ProcessCache::default());
+    // The opt-in live test can touch only the foreign process it launched.
+    #[cfg(test)]
+    static TEST_PROCESS: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -277,9 +281,6 @@ impl State {
         };
         if let std::collections::hash_map::Entry::Vacant(entry) = self.originals.entry(key) {
             let backdrop = read(hwnd, DWMWA_SYSTEMBACKDROP_TYPE);
-            if !unmanaged_backdrop(backdrop) {
-                return false; // The app owns its material; never mistake ours for its original.
-            }
             entry.insert(Tracked {
                 process,
                 original: Originals {
@@ -290,10 +291,15 @@ impl State {
             });
         }
         let tracked = self.originals.get_mut(&key).expect("inserted above");
+        let mut next = class.style(self.style);
+        // An app owning its material still has independently configurable frame corners.
+        if !unmanaged_backdrop(tracked.original.backdrop) {
+            next.backdrop = None;
+        }
         tracked.applied = apply_transition(
             hwnd,
             tracked.applied,
-            class.style(self.style),
+            next,
             &mut tracked.original,
         );
         true
@@ -398,7 +404,7 @@ fn classify_window(
     if style & WS_CHILD.0 != 0
         || cloaked
         || ex & (WS_EX_LAYERED.0 | WS_EX_TRANSPARENT.0) != 0
-        || (covers_monitor && ex & WS_EX_TOPMOST.0 != 0)
+        || covers_monitor
     {
         return WindowClass::Untouched;
     }
@@ -427,7 +433,7 @@ fn window_class(hwnd: HWND) -> WindowClass {
         }
         let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
         let mut covers_monitor = false;
-        if ex & WS_EX_TOPMOST.0 != 0 {
+        if !IsZoomed(hwnd).as_bool() {
             let mut rect = RECT::default();
             let mut monitor = MONITORINFO {
                 cbSize: size_of::<MONITORINFO>() as u32,
@@ -462,6 +468,11 @@ fn allowed_process(hwnd: HWND, windows_dir: &Path) -> Option<ProcessKey> {
     let mut pid = 0;
     // SAFETY: `pid` is a valid out pointer.
     unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    if pid == std::process::id() {
+        return None;
+    }
+    #[cfg(test)]
+    if TEST_PROCESS.get().is_some_and(|target| target != pid) { return None; }
     // SAFETY: opens a query-only handle, closed by `Process`'s drop.
     let Ok(handle) = (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }) else {
         return None;
@@ -472,11 +483,18 @@ fn allowed_process(hwnd: HWND, windows_dir: &Path) -> Option<ProcessKey> {
         started: process.started()?,
     };
     ALLOWLIST
-        .with_borrow_mut(|cache| cache.verdict(key, || evaluate_process(&process, windows_dir)))
+        .with_borrow_mut(|cache| cache.verdict(key, || {
+            #[cfg(test)]
+            if TEST_PROCESS.get() == Some(pid) { return process.non_elevated(); }
+            evaluate_process(&process, windows_dir)
+        }))
         .then_some(key)
 }
 
 fn evaluate_process(process: &Process, windows_dir: &Path) -> bool {
+    if !process.non_elevated() {
+        return false;
+    }
     let Some(image) = process.image() else {
         return false;
     };
@@ -506,6 +524,20 @@ impl Drop for Process {
 }
 
 impl Process {
+    fn non_elevated(&self) -> bool {
+        let mut token = HANDLE::default();
+        // SAFETY: query-only access; the owned token is closed on every return path.
+        if unsafe { OpenProcessToken(self.0, TOKEN_QUERY, &mut token) }.is_err() {
+            return false;
+        }
+        let token = Process(token);
+        let mut elevation = TOKEN_ELEVATION::default();
+        let mut size = 0;
+        // SAFETY: the output buffer and its byte length match TOKEN_ELEVATION.
+        unsafe { GetTokenInformation(token.0, TokenElevation,
+            Some((&raw mut elevation).cast()), size_of::<TOKEN_ELEVATION>() as u32, &mut size) }
+            .is_ok() && elevation.TokenIsElevated == 0
+    }
     fn started(&self) -> Option<u64> {
         let mut created = FILETIME::default();
         let mut exit = FILETIME::default();
@@ -619,7 +651,15 @@ fn apply_transition(
     next: WindowStyle,
     original: &mut Originals,
 ) -> WindowStyle {
-    let delta = before.transition_to(next);
+    let mut delta = before.transition_to(next);
+    // Apps can reset DWM preferences without a WinEvent. The existing tracked-window
+    // timer checks the actual value; unchanged preferences cause no write.
+    if let Some(corners) = next.corners
+        && read(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE)
+            .is_some_and(|actual| actual != corner_preference(corners).0 as u32)
+    {
+        delta.corners = Change::Set(corners);
+    }
     macro_rules! attribute {
         ($field:ident, $saved:ident, $attribute:ident, $fallback:expr, $encode:expr) => {
             update_attribute(
@@ -714,6 +754,10 @@ fn backdrop_type(backdrop: Backdrop) -> DWM_SYSTEMBACKDROP_TYPE {
         Backdrop::Tabbed => DWMSBT_TABBEDWINDOW,
     }
 }
+
+#[cfg(test)]
+#[path = "dwm_live_test.rs"]
+mod live_tests;
 
 #[cfg(test)]
 mod tests {

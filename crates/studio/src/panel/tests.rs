@@ -744,6 +744,13 @@ fn windows_as_is_is_explicit_and_escape_leaves_the_add_page() {
     let mut ui = Ui::new().unwrap();
     let mut app = app(&ui, true);
     super::run(&mut app, Command::Open(Page::Windows));
+    for mode in ["default", "round", "small", "square"] {
+        let built = super::build(&app, &mut ui.text);
+        let expected = serde_json::Value::String(mode.into());
+        let action = dropdown_option(&built, "/panel/windows/corners", |value| value == &expected);
+        app.run(action);
+        assert_eq!(app.docs.doc(DocId::Config).raw.pointer("/look/windows/corners"), Some(&expected));
+    }
     let built = super::build(&app, &mut ui.text);
     let action = dropdown_option(&built, "/panel/windows/corners", serde_json::Value::is_null);
     app.run(action);

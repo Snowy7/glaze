@@ -629,11 +629,12 @@ pub static SETTINGS: &[Setting] = &[
     ch(
         "windows_corners",
         "Corners",
-        "",
+        "Supported Windows app frames",
         C,
         "/look/windows/corners",
         &[
             ("null", "As is"),
+            (r#""default""#, "Default"),
             (r#""round""#, "Round"),
             (r#""small""#, "Small"),
             (r#""square""#, "Square"),

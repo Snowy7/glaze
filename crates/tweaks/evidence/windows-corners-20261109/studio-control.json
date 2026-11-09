@@ -1,0 +1,21 @@
+{
+    "bounds":  [
+                   -418,
+                   866,
+                   327,
+                   48
+               ],
+    "name":  "Corners Round ",
+    "control":  "ControlType.ComboBox",
+    "choices":  [
+                    "As is",
+                    "Default",
+                    "Round",
+                    "Small",
+                    "Square"
+                ],
+    "isolated_fixture":  true,
+    "enabled":  true,
+    "route":  "Look \u003e Windows \u003e Corners",
+    "offscreen":  false
+}

@@ -1,0 +1,42 @@
+{
+    "foreground_after":  126093454,
+    "foreground_before":  126093454,
+    "cases":  [
+                  {
+                      "dpi":  96,
+                      "app":  "fixture-files",
+                      "corner_preference":  2,
+                      "state":  "normal"
+                  },
+                  {
+                      "dpi":  96,
+                      "app":  "fixture-files",
+                      "corner_preference":  1,
+                      "state":  "edge"
+                  },
+                  {
+                      "dpi":  96,
+                      "app":  "fixture-files",
+                      "corner_preference":  1,
+                      "state":  "maximized"
+                  },
+                  {
+                      "dpi":  96,
+                      "app":  "fixture-studio",
+                      "corner_preference":  2,
+                      "state":  "normal"
+                  },
+                  {
+                      "dpi":  96,
+                      "app":  "fixture-studio",
+                      "corner_preference":  1,
+                      "state":  "edge"
+                  },
+                  {
+                      "dpi":  96,
+                      "app":  "fixture-studio",
+                      "corner_preference":  1,
+                      "state":  "maximized"
+                  }
+              ]
+}

@@ -1333,11 +1333,15 @@ fn bounds(
 
 pub fn round_window(hwnd: windows::Win32::Foundation::HWND) {
     use windows::Win32::Graphics::Dwm::{
-        DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DwmSetWindowAttribute,
+        DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DWMWCP_DONOTROUND, DwmSetWindowAttribute,
     };
     // SAFETY: the DWM attribute is sized and belongs to our own opaque App window. The App
     // kind retains Windows' normal frame/shadow and is never made topmost.
-    let preference = DWMWCP_ROUND;
+    let preference = if glaze_ui::app_window::corner_radius(hwnd) == 0.0 {
+        DWMWCP_DONOTROUND
+    } else {
+        DWMWCP_ROUND
+    };
     let _ = unsafe {
         DwmSetWindowAttribute(
             hwnd,

@@ -106,6 +106,9 @@ client area only where the app draws nothing opaque.
 A window is styled only if all of this holds:
 
 - It is top-level, visible and has a title bar.
+- Its process is not elevated. Tool windows receive no corner preference; transparent,
+  cloaked and borderless full-monitor windows are excluded. Glaze's own apps do not pass
+  the Windows-app allowlist.
 - Its process passes the injection allowlist in [`crates/inject`](../crates/inject/src/lib.rs)
   (`glaze_inject::evaluate`): Explorer, Settings, the frames around UWP apps, a few inbox apps,
   never games or third-party apps. The inputs are the image path
@@ -125,7 +128,21 @@ Existing windows are styled when the theme activates (`EnumWindows`). New window
 out-of-context `EVENT_OBJECT_SHOW` WinEvent hook on the styling worker, so nothing polls.
 Destroy events retire remembered HWNDs before they can be reused. Each window keeps its first
 dark-mode value and its successfully applied attributes. Updates write only changed attributes;
-only released attributes receive defaults. No restore/reapply sweep runs during a style change.
+only released attributes are restored. A one-second check of tracked windows reads the actual
+corner preference and reapplies it if the app reset it, without writing unchanged attributes.
+An app's explicit backdrop is preserved independently of its corner preference.
+No restore/reapply sweep runs during a style change.
+
+Studio exposes As is (release), Default (DWM's normal choice), Round, Small and Square in
+Windows > Corners. This control styles supported Windows apps, not arbitrary third-party apps.
+The DWM preference is a hint: per-pixel-alpha windows, custom regions and app-drawn corners
+can prevent visible rounding even when the call succeeds.
+
+Glaze Files and Studio themselves use Windows' 8 logical pixel outer contour, scaled by
+window DPI, with square edges when maximized or touching a monitor/work-area edge. Files'
+alpha content, caption hover clip and engine glass share the same device-pixel radius.
+Studio uses DWM's frame. Menus and flyouts also use 8 logical pixels; widget cards and bars
+keep their own design radii.
 
 ## System accent and dark mode
 

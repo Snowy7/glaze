@@ -85,7 +85,8 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
     let theme = &app.theme;
     let color = theme.color;
     let mut f = Frame::new(&mut ui.text, theme, s, &app.interaction);
-    f.surface(bounds, glass && app.backdrop.ready(app.surface.hwnd()));
+    let radius = glaze_ui::app_window::corner_radius(app.surface.hwnd());
+    f.surface_shaped(bounds, radius, glass && app.backdrop.ready(app.surface.hwnd()));
     let (title, rest) = bounds.take_top(px(46.0), 0.0);
     let (tabs, rest) = rest.take_top(px(40.0), 0.0);
     let (navigation, rest) = rest.take_top(px(58.0), 0.0);
@@ -993,7 +994,9 @@ pub fn draw(app: &mut App, ui: &mut Ui) -> Result<()> {
         Field::None => app.selection.focus.map(|index| ITEM + index as u32),
     }
     .filter(|id| f.list.hits.iter().any(|hit| hit.id == *id));
-    let list = f.list;
+    let mut list = f.list;
+    // All content, including caption hover and opaque panels, shares the glass contour.
+    list.ops = vec![Op::RoundedClipped { rect: bounds, radius, ops: list.ops.into() }];
     if glass {
         app.layered.present(&mut app.surface, ui, list)?;
     } else {

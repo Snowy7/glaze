@@ -354,7 +354,7 @@ impl App {
                 width: bounds.width() as i32,
                 height: bounds.height() as i32,
             };
-            let radius = (self.theme.radius.surface * self.surface.scale()).round();
+            let radius = glaze_ui::app_window::corner_radius(hwnd);
             material.blur *= self.surface.scale();
             if self.backdrop.contains(hwnd) {
                 self.backdrop.remember_overlay(hwnd);
