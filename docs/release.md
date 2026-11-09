@@ -120,6 +120,10 @@ existing configuration, including malformed JSON.
 
 ### Runtime asset audit
 
+The bundle includes Glaze's MIT `LICENSE`, both `THIRD-PARTY-NOTICES` files, theme credits,
+catalog and licence texts, effect `CREDITS.txt` files, and the shipped examples' `UPSTREAM.md`
+files. Packaging fails if the root licence/notices or theme credits/catalog are missing.
+
 * `glaze-theme::{locate,theme_roots}` searches `themes/` beside the EXEs (then ancestors),
   and `%APPDATA%\glaze\themes` for user content. The entire bundled theme tree is copied,
   including manifests, previews, media, web JS/CSS/images, model buffers/textures and licenses.

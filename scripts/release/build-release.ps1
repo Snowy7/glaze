@@ -8,6 +8,11 @@ param(
 )
 . "$PSScriptRoot\release-common.ps1"
 $repo = Get-FullPath (Join-Path $PSScriptRoot '..\..')
+foreach ($required in 'LICENSE','THIRD-PARTY-NOTICES.md','THIRD-PARTY-NOTICES-crates.md','themes\CREDITS.md','themes\catalog.json') {
+    if (-not (Test-Path -LiteralPath (Join-Path $repo $required) -PathType Leaf)) {
+        throw "Required release licence/credit file is missing: $required"
+    }
+}
 $From = (Resolve-Path -LiteralPath $From).Path
 $OutputDirectory = Get-FullPath $OutputDirectory
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
