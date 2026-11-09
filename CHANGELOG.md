@@ -120,11 +120,15 @@ The all-native rewrite. The shell (top bar, dock, flyouts, menus, widgets) and S
 
 ### Known issues
 
-<!-- COORDINATOR: fill in from the other release agents' reports before tagging. -->
-
-- The Print halftone effect can wash out or lose the picture when it sits above other effects in a busy stack (for example fog or light leaks).
-- Studio can use noticeable CPU while the wallpaper editor's live preview shows an animated wallpaper, because preview frames are rendered and decoded continuously.
-- The Windows corner setting reaches only allowlisted Windows apps (Explorer, Settings, Notepad, Terminal and a few others); browsers and other third-party apps keep their own corners, and the visible result was checked only at 100% scaling.
+- If Glaze's core and shell are both killed at once (for example "End process tree" in Task Manager), the Windows taskbar stays invisible until Glaze starts again, `glaze-core --restore` runs, or Explorer restarts. Quitting, crashes of either process alone, and uninstalling all restore it.
+- After a crash, window frames that Glaze styled return to Windows' defaults rather than their exact previous look.
+- The Windows corner setting reaches only allowlisted Windows apps (Explorer, Settings, Notepad, Terminal and a few others); browsers and other third-party apps keep their own corners. Windows itself limits corners to its own few styles. Skipping elevated windows was checked in code, not live.
+- A still wallpaper built in Studio wakes the engine about 2.4 times a second, against about 0.6 for a plain image. It does no GPU work, but it isn't yet as idle as a plain image.
+- Studio's live preview still costs some CPU while an animated wallpaper plays in the editor; decoding moved off the UI thread, so the gain in the editor is modest.
+- The Print halftone effect is heavy on dark photos and can dominate a busy stack (for example fog or light leaks).
+- A faint seam can remain on the 3D planet's rings.
+- The package's Windows identity is self-signed. On a PC without Developer Mode it may not register, and Glaze then runs without the features that need it (such as notifications). Windows SmartScreen may warn about the unsigned installer.
+- Tested on one PC (two monitors, 100% scaling, AMD graphics) and in a fresh profile with Windows' software renderer; not yet on a separate clean machine.
 
 ## [0.0.1] - 2026-11-04
 
