@@ -80,9 +80,24 @@ brightness and volume.
 ### What is still left behind
 
 **Core and shell killed together** (for example, Task Manager's "End process tree"). Nothing
-survives to restore the taskbar, so it stays hidden until the next start, `--restore`, or an
-Explorer restart. Every journal is intact. The panic hotkey needs core, so it doesn't help here.
-The Start menu (Win key) still works.
+survives to restore the taskbar:
+
+- **What breaks.** Explorer shows its taskbar windows again, but the veil stays on them, so the
+  taskbar is invisible and click-through. Auto-hide also stays on. This was measured; see the
+  evidence below.
+- **How long.** It lasts until the next start, `--restore`, or an Explorer restart. Every
+  journal is intact, and `--restore` puts it all back.
+- **What still works.** The panic hotkey needs core, so it doesn't help here. The Start menu (Win
+  key) still works.
+
+**A wallpaper journal whose original file is gone.** One example is a picture the user has
+since deleted; another is a pre-rename `mypaper` path.
+
+- `desktop_wallpaper::restore` keeps the journal when `SetWallpaper` fails, so every
+  `--restore` reports `failed: wallpaper` and exits `1`.
+- Because the uninstaller fails closed, that blocks uninstall.
+- The fix belongs in `crates/desktop/src/desktop_wallpaper.rs`: treat a missing original as
+  unrestorable, leave that monitor's current still, and drop the entry.
 
 **Power loss with nothing restored.** Changes held in the registry persist: auto-hide,
 alignment, accent, cursors and preferences. Autostart then starts Glaze, and its startup

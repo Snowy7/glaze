@@ -176,7 +176,11 @@ fn restore_all(report: &mut Report) {
     });
     step("styling", &mut restore_styling);
     step("preferences", &mut || {
-        glaze_tweaks::system::SystemTweaks::new()?.restore()
+        // Creating the controller already recovers a crashed run's journal.
+        let journal = glaze_tweaks::palette::local_dir()?.join("undo-system.json");
+        let pending = journal.exists();
+        glaze_tweaks::system::SystemTweaks::new()?.restore()?;
+        Ok(pending)
     });
     step("classic-menu", &mut || {
         let mut menu = glaze_tweaks::classic_menu::ClassicMenu::new()?;

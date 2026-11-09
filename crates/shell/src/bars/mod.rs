@@ -559,6 +559,8 @@ impl Bars {
             }
         }
         if services::take_due(&mut self.explorer_due, now) {
+            // TaskbarCreated: Explorer (re)started with new taskbar windows and no app bars.
+            log::info!("Explorer restarted: re-registering app bars, the tray and the taskbar mode");
             for b in &mut self.bars {
                 if let Some(r) = &mut b.reservation {
                     r.reregister();
