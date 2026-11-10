@@ -1,6 +1,6 @@
 param([Parameter(Mandatory=$true)][string]$Out,[switch]$LockHeld)
 $ErrorActionPreference = 'Stop'
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 if (-not $LockHeld) {
   if (Test-Path -LiteralPath $lock) { throw 'Desktop lock is busy' }
   New-Item -ItemType Directory -Path $lock | Out-Null

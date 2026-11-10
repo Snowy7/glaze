@@ -1,0 +1,165 @@
+cargo :    Compiling glaze-wallpaper v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\wallpaper)
+At line:2 char:50
++ ... ts\engine'; cargo test --release -p glaze-wallpaper --bins -- --test- ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling gl...ates\wallpaper):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    Finished `release` profile [optimized] target(s) in 38.52s
+     Running unittests src\main.rs 
+(C:\glaze-targets\engine\release\build\glaze-wallpaper/f7eb42de40c41034\out\glaze_wallpaper-f7eb42de40c41034.exe)
+
+running 150 tests
+test backdrop::tests::animated_sources_republish_per_interval_and_only_with_a_request ... ok
+test backdrop::tests::bgra_pixels_are_copied_in_order_and_aligned_rows_get_no_padding ... ok
+test backdrop::tests::bmp_has_top_down_24_bit_headers_and_padded_rows ... ok
+test backdrop::tests::covered_refresh_bypasses_cadence_without_starting_a_timer ... ok
+test backdrop::tests::first_frame_after_load_is_always_due_once ... ok
+test backdrop::tests::interval_is_read_clamped_and_defaults_when_unusable ... ok
+test backdrop::tests::output_is_an_eighth_of_the_screen ... ok
+test backdrop::tests::pyramid_keeps_a_solid_color ... ok
+test backdrop::tests::reset_deletes_only_native_screens_stale_images ... ok
+test backdrop::tests::screens_sharing_a_kept_frame_share_one_readback ... ok
+test backdrop::tests::widget_snapshots_work_without_bars_and_keep_the_shortest_request ... ok
+test backdrop::tests::writing_replaces_the_image_and_leaves_no_temp_file ... ok
+test control::tests::each_pause_setting_updates_hold ... ok
+test control::tests::identical_configs_ask_for_nothing ... ok
+test control::tests::renderer_changes_are_applied_before_a_simultaneous_theme_switch ... ok
+test control::tests::simultaneous_changes_do_both ... ok
+test control::tests::switching_the_static_snapshot_is_its_own_action ... ok
+test control::tests::theme_change_switches_theme_only ... ok
+test desktop_events::tests::explorer_noise_is_quiet_and_cannot_erase_pending_lifecycle_signals ... ok
+test desktop_events::tests::observer_owns_its_hook_thread_and_stops_with_a_queued_reset ... ok
+test engine::renderer_tests::caps_only_slow_animated_wallpaper_frames ... ok
+test glass_pass::tests::only_affected_screens_redraw_and_identical_publications_do_nothing ... ok
+test lab::glass_parity ... ignored, dev tool: GLAZE_PARITY_OUT=<output directory>
+test lab::idle ... ignored, dev tool: sample this process's thread wakes while it runs
+test lab::idle_present ... ignored, dev tool: sample this process's thread wakes while it runs
+test lab::lab ... ignored, dev tool: GLAZE_LAB=<theme>;<out dir>;<t1,t2,..>;<frames>
+test lab::live_plates ... ignored, dev tool: needs a running shell
+test lab::memory ... ignored, dev tool: GLAZE_LAB_THEME=<theme>
+test lab::memory_hints ... ignored, dev tool
+test lab::release ... ignored, dev tool: GLAZE_LAB_THEME=<theme>
+test lab::release_cycles ... ignored, dev tool: GLAZE_LAB_THEME=<theme>
+test material::tests::a_default_style_changes_nothing_and_each_knob_drives_one_thing ... ok
+test material::tests::controls_drive_the_kits_knobs ... ok
+test material::tests::no_refraction_and_no_highlight_is_flat_frosted_glass ... ok
+test overlay::capture::fence_tests::composition_waits_for_the_render_queue_without_any_wallpaper_presents ... ok
+test overlay::geometry::tests::a_slid_offscreen_dock_never_copies_outside_the_capture_texture ... ok
+test overlay::geometry::tests::reach_covers_the_shadow_and_scales_with_dpi ... ok
+test overlay::geometry::tests::straddling_shape_has_adjacent_pieces_without_internal_corners ... ok
+test overlay::geometry::tests::the_frame_grows_by_the_reach_and_stays_on_its_monitor ... ok
+test overlay::geometry::tests::touching_needs_a_shared_pixel ... ok
+test overlay::glass::tests::overlays_take_the_plates_controls_and_clarity_alone_tints ... ok
+test overlay::motion_tests::motion_coalesces_per_frame_and_close_during_open_cannot_be_undone_by_a_wake ... ok
+test overlay::plate_tests::a_plate_becomes_an_overlay_only_under_a_live_window_of_its_publisher ... ok
+test overlay::plate_tests::overlays_keep_a_plates_stained_tint ... ok
+test overlay::plate_tests::the_capture_rate_follows_a_lower_fps_cap_only ... ok
+test overlay::recovery::tests::lost_device_reopens_latest_requests_without_resurrecting_closed_clients ... ok
+test overlay::recovery::tests::recognizes_context_wrapped_device_errors_only ... ok
+test overlay::request::channel::tests::a_burst_reads_only_the_latest_complete_placement ... ok
+test overlay::request::curve::tests::compositor_pieces_follow_beziers_and_springs_within_one_alpha_step ... ok
+test overlay::request::tests::a_real_legacy_receiver_gets_the_supported_style_after_rejecting_the_extension ... ok
+test overlay::request::tests::every_request_survives_the_wire ... ok
+test overlay::request::tests::legacy_styles_keep_their_knobs_and_new_fields_default ... ok
+test overlay::request::tests::malformed_requests_are_refused ... ok
+test overlay::request::tests::only_a_style_request_is_longer_than_the_wire_before_it ... ok
+test palette::tests::a_dark_only_wallpaper_still_gets_a_palette_and_grays_stay_gray ... ok
+test palette::tests::a_vivid_streak_wins_the_accent_while_the_broad_color_stays_dominant ... ok
+test palette::tests::black_and_white_are_skipped_not_averaged ... ok
+test parent::tests::a_running_parent_no_newer_than_us_is_watched_and_others_are_not ... ok
+test preview::tests::the_header_layout_is_what_studio_writes ... ok
+test snapshot::tests::a_blank_snapshot_schedules_a_retry_without_visible_frames ... ok
+test snapshot::tests::a_screen_comes_back_as_a_jpeg_of_its_size_with_its_pixels_in_place ... ok
+test snapshot::tests::an_all_black_frame_is_recognised ... ok
+test snapshot::tests::real_wallpaper_round_trip ... ignored, changes the real Windows wallpaper for a moment
+test snapshot::tests::still_of_a_theme ... ignored, dev tool: GLAZE_STILL=<theme>;<out.jpg>[;<seconds>[;<W>x<H>]]
+test snapshot::tests::the_name_changes_with_whatever_changes_the_picture ... ok
+test sources::app::tests::arguments_are_quoted_for_the_msvcrt_parser ... ok
+test sources::app::tests::embedding_strips_decorations_and_never_activates ... ok
+test sources::app::tests::hwnd_is_substituted_as_decimal_everywhere_in_an_argument ... ok
+test sources::app::tests::main_window_is_a_visible_unowned_top_level_window_of_the_process ... ok
+test sources::app::tests::windows_already_under_the_screen_are_kept_and_deeper_children_ignored ... ok
+test sources::blit::tests::center_is_pixel_exact_and_stretch_is_identity ... ok
+test sources::blit::tests::contain_letterboxes ... ok
+test sources::blit::tests::cover_crops_the_long_side ... ok
+test sources::scene::input::tests::dragging_right_turns_the_camera_left_and_dragging_down_leans_it_up ... ok
+test sources::scene::input::tests::drags_add_up_and_the_lean_is_limited_but_the_orbit_is_not ... ok
+test sources::scene::load::tests::named_node_and_morph_clips_change_geometry_without_reallocating ... ok
+test sources::scene::load::tests::skeletal_clips_deform_vertices_and_loop ... ok
+test sources::scene::load::tests::step_and_cubic_spline_respect_sampler_interpolation ... ok
+test sources::scene::load::tests::tiny_glb_preserves_hierarchy_pbr_and_alpha ... ok
+test sources::scene::math::tests::approach_is_frame_rate_independent ... ok
+test sources::scene::math::tests::azimuth_wraps_and_stays_precise_after_long_uptime ... ok
+test sources::scene::math::tests::fit_distance_uses_the_narrower_field_of_view ... ok
+test sources::scene::math::tests::orbit_circles_the_center_and_keeps_it_framed ... ok
+test sources::scene::math::tests::parallax_slides_the_eye_across_the_view_not_along_it ... ok
+test sources::scene::math::tests::sphere_reaches_the_farthest_point_from_the_box_center ... ok
+test sources::scene::math::tests::srgb_encoding_matches_the_standard_curve ... ok
+test sources::scene::math::tests::the_whole_sphere_stays_inside_the_depth_range ... ok
+test sources::scene::tests::lab_material_alpha_environment_and_view_slots ... ignored, DX12 alpha/environment and multi-screen regression lab
+test sources::scene::tests::lab_model_layer_in_still_stack ... ignored, DX12 stack model composition lab
+test sources::scene::tests::lab_transparency_depth_and_cost ... ignored, GPU frame lab; writes C:/glaze-targets/scene3d
+test sources::scene::tests::render_scale_shrinks_targets ... ok
+test sources::scene::texture::tests::color_mips_average_light_and_preserve_clear_edges ... ok
+test sources::shader::tests::bundled_shader_ports_compile_with_the_engine_prelude ... ok
+test sources::shader::tests::uniforms_match_the_wgsl_layout ... ok
+test sources::slideshow::tests::a_late_decode_delays_the_fade_instead_of_cutting ... ok
+test sources::slideshow::tests::extension_filter_is_case_insensitive_and_exact ... ok
+test sources::slideshow::tests::holds_for_the_interval_then_fades_and_hands_over ... ok
+test sources::slideshow::tests::lists_only_images_in_the_folder_sorted_by_name ... ok
+test sources::slideshow::tests::shuffle_keeps_every_path_and_playlist_cycles ... ok
+test sources::slideshow::tests::zero_transition_is_a_cut_after_one_frame ... ok
+test sources::stack::effects_real::bloom_at_zero_leaves_the_sharp_input_untouched ... ok
+test sources::stack::effects_real::every_effect_keeps_the_photo_through_the_engine_at_1080p_and_1440p ... ok
+test sources::stack::effects_real::gallery_event_times_catch_lightning_and_glitch ... ok
+test sources::stack::effects_real::gallery_renders ... ignored
+test sources::stack::effects_real::halftone_preserves_dark_and_busy_input_tones ... ok
+test sources::stack::effects_real::no_effect_writes_nan_or_infinity_at_any_param_extreme ... ok
+test sources::stack::effects_real::params_as_studio_writes_them_change_the_render ... ok
+test sources::stack::effects_real::scene_theme_base_renders_and_moves_through_stack_source ... ok
+test sources::stack::effects_real::slideshow_theme_base_advances_beneath_an_animated_layer ... ok
+test sources::stack::effects_real::video_base_has_pixels_before_the_first_update ... ok
+test sources::stack::tests::a_broken_effect_or_base_is_skipped_and_reported_with_its_line ... ok
+test sources::stack::tests::a_linear_gradient_renders_both_stop_colors ... ok
+test sources::stack::tests::a_shadertoy_base_samples_noise_through_ichannel0 ... ok
+test sources::stack::tests::every_bundled_effect_compiles_through_the_prelude ... ok
+test sources::stack::tests::still_and_moving_stacks_split_where_the_first_animated_layer_is ... ok
+test sources::stack::tests::the_demo_theme_renders_non_black_moving_frames ... ok
+test sources::stack::tests::time_effects ... ignored
+test sources::tests::covered_beats_held_and_held_but_seen_is_a_still ... ok
+test sources::video::decode::tests::keeps_frames_up_to_the_fps_cap ... ok
+test sources::video::decode::tests::loops_onto_a_continuous_timeline ... ok
+test sources::video::decode::tests::packs_the_visible_area_and_skips_pitch_padding ... ok
+test sources::video::decode::tests::packs_two_byte_samples_for_p010 ... ok
+test sources::video::tests::bt2020_primaries_are_converted_to_bt709 ... ok
+test sources::video::tests::converts_limited_range_bt709_to_rgb ... ok
+test sources::video::tests::converts_ten_bit_p010_samples_like_the_eight_bit_ones ... ok
+test sources::video::tests::ends_only_after_the_last_frame_is_shown ... ok
+test sources::video::tests::hlg_reference_white_matches_pq_reference_white ... ok
+test sources::video::tests::picks_the_tagged_matrix_or_falls_back_by_height ... ok
+test sources::video::tests::pq_video_is_tone_mapped_to_sdr ... ok
+test sources::video::tests::shows_the_newest_due_frame_and_keeps_later_ones ... ok
+test sources::video::tests::slows_down_instead_of_racing_when_decoding_lags ... ok
+test sources::video::tests::tells_hdr_from_sdr_by_transfer_and_gamut_by_primaries ... ok
+test sources::video::tests::ten_bit_and_eight_bit_sdr_draw_the_same_colors ... ok
+test sources::web::tests::a_wheel_notch_becomes_a_dom_wheel_event_the_other_way_round ... ok
+test sources::web::tests::http_and_https_are_remote_in_any_case ... ok
+test sources::web::tests::mouse_coordinates_pack_as_signed_halves_and_buttons_map_to_their_flags ... ok
+test sources::web::tests::page_inside_the_theme_serves_the_theme_folder ... ok
+test sources::web::tests::page_outside_the_theme_serves_its_own_folder ... ok
+test sources::web::tests::percent_encoding_keeps_unreserved_and_escapes_the_rest ... ok
+test sources::wic::tests::contain_fits_inside_the_screen ... ok
+test sources::wic::tests::cover_never_shrinks_below_the_screen_on_either_axis ... ok
+test sources::wic::tests::cover_shrinks_to_just_cover_the_screen ... ok
+test sources::wic::tests::exif_values_map_to_wic_transforms ... ok
+test sources::wic::tests::jpeg_photos_come_out_upright ... ok
+test sources::wic::tests::nothing_exceeds_the_texture_limit ... ok
+test sources::wic::tests::only_the_quarter_turns_swap_width_and_height ... ok
+test sources::wic::tests::scaling_applies_to_the_upright_size ... ok
+test sources::wic::tests::stretch_shrinks_each_axis_and_center_never_scales ... ok
+test sources::wic::tests::tiff_photos_come_out_upright ... ok
+test trim::tests::trims_once_after_the_settle_time_and_again_for_a_new_theme ... ok
+
+test result: ok. 134 passed; 0 failed; 16 ignored; 0 measured; 0 filtered out; finished in 52.45s
+

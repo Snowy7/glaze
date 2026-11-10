@@ -119,7 +119,7 @@ fn close_with_grace(core: &Path, grace: Duration) -> Result<()> {
         dwSize: size_of::<PROCESSENTRY32W>() as u32,
         ..Default::default()
     };
-    let mut apps = Vec::new();
+    let mut processes = Vec::new();
     // SAFETY: the snapshot and initialized record stay live throughout enumeration.
     let mut next = unsafe { Process32FirstW(snapshot.0, &mut entry) };
     while next.is_ok() {
@@ -129,6 +129,19 @@ fn close_with_grace(core: &Path, grace: Duration) -> Result<()> {
             .position(|&c| c == 0)
             .unwrap_or(entry.szExeFile.len());
         let name = String::from_utf16_lossy(&entry.szExeFile[..end]);
+        processes.push((entry.th32ProcessID, entry.th32ParentProcessID, name));
+        // SAFETY: reuse the same live snapshot and initialized output record.
+        next = unsafe { Process32NextW(snapshot.0, &mut entry) };
+    }
+    let requesters = restore_requesters(&processes, std::process::id());
+    let mut apps = Vec::new();
+    for (pid, _, name) in processes {
+        if requesters.contains(&pid) {
+            // Studio's "Restore Windows desktop" runs `glaze-core --restore` and waits to show
+            // its result; closing it here would cut that off.
+            log::info!("leaving {name} ({pid}) open: it is waiting on a restore");
+            continue;
+        }
         if companion_name(&name) {
             // Open once and retain the handle: PID recycling cannot redirect the later kill.
             // SAFETY: access is limited to query, wait and shutdown of the validated process.
@@ -136,7 +149,7 @@ fn close_with_grace(core: &Path, grace: Duration) -> Result<()> {
                 OpenProcess(
                     PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE | PROCESS_TERMINATE,
                     false,
-                    entry.th32ProcessID,
+                    pid,
                 )
             } {
                 let process = Handle(handle);
@@ -158,12 +171,10 @@ fn close_with_grace(core: &Path, grace: Duration) -> Result<()> {
                     )
                     && identity(process.0).is_ok_and(|other| other == ours)
                 {
-                    apps.push((entry.th32ProcessID, process, name));
+                    apps.push((pid, process, name));
                 }
             }
         }
-        // SAFETY: reuse the same live snapshot and initialized output record.
-        next = unsafe { Process32NextW(snapshot.0, &mut entry) };
     }
     for (pid, _, name) in &apps {
         log::info!("asking {name} ({pid}) to close");
@@ -190,6 +201,16 @@ fn close_with_grace(core: &Path, grace: Duration) -> Result<()> {
     Ok(())
 }
 
+/// Parents of another running `glaze-core` (`(pid, parent, exe name)` rows; `ours` is this
+/// core): the companions that launched `--restore` and are waiting for its answer.
+fn restore_requesters(processes: &[(u32, u32, String)], ours: u32) -> Vec<u32> {
+    processes
+        .iter()
+        .filter(|(pid, _, name)| *pid != ours && name.eq_ignore_ascii_case("glaze-core.exe"))
+        .map(|(_, parent, _)| *parent)
+        .collect()
+}
+
 unsafe extern "system" fn close_window(window: HWND, pid: LPARAM) -> BOOL {
     let mut owner = 0;
     // SAFETY: read-only PID query; enum guarantees a window handle for the callback.
@@ -209,6 +230,21 @@ mod tests {
     use super::*;
     use std::io::{BufRead, BufReader};
     use std::process::{Child, ChildStdout, Command, Stdio};
+
+    #[test]
+    fn only_a_companion_waiting_on_another_core_is_kept_open() {
+        let rows = |r: &[(u32, u32, &str)]| -> Vec<(u32, u32, String)> {
+            r.iter().map(|(p, q, n)| (*p, *q, n.to_string())).collect()
+        };
+        // Studio 20 launched `glaze-core --restore` (30); Studio 21 launched this core (10).
+        let processes = rows(&[
+            (10, 21, "glaze-core.exe"),
+            (20, 5, "glaze-studio.exe"),
+            (21, 5, "glaze-studio.exe"),
+            (30, 20, "Glaze-Core.exe"),
+        ]);
+        assert_eq!(restore_requesters(&processes, 10), vec![20]);
+    }
 
     struct Fixture(Child, BufReader<ChildStdout>);
     impl Drop for Fixture {

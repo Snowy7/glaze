@@ -10,7 +10,7 @@ $InstallDirectory = (Resolve-Path -LiteralPath $InstallDirectory).Path
 $ProbePath = (Resolve-Path -LiteralPath $ProbePath).Path
 $EvidenceDirectory = [IO.Path]::GetFullPath($EvidenceDirectory)
 New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 while (-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) {
     Start-Sleep -Milliseconds 250
 }

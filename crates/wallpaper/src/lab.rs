@@ -277,7 +277,7 @@ impl Lab {
             count: PASS_STAMPS,
         });
         if let Some(r) = self.glass.renderer(0) {
-            r.profiler = Some(liquid_rust::Profiler::new(queries));
+            r.profiler = Some(stillkit_glass::Profiler::new(queries));
         }
     }
 
@@ -494,7 +494,7 @@ use crate::trim::private_mib;
 #[test]
 #[ignore = "dev tool: GLAZE_PARITY_OUT=<output directory>"]
 fn glass_parity() {
-    use liquid_rust as lr;
+    use stillkit_glass as lr;
     let out = PathBuf::from(std::env::var_os("GLAZE_PARITY_OUT").expect("output directory"));
     std::fs::create_dir_all(&out).unwrap();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");

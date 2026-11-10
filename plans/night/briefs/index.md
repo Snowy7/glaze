@@ -1,6 +1,6 @@
 # Brief: index (instant file search and folder sizes)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/plugins.md` (how `glaze-plugins` is
+Read `plans/native/LIVE.md`, `docs/plugins.md` (how `glaze-plugins` is
 started only when needed; copy that lifecycle), and the launcher (`crates/shell/src/flyouts`, parity
 rows L01-L05, `launcher.files`).
 

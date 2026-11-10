@@ -1,3 +1,16 @@
+Shaders: separate license
+This effect (glass.wgsl and rain.wgsl: beads, sliding drops, trails and the refraction
+through them) is adapted from "Heartfelt" by Martijn Steinrucken (BigWings), 2017,
+licensed CC BY-NC-SA 3.0.
+Source: https://www.shadertoy.com/view/ltffzl
+License: https://creativecommons.org/licenses/by-nc-sa/3.0/
+Changes: ported to WGSL; split into a half-resolution drop-field pass (glass.wgsl) and a
+full-resolution refraction and fog pass (rain.wgsl); parameters for amount, size, speed,
+fog, tint and streaks. The drop and trail algorithm and its constants follow the original.
+The hash n31 follows Dave Hoskins' "Hash without Sine" (MIT), as in the original.
+This effect is therefore NON-COMMERCIAL and ShareAlike: it may not be sold or used in a
+commercial distribution, and adaptations must keep CC BY-NC-SA 3.0.
+
 Preview photograph: separate license
 preview.jpg is adapted from "Hong Kong Skyline Restitch - Dec 2007"
 by David Iliff (Diliff), licensed CC BY 3.0.

@@ -1,6 +1,6 @@
+param([Parameter(Mandatory)][string]$Backup)
 $ErrorActionPreference='Stop'
-$lock='C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
-$backup='C:\Users\you\AppData\Local\glaze\backups\covered-refresh-20261107-153959'
+$lock=(Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $local=Join-Path $env:LOCALAPPDATA 'Glaze'
 $config=Join-Path $env:APPDATA 'glaze\config.json'
 $out=$PSScriptRoot

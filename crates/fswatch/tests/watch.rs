@@ -71,6 +71,15 @@ fn create_modify_atomic_replace_rename_delete_recursive_and_stop() {
     let nested = dir.0.join("sub").join("child");
     std::fs::write(&nested, "x").unwrap();
     wait_for(&rx, &nested);
+    // A write can produce several batches. A fresh watch isolates the read-only assertion
+    // from notifications still queued for the preceding writes.
+    drop(watch);
+    let (tx, rx) = mpsc::channel();
+    let watch = Watch::directory(&dir.0, true, move |event| {
+        let _ = tx.send(event);
+    })
+    .unwrap();
+    assert_eq!(std::fs::read_to_string(&nested).unwrap(), "x");
     assert!(
         rx.recv_timeout(Duration::from_millis(200)).is_err(),
         "reading doesn't report access events"

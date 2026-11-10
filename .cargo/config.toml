@@ -35,3 +35,4 @@ git-fetch-with-cli = true
 # comes from the pinned rev: Cargo cannot patch a patch.)
 [patch."https://github.com/Snowy7/stillkit"]
 stillkit = { path = "D:/Coding/projects/desktop/stillkit/crates/stillkit" }
+stillkit-glass = { path = "D:/Coding/projects/desktop/stillkit/crates/stillkit-glass" }

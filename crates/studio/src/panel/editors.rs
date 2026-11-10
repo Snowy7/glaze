@@ -6,6 +6,7 @@ pub use bars::{
     overview as bars_overview, same_bars, selected_module_name,
 };
 pub use connections::{
+    connected,
     connect, connection_module, disconnect, hide_connection_widget, summary as connections_summary,
 };
 mod look;
@@ -23,7 +24,7 @@ use glaze_ui::{Rect, Role};
 use glaze_widgets::layout::{Instance, Layout};
 use serde_json::Value;
 
-use super::controls::{button, group, height, notice, row, text, page_title};
+use super::controls::{button, dropdown, group, height, notice, row, text, page_title};
 use super::{Command, Page};
 use crate::actions::{Action, Choices, Edit, FieldId};
 use crate::app::App;
@@ -109,7 +110,7 @@ pub fn view(app: &App, b: &mut B, c: &mut Col, page: Page) {
         Page::Connections => connections::list(app, b, c),
         Page::Connection => connections::details(app, b, c),
         Page::General => settings::general(app, b, c),
-        Page::Keyboard => settings::keyboard(b, c),
+        Page::Keyboard => settings::keyboard(app, b, c),
         Page::Troubleshoot => settings::troubleshoot(app, b, c),
         Page::About => settings::about(app, b, c),
         Page::DesktopMenu => settings::desktop_menu(app, b, c),
@@ -145,14 +146,6 @@ pub fn intercept_page_set(app: &mut App, edit: &Edit, value: &Value) -> bool {
 
 pub fn field_initial(app: &App, id: &FieldId) -> Option<String> {
     bars::field_initial(app, id)
-}
-
-/// Creation and its room check must use the same display grid as the shell.
-pub fn prepare_widget_grid(app: &App) {
-    if let Some(monitor) = app.display() {
-        let layout = crate::editing::widgets::layout(app);
-        app.stage.borrow_mut().content.grid = Some((crate::stage::grid_for(&layout, monitor), 1.0));
-    }
 }
 
 pub fn widget_has_room(app: &App, id: &str) -> bool {
@@ -259,55 +252,30 @@ pub fn select(
     let label_width = b.measure(label, &super::controls::font(b, 13.0, 500)).0;
     // Keep the complete value readable, including a long choice at Windows' larger text size.
     if label_width.max(b.px(140.0)) + value_width + b.px(12.0) > available {
-        let top = c.y;
-        let content_at = b.list.ops.len();
+        // No room beside the label: the label, then the same boxed dropdown under it, full width.
+        // The whole value stays readable (it wraps inside the box at larger text sizes).
         let line = height(b, 21.0);
         c.y += b.px(7.0);
-        c.y += b.paragraph(
-            c.x,
-            c.y,
-            available,
-            label,
-            &super::controls::font(b, 13.0, 500),
-            line,
-            b.p.ink1,
-        );
-        c.y += b.paragraph(c.x, c.y, available, &shown, &style, line, b.p.ink2);
-        c.y += b.px(7.0);
-        let r = Rect::new(c.x, top, c.w, c.y - top);
-        let area = b.list_row_area(r);
+        c.y += b.paragraph(c.x, c.y, available, label, &super::controls::font(b, 13.0, 500), line, b.p.ink1);
+        c.y += b.px(4.0);
+        let chevron = height(b, 16.0);
+        let inner = c.w - b.px(24.0) - chevron - b.px(8.0);
+        let lines = b.text.lines(&shown, &style, inner, 3).len().max(1) as f32;
+        let field = Rect::new(c.x, c.y, c.w, (line * lines + b.px(11.0)).max(height(b, 32.0)));
         let k = key(("panel-select", c.view, label));
-        let wash_at = b.list.ops.len();
-        b.wash(k, area, b.px(radius::CONTROL));
-        let wash = b.list.ops.split_off(wash_at);
-        b.list.ops.splice(content_at..content_at, wash);
-        b.icon(
-            Rect::new(
-                c.right() - height(b, 16.0),
-                top,
-                height(b, 16.0),
-                r.height(),
-            ),
-            glyph::CHEVRON_DOWN,
-            15.0,
-            b.p.ink3,
-        );
-        b.hit(
-            k,
-            area,
-            Role::ComboBox,
-            &format!("{label} {shown}"),
-            action,
-            Behavior::Click,
-        );
-        b.focus_ring(k, area, b.px(radius::CONTROL));
+        b.fill(field, b.px(radius::CONTROL), if b.hovered(k) { b.p.hover } else { b.p.fill });
+        b.paragraph(field.left + b.px(12.0), field.top + (field.height() - line * lines) / 2.0, inner, &shown, &style, line, b.p.ink1);
+        b.icon(Rect::new(field.right - chevron - b.px(10.0), field.top, chevron, field.height()), glyph::CHEVRON_DOWN, 15.0, b.p.ink3);
+        b.hit(k, field, Role::ComboBox, &format!("{label} {shown}"), action, Behavior::Click);
+        b.focus_ring(k, field, b.px(radius::CONTROL));
+        c.y = field.bottom + b.px(10.0);
         b.hline(c.x, c.right(), c.y - 1.0, b.p.line.with_alpha(0.45));
         return;
     }
     row(b, c, None, label, &shown, "", None, action);
 }
 
-/// Small, finite choices use the kit's single page layout.
+/// Two choices are a segment; three or more (or labels that do not fit) open a dropdown.
 pub fn segments(
     b: &mut B,
     c: &mut Col,
@@ -322,7 +290,7 @@ pub fn segments(
         .iter()
         .map(|label| b.measure(label, &style).0 + b.px(20.0))
         .sum();
-    if options.len() > 4 || needed > c.w - b.px(4.0) {
+    if options.len() > 2 || needed > c.w - b.px(4.0) {
         select(b, c, label, value, edit, options);
         return;
     }
@@ -508,14 +476,20 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
             .any(|id| app.docs.doc(*id).issue.is_some());
     let gap = b.px(8.0);
     let stacked = state.page == Page::FirstRun && r.height() > b.px(64.0);
+    // The window's footer keeps its two actions compact at the right; the panel splits its width.
+    let compact = state.windowed && !stacked;
     let width = if stacked {
         r.width() - b.px(32.0)
+    } else if compact {
+        b.px(120.0)
     } else {
         (r.width() - b.px(32.0) - gap) / 2.0
     };
+    let left = if compact { r.right - b.px(16.0) - width * 2.0 - gap } else { r.left + b.px(16.0) };
+    b.hline(r.left, r.right, r.top, b.p.line);
     button(
         b,
-        Rect::new(r.left + b.px(16.0), r.top + b.px(16.0), width, b.px(32.0)),
+        Rect::new(left, r.top + b.px(16.0), width, b.px(32.0)),
         secondary,
         None,
         false,
@@ -525,7 +499,7 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
     button(
         b,
         Rect::new(
-            r.left + b.px(16.0) + if stacked { 0.0 } else { width + gap },
+            left + if stacked { 0.0 } else { width + gap },
             r.top + b.px(if stacked { 56.0 } else { 16.0 }),
             width,
             b.px(32.0),
@@ -539,7 +513,7 @@ pub fn footer(app: &App, b: &mut B, r: Rect) {
 }
 
 fn history(app: &App, b: &mut B, c: &mut Col) {
-    page_title(app, b, c, "History", "Preview on every display");
+    page_title(app, b, c, "History", "Point at a change to preview it on every display");
     if super::history::partial_preview(app) {
         notice(b, c, "Partial preview · wallpaper unchanged");
     }

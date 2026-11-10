@@ -9,7 +9,7 @@ param([int]$Minutes = 15, [string]$Log = "C:\glaze-targets\app-styler\round3\soa
       [int]$Pause = 45, [switch]$Bare)
 $ErrorActionPreference = 'Stop'
 $dir = Join-Path $env:LOCALAPPDATA 'glaze\app-styler'
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $utf8 = New-Object Text.UTF8Encoding($false)
 
 function Note([string]$m) {

@@ -76,6 +76,7 @@ unsafe extern "system" fn follow(
     // SAFETY: preserve the surface's original handling before following its final z-order.
     let result = unsafe { DefSubclassProc(client, msg, wp, lp) };
     if restack {
+        glaze_ui::platform::windows::glass::system().follow(client);
         move_glass(client);
     }
     if msg == WM_NCDESTROY {
@@ -138,6 +139,20 @@ mod tests {
     ) -> LRESULT {
         // SAFETY: the fixture forwards the original window message unchanged.
         unsafe { DefWindowProcW(hwnd, msg, wp, lp) }
+    }
+
+    /// Other tests and desktop apps may insert windows between the fixture's windows.
+    fn next_fixture(window: HWND, fixtures: &[HWND]) -> HWND {
+        // SAFETY: read-only z-order queries; all supplied handles belong to this fixture.
+        let mut next = unsafe { GetWindow(window, GW_HWNDNEXT) }.ok();
+        while let Some(window) = next {
+            if fixtures.contains(&window) {
+                return window;
+            }
+            // SAFETY: read-only query; a concurrently destroyed window ends the search.
+            next = unsafe { GetWindow(window, GW_HWNDNEXT) }.ok();
+        }
+        panic!("no fixture window below {window:?}");
     }
 
     #[test]
@@ -206,7 +221,8 @@ mod tests {
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
             )
             .unwrap();
-            assert_eq!(GetWindow(menu.0, GW_HWNDNEXT).unwrap(), glass.0);
+            let fixtures = [lower.0, menu.0, glass.0];
+            assert_eq!(next_fixture(menu.0, &fixtures), glass.0);
             SetWindowPos(
                 lower.0,
                 Some(HWND_TOPMOST),
@@ -218,11 +234,23 @@ mod tests {
             )
             .unwrap();
             assert_eq!(
-                GetWindow(menu.0, GW_HWNDNEXT).unwrap(),
+                next_fixture(menu.0, &fixtures),
                 glass.0,
                 "parent repaint must not split the menu/glass pair"
             );
-            assert_eq!(GetWindow(glass.0, GW_HWNDNEXT).unwrap(), lower.0);
+            // An unrelated desktop window can appear below the pair at any time.
+            let unrelated = make(w!("STATIC"));
+            SetWindowPos(
+                unrelated.0,
+                Some(glass.0),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            )
+            .unwrap();
+            assert_eq!(next_fixture(glass.0, &fixtures), lower.0);
             // An explicit later raise repairs the pair even after an intervening window.
             let other = make(w!("STATIC"));
             SetWindowPos(
@@ -245,7 +273,8 @@ mod tests {
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
             )
             .unwrap();
-            assert_eq!(GetWindow(menu.0, GW_HWNDNEXT).unwrap(), glass.0);
+            let fixtures = [lower.0, menu.0, glass.0, other.0];
+            assert_eq!(next_fixture(menu.0, &fixtures), glass.0);
             let second = make(class);
             SetPropW(second.0, w!("glaze.glass.client"), Some(HANDLE(menu.0.0))).unwrap();
             SetWindowPos(
@@ -258,8 +287,9 @@ mod tests {
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
             )
             .unwrap();
-            let first = GetWindow(menu.0, GW_HWNDNEXT).unwrap();
-            let next = GetWindow(first, GW_HWNDNEXT).unwrap();
+            let fixtures = [lower.0, menu.0, glass.0, other.0, second.0];
+            let first = next_fixture(menu.0, &fixtures);
+            let next = next_fixture(first, &fixtures);
             assert!(first == glass.0 || first == second.0);
             assert!(next == glass.0 || next == second.0);
             assert_ne!(

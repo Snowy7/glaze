@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $out = Join-Path $OutputRoot $Label
 New-Item -ItemType Directory -Force -Path $out | Out-Null
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 if (-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) {
     throw 'Desktop is busy; retry this action after the other agent releases it.'
 }
@@ -76,6 +76,6 @@ public static class HoldCaptureDpi {
     Write-Output "Captured $($screen.DeviceName) $($rect.Width)x$($rect.Height) to $out"
 } finally {
     if ($game -and -not $game.HasExited) { Stop-Process -Id $game.Id -ErrorAction SilentlyContinue }
-    if ([IO.Path]::GetFullPath($lock) -ne 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock') { throw 'Invalid desktop lock' }
+    if ([IO.Path]::GetFullPath($lock) -ne (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')) { throw 'Invalid desktop lock' }
     [IO.Directory]::Delete($lock)
 }

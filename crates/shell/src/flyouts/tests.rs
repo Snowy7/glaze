@@ -269,9 +269,9 @@ fn panels(ui: &mut Ui, surface: &Surface) -> Vec<(&'static str, Box<dyn Panel>)>
                 vec![
                     layout("4090409", "English (United States)", "US"),
                     layout(
-                        "4010401",
-                        "العربية (المملكة العربية السعودية)",
-                        "Arabic (101)",
+                        "40c040c",
+                        "Français (France)",
+                        "French",
                     ),
                     layout("e0010411", "日本語", "Microsoft IME"),
                 ],

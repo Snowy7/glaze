@@ -2,8 +2,7 @@
 
 **Status:** deferred, CPU-budgeted offline catch-up (`8b4d885`, `f18aa06`) was deployed
 on 2026-11-06 at 12:35 local; measurements and policy are below. The earlier memory/game
-follow-up `6ebad2c` remains included, as recorded in the
-[night log](../plans/night/2026-11-06.md). Its isolated replay passed; the earlier independent
+follow-up `6ebad2c` remains included. Its isolated replay passed; the earlier independent
 review's broad post-repair production game certification remains separate from this startup work.
 
 `glaze-index` is an optional native process, enabled with
@@ -104,12 +103,12 @@ volumes**, and performed **zero startup volume scans**. Its three-minute sample 
 This was **not a quiet-startup CPU measurement**: existing game-resume notifications
 replayed several dirty directories, twice including the 474k-entry AppData/Local subtree.
 That live-recovery work retains its existing path and can still burst CPU; it is outside
-the offline catch-up budget. The full sample and service log are retained rather than
-discarded. The new policy removes unconditional startup volume scans; it does not cap
+the offline catch-up budget. The aggregate sample is retained; the raw service log was removed
+for privacy. The new policy removes unconditional startup volume scans; it does not cap
 query or live/overflow/game-resume recovery CPU.
 
 Evidence: `crates/index/evidence/startup-{before,after,fixture,catchup,recent,summary}.json`,
-`startup-production-freshness.json`, `startup-parent.json`, `startup-recent-service.log`,
+`startup-parent.json`,
 `startup-deploy.log`, and `startup-comparison.html`. Tools are
 `crates/index/tools/{measure-startup,verify-startup,observe-catchup}.ps1`.
 Implementation commits: `8b4d885`, `f18aa06`. Index/config tests: **35 + 24 passed**;
@@ -479,7 +478,7 @@ Removing the alias and delivering its volume-removal notification hid it in **1.
 The earlier Z: test's log explicitly recorded `watch Z: offline: Access is denied` and
 hid it in **65.98 ms**. These are alias/device-message tests, not physical USB/VHD or
 BitLocker certification. Evidence: `review-final-volumes.json`,
-`review-final-volumes-z.json` and `review-final-service.log`.
+`review-final-volumes-z.json`. The raw service log was removed for privacy.
 
 On that live K: alias, **20 crafted Sizes requests using `?:\`** returned correct
 sizes. Four transactions held open concurrently then received valid responses, proving
@@ -510,7 +509,7 @@ On resume, the deployed recovery log included broad parents such as
 `C:/Users/you/AppData/Local`. The then-unbounded in-memory subtree scan/import raised
 PID 78592's OS lifetime working-set high-water to **759,324,672 bytes / 724.15 MiB**.
 The main 256 MiB goal fails for this deployed broad-replay case. Evidence is the final
-lifetime record, the failed-fixture record and `review-final-service.log`.
+lifetime record and the failed-fixture record. The raw service log was removed for privacy.
 
 `6ebad2c` now abandons a small subtree's private scan above **25,000 records or 8 MiB
 of record/name capacity**, then re-enumerates that subtree into sparse scan mappings.

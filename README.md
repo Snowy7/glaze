@@ -12,7 +12,7 @@
   <a href="#whats-inside">What's inside</a> ·
   <a href="#performance">Performance</a> ·
   <a href="#architecture">Architecture</a> ·
-  <a href="#quick-start">Quick start</a> ·
+  <a href="#install">Install</a> ·
   <a href="#make-your-own">Make your own</a> ·
   <a href="docs/README.md">Docs</a>
 </p>
@@ -23,8 +23,8 @@
 
 - **Every wallpaper kind** on one wgpu engine: shaders, images, slideshows, hardware-decoded video,
   glTF scenes, web pages and external renderers.
-- **Liquid Glass** on every surface, drawn by the engine with the vendored
-  [liquid-rust](https://github.com/al1h3n/liquid-rust), always live to what's behind it.
+- **Liquid Glass** on every surface, drawn by the engine with
+  stillkit-glass ([liquid-rust](https://github.com/al1h3n/liquid-rust) in stillkit), always live to what's behind it.
 - **Native shell** on software Direct2D: no WebView or hardware GPU device. Windows preferences and
   frame styling are journaled and undone on quit, on the panic hotkey and
   after a crash.
@@ -59,11 +59,12 @@ settings, per wallpaper too; `auto` renders on the card that drives your screens
 </p>
 
 The bars, dock, widgets, flyouts and menus all sit on glass that the engine draws with
-**liquid-rust**: a squircle lens refracts the backdrop (Snell's law, η 1.5), with light frost, a
+**stillkit-glass** (liquid-rust): a squircle lens refracts the backdrop (Snell's law, η 1.5), with light frost, a
 directional rim light and a soft shadow. Thin glass such as the 24 pt bar gets a shallow lens with a
 flat face. Clarity (clear to tinted), blur, refraction, highlight and tint are adjustable per family
-(bars, widgets, menus). Over app windows, flyouts get the same glass from a Windows Graphics Capture
-crop. Bars and widgets also get live glass over `web` and `app` wallpapers, with capture released
+(bars, widgets, menus). Over app windows, menus, flyouts and covered bar surfaces use native DWM
+backdrop frost, with captured engine glass as fallback. Native glass bars keep this backdrop over
+wallpaper too, so movement never switches providers. Widgets also get live glass over `web` and `app` wallpapers, with capture released
 when covered. See [docs/glass.md](docs/glass.md#glass-over-web-and-app-wallpapers-p14-6-november-2026).
 
 ### Top bar and dock
@@ -156,7 +157,7 @@ Settings for each live in Studio. See [docs/widgets.md](docs/widgets.md) and
 ### Studio
 
 <p align="center">
-  <img src="docs/media/readme/studio-home.jpg" alt="Glaze Studio: Home" width="85%">
+  <img src="docs/media/readme/studio-home.jpg" alt="Glaze Studio: Your desktop, with the wallpaper, look, bars, widgets and desktop menu" width="85%">
 </p>
 
 Studio is the native settings app, on the same UI kit as the shell. It opens in about 250 ms, uses
@@ -235,8 +236,7 @@ glaze-studio       the settings app (software Direct2D); runs only while open
 |---|---|
 | `crates/core` | Supervisor, tray, panic hotkey, styling lifecycle |
 | `crates/wallpaper` | The engine: sources, frame pacing, glass passes, overlays |
-| `crates/liquid-rust` | Vendored Liquid Glass renderer |
-| `crates/ui` | The UI kit: surfaces, display lists, text, icons, components, themes |
+| [stillkit](https://github.com/Snowy7/stillkit) | The UI library (as `glaze-ui`) and its Liquid Glass renderer, `stillkit-glass` |
 | `crates/shell` | Bars, dock, flyouts, desktop menu, widget views, integrations views |
 | `crates/widgets` · `crates/bars` · `crates/integrations` | Services: catalog, layout, storage, plugins; app bars and tray; integration providers |
 | `crates/studio` | Glaze Studio |
@@ -248,7 +248,14 @@ glaze-studio       the settings app (software Direct2D); runs only while open
 
 More in [docs/ui.md](docs/ui.md) and the [native plan](plans/council/native-plan.md).
 
-## Quick start
+## Install
+
+Download the latest `Glaze-*-windows-x64.zip` from [Releases](https://github.com/Snowy7/glaze/releases),
+extract all of it and double-click `install.cmd` (not as administrator). It installs per user, and
+uninstalling from Settings > Apps first undoes every change Glaze made to Windows. See
+[docs/release.md](docs/release.md) for SmartScreen and signing.
+
+## Build from source
 
 You need Windows 10 or 11 and [rustup](https://rustup.rs); the pinned nightly toolchain installs
 itself.
@@ -322,19 +329,22 @@ with `scripts/build-plugins.ps1` when upgrading the plugin contract.
 
 ## Credits and licences
 
-- **[liquid-rust](https://github.com/al1h3n/liquid-rust)** by al1h3n, MIT OR Apache-2.0, vendored in
-  [crates/liquid-rust](crates/liquid-rust) with both licence texts and the few marked changes
-  ([VENDORED.md](crates/liquid-rust/VENDORED.md)). Its look is calibrated against Apple's Liquid
+- **[liquid-rust](https://github.com/al1h3n/liquid-rust)** by al1h3n, MIT OR Apache-2.0, carried in
+  stillkit as [stillkit-glass](https://github.com/Snowy7/stillkit/tree/main/crates/stillkit-glass)
+  with both licence texts and the few marked changes (`UPSTREAM-CHANGES.md`). Its look is calibrated against Apple's Liquid
   Glass kit.
 - **Wallpapers:** each bundled theme's author, source and licence is in
   [themes/CREDITS.md](themes/CREDITS.md), with the source audit in
   [docs/research/wallpaper-sources.md](docs/research/wallpaper-sources.md). Some are
   **non-commercial** and marked so there.
-- **Icons:** [Lucide](https://lucide.dev) outlines, ISC
-  ([licence](crates/ui/icons/LICENSE-lucide)), and Windows' Segoe Fluent Icons for the Fluent style.
-- Rust crates are listed in [Cargo.lock](Cargo.lock), each under its own licence.
+- **Icons:** [Lucide](https://lucide.dev) outlines, ISC (licence in
+  [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md#icons-and-fonts)), and Windows' Segoe Fluent Icons
+  for the Fluent style.
+- **Everything else:** [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) summarizes every
+  third-party licence. [THIRD-PARTY-NOTICES-crates.md](THIRD-PARTY-NOTICES-crates.md) has the full
+  licence text of every Rust crate in the programs and bundled plugins.
 
-Glaze itself has no public licence yet.
+Glaze itself is MIT licensed; see [LICENSE](LICENSE).
 
 ## Documentation
 

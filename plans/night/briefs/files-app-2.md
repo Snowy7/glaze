@@ -1,6 +1,6 @@
 # Brief: files-app round 2 (an Explorer you'd actually switch to)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/files.md` (v1, commits a2d74f7..c0d6b41),
+Read `plans/native/LIVE.md`, `docs/files.md` (v1, commits a2d74f7..c0d6b41),
 `docs/ui.md` (The kit), `docs/glass.md`. Same ownership as round 1 (`briefs/files-app.md`), plus the small
 Win+E edit below. `crates/shell` is also being edited by the shell-idle agent: keep your shell edits
 tiny, in separate functions, and commit them immediately.

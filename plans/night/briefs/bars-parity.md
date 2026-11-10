@@ -1,6 +1,6 @@
 # Brief: bars-parity
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/bars.md`, `docs/ui.md` (The kit),
+Read `plans/native/LIVE.md`, `docs/bars.md`, `docs/ui.md` (The kit),
 `docs/glass.md`, and the **partial** rows in `plans/native/parity.md`: C06, C07, C09, C10, C12,
 C13, C14, C15, C22, C25.
 

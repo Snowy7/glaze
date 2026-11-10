@@ -26,10 +26,10 @@ the merge can handle it.
 ## Live testing on the real desktop
 - Only one agent may run Glaze on the user's desktop at a time. Take the lock before you start
   anything that runs Glaze or touches the shell or desktop:
-  `C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock`. Create it as a directory; if it
+  `%LOCALAPPDATA%\Temp\glaze-tools\desktop.lock`. Create it as a directory; if it
   already exists, wait. It is considered stale after 5 minutes. Release it in a `finally` block.
   `measure.ps1` in that folder takes the lock itself, so don't hold the lock while calling it.
-- Measure with `C:\Users\you\AppData\Local\Temp\glaze-tools\measure.ps1 -Label <name> -Seconds 60`
+- Measure with `%LOCALAPPDATA%\Temp\glaze-tools\measure.ps1 -Label <name> -Seconds 60`
   (CPU, GPU and RAM per process). For harness numbers, use `tools/perf`.
 - Whatever you start, you stop. Always leave the desktop as you found it: the stock taskbar shows and
   the user's Glaze is running. The panic hotkey is Ctrl+Alt+Shift+Backspace.

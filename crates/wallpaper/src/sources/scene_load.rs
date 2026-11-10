@@ -137,7 +137,9 @@ fn material(m: gltf::Material<'_>) -> Material {
             surface: [
                 p.metallic_factor(),
                 p.roughness_factor(),
-                normal.as_ref().map_or(1.0, |t| t.scale()),
+                // The 8-bit fallback normal is not exactly (0,0,1). Do not perturb an
+                // untextured material's normal along its UV seam (notably planet rings).
+                normal.as_ref().map_or(0.0, |t| t.scale()),
                 occlusion.as_ref().map_or(1.0, |t| t.strength()),
             ],
             alpha: [
@@ -242,7 +244,7 @@ fn build(
         uniform: MaterialUniform {
             base: [1.0; 4],
             emissive: [0.0; 4],
-            surface: [1.0, 1.0, 1.0, 1.0],
+            surface: [1.0, 1.0, 0.0, 1.0],
             alpha: [0.0, 0.5, 0.0, 0.0],
             uv_sets: [0; 4],
             uv_extra: [0; 4],

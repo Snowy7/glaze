@@ -3,7 +3,8 @@
 //! inside other processes.
 //!
 //! A visible app frame gets full styling; floating surfaces get dark mode only.
-//! Overlays and transparent indicators are untouched. A window must pass the
+//! Overlays, transparent indicators and full-screen apps ([`full_screen`]: games, video)
+//! are untouched, as are elevated and anti-cheat processes. A window must pass the
 //! process injection allowlist (`glaze_inject::evaluate`, with
 //! the signature check). Existing windows are styled when the [`Styler`]
 //! starts; WinEvents follow new windows and frame changes. A slow timer checks
@@ -36,10 +37,11 @@ use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
 };
 use windows::Win32::Storage::Packaging::Appx::GetPackageFamilyName;
+use windows::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
 use windows::Win32::System::SystemInformation::GetWindowsDirectoryW;
 use windows::Win32::System::Threading::{
     GetProcessTimes, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
-    QueryFullProcessImageNameW,
+    QueryFullProcessImageNameW, OpenProcessToken,
 };
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -47,9 +49,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW, EVENT_OBJECT_STATECHANGE,
     EVENT_OBJECT_UNCLOAKED, EnumWindows, GA_PARENT, GW_OWNER, GWL_EXSTYLE, GWL_STYLE, GetAncestor,
     GetDesktopWindow, GetWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
-    IsWindow, IsWindowVisible, KillTimer, OBJID_WINDOW, SetTimer, WINEVENT_OUTOFCONTEXT,
+    IsWindow, IsWindowVisible, IsZoomed, KillTimer, OBJID_WINDOW, SetTimer, WINEVENT_OUTOFCONTEXT,
     WINEVENT_SKIPOWNPROCESS, WS_CAPTION, WS_CHILD, WS_EX_APPWINDOW, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX,
     WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU, WS_THICKFRAME,
 };
 use windows::core::{BOOL, PWSTR};
@@ -63,6 +65,9 @@ thread_local! {
     /// installed the hook, so no lock is required.
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
     static ALLOWLIST: RefCell<ProcessCache> = RefCell::new(ProcessCache::default());
+    // The opt-in live test can touch only the foreign process it launched.
+    #[cfg(test)]
+    static TEST_PROCESS: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -277,9 +282,6 @@ impl State {
         };
         if let std::collections::hash_map::Entry::Vacant(entry) = self.originals.entry(key) {
             let backdrop = read(hwnd, DWMWA_SYSTEMBACKDROP_TYPE);
-            if !unmanaged_backdrop(backdrop) {
-                return false; // The app owns its material; never mistake ours for its original.
-            }
             entry.insert(Tracked {
                 process,
                 original: Originals {
@@ -290,10 +292,15 @@ impl State {
             });
         }
         let tracked = self.originals.get_mut(&key).expect("inserted above");
+        let mut next = class.style(self.style);
+        // An app owning its material still has independently configurable frame corners.
+        if !unmanaged_backdrop(tracked.original.backdrop) {
+            next.backdrop = None;
+        }
         tracked.applied = apply_transition(
             hwnd,
             tracked.applied,
-            class.style(self.style),
+            next,
             &mut tracked.original,
         );
         true
@@ -398,7 +405,7 @@ fn classify_window(
     if style & WS_CHILD.0 != 0
         || cloaked
         || ex & (WS_EX_LAYERED.0 | WS_EX_TRANSPARENT.0) != 0
-        || (covers_monitor && ex & WS_EX_TOPMOST.0 != 0)
+        || covers_monitor
     {
         return WindowClass::Untouched;
     }
@@ -425,27 +432,27 @@ fn window_class(hwnd: HWND) -> WindowClass {
         if !IsWindowVisible(hwnd).as_bool() || GetAncestor(hwnd, GA_PARENT) != GetDesktopWindow() {
             return WindowClass::Untouched;
         }
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
         let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
-        let mut covers_monitor = false;
-        if ex & WS_EX_TOPMOST.0 != 0 {
-            let mut rect = RECT::default();
-            let mut monitor = MONITORINFO {
-                cbSize: size_of::<MONITORINFO>() as u32,
-                ..Default::default()
-            };
-            covers_monitor = GetWindowRect(hwnd, &mut rect).is_ok()
-                && GetMonitorInfoW(
-                    MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
-                    &mut monitor,
-                )
-                .as_bool()
-                && rect.left <= monitor.rcMonitor.left
-                && rect.top <= monitor.rcMonitor.top
-                && rect.right >= monitor.rcMonitor.right
-                && rect.bottom >= monitor.rcMonitor.bottom;
-        }
+        let mut rect = RECT::default();
+        let mut monitor = MONITORINFO {
+            cbSize: size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        let covers_monitor = GetWindowRect(hwnd, &mut rect).is_ok()
+            && GetMonitorInfoW(
+                MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+                &mut monitor,
+            )
+            .as_bool()
+            && full_screen(
+                rect,
+                monitor.rcMonitor,
+                IsZoomed(hwnd).as_bool(),
+                style,
+            );
         classify_window(
-            GetWindowLongPtrW(hwnd, GWL_STYLE) as u32,
+            style,
             ex,
             GetWindow(hwnd, GW_OWNER).is_ok_and(|h| !h.is_invalid()),
             read(hwnd, DWMWA_CLOAKED).is_some_and(|v| v != 0),
@@ -453,6 +460,44 @@ fn window_class(hwnd: HWND) -> WindowClass {
         )
     }
 }
+/// A full-screen app: a window covering its whole monitor (exclusive or borderless full screen,
+/// games, video, presentations) that is not a maximized normal window. Maximized frames keep
+/// their caption and stay styled; a maximized window without one (how some games and players go
+/// borderless full screen) is full screen too. Such windows never receive a DWM write.
+fn full_screen(window: RECT, monitor: RECT, zoomed: bool, style: u32) -> bool {
+    let maximized_frame = zoomed && style & WS_CAPTION.0 == WS_CAPTION.0;
+    !maximized_frame
+        && crate::game_activity::covers_monitor(
+            [window.left, window.top, window.right, window.bottom],
+            [monitor.left, monitor.top, monitor.right, monitor.bottom],
+        )
+}
+
+/// Executables of anti-cheat services, clients and protected game builds. Defence in depth:
+/// only allowlisted, Microsoft-signed Windows apps are ever styled, so none of these could pass,
+/// but a future allowlist entry must never let Glaze touch a process an anti-cheat watches.
+const ANTI_CHEAT: &[&str] = &[
+    "easyanticheat.exe",
+    "easyanticheat_eos.exe",
+    "beservice.exe",
+    "beservice_x64.exe",
+    "vgc.exe",
+    "vgtray.exe",
+    "faceit.exe",
+    "faceitclient.exe",
+    "faceitservice.exe",
+];
+
+/// Is `image` an anti-cheat process, or a game build launched under one (`*_EAC.exe`,
+/// `*_BE.exe`, the names Easy Anti-Cheat and BattlEye give protected binaries)?
+fn anti_cheat(image: &Path) -> bool {
+    let Some(name) = image.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+    let name = name.to_ascii_lowercase();
+    ANTI_CHEAT.contains(&name.as_str()) || name.ends_with("_eac.exe") || name.ends_with("_be.exe")
+}
+
 /// Does the window's process pass the injection allowlist?
 fn process_allowed(hwnd: HWND, windows_dir: &Path) -> bool {
     allowed_process(hwnd, windows_dir).is_some()
@@ -462,6 +507,11 @@ fn allowed_process(hwnd: HWND, windows_dir: &Path) -> Option<ProcessKey> {
     let mut pid = 0;
     // SAFETY: `pid` is a valid out pointer.
     unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    if pid == std::process::id() {
+        return None;
+    }
+    #[cfg(test)]
+    if TEST_PROCESS.get().is_some_and(|target| target != pid) { return None; }
     // SAFETY: opens a query-only handle, closed by `Process`'s drop.
     let Ok(handle) = (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }) else {
         return None;
@@ -472,14 +522,24 @@ fn allowed_process(hwnd: HWND, windows_dir: &Path) -> Option<ProcessKey> {
         started: process.started()?,
     };
     ALLOWLIST
-        .with_borrow_mut(|cache| cache.verdict(key, || evaluate_process(&process, windows_dir)))
+        .with_borrow_mut(|cache| cache.verdict(key, || {
+            #[cfg(test)]
+            if TEST_PROCESS.get() == Some(pid) { return process.non_elevated(); }
+            evaluate_process(&process, windows_dir)
+        }))
         .then_some(key)
 }
 
 fn evaluate_process(process: &Process, windows_dir: &Path) -> bool {
+    if !process.non_elevated() {
+        return false;
+    }
     let Some(image) = process.image() else {
         return false;
     };
+    if anti_cheat(&image) {
+        return false;
+    }
     let family = process.package_family();
     let mut target = Target {
         image: &image,
@@ -506,6 +566,20 @@ impl Drop for Process {
 }
 
 impl Process {
+    fn non_elevated(&self) -> bool {
+        let mut token = HANDLE::default();
+        // SAFETY: query-only access; the owned token is closed on every return path.
+        if unsafe { OpenProcessToken(self.0, TOKEN_QUERY, &mut token) }.is_err() {
+            return false;
+        }
+        let token = Process(token);
+        let mut elevation = TOKEN_ELEVATION::default();
+        let mut size = 0;
+        // SAFETY: the output buffer and its byte length match TOKEN_ELEVATION.
+        unsafe { GetTokenInformation(token.0, TokenElevation,
+            Some((&raw mut elevation).cast()), size_of::<TOKEN_ELEVATION>() as u32, &mut size) }
+            .is_ok() && elevation.TokenIsElevated == 0
+    }
     fn started(&self) -> Option<u64> {
         let mut created = FILETIME::default();
         let mut exit = FILETIME::default();
@@ -619,7 +693,15 @@ fn apply_transition(
     next: WindowStyle,
     original: &mut Originals,
 ) -> WindowStyle {
-    let delta = before.transition_to(next);
+    let mut delta = before.transition_to(next);
+    // Apps can reset DWM preferences without a WinEvent. The existing tracked-window
+    // timer checks the actual value; unchanged preferences cause no write.
+    if let Some(corners) = next.corners
+        && read(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE)
+            .is_some_and(|actual| actual != corner_preference(corners).0 as u32)
+    {
+        delta.corners = Change::Set(corners);
+    }
     macro_rules! attribute {
         ($field:ident, $saved:ident, $attribute:ident, $fallback:expr, $encode:expr) => {
             update_attribute(
@@ -714,6 +796,10 @@ fn backdrop_type(backdrop: Backdrop) -> DWM_SYSTEMBACKDROP_TYPE {
         Backdrop::Tabbed => DWMSBT_TABBEDWINDOW,
     }
 }
+
+#[cfg(test)]
+#[path = "dwm_live_test.rs"]
+mod live_tests;
 
 #[cfg(test)]
 mod tests {
@@ -920,5 +1006,36 @@ mod tests {
         };
         assert!(!cache.verdict(reused, || false));
         assert!(!cache.verdict(reused, || panic!("negative verdicts are cached too")));
+    }
+
+    #[test]
+    fn full_screen_apps_are_left_alone_but_maximized_frames_are_not() {
+        let rect = |left, top, right, bottom| RECT { left, top, right, bottom };
+        let monitor = rect(-1920, 0, 0, 1080);
+        let popup = WS_POPUP.0;
+        let frame = WS_CAPTION.0 | WS_THICKFRAME.0;
+        // Exclusive or borderless full screen, including a maximized captionless window.
+        assert!(full_screen(monitor, monitor, false, popup));
+        assert!(full_screen(monitor, monitor, true, popup));
+        // A maximized normal window overhangs its monitor by its frame and stays styled.
+        assert!(!full_screen(rect(-1928, -8, 8, 1088), monitor, true, frame));
+        // A frame merely as large as the monitor, not maximized, is a full-screen app.
+        assert!(full_screen(rect(-1928, -8, 8, 1088), monitor, false, frame));
+        assert!(!full_screen(rect(-1920, 0, 0, 1040), monitor, false, popup));
+    }
+
+    #[test]
+    fn anti_cheat_processes_and_protected_game_builds_are_denied() {
+        for image in [
+            r"C:\Program Files (x86)\EasyAntiCheat\EasyAntiCheat.exe",
+            r"C:\Program Files\Riot Vanguard\vgc.exe",
+            r"C:\Games\Fortnite\FortniteClient-Win64-Shipping_EAC.exe",
+            r"C:\Games\PUBG\TslGame_BE.exe",
+            r"C:\Program Files\FACEIT\FACEIT.exe",
+        ] {
+            assert!(anti_cheat(Path::new(image)), "{image}");
+        }
+        assert!(!anti_cheat(Path::new(r"C:\Windows\explorer.exe")));
+        assert!(!anti_cheat(Path::new(r"C:\Tools\beacon.exe")));
     }
 }

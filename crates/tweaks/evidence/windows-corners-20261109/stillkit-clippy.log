@@ -1,0 +1,20 @@
+cargo :     Checking stillkit v0.0.1 (D:\Coding\projects\desktop\stillkit\crates\stillkit)
+At line:2 char:89
++ ... stability'; cargo clippy -p stillkit --all-targets --features golden  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checking st...rates\stillkit):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: useless conversion to the same type: `std::sync::Arc<str>`
+    --> crates\stillkit\src\menu.rs:1280:61
+     |
+1280 |             if let Op::Text {rect,text,style,..}=op { *text=ui.text.fit(text,style,rect.width()).into(); }
+     |                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: 
+consider removing `.into()`: `ui.text.fit(text,style,rect.width())`
+     |
+     = help: for further information visit https://clippy.rust-lang.org/main/index.html#useless_conversion
+     = note: `#[warn(clippy::useless_conversion)]` on by default
+
+warning: `stillkit` (lib) generated 1 warning (run `cargo clippy --fix --lib -p stillkit -- ` to apply 1 suggestion)
+warning: `stillkit` (lib test) generated 1 warning (1 duplicate)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.82s

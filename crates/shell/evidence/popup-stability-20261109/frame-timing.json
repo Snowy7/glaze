@@ -1,0 +1,3609 @@
+{
+  "blank_frames": 0,
+  "foreground_untouched": true,
+  "frames": 360,
+  "internal_events_only": true,
+  "samples": [
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 55.3737,
+      "frame": 0,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 86.60510000000001,
+      "frame": 1,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 116.9848,
+      "frame": 2,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 174.6712,
+      "frame": 3,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 217.3166,
+      "frame": 4,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 252.2708,
+      "frame": 5,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 305.4407,
+      "frame": 6,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 341.29310000000004,
+      "frame": 7,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 372.8952,
+      "frame": 8,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 407.5677,
+      "frame": 9,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 441.05850000000004,
+      "frame": 10,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 476.31800000000004,
+      "frame": 11,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 503.4121,
+      "frame": 12,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 534.3202,
+      "frame": 13,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 580.1305,
+      "frame": 14,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 613.3528,
+      "frame": 15,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 645.5134999999999,
+      "frame": 16,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 688.0177,
+      "frame": 17,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 732.7276,
+      "frame": 18,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 800.2143000000001,
+      "frame": 19,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 826.7267,
+      "frame": 20,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 859.3193,
+      "frame": 21,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 890.8705,
+      "frame": 22,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 925.0492,
+      "frame": 23,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 949.8056,
+      "frame": 24,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 974.2968,
+      "frame": 25,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1025.5188,
+      "frame": 26,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1061.6091000000001,
+      "frame": 27,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1135.805,
+      "frame": 28,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1254.2618,
+      "frame": 29,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 971,
+      "stage": "menu-open",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1303.8781999999999,
+      "frame": 30,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1341.15,
+      "frame": 31,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1370.1479000000002,
+      "frame": 32,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1396.3147000000001,
+      "frame": 33,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1432.197,
+      "frame": 34,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1473.1565,
+      "frame": 35,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1508.0553,
+      "frame": 36,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1540.6290000000001,
+      "frame": 37,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1570.8096999999998,
+      "frame": 38,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 1603.5558999999998,
+      "frame": 39,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 1662.1385,
+      "frame": 40,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 1718.9084,
+      "frame": 41,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 1791.3573000000001,
+      "frame": 42,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 1838.6992,
+      "frame": 43,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 1891.4531000000002,
+      "frame": 44,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 1940.7350999999999,
+      "frame": 45,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 1997.4560000000001,
+      "frame": 46,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2045.5572000000002,
+      "frame": 47,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2087.7174,
+      "frame": 48,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2134.6622,
+      "frame": 49,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2187.1626,
+      "frame": 50,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2220.3360000000002,
+      "frame": 51,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2246.9433,
+      "frame": 52,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2280.9680000000003,
+      "frame": 53,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2323.0691,
+      "frame": 54,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2358.4728999999998,
+      "frame": 55,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2391.1622,
+      "frame": 56,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2425.316,
+      "frame": 57,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2454.3857,
+      "frame": 58,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2479.4365,
+      "frame": 59,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2528.6037,
+      "frame": 60,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2566.0894000000003,
+      "frame": 61,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2611.9440000000004,
+      "frame": 62,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2653.9518,
+      "frame": 63,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2691.2894,
+      "frame": 64,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2732.869,
+      "frame": 65,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2774.8805,
+      "frame": 66,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2817.2639999999997,
+      "frame": 67,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2862.2729,
+      "frame": 68,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 2896.7825000000003,
+      "frame": 69,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2928.8824,
+      "frame": 70,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2958.2934,
+      "frame": 71,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 2987.9699,
+      "frame": 72,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3018.0041,
+      "frame": 73,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3041.4096,
+      "frame": 74,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3074.9467,
+      "frame": 75,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3099.6719000000003,
+      "frame": 76,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3124.6895,
+      "frame": 77,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3153.819,
+      "frame": 78,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3188.1651,
+      "frame": 79,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 3233.5147,
+      "frame": 80,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 3283.0287,
+      "frame": 81,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 3318.1222,
+      "frame": 82,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 3358.3336,
+      "frame": 83,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 3397.3523999999998,
+      "frame": 84,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 3437.5637,
+      "frame": 85,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 3478.7670999999996,
+      "frame": 86,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 3524.7742,
+      "frame": 87,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 3562.0887,
+      "frame": 88,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 3596.636,
+      "frame": 89,
+      "max_backdrop_edge_contrast": 0.10000000149011612,
+      "min_content_pixels": 950,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3624.5503000000003,
+      "frame": 90,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3654.0816,
+      "frame": 91,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3682.8704000000002,
+      "frame": 92,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3707.9258,
+      "frame": 93,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3733.5873,
+      "frame": 94,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3757.8905000000004,
+      "frame": 95,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3783.1635,
+      "frame": 96,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3807.9058,
+      "frame": 97,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3841.3714,
+      "frame": 98,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3866.4346,
+      "frame": 99,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2780,
+      "stage": "hover-and-submenus",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3900.5688,
+      "frame": 100,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3929.6124,
+      "frame": 101,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3958.1094000000003,
+      "frame": 102,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 3983.2619999999997,
+      "frame": 103,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4012.7186,
+      "frame": 104,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4037.2607,
+      "frame": 105,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4062.5843,
+      "frame": 106,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4087.6355000000003,
+      "frame": 107,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4117.828399999999,
+      "frame": 108,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4149.715099999999,
+      "frame": 109,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4175.5197,
+      "frame": 110,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4199.644700000001,
+      "frame": 111,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4232.964800000001,
+      "frame": 112,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4258.1392000000005,
+      "frame": 113,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4287.496700000001,
+      "frame": 114,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4325.1129,
+      "frame": 115,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4354.3376,
+      "frame": 116,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4383.0752999999995,
+      "frame": 117,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4412.4091,
+      "frame": 118,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4437.732300000001,
+      "frame": 119,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4466.471399999999,
+      "frame": 120,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4502.9583999999995,
+      "frame": 121,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4538.24,
+      "frame": 122,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4562.2755,
+      "frame": 123,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4587.2874,
+      "frame": 124,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4613.4785999999995,
+      "frame": 125,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4656.4571,
+      "frame": 126,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4687.4265,
+      "frame": 127,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4729.1727,
+      "frame": 128,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 4758.1774000000005,
+      "frame": 129,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "async-menu-update",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 4808.0986,
+      "frame": 130,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 4860.2256,
+      "frame": 131,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 4912.957600000001,
+      "frame": 132,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 4971.1885,
+      "frame": 133,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5016.4735,
+      "frame": 134,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5079.3108,
+      "frame": 135,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5124.0148,
+      "frame": 136,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5173.1059000000005,
+      "frame": 137,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5229.662700000001,
+      "frame": 138,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5283.134999999999,
+      "frame": 139,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5329.0266,
+      "frame": 140,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5383.4028,
+      "frame": 141,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5433.5315,
+      "frame": 142,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5475.1197999999995,
+      "frame": 143,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5520.7928,
+      "frame": 144,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5558.3792,
+      "frame": 145,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5608.4151,
+      "frame": 146,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5655.7818,
+      "frame": 147,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5726.2072,
+      "frame": 148,
+      "max_backdrop_edge_contrast": 0.1538461595773697,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5776.1283,
+      "frame": 149,
+      "max_backdrop_edge_contrast": 0.1538461595773697,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5821.641,
+      "frame": 150,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5884.4222,
+      "frame": 151,
+      "max_backdrop_edge_contrast": 0.1538461595773697,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5938.8261,
+      "frame": 152,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 5984.4856,
+      "frame": 153,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6026.1575,
+      "frame": 154,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6084.728700000001,
+      "frame": 155,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6130.2348999999995,
+      "frame": 156,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6172.3132,
+      "frame": 157,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6230.5317000000005,
+      "frame": 158,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 6263.7137999999995,
+      "frame": 159,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6305.3787999999995,
+      "frame": 160,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6375.7797,
+      "frame": 161,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6422.776800000001,
+      "frame": 162,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6467.6449,
+      "frame": 163,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6521.859100000001,
+      "frame": 164,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6563.4717,
+      "frame": 165,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6605.2375999999995,
+      "frame": 166,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6642.663500000001,
+      "frame": 167,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6680.3536,
+      "frame": 168,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6722.0094,
+      "frame": 169,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6759.44,
+      "frame": 170,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6796.9175000000005,
+      "frame": 171,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6829.6828000000005,
+      "frame": 172,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6858.8862,
+      "frame": 173,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6887.9767,
+      "frame": 174,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6921.4186,
+      "frame": 175,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6950.4609,
+      "frame": 176,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 6979.7627,
+      "frame": 177,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7008.618,
+      "frame": 178,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7037.8667000000005,
+      "frame": 179,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7067.1913,
+      "frame": 180,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7096.525500000001,
+      "frame": 181,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7125.491099999999,
+      "frame": 182,
+      "max_backdrop_edge_contrast": 0.07692307978868484,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7159.4046,
+      "frame": 183,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7196.7261,
+      "frame": 184,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7229.9289,
+      "frame": 185,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7258.8391,
+      "frame": 186,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7292.2198,
+      "frame": 187,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7321.5151,
+      "frame": 188,
+      "max_backdrop_edge_contrast": 0.1538461595773697,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7350.519,
+      "frame": 189,
+      "max_backdrop_edge_contrast": 0.1538461595773697,
+      "min_content_pixels": 2007,
+      "stage": "dock-reveal-hide",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7383.918900000001,
+      "frame": 190,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7413.0104,
+      "frame": 191,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7446.4407,
+      "frame": 192,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7475.4737000000005,
+      "frame": 193,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7504.7443,
+      "frame": 194,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7537.974700000001,
+      "frame": 195,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7571.427500000001,
+      "frame": 196,
+      "max_backdrop_edge_contrast": 0.09090909361839294,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7600.379099999999,
+      "frame": 197,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7633.8295,
+      "frame": 198,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 7658.9305,
+      "frame": 199,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7692.430899999999,
+      "frame": 200,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7721.4427,
+      "frame": 201,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7750.560799999999,
+      "frame": 202,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7779.7092,
+      "frame": 203,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7808.9443,
+      "frame": 204,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7837.8565,
+      "frame": 205,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7867.2731,
+      "frame": 206,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7900.6533,
+      "frame": 207,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7938.3541,
+      "frame": 208,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 7979.910699999999,
+      "frame": 209,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8017.399899999999,
+      "frame": 210,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8054.9427,
+      "frame": 211,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8084.0806999999995,
+      "frame": 212,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8121.574600000001,
+      "frame": 213,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8155.2279,
+      "frame": 214,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8196.850100000001,
+      "frame": 215,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8234.478599999999,
+      "frame": 216,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8280.1036,
+      "frame": 217,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8313.248399999999,
+      "frame": 218,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8355.07,
+      "frame": 219,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8384.1427,
+      "frame": 220,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8421.4935,
+      "frame": 221,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8454.9445,
+      "frame": 222,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8488.3249,
+      "frame": 223,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8525.7936,
+      "frame": 224,
+      "max_backdrop_edge_contrast": 0.09090909361839294,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8554.9152,
+      "frame": 225,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8584.2419,
+      "frame": 226,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8617.452099999999,
+      "frame": 227,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8651.108,
+      "frame": 228,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8701.6912,
+      "frame": 229,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8781.975299999998,
+      "frame": 230,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8825.995499999999,
+      "frame": 231,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8867.693599999999,
+      "frame": 232,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8901.5295,
+      "frame": 233,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8938.3771,
+      "frame": 234,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 8980.3585,
+      "frame": 235,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9017.5871,
+      "frame": 236,
+      "max_backdrop_edge_contrast": 0.09090909361839294,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9059.537900000001,
+      "frame": 237,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9096.9795,
+      "frame": 238,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 9125.991100000001,
+      "frame": 239,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9159.284,
+      "frame": 240,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9213.510100000001,
+      "frame": 241,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9250.8827,
+      "frame": 242,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9284.226,
+      "frame": 243,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9325.9113,
+      "frame": 244,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9355.086500000001,
+      "frame": 245,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9392.6246,
+      "frame": 246,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9430.3504,
+      "frame": 247,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9471.9717,
+      "frame": 248,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9518.0954,
+      "frame": 249,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9551.0919,
+      "frame": 250,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9593.4296,
+      "frame": 251,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9630.583400000001,
+      "frame": 252,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9677.9902,
+      "frame": 253,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9710.9759,
+      "frame": 254,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9747.8673,
+      "frame": 255,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9789.7672,
+      "frame": 256,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9827.2619,
+      "frame": 257,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9873.033899999999,
+      "frame": 258,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9914.8181,
+      "frame": 259,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9952.234499999999,
+      "frame": 260,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 9991.0817,
+      "frame": 261,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10024.0625,
+      "frame": 262,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10057.5605,
+      "frame": 263,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10091.4344,
+      "frame": 264,
+      "max_backdrop_edge_contrast": 0.09090909361839294,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10132.3575,
+      "frame": 265,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10169.8012,
+      "frame": 266,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10207.3796,
+      "frame": 267,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10240.954,
+      "frame": 268,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10274.051,
+      "frame": 269,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10307.655499999999,
+      "frame": 270,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10340.6946,
+      "frame": 271,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10382.5131,
+      "frame": 272,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10415.6664,
+      "frame": 273,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10453.3003,
+      "frame": 274,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10487.4169,
+      "frame": 275,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10528.3259,
+      "frame": 276,
+      "max_backdrop_edge_contrast": 0.09090909361839294,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10574.7149,
+      "frame": 277,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10628.6279,
+      "frame": 278,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 2,
+      "elapsed_ms": 10657.8936,
+      "frame": 279,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10699.226700000001,
+      "frame": 280,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10736.931,
+      "frame": 281,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10774.483699999999,
+      "frame": 282,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10820.1388,
+      "frame": 283,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10857.5932,
+      "frame": 284,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10903.7284,
+      "frame": 285,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 10953.9565,
+      "frame": 286,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11034.4012,
+      "frame": 287,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11082.6226,
+      "frame": 288,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11124.5417,
+      "frame": 289,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "magnification",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11154.9312,
+      "frame": 290,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11195.315499999999,
+      "frame": 291,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11228.5869,
+      "frame": 292,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11270.2514,
+      "frame": 293,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11324.6257,
+      "frame": 294,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11357.762299999999,
+      "frame": 295,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11433.0605,
+      "frame": 296,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11499.9757,
+      "frame": 297,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11541.9853,
+      "frame": 298,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11609.015,
+      "frame": 299,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11686.8532,
+      "frame": 300,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11773.729599999999,
+      "frame": 301,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11892.724,
+      "frame": 302,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 11972.0326,
+      "frame": 303,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 12042.3095,
+      "frame": 304,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 12127.1541,
+      "frame": 305,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 12238.5672,
+      "frame": 306,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 12393.4086,
+      "frame": 307,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 12477.5887,
+      "frame": 308,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 12576.1283,
+      "frame": 309,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 12660.2284,
+      "frame": 310,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 12727.6162,
+      "frame": 311,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 12788.7845,
+      "frame": 312,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 12872.7907,
+      "frame": 313,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 12938.7901,
+      "frame": 314,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13001.4392,
+      "frame": 315,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13076.4033,
+      "frame": 316,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13147.3655,
+      "frame": 317,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13201.3298,
+      "frame": 318,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13258.1746,
+      "frame": 319,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13305.5313,
+      "frame": 320,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13359.9147,
+      "frame": 321,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13447.4639,
+      "frame": 322,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13530.732399999999,
+      "frame": 323,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13601.5682,
+      "frame": 324,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13659.742,
+      "frame": 325,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13709.8294,
+      "frame": 326,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13776.705,
+      "frame": 327,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13822.267399999999,
+      "frame": 328,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13880.516099999999,
+      "frame": 329,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13930.673,
+      "frame": 330,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 13980.5266,
+      "frame": 331,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14030.454300000001,
+      "frame": 332,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14089.7989,
+      "frame": 333,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14146.929699999999,
+      "frame": 334,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14198.3909,
+      "frame": 335,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14248.3802,
+      "frame": 336,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14307.8534,
+      "frame": 337,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14354.455899999999,
+      "frame": 338,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14406.5969,
+      "frame": 339,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14461.751100000001,
+      "frame": 340,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14523.4355,
+      "frame": 341,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14585.8473,
+      "frame": 342,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14636.019600000001,
+      "frame": 343,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14682.4164,
+      "frame": 344,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14723.6601,
+      "frame": 345,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14769.6799,
+      "frame": 346,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14815.169600000001,
+      "frame": 347,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14860.959700000001,
+      "frame": 348,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14906.764799999999,
+      "frame": 349,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14956.7659,
+      "frame": 350,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 14998.5552,
+      "frame": 351,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 15041.139,
+      "frame": 352,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 15157.6271,
+      "frame": 353,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 15271.9535,
+      "frame": 354,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 15348.372599999999,
+      "frame": 355,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 15466.929800000002,
+      "frame": 356,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 15569.3521,
+      "frame": 357,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 15620.328300000001,
+      "frame": 358,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    },
+    {
+      "blank": 0,
+      "checked_windows": 3,
+      "elapsed_ms": 15703.2978,
+      "frame": 359,
+      "max_backdrop_edge_contrast": 0.0,
+      "min_content_pixels": 2007,
+      "stage": "flyout-repaint",
+      "unfrosted": 0
+    }
+  ],
+  "unfrosted_frames": 0
+}

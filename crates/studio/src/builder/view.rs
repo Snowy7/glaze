@@ -1,6 +1,6 @@
 use super::{Command, active, edit, raw};
 use crate::{
-    actions::{Action, FieldId},
+    actions::{Action, FieldId, MenuItem, menu_icon},
     app::App,
     panel::{
         Page,
@@ -206,26 +206,6 @@ fn more_glyph() -> glaze_ui::controls::Glyph {
     glaze_ui::icons::Icon::More.into()
 }
 
-/// A full-width menu row (overflow menus and pickers).
-fn menu_row(b: &mut B, c: &mut Col, k: glaze_ui::controls::Key, glyph: Option<glaze_ui::controls::Glyph>, label: &str, detail: &str, act: Action) {
-    let r = Rect::new(c.x, c.y, c.w, b.px(34.0));
-    if b.hovered(k) {
-        b.fill(r, b.px(8.0), b.p.hover);
-    }
-    let mut x = r.left + b.px(10.0);
-    if let Some(glyph) = glyph {
-        b.icon(Rect::new(x, r.top, b.px(18.0), r.height()), glyph, 14.0, b.p.ink2);
-        x += b.px(28.0);
-    }
-    text(b, Rect::new(x, r.top, r.right - x - b.px(10.0), r.height()), label, 13.0, 500, b.p.ink1, Align::Start);
-    if !detail.is_empty() {
-        text(b, Rect::new(x, r.top, r.right - x - b.px(10.0), r.height()), detail, 12.0, 400, b.p.ink3, Align::End);
-    }
-    b.hit(k, r, Role::Button, label, act, Behavior::Click);
-    b.focus_ring(k, r, b.px(8.0));
-    c.y = r.bottom;
-}
-
 /// Name (edited in place), save state, Apply / Save / overflow.
 fn header(app: &App, b: &mut B, c: &mut Col, value: &Value) {
     let editor = active(app).unwrap();
@@ -255,31 +235,27 @@ fn header(app: &App, b: &mut B, c: &mut Col, value: &Value) {
     let h = b.px(34.0);
     let more = Rect::new(c.right() - h, c.y, h, h);
     let gap = b.px(8.0);
-    let save_w = b.px(84.0);
+    // Say where each action goes: onto the desktop, or into your wallpapers.
+    let save_w = b.px(128.0);
     let save = Rect::new(more.left - gap - save_w, c.y, save_w, h);
     let apply = Rect::new(c.x, c.y, save.left - gap - c.x, h);
     let ready = !editor.fresh;
-    button(b, apply, "Apply", None, true, ready, action(Command::Save(true)));
-    button(b, save, "Save", None, false, ready, action(Command::Save(false)));
+    button(b, apply, "Apply to desktop", None, true, ready, action(Command::Save(true)));
+    button(b, save, "Save wallpaper", None, false, ready, action(Command::Save(false)));
     let mk = key("builder-more");
-    b.fill(more, b.control_radius(more), if b.hovered(mk) || app.is_open(mk) { b.p.hover } else { b.p.fill });
+    b.fill(more, b.control_radius(more), if b.hovered(mk) { b.p.hover } else { b.p.fill });
     b.stroke(more, b.control_radius(more), b.px(1.0), b.p.line);
     b.icon(more, more_glyph(), 15.0, b.p.ink1);
-    b.hit(mk, more, Role::Button, "More actions", Action::More(mk), Behavior::Click);
+    let menu = vec![
+        MenuItem::new("Save as copy", action(Command::SaveCopy)).icon(menu_icon::COPY).enabled(ready),
+        MenuItem::new("Revert to original", action(Command::Revert)).icon(menu_icon::UNDO).enabled(editor.initial != *value),
+        MenuItem::new("Credits for imported files", action(Command::Credits)).icon(menu_icon::INFO),
+        MenuItem::Separator,
+        MenuItem::new("Discard draft", action(Command::Discard)).icon(menu_icon::DELETE),
+    ];
+    b.hit(mk, more, Role::Button, "More actions", Action::Menu(menu), Behavior::Click);
     b.focus_ring(mk, more, b.control_radius(more));
     c.y = more.bottom + b.px(6.0);
-    if app.is_open(mk) {
-        let top = c.y;
-        let at = b.list.ops.len();
-        c.y += b.px(4.0);
-        let mut inner = Col { x: c.x + b.px(4.0), w: c.w - b.px(8.0), ..*c };
-        menu_row(b, &mut inner, key("builder-more-copy"), Some(glyph::COPY), "Save as copy", "", action(Command::SaveCopy));
-        menu_row(b, &mut inner, key("builder-more-revert"), Some(glyph::UNDO), "Revert to original", "", action(Command::Revert));
-        menu_row(b, &mut inner, key("builder-more-discard"), Some(glyph::DELETE), "Discard draft", "", action(Command::Discard));
-        c.y = inner.y + b.px(4.0);
-        b.list.ops.insert(at, glaze_ui::Op::Fill { rect: Rect::new(c.x, top, c.w, c.y - top), radius: b.px(12.0), color: b.p.panel });
-        c.y += b.px(4.0);
-    }
 }
 
 /// A new draft: what to start from.
@@ -296,7 +272,7 @@ fn start(app: &App, b: &mut B, c: &mut Col) {
         (glyph::IMAGE, "Photo", "JPG, PNG, WebP", action(Command::Pick("photo"))),
         (glyph::VIDEO, "Video", "MP4, WebM", action(Command::Pick("video"))),
         (crate::theme::glyph::LOOK, "Colour", "Solid or gradient", action(Command::Base("color"))),
-        (glyph::DESKTOP, "Wallpaper", "One you have", Action::More(key("builder-change"))),
+        (glyph::DESKTOP, "Wallpaper", "One you have", Action::Menu(wallpaper_items(app))),
     ];
     for (i, (icon, label, detail, act)) in tiles.into_iter().enumerate() {
         let r = Rect::new(c.x + (i % 2) as f32 * (w + gap), c.y + (i / 2) as f32 * (h + gap), w, h);
@@ -310,10 +286,11 @@ fn start(app: &App, b: &mut B, c: &mut Col) {
         b.focus_ring(k, r, b.px(12.0));
     }
     c.y += 2.0 * h + gap + b.px(14.0);
-    line(b, c, "Gradient, shader or 3D scene", "", Action::More(key("builder-change")));
-    if app.is_open(key("builder-change")) {
-        picker(app, b, c);
-    }
+    controls::row(b, c, None, "Something else", "Gradient, shader or 3D scene", "", None, Action::Menu(vec![
+        MenuItem::new("Gradient", action(Command::Base("gradient"))).icon(menu_icon::COLOR),
+        MenuItem::new("Shader", action(Command::Base("shader"))).icon(menu_icon::SHADER),
+        MenuItem::new("3D scene…", action(Command::Pick("scene"))).icon(menu_icon::SCENE),
+    ]));
 }
 
 /// What the base is, in words a person uses.
@@ -370,7 +347,8 @@ fn background(app: &App, b: &mut B, c: &mut Col, base: &Value) {
         let row = Rect::new(c.x, c.y, c.w, b.px(52.0));
         let thumb = Rect::new(row.left, row.top + b.px(2.0), b.px(80.0), b.px(48.0));
         b.fill(thumb, b.px(8.0), swatch(base, b.p.well));
-        match base_picture(app, base).and_then(|p| app.images.borrow_mut().get(&p, (thumb.width() as u32, thumb.height() as u32))) {
+        let visible = b.clip_rect().is_none_or(|clip| thumb.bottom >= clip.top && thumb.top <= clip.bottom);
+        match visible.then(|| base_picture(app, base)).flatten().and_then(|p| app.images.borrow_mut().get(&p, (thumb.width() as u32, thumb.height() as u32))) {
             Some(image) => crate::stage::image_round(b, thumb, &image, 1.0, b.px(8.0)),
             None if !matches!(kind.as_str(), "color" | "gradient") => b.icon(thumb, icon, 18.0, b.p.ink2),
             None => {}
@@ -380,18 +358,17 @@ fn background(app: &App, b: &mut B, c: &mut Col, base: &Value) {
         let change = Rect::new(row.right - b.px(76.0), row.top + b.px(11.0), b.px(76.0), b.px(30.0));
         text(b, Rect::new(tx, row.top + b.px(6.0), change.left - tx - b.px(8.0), b.px(20.0)), &label, 13.0, 600, b.p.ink1, Align::Start);
         small_text(b, Rect::new(tx, row.top + b.px(26.0), change.left - tx - b.px(8.0), b.px(18.0)), &detail, b.p.ink3);
-        let ck = key("builder-change");
-        b.button(ck, change, if app.is_open(ck) { "Done" } else { "Change" }, None, glaze_ui::controls::ButtonKind::Secondary, true, Action::More(ck));
+        b.button(key("builder-change"), change, "Change", None, glaze_ui::controls::ButtonKind::Secondary, true, Action::Menu(base_menu(app)));
         c.y = row.bottom + b.px(10.0);
-        if app.is_open(ck) {
-            picker(app, b, c);
-            return;
-        }
         match kind.as_str() {
             "image" | "video" => {
                 fit(b, c, base["fit"].as_str().unwrap_or("cover"));
                 if kind == "image" {
                     anchor(b, c, &base["focus"]);
+                    for (i, label) in ["Horizontal focus", "Vertical focus"].into_iter().enumerate() {
+                        slider(app, b, c, format!("/wallpaper/base/focus/{i}"), label,
+                            base["focus"][i].as_f64().unwrap_or(0.5), 0.0, 1.0, 0.01);
+                    }
                 }
             }
             "color" => color(app, b, c, "/wallpaper/base/color".into(), "Colour", &base["color"]),
@@ -413,87 +390,59 @@ fn background(app: &App, b: &mut B, c: &mut Col, base: &Value) {
     });
 }
 
-/// One clear list of what a background can be.
-fn picker(app: &App, b: &mut B, c: &mut Col) {
-    for (i, (icon, label, act)) in [
-        (glyph::IMAGE, "Photo", action(Command::Pick("photo"))),
-        (glyph::VIDEO, "Video", action(Command::Pick("video"))),
-        (crate::theme::glyph::LOOK, "Colour", action(Command::Base("color"))),
-        (crate::theme::glyph::LOOK, "Gradient", action(Command::Base("gradient"))),
-        (glyph::SHADER, "Shader", action(Command::Base("shader"))),
-        (glyph::SCENE, "3D scene", action(Command::Pick("scene"))),
+/// What a background can be, as the Change menu: new sources, then wallpapers you have.
+fn base_menu(app: &App) -> Vec<MenuItem> {
+    vec![
+        MenuItem::new("Photo…", action(Command::Pick("photo"))).icon(menu_icon::PHOTO),
+        MenuItem::new("Video…", action(Command::Pick("video"))).icon(menu_icon::VIDEO),
+        MenuItem::new("Colour", action(Command::Base("color"))).icon(menu_icon::COLOR),
+        MenuItem::new("Gradient", action(Command::Base("gradient"))).icon(menu_icon::COLOR),
+        MenuItem::new("Shader", action(Command::Base("shader"))).icon(menu_icon::SHADER),
+        MenuItem::new("3D scene…", action(Command::Pick("scene"))).icon(menu_icon::SCENE),
+        MenuItem::Separator,
+        MenuItem::Submenu { label: "A wallpaper you have".into(), items: wallpaper_items(app) },
     ]
-    .into_iter()
-    .enumerate()
-    {
-        menu_row(b, c, key(("builder-pick", i)), Some(icon), label, "", act);
-    }
-    c.y += b.px(10.0);
-    small_text(b, Rect::new(c.x, c.y, c.w, b.px(20.0)), "A wallpaper you have", b.p.ink3);
-    c.y += b.px(24.0);
-    for index in super::base_choices(app) {
-        let w = &app.library.items[index];
-        menu_row(b, c, key(("builder-pick-theme", index)), Some(glyph::WALLPAPERS), &w.name, w.kind.map_or("", crate::library::Kind::label), action(Command::BaseTheme(index)));
-    }
 }
 
-/// Fill / Fit / Stretch / Center, each drawn as a tiny screen and picture.
+/// Wallpapers that can be a base, as menu rows.
+fn wallpaper_items(app: &App) -> Vec<MenuItem> {
+    super::base_choices(app)
+        .into_iter()
+        .map(|index| {
+            let w = &app.library.items[index];
+            let label = match w.kind {
+                Some(kind) => format!("{} · {}", w.name, kind.label()),
+                None => w.name.clone(),
+            };
+            MenuItem::new(label, action(Command::BaseTheme(index)))
+        })
+        .collect()
+}
+
+/// How a photo or video covers the screen, as a dropdown.
 fn fit(b: &mut B, c: &mut Col, current: &str) {
-    text(b, Rect::new(c.x, c.y, c.w, b.px(20.0)), "Fit", 12.0, 500, b.p.ink2, Align::Start);
-    c.y += b.px(24.0);
     let values = [("cover", "Fill"), ("contain", "Fit"), ("stretch", "Stretch"), ("center", "Center")];
-    let r = Rect::new(c.x, c.y, c.w, b.px(62.0));
-    b.fill(r, b.px(10.0), b.p.fill);
-    let w = r.width() / 4.0;
-    for (i, (fit, label)) in values.into_iter().enumerate() {
-        let cell = Rect::new(r.left + i as f32 * w, r.top, w, r.height()).inflate(-b.px(3.0));
-        let k = key(("builder-fit", i));
-        let on = current == fit;
-        if on {
-            b.fill(cell, b.px(8.0), b.p.panel);
-            b.stroke(cell, b.px(8.0), b.px(1.0), b.p.line);
-        } else if b.hovered(k) {
-            b.fill(cell, b.px(8.0), b.p.hover);
-        }
-        let screen = Rect::new(cell.left + (cell.width() - b.px(30.0)) / 2.0, cell.top + b.px(9.0), b.px(30.0), b.px(19.0));
-        let ink = if on { b.p.ink1 } else { b.p.ink3 };
-        let picture = match fit {
-            "cover" => screen.inflate(b.px(3.0)),
-            "contain" => Rect::new(screen.left + b.px(7.0), screen.top, screen.width() - b.px(14.0), screen.height()),
-            "stretch" => screen,
-            _ => Rect::new(screen.left + b.px(9.0), screen.top + b.px(5.0), screen.width() - b.px(18.0), screen.height() - b.px(10.0)),
-        };
-        let clip = Rect::new(picture.left.max(screen.left), picture.top.max(screen.top), picture.right.min(screen.right) - picture.left.max(screen.left), picture.bottom.min(screen.bottom) - picture.top.max(screen.top));
-        b.fill(clip, b.px(2.0), glaze_ui::Rgba { a: 0.45, ..ink });
-        b.stroke(screen, b.px(3.0), b.px(1.2), ink);
-        text(b, Rect::new(cell.left, cell.bottom - b.px(24.0), cell.width(), b.px(20.0)), label, 12.0, if on { 600 } else { 500 }, if on { b.p.ink1 } else { b.p.ink2 }, Align::Center);
-        b.hit(k, cell, Role::RadioButton, label, action(Command::Fit(fit)), Behavior::Click);
-        b.focus_ring(k, cell, b.px(8.0));
-    }
-    c.y = r.bottom + b.px(14.0);
+    let shown = values.iter().find(|(v, _)| *v == current).map_or("Fill", |(_, l)| l);
+    let menu = values.iter().map(|(v, l)| MenuItem::choice(*l, *v == current, action(Command::Fit(v)))).collect();
+    controls::row(b, c, None, "Fit", shown, "", None, Action::Menu(menu));
 }
 
-/// Which part of the photo stays in view: a 3x3 anchor.
+/// Which part of the photo stays in view when it's cropped, as a dropdown of nine places.
 fn anchor(b: &mut B, c: &mut Col, focus: &Value) {
-    let (fx, fy) = (focus[0].as_f64().unwrap_or(0.5), focus[1].as_f64().unwrap_or(0.5));
-    let size = b.px(66.0);
-    let r = Rect::new(c.right() - size, c.y, size, size * 0.66);
-    text(b, Rect::new(c.x, c.y, c.w - size - b.px(12.0), b.px(20.0)), "Keep in view", 12.0, 500, b.p.ink2, Align::Start);
-    small_text(b, Rect::new(c.x, c.y + b.px(20.0), c.w - size - b.px(12.0), b.px(20.0)), "The part of the photo that stays when it's cropped.", b.p.ink3);
-    b.fill(r, b.px(8.0), b.p.fill);
-    let (cw, ch) = (r.width() / 3.0, r.height() / 3.0);
-    for y in 0..3u8 {
-        for x in 0..3u8 {
-            let cell = Rect::new(r.left + f32::from(x) * cw, r.top + f32::from(y) * ch, cw, ch);
-            let on = (fx * 2.0).round() as u8 == x && (fy * 2.0).round() as u8 == y;
-            let k = key(("builder-anchor", x, y));
-            let dot = b.px(if on { 8.0 } else { 4.0 });
-            let d = Rect::new(cell.left + (cw - dot) / 2.0, cell.top + (ch - dot) / 2.0, dot, dot);
-            b.fill(d, dot / 2.0, if on { b.p.ink1 } else if b.hovered(k) { b.p.ink2 } else { b.p.ink3 });
-            b.hit(k, cell, Role::RadioButton, "Keep this part in view", action(Command::Focus(x, y)), Behavior::Click);
+    const PLACES: [[&str; 3]; 3] = [["Top left", "Top", "Top right"], ["Left", "Center", "Right"], ["Bottom left", "Bottom", "Bottom right"]];
+    let at = |v: &Value| (v.as_f64().unwrap_or(0.5) * 2.0).round().clamp(0.0, 2.0) as u8;
+    let (fx, fy) = (at(&focus[0]), at(&focus[1]));
+    let mut menu = Vec::new();
+    for (y, row) in PLACES.iter().enumerate() {
+        if y > 0 {
+            menu.push(MenuItem::Separator);
+        }
+        for (x, label) in row.iter().enumerate() {
+            let (x, y) = (x as u8, y as u8);
+            menu.push(MenuItem::choice(*label, (x, y) == (fx, fy), action(Command::Focus(x, y))));
         }
     }
-    c.y = r.bottom.max(c.y + b.px(44.0)) + b.px(8.0);
+    controls::row(b, c, None, "Keep in view", PLACES[usize::from(fy)][usize::from(fx)], "The part that stays when it's cropped", None, Action::Menu(menu));
 }
 
 fn gradient(app: &App, b: &mut B, c: &mut Col, base: &Value) {
@@ -581,13 +530,14 @@ fn layer_row(app: &App, b: &mut B, c: &mut Col, i: usize, layer: &Value, selecte
         Some("image") => layer["source"].as_str().map(|s| active(app).unwrap().dir.join(s)),
         _ => None,
     };
-    match picture.and_then(|p| app.images.borrow_mut().get(&p, (thumb.width() as u32, thumb.height() as u32))) {
+    let visible = b.clip_rect().is_none_or(|clip| thumb.bottom >= clip.top && thumb.top <= clip.bottom);
+    match picture.filter(|_| visible).and_then(|p| app.images.borrow_mut().get(&p, (thumb.width() as u32, thumb.height() as u32))) {
         Some(image) => crate::stage::image_round(b, thumb, &image, if on { 1.0 } else { 0.4 }, b.px(7.0)),
         None => b.icon(thumb, if layer["kind"] == "model" { glyph::SCENE } else { glyph::LAYERS }, 14.0, b.p.ink2),
     }
     let name = layer_name(app, layer);
     let eye = Rect::new(r.right - b.px(66.0), r.top + b.px(10.0), b.px(28.0), b.px(28.0));
-    let menu = Rect::new(r.right - b.px(34.0), r.top + b.px(10.0), b.px(28.0), b.px(28.0));
+    let menu_rect = Rect::new(r.right - b.px(34.0), r.top + b.px(10.0), b.px(28.0), b.px(28.0));
     let tx = thumb.right + b.px(10.0);
     text(b, Rect::new(tx, r.top + b.px(6.0), eye.left - tx - b.px(4.0), b.px(20.0)), &name, 13.0, 600, if on { b.p.ink1 } else { b.p.ink3 }, Align::Start);
     let caption = match (layer["kind"].as_str(), effect) {
@@ -605,27 +555,19 @@ fn layer_row(app: &App, b: &mut B, c: &mut Col, i: usize, layer: &Value, selecte
     if !on {
         b.fill(Rect::new(eye.left + b.px(7.0), eye.top + b.px(13.5), b.px(14.0), b.px(1.5)), 0.0, b.p.ink3);
     }
-    let mk = key(("builder-layer-menu", i));
-    icon_button(b, menu, mk, more_glyph(), b.p.ink2, "Layer actions", Action::More(mk));
-    c.y = r.bottom + b.px(2.0);
-    if app.is_open(mk) {
-        let top = c.y;
-        let at = b.list.ops.len();
-        let mut inner = Col { x: c.x + b.px(28.0), y: c.y + b.px(4.0), w: c.w - b.px(28.0), view: c.view };
-        let last = super::layers(app).len().saturating_sub(1);
-        // The panel lists the top layer first, so "up" moves a layer later in the stack.
-        menu_row(b, &mut inner, key(("builder-lm-dup", i)), Some(glyph::COPY), "Duplicate", "", action(Command::DuplicateAt(i)));
-        if i < last {
-            menu_row(b, &mut inner, key(("builder-lm-up", i)), Some(crate::theme::glyph::CHEVRON_RIGHT), "Move up", "", action(Command::MoveAt(i, 1)));
-        }
-        if i > 0 {
-            menu_row(b, &mut inner, key(("builder-lm-down", i)), Some(crate::theme::glyph::CHEVRON_DOWN), "Move down", "", action(Command::MoveAt(i, -1)));
-        }
-        menu_row(b, &mut inner, key(("builder-lm-del", i)), Some(glyph::DELETE), "Remove", "Del", action(Command::RemoveAt(i)));
-        c.y = inner.y + b.px(4.0);
-        b.list.ops.insert(at, glaze_ui::Op::Fill { rect: Rect::new(c.x + b.px(24.0), top, c.w - b.px(24.0), c.y - top), radius: b.px(10.0), color: b.p.fill });
-        c.y += b.px(4.0);
+    let last = super::layers(app).len().saturating_sub(1);
+    // The panel lists the top layer first, so "up" moves a layer later in the stack.
+    let mut menu = vec![
+        MenuItem::new("Duplicate", action(Command::DuplicateAt(i))).icon(menu_icon::COPY),
+        MenuItem::new("Move up", action(Command::MoveAt(i, 1))).icon(menu_icon::UP).enabled(i < last),
+        MenuItem::new("Move down", action(Command::MoveAt(i, -1))).icon(menu_icon::DOWN).enabled(i > 0),
+    ];
+    if layer["kind"] == "effect" {
+        menu.push(MenuItem::new("Edit effect code", action(Command::Shader)).icon(menu_icon::CODE));
     }
+    menu.extend([MenuItem::Separator, MenuItem::new("Remove", action(Command::RemoveAt(i))).icon(menu_icon::DELETE)]);
+    icon_button(b, menu_rect, key(("builder-layer-menu", i)), more_glyph(), b.p.ink2, "Layer actions", Action::Menu(menu));
+    c.y = r.bottom + b.px(2.0);
 }
 
 /// The selected layer's settings, in plain words, directly under its row.
@@ -652,43 +594,42 @@ fn layer_settings(app: &App, b: &mut B, c: &mut Col, i: usize, layer: &Value) {
         }
     }
     slider(app, b, c2, format!("{prefix}/mix"), "Strength", layer["mix"].as_f64().unwrap_or(1.0), 0.0, 1.0, 0.01);
-    let more = key(("builder-layer-more", i));
-    let r = Rect::new(c2.x, c2.y, c2.w, b.px(30.0));
-    b.icon(Rect::new(r.left, r.top, b.px(14.0), r.height()), if app.is_open(more) { glyph::CHEVRON_DOWN } else { crate::theme::glyph::CHEVRON_RIGHT }, 11.0, b.p.ink3);
-    text(b, Rect::new(r.left + b.px(20.0), r.top, r.width() - b.px(20.0), r.height()), "More", 12.0, 500, b.p.ink2, Align::Start);
-    b.hit(more, r, Role::Button, "More settings", Action::More(more), Behavior::Click);
-    c2.y = r.bottom + b.px(4.0);
-    if app.is_open(more) {
-        editors::select(b, c2, "Blend", layer.get("blend").cloned().unwrap_or(json!("normal")), edit(app, format!("{prefix}/blend"), "Blend"),
-            [("normal", "Normal"), ("add", "Add (brighter)"), ("screen", "Screen (lighter)"), ("multiply", "Multiply (darker)")].iter().map(|(v, l)| (json!(v), (*l).to_owned())).collect());
-        text_field(app, b, c2, format!("{prefix}/id"), "Layer name", layer["id"].as_str().unwrap_or(""));
-        if layer["kind"] == "effect" {
-            line(b, c2, "Edit effect code", "WGSL", action(Command::Shader));
-        }
-    }
+    editors::select(b, c2, "Blend", layer.get("blend").cloned().unwrap_or(json!("normal")), edit(app, format!("{prefix}/blend"), "Blend"),
+        [("normal", "Normal"), ("add", "Add (brighter)"), ("screen", "Screen (lighter)"), ("multiply", "Multiply (darker)")].iter().map(|(v, l)| (json!(v), (*l).to_owned())).collect());
+    text_field(app, b, c2, format!("{prefix}/id"), "Layer name", layer["id"].as_str().unwrap_or(""));
     c.y = inner.y + b.px(10.0);
     b.hline(c.x + b.px(10.0), c.right() - b.px(10.0), c.y - b.px(4.0), b.p.line);
 }
 
-/// What it costs, in words; frame rate and quality live under it.
+/// What it costs, in words, then frame rate and quality as dropdowns.
 fn footer(app: &App, b: &mut B, c: &mut Col, value: &Value) {
     c.y += b.px(18.0);
     let cost = super::cost_line(app);
     let r = Rect::new(c.x, c.y, c.w, b.px(24.0));
     b.icon(Rect::new(r.left, r.top, b.px(16.0), r.height()), glyph::GAUGE, 13.0, b.p.ink2);
     text(b, Rect::new(r.left + b.px(24.0), r.top, r.width() - b.px(24.0), r.height()), &cost, 12.0, 500, b.p.ink2, Align::Start);
-    c.y = r.bottom + b.px(4.0);
-    let k = key("builder-performance");
-    let p = Rect::new(c.x, c.y, c.w, b.px(28.0));
-    text(b, Rect::new(p.left + b.px(24.0), p.top, p.width(), p.height()), if app.is_open(k) { "Hide frame rate and quality" } else { "Frame rate and quality" }, 12.0, 400, b.p.ink3, Align::Start);
-    b.hit(k, p, Role::Button, "Frame rate and quality", Action::More(k), Behavior::Click);
-    c.y = p.bottom;
-    if app.is_open(k) {
-        let mut inner = Col { x: c.x + b.px(24.0), w: c.w - b.px(24.0), ..*c };
-        slider(app, b, &mut inner, "/wallpaper/fps".into(), "Frames per second while moving", value["wallpaper"]["fps"].as_f64().unwrap_or(30.0), 1.0, 120.0, 1.0);
-        slider(app, b, &mut inner, "/wallpaper/scale".into(), "Quality while moving", value["wallpaper"]["scale"].as_f64().unwrap_or(1.0), 0.25, 1.0, 0.05);
-        line(b, &mut inner, "Credits for imported files", "Edit", action(Command::Credits));
-        c.y = inner.y;
+    c.y = r.bottom + b.px(6.0);
+    let fps = value["wallpaper"]["fps"].clone();
+    let mut rates: Vec<(Value, String)> = [15, 24, 30, 60, 120].iter().map(|n| (json!(n), format!("{n} fps"))).collect();
+    if !rates.iter().any(|(v, _)| v.as_f64() == fps.as_f64()) && let Some(n) = fps.as_f64() {
+        rates.push((fps.clone(), format!("{n} fps")));
+    }
+    editors::select(b, c, "Frame rate while moving", json_number(&fps), edit(app, "/wallpaper/fps", "Frame rate"), rates);
+    let scale = value["wallpaper"]["scale"].as_f64().unwrap_or(1.0);
+    let qualities = [(1.0, "Full"), (0.75, "Three quarters"), (0.5, "Half"), (0.25, "A quarter")];
+    let mut options: Vec<(Value, String)> = qualities.iter().map(|(v, l)| (json!(v), (*l).to_owned())).collect();
+    if !qualities.iter().any(|(v, _)| (v - scale).abs() < 1e-6) {
+        options.push((json!(scale), format!("{:.0}%", scale * 100.0)));
+    }
+    let current = qualities.iter().find(|(v, _)| (v - scale).abs() < 1e-6).map_or(json!(scale), |(v, _)| json!(v));
+    editors::select(b, c, "Quality while moving", current, edit(app, "/wallpaper/scale", "Quality"), options);
+}
+
+/// Whole numbers compare as integers, so a stored 30 matches the menu's 30.
+fn json_number(v: &Value) -> Value {
+    match v.as_f64() {
+        Some(n) if n.fract() == 0.0 => json!(n as i64),
+        _ => v.clone(),
     }
 }
 
@@ -705,26 +646,11 @@ fn gallery(app: &App, b: &mut B, c: &mut Col) {
     crate::ui::text_field(app, b, search, FieldId::EffectSearch, Some(glyph::SEARCH), "Search effects", "", "Search effects");
     b.stroke(search, b.control_radius(search), b.px(1.0), b.p.edge);
     c.y = search.bottom + b.px(10.0);
-    // Category chips wrap to the panel's width.
-    let font = controls::font(b, 12.0, 500);
-    let (mut x, mut y) = (c.x, c.y);
-    let chips: Vec<(Option<&str>, &str)> = std::iter::once((None, "All")).chain(CATEGORIES.iter().map(|(id, label)| (Some(*id), *label))).collect();
-    for (id, label) in chips {
-        let w = b.measure(label, &font).0 + b.px(22.0);
-        if x + w > c.right() {
-            x = c.x;
-            y += b.px(34.0);
-        }
-        let r = Rect::new(x, y, w, b.px(28.0));
-        let on = editor.category.as_deref() == id;
-        let k = key(("builder-chip", label));
-        b.fill(r, r.height() / 2.0, if on { b.p.solid } else if b.hovered(k) { b.p.hover } else { b.p.fill });
-        text(b, r, label, 12.0, 500, if on { b.p.on_solid } else { b.p.ink1 }, Align::Center);
-        b.hit(k, r, Role::RadioButton, label, action(Command::Category(id.map(str::to_owned))), Behavior::Click);
-        b.focus_ring(k, r, r.height() / 2.0);
-        x = r.right + b.px(6.0);
-    }
-    c.y = y + b.px(42.0);
+    let current = editor.category.as_deref().and_then(|id| CATEGORIES.iter().find(|(c, _)| *c == id)).map_or("All effects", |(_, l)| l);
+    let mut menu = vec![MenuItem::choice("All effects", editor.category.is_none(), action(Command::Category(None))), MenuItem::Separator];
+    menu.extend(CATEGORIES.iter().map(|(id, label)| MenuItem::choice(*label, editor.category.as_deref() == Some(id), action(Command::Category(Some((*id).to_owned()))))));
+    controls::row(b, c, None, "Show", current, "", None, Action::Menu(menu));
+    c.y += b.px(10.0);
     let query = app.text(&FieldId::EffectSearch).to_lowercase();
     let shown: Vec<_> = editor
         .effects
@@ -899,15 +825,7 @@ pub fn stage(app: &App, b: &mut B, area: Rect) -> bool {
         return true;
     }
     let value = raw(app);
-    let canvas = crate::stage::frame(
-        app,
-        Rect::new(
-            area.left + b.px(28.0),
-            area.top + b.px(24.0),
-            area.width() - b.px(56.0),
-            area.height() - b.px(88.0),
-        ),
-    );
+    let canvas = super::canvas::geometry(app, area);
     let radius = b.px(14.0);
     let base = &value["wallpaper"]["base"];
     if editor.fresh {
@@ -922,21 +840,23 @@ pub fn stage(app: &App, b: &mut B, area: Rect) -> bool {
     let snapshot = editor.dir.join("preview.jpg");
     let engine_frame = snapshot.is_file();
     // Until the engine's first frame: the base's own picture, then its colour.
-    let path = engine_frame.then_some(snapshot).or_else(|| match base["kind"].as_str() {
-        Some("image") => base["source"].as_str().map(|p| editor.dir.join(p)),
-        Some("theme") => theme_item(app, base).and_then(|w| w.preview.clone()),
+    let poster = || match base["kind"].as_str() {
+        Some("image" | "video") => base["source"].as_str().map(|p| editor.dir.join(p)),
+        Some("theme") => theme_item(app, base).and_then(|w| w.preview.clone().or(w.video.clone())),
         _ => None,
-    });
-    let image = path.as_ref().and_then(|p| {
+    };
+    let size = (canvas.width() as u32, canvas.height() as u32);
+    let image = engine_frame.then(|| app.images.borrow_mut().get(&snapshot, size)).flatten().or_else(|| poster().and_then(|p| {
         app.images
             .borrow_mut()
-            .get(p, (canvas.width() as u32, canvas.height() as u32))
-    });
+            .get(&p, size)
+    }));
     b.fill(canvas, radius, swatch(base, b.p.well));
     if let Some(image) = image {
         crate::stage::image_round(b, canvas, &image, 1.0, radius);
     }
     b.stroke(canvas, radius, b.px(1.0), b.p.edge);
+    super::canvas::overlay(app, b, canvas);
     let (mw, mh) = app
         .display()
         .map_or((1920, 1080), |m| (m.rect.width, m.rect.height));

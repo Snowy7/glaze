@@ -74,6 +74,7 @@ def main():
     parser.add_argument('--frames', type=Path, default=Path('C:/glaze-targets/effects-sheet/gallery-v2'))
     parser.add_argument('--only', default='')
     parser.add_argument('--grid-only', action='store_true')
+    parser.add_argument('--release', action='store_true', help='Use the release engine test binary')
     args = parser.parse_args()
     config = json.loads((ROOT / 'effects/tools/gallery.json').read_text())
     manifests = sorted((json.loads(p.read_text()) for p in (ROOT / 'effects').glob('*/effect.json')),
@@ -114,7 +115,7 @@ def main():
         (folder / 'job.json').write_text(json.dumps(job, indent=2) + '\n')
     if chosen:
         env = dict(os.environ, GLAZE_GALLERY=str(args.out), CARGO_TARGET_DIR=args.target_dir)
-        subprocess.run(['cargo', 'test', '-p', 'glaze-wallpaper', '--bins', 'gallery_renders', '--',
+        subprocess.run(['cargo', 'test', *(['--release'] if args.release else []), '-p', 'glaze-wallpaper', '--bins', 'gallery_renders', '--',
                         '--ignored', '--test-threads=1', '--nocapture'], cwd=ROOT, env=env, check=True)
     for manifest in chosen:
         effect_id = manifest['id']

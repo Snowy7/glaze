@@ -85,15 +85,6 @@ pub enum Drag {
         grab: f32,
         start: f32,
     },
-    /// A widget on the canvas: moving, or resizing by its corner.
-    Widget {
-        instance: String,
-        from: Point,
-        resize: bool,
-        moved: bool,
-    },
-    /// A module on the bars stage or a list row.
-    Module { slot: Slot, from: Point, moved: bool },
 }
 
 /// The overlay over the page (one at a time).
@@ -125,6 +116,7 @@ pub struct Field {
 
 /// Messages from Studio's worker threads and the file watcher.
 pub enum Msg {
+    DesktopRestored(Result<crate::system::RestoreResult, String>),
     PluginPrepared(Result<glaze_widgets::plugin_manager::Package, String>),
     PluginInstalled(Result<String, String>),
     Files(Vec<crate::watch::Change>),
@@ -133,7 +125,7 @@ pub enum Msg {
     PeekEnded,
 }
 
-/// What the glass and image workers post back to wake the loop.
+/// What the image workers post back to wake the loop.
 pub const WM_STUDIO: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 41;
 
 pub struct App {
@@ -156,7 +148,6 @@ pub struct App {
     pub toast: Option<Toast>,
     pub images: RefCell<crate::images::Images>,
     pub stage: RefCell<crate::stage::Cache>,
-    pub glass: RefCell<crate::glass::Glass>,
     pub flash: Option<(&'static str, Instant)>,
     /// A setting the palette opened: scrolled to once its row is drawn.
     pub pending_reveal: Option<&'static str>,
@@ -173,6 +164,8 @@ pub struct App {
     /// A select asked for its menu: the control's rect (client pixels) and its options. The
     /// window's loop opens the kit's menu there and answers with [`App::chose`].
     pub picking: Option<(Rect, Choices)>,
+    /// An action menu asked to open under its control; the loop opens it like a select's.
+    pub menu: Option<(Rect, Vec<crate::actions::MenuItem>)>,
     pub dirty: bool,
     pub quit: bool,
     /// Goldens fix the clock and leave out live data.
@@ -274,7 +267,6 @@ impl App {
             toast: None,
             images: RefCell::new(crate::images::Images::default()),
             stage: RefCell::new(crate::stage::Cache::default()),
-            glass: RefCell::new(crate::glass::Glass::default()),
             flash: None,
             pending_reveal: None,
             pending_value: None,
@@ -285,6 +277,7 @@ impl App {
             places_query: 0,
             window: None,
             picking: None,
+            menu: None,
             dirty: true,
             quit: false,
             fixture,
@@ -353,6 +346,34 @@ impl App {
         self.frame.targets.iter().find(|t| t.key == key)
     }
 
+    /// Pointer and keyboard share the wallpaper card's kit menu and existing actions.
+    fn wallpaper_menu(&mut self, target: Option<Target<Action>>, at: Option<Point>) -> bool {
+        let Some(target) = target else { return false };
+        let index = match target.action {
+            Action::Panel(crate::panel::Command::Wallpaper(i))
+            | Action::Panel(crate::panel::Command::Builder(crate::builder::Command::Edit(i)))
+            | Action::SelectWallpaper(i) | Action::UseWallpaper(i) => i,
+            _ => return false,
+        };
+        let Some(wallpaper) = self.library.items.get(index) else { return false };
+        use crate::actions::MenuItem;
+        let mut rows = vec![
+            MenuItem::new("Edit", Action::Panel(crate::panel::Command::Builder(crate::builder::Command::Edit(index))))
+                .enabled(crate::builder::cannot_edit(wallpaper).is_none()),
+            MenuItem::new("Duplicate", Action::CopyWallpaper(index)).enabled(wallpaper.error.is_none()),
+            MenuItem::new("Apply", Action::UseWallpaper(index)).enabled(wallpaper.error.is_none()),
+        ];
+        if wallpaper.editable() {
+            rows.extend([MenuItem::Separator, MenuItem::new("Delete", Action::RemoveWallpaper(index)).enabled(!wallpaper.active)]);
+        }
+        self.input.focus = Some(target.key);
+        self.input.focus_visible = at.is_none();
+        self.nav.wallpaper = Some(index);
+        self.menu = Some((at.map_or(target.rect, |p| Rect::new(p.x, p.y, 0.0, 0.0)), rows));
+        self.dirty = true;
+        true
+    }
+
     /// Handles one window event. Sets `dirty` when the next frame differs.
     pub fn event(&mut self, event: Event) {
         if crate::panel::event(self, &event) { return; }
@@ -372,6 +393,9 @@ impl App {
                 }
             }
             Event::Press(p, Button::Right) => {
+                if self.wallpaper_menu(self.target_at(p.at).cloned(), Some(p.at)) {
+                    return;
+                }
                 // Right-clicking the bare wallpaper on Home: the desktop menu's settings.
                 if self.nav.page() == Page::Home
                     && let Some(Action::Nav(Page::Wallpapers)) = self.target_at(p.at).map(|t| t.action.clone())
@@ -489,18 +513,7 @@ impl App {
 
     fn release(&mut self, p: Point) {
         if self.drag.is_some() {
-            let clicked = matches!(
-                &self.drag,
-                Some(Drag::Widget { moved: false, .. } | Drag::Module { moved: false, .. })
-            );
-            let pressed = self.input.pressed;
             self.end_drag();
-            if clicked
-                && let Some(t) = pressed.and_then(|k| self.target(k))
-            {
-                let action = t.action.clone();
-                self.run(action);
-            }
             return;
         }
         let pressed = self.input.pressed.take();
@@ -588,9 +601,6 @@ impl App {
                     self.scroll_to(view, start + (p.y - grab) * ratio, area);
                 }
             }
-            Drag::Widget { .. } | Drag::Module { .. } => {
-                crate::editing::drag_to(self, drag, p);
-            }
         }
     }
 
@@ -601,24 +611,6 @@ impl App {
                 self.capture(true);
                 self.panel.as_mut().unwrap().window.inspector_drag = Some(width);
                 self.drag = Some(Drag::Inspector { from: p.x, width });
-            }
-            Action::SelectWidget(Some(instance)) => {
-                let resize = matches!(self.target_at(p).map(|t| t.key), Some(k) if k == key(("resize", instance.as_str())));
-                self.capture(true);
-                self.drag = Some(Drag::Widget {
-                    instance: instance.clone(),
-                    from: p,
-                    resize,
-                    moved: false,
-                });
-            }
-            Action::SelectModule(Some(slot)) => {
-                self.capture(true);
-                self.drag = Some(Drag::Module {
-                    slot: slot.clone(),
-                    from: p,
-                    moved: false,
-                });
             }
             other => {
                 let other = other.clone();
@@ -631,8 +623,6 @@ impl App {
         let drag = self.drag.take();
         let history_label = match &drag {
             Some(Drag::Slider { edit, .. }) => Some(edit.label.to_string()),
-            Some(Drag::Widget { resize, .. }) => Some(if *resize { "Resize widget" } else { "Move widget" }.into()),
-            Some(Drag::Module { .. }) => Some("Move module".into()),
             _ => None,
         };
         self.capture(false);
@@ -659,9 +649,6 @@ impl App {
                 }
                 self.after_edit(&[edit.doc]);
             }
-            Some(drag @ (Drag::Widget { .. } | Drag::Module { .. })) => {
-                crate::editing::drop_drag(self, drag);
-            }
             _ => {}
         }
         if let Some(label) = history_label { crate::panel::record_drag(self, &label); }
@@ -679,6 +666,11 @@ impl App {
     /// One key press with its modifiers (Ctrl, Shift, Alt).
     pub fn key_with(&mut self, vk: u16, (ctrl, shift, alt): (bool, bool, bool)) {
         self.dirty = true;
+        if self.field.is_none() && (vk == 0x5D || (shift && vk == 0x79)) {
+            if self.wallpaper_menu(self.input.focus.and_then(|k| self.target(k)).cloned(), None) {
+                return;
+            }
+        }
         if self.panel.is_some() && crate::panel::on_key(self, vk, (ctrl, shift, alt)) {
             return;
         }
@@ -1403,6 +1395,15 @@ impl App {
     /// A message from a worker or the watcher.
     pub fn message(&mut self, msg: Msg) {
         match msg {
+            Msg::DesktopRestored(result) => {
+                let summary = match &result {
+                    Ok(result) => result.summary().to_owned(),
+                    Err(_) => "Couldn't restore the Windows desktop. See Recovery in Troubleshoot.".into(),
+                };
+                self.system.restore = crate::system::Restore::Finished(result);
+                if !self.fixture { self.system.refresh(); }
+                self.toast(summary, None);
+            }
             Msg::PluginPrepared(result) => {
                 self.plugins.busy = None;
                 match result {
@@ -1514,7 +1515,20 @@ impl App {
                 Ok(()) => self.toast(format!("Restarting the {part}"), None),
                 Err(e) => self.alert(format!("{e:#}")),
             },
-            Action::RestoreDesktop => crate::system::restore_desktop(),
+            Action::RestoreDesktop => {
+                if matches!(self.system.restore, crate::system::Restore::Running) { return; }
+                let Some(inbox) = self.inbox.clone() else {
+                    return self.alert("Restore is unavailable until Studio has finished opening.");
+                };
+                self.system.restore = crate::system::Restore::Running;
+                self.toast("Restoring Windows desktop…", None);
+                let thread = self.thread;
+                std::thread::spawn(move || {
+                    let result = crate::system::restore_desktop().map_err(|error| format!("{error:#}"));
+                    let _ = inbox.send(Msg::DesktopRestored(result));
+                    crate::wake(thread);
+                });
+            }
             Action::CopyDiagnostics => {
                 let text = crate::system::diagnostics(self);
                 crate::system::copy_text(&text);
@@ -1535,6 +1549,11 @@ impl App {
                 value: None,
             }]),
             Action::Choose(choices) => self.choose(choices),
+            Action::Menu(items) => {
+                if let Some(rect) = self.input.focus.and_then(|k| self.target(k)).map(|t| t.rect) {
+                    self.menu = Some((rect, items));
+                }
+            }
             Action::Field(id) => self.focus_field(id),
             Action::Dismiss => {
                 if matches!(self.overlay, Some(Overlay::PluginConsent)) { self.plugins.pending = None; }

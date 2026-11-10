@@ -1,0 +1,17 @@
+Fresh build: glaze-core (2026-11-09T12:24:45.5947420Z)
+Fresh build: glaze-wallpaper (2026-11-09T12:25:05.7490253Z)
+powershell.exe : Stale build: C:\mypaper-targets\main\release\glaze-shell.exe is older than, or missing, input 
+At line:2 char:1
++ powershell.exe -NoProfile -File scripts/deploy-local.ps1 -From C:/myp ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Stale build: C:...missing, input :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+D:\Coding\projects\desktop\stillkit\crates\stillkit\src\menu.rs. Rebuild glaze-shell before deploying.
+At D:\Coding\projects\desktop\wallpaper\scripts\deploy-local.ps1:41 char:9
++         throw "Stale build: $($binary.FullName) is older than, or mis ...
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Stale build: C:...fore deploying.:String) [], RuntimeException
+    + FullyQualifiedErrorId : Stale build: C:\mypaper-targets\main\release\glaze-shell.exe is older than, or missing,  
+   input D:\Coding\projects\desktop\stillkit\crates\stillkit\src\menu.rs. Rebuild glaze-shell before deploying.
+ 

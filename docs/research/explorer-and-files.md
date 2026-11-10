@@ -5,7 +5,7 @@ This is source research, not a live visual-tree inspection or a benchmark of thi
 Private selectors, exports, and hooks require verification on the precise Windows build before shipping.
 Numbers below are attributed vendor measurements or estimates, never measurements of glaze.
 
-The [night plan](../../plans/night/2026-11-06.md) supersedes the older research notes' blanket
+The experimental-service policy supersedes the older research notes' blanket
 no-injection assumption: code inside another process belongs behind an off-by-default experimental
 flag. The [current injection policy](../../crates/inject/src/lib.rs) permits only allowlisted,
 Microsoft-signed Windows components; it forbids games, third-party applications, and following children.
@@ -29,7 +29,7 @@ not arbitrary Explorer interior styling.
   own work is under our control. [Build study][cow-builds], [HAGS][hags], [process exit][process-exit].
 
 These are recommendations, not changes implemented by this document. Native services, app-specific
-plugins, and experimental features follow the boundaries in the [night plan](../../plans/night/2026-11-06.md).
+plugins, and experimental features follow the current experimental-service boundaries described above.
 
 ## 1. Explorer interior styling
 
@@ -428,7 +428,7 @@ evidence limits above.
 
 ### What zero overhead requires from Glaze
 
-The [night plan](../../plans/night/2026-11-06.md) requires disabled optional services to have no
+The optional-service contract requires disabled optional services to have no
 process/hook/thread/timer/memory. A blocked worker can approach zero idle CPU while retaining memory;
 it is not disabled. Literal **zero product footprint during a game** requires graceful shutdown of
 all Glaze processes and unloading any injected code; process exit releases its resources, but

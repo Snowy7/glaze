@@ -32,6 +32,7 @@ struct Plate {
     material: Material,
     channel: Channel,
     overlay: Cell<Option<HWND>>,
+    visible: Cell<bool>,
 }
 impl Plate {
     fn request(&self) -> Request {
@@ -125,8 +126,43 @@ impl Client {
         self.plates.borrow().iter().any(|p| p.client == hwnd)
     }
 
-    /// At creation the engine puts its glass directly under the requesting HWND. Remember that
-    /// exact adjacent window, checking its class and process; never guess among other plates.
+    pub fn visibility(&self, client: HWND, visible: bool) {
+        self.remember_overlay(client);
+        let change = self
+            .plates
+            .borrow()
+            .iter()
+            .find(|p| p.client == client)
+            .filter(|p| p.visible.replace(visible) != visible)
+            .map(|p| p.overlay.get());
+        if let Some(overlay) = change {
+            // The verified plate already holds its last frame. Show it on this UI thread
+            // before the engine can be delayed restarting capture under load.
+            if let Some(overlay) = overlay {
+                // SAFETY: this is the verified engine plate for this owned client only.
+                unsafe {
+                    let _ = ShowWindow(overlay, if visible { SW_SHOWNOACTIVATE } else { SW_HIDE });
+                }
+            }
+            self.send(&Request::Visibility { client, visible });
+        }
+    }
+
+    pub fn ready(&self, client: HWND) -> bool {
+        self.remember_overlay(client);
+        self.plates
+            .borrow()
+            .iter()
+            .find(|p| p.client == client)
+            .and_then(|p| p.overlay.get())
+            // SAFETY: a read-only value property on the verified engine plate.
+            .is_some_and(|h| unsafe {
+                !GetPropW(h, windows::core::w!("glaze.glass.ready")).is_invalid()
+            })
+    }
+
+    /// Find this client's exact plate by its engine-owned identity. Hidden IME/helper windows
+    /// can sit between the client and plate even though their visible z-order is adjacent.
     pub fn remember_overlay(&self, client: HWND) {
         let Some(engine) = self.engine() else {
             return;
@@ -143,21 +179,36 @@ impl Client {
         {
             return;
         }
-        // SAFETY: this is a read-only z-order query for the live client window.
-        if let Ok(next) = unsafe { GetWindow(client, GW_HWNDNEXT) } {
-            let (mut engine_pid, mut overlay_pid) = (0, 0);
+        let mut engine_pid = 0;
+        // SAFETY: read-only process query of the live engine handle.
+        unsafe {
+            GetWindowThreadProcessId(engine, Some(&mut engine_pid));
+        }
+        let mut next = client;
+        for _ in 0..4096 {
+            // SAFETY: a bounded read-only walk; an invalid/destroyed handle ends it.
+            let Ok(window) = (unsafe { GetWindow(next, GW_HWNDNEXT) }) else {
+                break;
+            };
+            if window == client {
+                break;
+            }
+            next = window;
+            let mut overlay_pid = 0;
             let mut class = [0u16; 64];
             // SAFETY: both handles are queried into writable process-ID locals.
             unsafe {
-                GetWindowThreadProcessId(engine, Some(&mut engine_pid));
                 GetWindowThreadProcessId(next, Some(&mut overlay_pid));
             }
             // SAFETY: the bounded class buffer is writable for the class-name query.
             let length = unsafe { GetClassNameW(next, &mut class) }.max(0) as usize;
             if engine_pid == overlay_pid
                 && String::from_utf16_lossy(&class[..length]) == "glaze.wallpaper.glass"
+                // SAFETY: this value property identifies the client without following pointers.
+                && unsafe { GetPropW(next, windows::core::w!("glaze.glass.client")) }.0 == client.0
             {
                 plate.overlay.set(Some(next));
+                break;
             }
         }
     }
@@ -200,6 +251,7 @@ impl Backdrop for Client {
             material: material_wire(material),
             channel,
             overlay: Cell::new(None),
+            visible: Cell::new(true),
         };
         let request = plate.request();
         plate.channel.write(&request);

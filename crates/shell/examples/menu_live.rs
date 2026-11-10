@@ -30,8 +30,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::w;
 
-const SHOT_SCRIPT: &str = r"C:\Users\you\AppData\Local\Temp\glaze-tools\shot.ps1";
-
 struct Args {
     x: Option<i32>,
     y: Option<i32>,
@@ -228,8 +226,12 @@ fn main() -> Result<()> {
             }
             std::thread::sleep(Duration::from_millis(args.hold / 2));
             if let Some(path) = &args.shot {
+                let script = std::path::PathBuf::from(std::env::var("LOCALAPPDATA")?)
+                    .join(r"Temp\glaze-tools\shot.ps1");
                 let status = std::process::Command::new("powershell")
-                    .args(["-NoProfile", "-File", SHOT_SCRIPT, "-Out", path])
+                    .args(["-NoProfile", "-File"])
+                    .arg(script)
+                    .args(["-Out", path])
                     .status();
                 println!("screenshot {path}: {status:?}");
             }

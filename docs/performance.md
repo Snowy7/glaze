@@ -375,7 +375,7 @@ transport keepalives and external incoming events remain while sockets stay conn
 keepalive on an upgraded live socket was rejected with `ERROR_WINHTTP_INCORRECT_HANDLE_STATE`.
 Processes retain memory. No FPS or game frame-time improvement is inferred from quiescence.
 
-**Later engine pass (10:25).** The [night log](../plans/night/2026-11-06.md) records the separate
+**Later engine pass (10:25).** A separate engine sample recorded the
 `engine.during_games: "pause"` check: a game covering one screen paused both, measured engine CPU
 was **0.000% of one core**, private memory **208.7 → 124.7 MiB**, and resume **74 ms**. This is a later
 engine-only sample, not a repeat of the whole-product table above. The device still remains;

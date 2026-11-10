@@ -50,13 +50,14 @@ pub fn view(app: &App, b: &mut B, c: &mut Col) {
         },
     );
     page_title(app, b, c, "Look", &subtitle);
-    if let Some(wallpaper) = wallpaper {
-        let r = Rect::new(c.x, c.y + b.px(6.0), c.w, b.px(30.0));
-        let wallpaper_label = format!("{}'s", wallpaper.name);
+    if wallpaper.is_some() {
+        let labels = ["Your look", "This wallpaper's"];
+        let w = b.segmented_width(&labels).max(b.px(260.0)).min(c.w);
+        let r = Rect::new(c.x, c.y + b.px(6.0), w, b.px(30.0));
         b.segmented(
             key("panel-look-scope"),
             r,
-            &["Yours", &wallpaper_label],
+            &labels,
             Some(usize::from(app.nav.look_theme)),
             "Look scope",
             true,

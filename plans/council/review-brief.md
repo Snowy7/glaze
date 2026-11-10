@@ -1,8 +1,7 @@
 # Council review brief (round 7)
 
 This review is read-only: do not edit, build, commit or run the app. Context is in
-`plans/council/brief.md`. The user rejected building our own research platform: adopt proven
-techniques and measure narrowly. Filesystem and OS tuning are out of scope.
+`plans/council/brief-native.md`. Use proven techniques and measure narrowly. Filesystem and OS tuning are out of scope.
 
 Review `plans/council/plan.md` (v6). Score history:
 - R2: Sol 7, Opus 7, Grok 6

@@ -2,7 +2,7 @@
 param([switch]$Interactions)
 $ErrorActionPreference = 'Stop'
 $fixtureWorkspace = (Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
-$fixtureLock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$fixtureLock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $fixtureRoot = Join-Path $fixtureWorkspace 'artifacts\n4\live'
 $fixtureExe = Join-Path $fixtureWorkspace 'target\release\examples\glaze-widget-fixture.exe'
 $fixtureOldAppData = $env:APPDATA
@@ -46,8 +46,8 @@ try {
     $fixtureLockOwned = $false
     # measure.ps1 takes the lock itself. The separate process keeps its isolated environment.
     foreach ($run in 1..3) {
-        & 'C:\Users\you\AppData\Local\Temp\glaze-tools\measure.ps1' -Label "n4-widgets-$run" -Seconds 60
-        Copy-Item -LiteralPath "C:\Users\you\AppData\Local\Temp\glaze-tools\measure-n4-widgets-$run.json" -Destination $fixtureRoot
+        & (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\measure.ps1') -Label "n4-widgets-$run" -Seconds 60
+        Copy-Item -LiteralPath (Join-Path $env:LOCALAPPDATA "Temp\glaze-tools\measure-n4-widgets-$run.json") -Destination $fixtureRoot
     }
     $stopEvent = [System.Threading.EventWaitHandle]::OpenExisting("Local\glaze-n4-fixture-stop-$($fixtureProcess.Id)")
     try { $stopEvent.Set() | Out-Null } finally { $stopEvent.Dispose() }

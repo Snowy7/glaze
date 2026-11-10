@@ -1,6 +1,6 @@
 param([switch]$Bless,[string]$Filter='widget',[switch]$Studio,[switch]$BlessStudio)
 $ErrorActionPreference='Stop'
-$widgetCheckLock='C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$widgetCheckLock=(Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $widgetCheckRoot=(Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
 $widgetCheckOwned=$false
 try {

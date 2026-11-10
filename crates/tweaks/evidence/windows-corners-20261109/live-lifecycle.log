@@ -1,0 +1,20 @@
+cargo :     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s
+At line:2 char:255
++ ... /probe.pid; cargo test -p glaze-tweaks --lib foreign_window_corner_li ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Finished `t...get(s) in 0.20s:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+     Running unittests src\lib.rs 
+(C:\mypaper-targets\main\debug\build\glaze-tweaks/a747ca7900b60dbe\out\glaze_tweaks-a747ca7900b60dbe.exe)
+
+running 1 test
+Default: existing/new/reset/release/drop passed
+Round: existing/new/reset/release/drop passed
+Small: existing/new/reset/release/drop passed
+Square: existing/new/reset/release/drop passed
+tool/full-monitor exclusions and crash-recovery default reset passed
+test dwm::live_tests::foreign_window_corner_lifecycle ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 71 filtered out; finished in 22.21s
+

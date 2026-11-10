@@ -1,0 +1,24 @@
+cargo :    Compiling windows v0.62.2
+At line:2 char:108
++ ... gets\main'; cargo test -p glaze-inject --lib *> C:/Users/you/AppDat ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling windows v0.62.2:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   Compiling glaze-inject v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\inject)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.24s
+     Running unittests src\lib.rs 
+(C:\mypaper-targets\main\debug\build\glaze-inject/45e2fa5f183df95b\out\glaze_inject-45e2fa5f183df95b.exe)
+
+running 8 tests
+test signature::tests::chain_rule_wants_microsoft_leaf_and_root ... ok
+test tests::allows_inbox_packaged_apps ... ok
+test tests::allows_settings_as_it_really_runs_packaged ... ok
+test tests::denies_lookalikes ... ok
+test tests::never_allows_critical_or_non_ui_system_processes ... ok
+test tests::denies_games_even_microsoft_published_ones ... ok
+test tests::allows_windows_shell_and_settings ... ok
+test signature::tests::windows_binaries_verify_through_the_catalog_and_other_files_do_not ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+

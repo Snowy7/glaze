@@ -35,113 +35,9 @@ pub fn finish_raster(app: &crate::app::App) {
 /// Lay out at widget size, then paint those operations once at the displayed pixel size.
 /// This preserves text fitting without allocating a native intermediate bitmap.
 pub fn scale_picture(ops: &mut [glaze_ui::Op], scale: f32) {
-    use glaze_ui::{Op, Point, Rect};
-    let rect = |r: &mut Rect| {
-        r.left *= scale;
-        r.top *= scale;
-        r.right *= scale;
-        r.bottom *= scale;
-    };
-    let point = |p: &mut Point| {
-        p.x *= scale;
-        p.y *= scale;
-    };
+    // stillkit owns the per-op arithmetic, so a new op never needs a case here.
     for op in ops {
-        match op {
-            Op::Image { rect: r, .. } | Op::Clip { rect: r } | Op::TextField { rect: r, .. } => {
-                rect(r)
-            }
-            Op::RoundedImage {
-                rect: r, radius, ..
-            }
-            | Op::Fill {
-                rect: r, radius, ..
-            } => {
-                rect(r);
-                *radius *= scale;
-            }
-            Op::Stroke {
-                rect: r,
-                radius,
-                width,
-                ..
-            }
-            | Op::Continuous {
-                rect: r,
-                radius,
-                width,
-                ..
-            } => {
-                rect(r);
-                *radius *= scale;
-                *width *= scale;
-            }
-            Op::Icon {
-                rect: r, weight, ..
-            } => {
-                rect(r);
-                *weight *= scale;
-            }
-            Op::Text { rect: r, style, .. } | Op::Emphasis { rect: r, style, .. } => {
-                rect(r);
-                style.size *= scale;
-                style.tracking *= scale;
-            }
-            Op::Line {
-                from, to, width, ..
-            } => {
-                point(from);
-                point(to);
-                *width *= scale;
-            }
-            Op::Arc {
-                center,
-                radius,
-                width,
-                ..
-            } => {
-                point(center);
-                *radius *= scale;
-                *width *= scale;
-            }
-            Op::Shadow {
-                rect: r,
-                radius,
-                spread,
-                drop,
-                ..
-            } => {
-                rect(r);
-                *radius *= scale;
-                *spread *= scale;
-                *drop *= scale;
-            }
-            Op::SoftShadow {
-                rect: r,
-                radius,
-                blur,
-                offset,
-                spread,
-                ..
-            } => {
-                rect(r);
-                *radius *= scale;
-                *blur *= scale;
-                offset.0 *= scale;
-                offset.1 *= scale;
-                *spread *= scale;
-            }
-            Op::Clipped { rect: r, ops } => {
-                rect(r);
-                scale_picture(std::sync::Arc::make_mut(ops), scale);
-            }
-            Op::RoundedClipped { rect: r, radius, ops } => {
-                rect(r);
-                *radius *= scale;
-                scale_picture(std::sync::Arc::make_mut(ops), scale);
-            }
-            Op::Unclip => {}
-        }
+        op.scale(scale);
     }
 }
 
@@ -182,7 +78,6 @@ pub(super) fn release_page_resources(app: &crate::app::App, text: &mut glaze_ui:
     let mut images = app.images.borrow_mut();
     images.clear_page();
     drop(images);
-    app.stage.borrow_mut().clear_pictures();
     text.clear_cache();
     // Native thumbnail/icon providers are page-owned too. COM unloads only libraries
     // whose objects and calls have all been released; active UI factories stay live.

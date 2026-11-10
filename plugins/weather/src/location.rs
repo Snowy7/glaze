@@ -552,7 +552,7 @@ mod tests {
                 25_000.0
             },
             name: "Oslo".into(),
-            region: "Oslo".into(),
+            region: "Oslo County".into(),
             country: "Norway".into(),
             source,
         }
@@ -580,8 +580,8 @@ mod tests {
         fn reverse(&self, _location: &Location) -> Result<Names, String> {
             lock(&self.calls).push("reverse");
             Ok(Names {
-                name: "Al Mirqab".into(),
-                region: "Oslo".into(),
+                name: "Sentrum".into(),
+                region: "Oslo County".into(),
                 country: "Norway".into(),
             })
         }
@@ -596,7 +596,7 @@ mod tests {
         let windows = Locator::new(Fake::default());
         let found = windows.locate_at(100).unwrap();
         assert_eq!(found.source, Origin::Windows);
-        assert_eq!(found.name, "Al Mirqab");
+        assert_eq!(found.name, "Sentrum");
         assert_eq!(*lock(&windows.source.calls), ["windows", "reverse"]);
 
         let ip = Locator::new(Fake {

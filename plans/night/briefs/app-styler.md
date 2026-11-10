@@ -1,6 +1,6 @@
 # Brief: app-styler (Explorer and Settings interiors, experimental)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/windows-styling.md`,
+Read `plans/native/LIVE.md`, `docs/windows-styling.md`,
 `crates/inject/src/lib.rs` (the allowlist: Explorer, Settings, Microsoft-signed only), and
 `crates/tweaks/src/dwm.rs`. A research agent is writing `docs/research/explorer-and-files.md` in
 parallel; read it when it lands (check `git log -- docs/research`), but don't wait for it.

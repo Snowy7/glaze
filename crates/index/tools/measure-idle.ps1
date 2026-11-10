@@ -1,7 +1,7 @@
 # Measure a truly quiet watched tree, then verify off/on and restore the core-owned helper.
 param([string]$Exe = 'D:\Coding\projects\desktop\wallpaper\target\release\glaze-index.exe', [int]$Seconds = 60)
 $ErrorActionPreference = 'Stop'
-$toolsDir = 'C:\Users\you\AppData\Local\Temp\glaze-tools'
+$toolsDir = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools')
 $lockDir = Join-Path $toolsDir 'desktop.lock'
 $configPath = Join-Path $env:APPDATA 'glaze\config.json'
 $tag = 'idle-' + [Guid]::NewGuid().ToString('N')

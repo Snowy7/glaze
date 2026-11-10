@@ -1,0 +1,22 @@
+{
+    "pid":  44632,
+    "results":  [
+                    {
+                        "frame_retained":  true,
+                        "no_foreground":  true,
+                        "show_to_retained_ms":  9.907,
+                        "kind":  "hidden",
+                        "plate_same":  true,
+                        "plate_hidden":  true
+                    },
+                    {
+                        "frame_retained":  true,
+                        "no_foreground":  true,
+                        "show_to_retained_ms":  7.4730000000000008,
+                        "kind":  "minimized",
+                        "plate_same":  true,
+                        "plate_hidden":  true
+                    }
+                ],
+    "role":  "ControlType.Window"
+}

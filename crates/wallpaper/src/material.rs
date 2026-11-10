@@ -1,8 +1,8 @@
-//! Our glass material controls as liquid-rust glass (`crates/liquid-rust`, a vendored copy of
+//! Our glass material controls as liquid-rust glass (stillkit-glass, stillkit's copy of
 //! al1h3n/liquid-rust): one mapping for plates (`glass_pass`), overlays (`overlay::glass`) and
 //! Studio's previews (`preview`). See `docs/glass.md`.
 
-use liquid_rust as lr;
+use stillkit_glass as lr;
 use glaze_glass_ipc::Material;
 
 /// The highlight control at 1 is the kit's Clear glass (Figma *Light* 40 %); the bars' default

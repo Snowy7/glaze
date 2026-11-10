@@ -133,10 +133,10 @@ pub fn fixture() -> Snapshot {
     let limits = vec![
         limit("codex", "Codex", "you@example.com", "Weekly", 730, Some(4 * 24 * 60 + 19 * 60)),
         limit("claudeAgent", "Claude", "you@example.com", "Weekly", 430, days(3)),
-        limit("claudeAgent", "Claude", "you@example.com", "Weekly", 860, days(3)),
+        limit("claudeAgent", "Claude", "sn@studio.example", "Weekly", 860, days(3)),
         limit("claudeAgent", "Claude", "you@example.com", "Weekly", 430, days(3)),
         limit("claudeAgent", "Claude", "you@example.com", "Weekly · Fable", 0, days(3)),
-        limit("claudeAgent", "Claude", "you@example.com", "Weekly · Fable", 0, days(3)),
+        limit("claudeAgent", "Claude", "sn@studio.example", "Weekly · Fable", 0, days(3)),
     ];
     snapshot(Availability::Live, threads, details, limits, Some(history()))
 }
@@ -156,7 +156,7 @@ pub fn edges() -> Vec<(&'static str, Snapshot)> {
         None,
     );
     let mut many_limits = Vec::new();
-    for (i, account) in ["a.very.long.address.for.work@an-extremely-long-company-domain.example", "alex@home.example", "alex@work.example", "ops@team.example", "ci@team.example", "bot@team.example"].iter().enumerate() {
+    for (i, account) in ["a.very.long.address.for.work@an-extremely-long-company-domain.example", "you@home.example", "you@work.example", "ops@team.example", "ci@team.example", "bot@team.example"].iter().enumerate() {
         many_limits.push(limit("claudeAgent", "Claude", account, "Weekly", 150 + i as u32 * 140, Some(30 * (i as i64 + 1))));
     }
     // The same label twice with different numbers: two orgs behind one login.
@@ -310,10 +310,10 @@ fn settled_snoozed_and_archived_threads_never_show() {
 fn identical_reports_collapse_and_duplicate_labels_stay_apart() {
     let json = serde_json::to_string(&faces()["limits"]["large"]).unwrap();
     // Two Claude accounts by their names (never initials), the duplicate report folded away.
-    assert_eq!(json.matches("Weekly · snowy7").count(), 1, "{json}");
+    assert_eq!(json.matches("Weekly · you").count(), 1, "{json}");
     assert_eq!(json.matches("Weekly · sn\"").count(), 1, "{json}");
     let edges = edge_faces();
     let many = serde_json::to_string(&edges["many"]["limits"]["large"]).unwrap();
-    assert!(many.contains("snowy7 (2)"), "{many}");
+    assert!(many.contains("you (2)"), "{many}");
     assert!(many.contains("4 more accounts"), "{many}");
 }

@@ -353,6 +353,229 @@ fn params_as_studio_writes_them_change_the_render() {
     assert!(noir < teal * 0.5, "noir chroma {noir:.3} vs default {teal:.3}");
 }
 
+/// Tonal coverage must follow the input, including a low-key photo and preceding effects.
+#[test]
+fn halftone_preserves_dark_and_busy_input_tones() {
+    com();
+    let gpu = Gpu::headless().expect("a DX12 GPU");
+    let size = (960, 540);
+    let print = layer("halftone", Value::Null);
+    for (name, under) in [
+        ("city", String::new()),
+        (
+            "dark",
+            layer("color", serde_json::json!({"exposure": -2.0})),
+        ),
+        ("fog", layer("fog", Value::Null)),
+        ("light-leaks", layer("light-leaks", Value::Null)),
+    ] {
+        let base = frame(&gpu, &mut photo_stack(&gpu, &under), size);
+        let layers = if under.is_empty() {
+            print.clone()
+        } else {
+            format!("{under},{print}")
+        };
+        let out = frame(&gpu, &mut photo_stack(&gpu, &layers), size);
+        let s = stats(&out, &base, size);
+        let input = mean(&lumas(&base));
+        eprintln!(
+            "halftone {name}: input {input:.3}, output {:.3}, correlation {:.3}",
+            s.mean, s.correlation
+        );
+        if let Some(dir) = std::env::var_os("GLAZE_ENGINE_EVIDENCE").map(PathBuf::from) {
+            std::fs::create_dir_all(&dir).unwrap();
+            crate::snapshot::save_jpeg(
+                &gpu,
+                size,
+                &base,
+                &dir.join(format!("halftone-{name}-input.jpg")),
+            )
+            .unwrap();
+            crate::snapshot::save_jpeg(&gpu, size, &out, &dir.join(format!("halftone-{name}.jpg")))
+                .unwrap();
+        }
+        assert!(
+            (s.mean - input).abs() < 0.025,
+            "{name}: paper replaced the tone range: {input:.3} -> {:.3}",
+            s.mean
+        );
+        assert!(s.correlation > 0.85, "{name}: print lost the image: {s:?}");
+    }
+}
+
+fn theme_stack(gpu: &Gpu, dir: &Path, layers: Value) -> StackSource {
+    let json = serde_json::json!({"name":"base test", "wallpaper":{"kind":"stack",
+        "base":{"kind":"theme", "theme":dir}, "layers":layers}});
+    let theme = LoadedTheme::parse(repo().join(THEME), &json.to_string()).unwrap();
+    let glaze_theme::Wallpaper::Stack(config) = &theme.theme.wallpaper else {
+        unreachable!()
+    };
+    let source = StackSource::new_in(gpu, &theme, config, &[repo().join("effects")]).unwrap();
+    assert!(source.errors.is_empty(), "{:?}", source.errors);
+    source
+}
+
+#[test]
+fn slideshow_theme_base_advances_beneath_an_animated_layer() {
+    com();
+    let gpu = Gpu::headless().expect("a DX12 GPU");
+    let dir = std::env::temp_dir().join(format!("glaze-engine-slides-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("images")).unwrap();
+    std::fs::copy(repo().join(THEME).join(PHOTO), dir.join("images/1.jpg")).unwrap();
+    std::fs::copy(
+        repo().join("themes/snow-forest/media/image.jpg"),
+        dir.join("images/2.jpg"),
+    )
+    .unwrap();
+    std::fs::write(dir.join("theme.json"), r#"{"name":"slides","wallpaper":{"kind":"slideshow","folder":"images","interval":1,"transition":0,"shuffle":false}}"#).unwrap();
+    let mut still = theme_stack(&gpu, &dir, serde_json::json!([]));
+    let mut moving = theme_stack(
+        &gpu,
+        &dir,
+        serde_json::json!([{"kind":"effect","effect":"grain","params":{"amount":0}}]),
+    );
+    let render = |source: &mut StackSource, seconds| {
+        stack_preview::render(
+            &gpu,
+            source,
+            (320, 180),
+            Duration::from_secs(seconds),
+            1,
+            [0.0; 2],
+        )
+    };
+    let a = render(&mut moving, 0);
+    let _ = render(&mut still, 0);
+    assert!(
+        matches!(still.redraw(Duration::ZERO), Redraw::At(_)),
+        "slides hold without a frame timer"
+    );
+    // WIC's worker gets a bounded opportunity to finish the tiny second image.
+    let ready = |stack: &StackSource| {
+        matches!(&stack.base, BaseDraw::Theme {source, ..}
+            if matches!(source.redraw(Duration::from_secs(1)), Redraw::At(at) if at <= Duration::from_secs(1)))
+    };
+    for _ in 0..100 {
+        moving.update(&gpu, Duration::ZERO);
+        still.update(&gpu, Duration::ZERO);
+        if ready(&moving) && ready(&still) {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let b = render(&mut moving, 2);
+    let _ = render(&mut still, 2);
+    let c = render(&mut still, 3);
+    assert!(
+        change(&a, &b) > 0.03,
+        "slideshow base was baked permanently under the moving layer"
+    );
+    assert!(
+        change(&b, &c) < 0.01,
+        "moving and scheduled stacks disagree"
+    );
+    drop((moving, still));
+    // Dropping the prefetch sender lets its worker finish the in-flight WIC decode.
+    let mut removed = false;
+    for _ in 0..100 {
+        if std::fs::remove_dir_all(&dir).is_ok() {
+            removed = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(removed, "slideshow worker did not release the test files");
+}
+
+#[test]
+fn scene_theme_base_renders_and_moves_through_stack_source() {
+    com();
+    let gpu = Gpu::headless().expect("a DX12 GPU");
+    let mut source = theme_stack(
+        &gpu,
+        &repo().join("themes/examples/ringed-planet"),
+        serde_json::json!([]),
+    );
+    assert!(matches!(source.redraw(Duration::ZERO), Redraw::Every(_)));
+    let a = stack_preview::render(
+        &gpu,
+        &mut source,
+        (640, 360),
+        Duration::ZERO,
+        1,
+        [320.0, 180.0],
+    );
+    let b = stack_preview::render(
+        &gpu,
+        &mut source,
+        (640, 360),
+        Duration::from_secs(3),
+        90,
+        [320.0, 180.0],
+    );
+    assert!(
+        std_dev(&grid(&lumas(&a), (640, 360), 32, 18)) > 0.03,
+        "blank scene"
+    );
+    assert!(change(&a, &b) > 0.002, "frozen scene");
+}
+
+#[test]
+fn video_base_has_pixels_before_the_first_update() {
+    com();
+    let gpu = Gpu::headless().expect("a DX12 GPU");
+    let json = serde_json::json!({"name":"video", "wallpaper":{"kind":"stack",
+        "base":{"kind":"video", "source":repo().join("themes/charge-city/loop.mp4")}}});
+    let theme = LoadedTheme::parse(repo().join(THEME), &json.to_string()).unwrap();
+    let glaze_theme::Wallpaper::Stack(config) = &theme.theme.wallpaper else {
+        unreachable!()
+    };
+    let mut source = StackSource::new_in(&gpu, &theme, config, &[repo().join("effects")]).unwrap();
+    assert!(source.errors.is_empty(), "{:?}", source.errors);
+    struct RenderOnly<'a>(&'a mut dyn Source);
+    impl Source for RenderOnly<'_> {
+        fn render(&mut self, gpu: &Gpu, frame: Frame<'_>) {
+            self.0.render(gpu, frame);
+        }
+        fn redraw(&self, clock: Duration) -> Redraw {
+            self.0.redraw(clock)
+        }
+    }
+    let pixels = stack_preview::render(
+        &gpu,
+        &mut RenderOnly(&mut source),
+        (320, 180),
+        Duration::ZERO,
+        1,
+        [0.0; 2],
+    );
+    assert!(mean(&lumas(&pixels)) > 0.02);
+}
+
+#[test]
+fn gallery_event_times_catch_lightning_and_glitch() {
+    com();
+    let gpu = Gpu::headless().expect("a DX12 GPU");
+    let recipes: Value = serde_json::from_str(
+        &std::fs::read_to_string(repo().join("effects/tools/gallery.json")).unwrap(),
+    )
+    .unwrap();
+    let size = (960, 540);
+    let base = frame(&gpu, &mut photo_stack(&gpu, ""), size);
+    for id in ["lightning", "glitch"] {
+        let recipe = &recipes["effects"][id];
+        let time = Duration::from_secs_f64(recipe["time"].as_f64().expect("pinned event time"));
+        let mut source = photo_stack(&gpu, &layer(id, recipe["params"].clone()));
+        let out = stack_preview::render(&gpu, &mut source, size, time, 1, [0.0; 2]);
+        let s = stats(&out, &base, size);
+        eprintln!("gallery {id}: {s:?}");
+        assert!(
+            s.change > 0.003 && s.touched > 0.03,
+            "{id} missed its event: {s:?}"
+        );
+    }
+}
+
 /// Renders the gallery jobs `effects/tools/render_gallery.py` prepared: each folder of
 /// `GLAZE_GALLERY` with a `job.json` ({ effect, params, time, mouse [x, y] in 0..1,
 /// clock_hours, second: { time, mouse }? } over its `input.jpg`) gets `<effect>.jpg` at

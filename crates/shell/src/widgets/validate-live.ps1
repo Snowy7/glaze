@@ -9,7 +9,7 @@ if ($Debug -and $Samples -ne 0) {throw 'Performance samples require the release 
 if ($Profile -and ($Samples -ne 0 -or $Interactions)) {throw 'Use -Profile -Samples 0 separately from gates/interactions'}
 if ($Production -and ($Interactions -or $Profile -or $Debug)) {throw 'Production gates use the release shell separately from interactions/profiling'}
 $widgetLiveRoot=(Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
-$widgetLiveLock='C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$widgetLiveLock=(Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $widgetLiveEvidence=Join-Path $PSScriptRoot 'evidence'
 if ($Interactions) {$widgetLiveEvidence=Join-Path $widgetLiveEvidence 'interactions'}
 if ($Profile) {$widgetLiveEvidence=Join-Path $widgetLiveEvidence 'profile'}
@@ -216,11 +216,11 @@ try {
             if ($phaseVisible -ne $phaseExpected) {throw "Diagnostic $phase visibility mismatch: $phaseVisible/$phaseExpected"}
             [WidgetStartup]::Threads($widgetLiveShell.Id) | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $widgetLiveEvidence "$phase-threads-before.json")
         }
-        & 'C:\Users\you\AppData\Local\Temp\glaze-tools\measure.ps1' -Label $measureLabel -Seconds 60
+        & (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\measure.ps1') -Label $measureLabel -Seconds 60
         if ($widgetLiveFixture.HasExited) {throw 'Fixture exited during a performance sample'}
         if ($Production -and $widgetLiveShell.HasExited) {throw 'Production shell exited during a performance sample'}
         if ($Production) {[WidgetStartup]::Snapshot($widgetLiveShell.Id)}
-        Copy-Item -LiteralPath "C:\Users\you\AppData\Local\Temp\glaze-tools\measure-$measureLabel.json" -Destination $widgetLiveEvidence
+        Copy-Item -LiteralPath (Join-Path $env:LOCALAPPDATA "Temp\glaze-tools\measure-$measureLabel.json") -Destination $widgetLiveEvidence
         if ($ProductionProfile) {
             Enter-WidgetLiveLock
             try {

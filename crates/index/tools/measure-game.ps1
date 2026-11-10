@@ -1,7 +1,7 @@
 # Owns only index_game.exe and the desktop lock; never moves another application's window.
 param([int]$Seconds = 60, [string]$FixtureExe = 'C:\glaze-targets\index\release\examples\index_game.exe', [switch]$TestCatchup)
 $ErrorActionPreference = 'Stop'
-$lockDir = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lockDir = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $signalPath = Join-Path $env:LOCALAPPDATA 'glaze\game-activity.json'
 $evidence = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\evidence'))
 $deployed = 'D:\Coding\projects\desktop\wallpaper\target\release\glaze-index.exe'
@@ -116,7 +116,7 @@ try {
   $fixture.Refresh()
   [IndexGameThreads]::ActivateOwn($fixture.MainWindowHandle,$fixture.Id)
   Start-Sleep -Seconds 10
-  & 'C:\Users\you\AppData\Local\Temp\glaze-tools\shotall.ps1' -Out (Join-Path $evidence 'round2-game-fullscreen.png') | Out-Null
+  & (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\shotall.ps1') -Out (Join-Path $evidence 'round2-game-fullscreen.png') | Out-Null
   $signal = Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json
   if (-not $signal.activity.pause_background -or $signal.activity.foreground_pid -ne $fixture.Id -or [IndexGameThreads]::ForegroundPid() -ne $fixture.Id) {
     [IndexGameThreads]::ActivateOwn($fixture.MainWindowHandle,$fixture.Id)
@@ -190,7 +190,7 @@ try {
       [pscustomobject]@{created_at=$createdAt;file=$gameFile;catchup_ms=$catchupMs;search=$answer;sizes=$sizes} | ConvertTo-Json -Depth 7 | Set-Content -Encoding utf8 (Join-Path $evidence 'round2-backed-game-catchup.json')
     }
     Start-Sleep -Seconds 2
-    & 'C:\Users\you\AppData\Local\Temp\glaze-tools\shotall.ps1' -Out (Join-Path $evidence 'round2-game-restored.png') | Out-Null
+    & (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\shotall.ps1') -Out (Join-Path $evidence 'round2-game-restored.png') | Out-Null
   } finally { [IO.Directory]::Delete($lockDir) }
 }
 } finally {

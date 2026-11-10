@@ -15,7 +15,7 @@ use crate::wake::{Msg, Waker};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct UserInfo {
-    /// The display name ("Alex K."), else the account name.
+    /// The display name ("Alex"), else the account name.
     pub name: String,
     /// The account name ("you").
     pub account: String,
@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn the_display_name_falls_back_to_the_account() {
-        assert_eq!(pick_name(Some("Alex K.".into()), "you"), "Alex K.");
+        assert_eq!(pick_name(Some("Alex".into()), "you"), "Alex");
         assert_eq!(pick_name(Some("  ".into()), "you"), "you");
         assert_eq!(pick_name(None, "you"), "you");
     }

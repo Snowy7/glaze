@@ -733,8 +733,7 @@ mod tests {
         }
     }
 
-    /// Weather fixtures were captured from the actual WASM component with a saved Oslo
-    /// forecast and denied network permissions, using an isolated runtime data directory.
+    /// Synthetic weather faces exercise the WASM plugin layout without network access.
     #[test]
     fn weather_plugin_faces_render_on_the_kit() {
         use glaze_ui::{DisplayList, TextStyle, golden, render};

@@ -1,0 +1,140 @@
+cargo :    Compiling stillkit v0.0.1 (D:\Coding\projects\desktop\stillkit\crates\stillkit)
+At line:2 char:230
++ ... stability'; cargo test -p stillkit --lib --features golden *> C:/User ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling st...rates\stillkit):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.09s
+     Running unittests src\lib.rs 
+(C:\mypaper-targets\stillkit\popup-stability\debug\build\stillkit/d556c639f5080d93\out\stillkit-d556c639f5080d93.exe)
+
+running 125 tests
+test color_row::popover::tests::color_model_round_trips_primaries_greys_and_custom_colors ... ok
+test color_row::popover::tests::pointer_covers_the_square_and_hue_strip_and_clamps_at_edges ... ok
+test el::edit::tests::typing_undoes_by_word_and_max_len_cuts ... ok
+test controls::tests::text_steps_meet_the_kit_floors_on_every_surface ... ok
+test damage::tests::resize_invalidates_every_pixel_but_identical_frames_do_nothing ... ok
+test damage::tests::removal_and_addition_are_clamped_to_the_bitmap_in_both_modes ... ok
+test el::animate::tests::oklab_round_trips_and_blends_premultiplied ... ok
+test el::animate::tests::a_retarget_keeps_position_and_velocity ... ok
+test el::edit::tests::graphemes_move_and_delete_whole ... ok
+test a11y::tests::a_field_reads_as_text_runs_with_its_selection ... ok
+test el::edit::tests::words_move_like_windows ... ok
+test el::feedback::tests::a_hover_eases_in_and_out_and_then_forgets_the_control ... ok
+test el::json::tests::parses_a_script_and_round_trips_strings ... ok
+test el::overlay::tests::it_opens_on_its_side_and_flips_where_it_would_not_fit ... ok
+test el::overlay::tests::it_shifts_inside_and_window_placements_use_the_edges ... ok
+test el::png::tests::checksums_match_the_reference_values ... ok
+test el::rotate::tests::a_quarter_turn_maps_arcs_lines_and_boxes_exactly ... ok
+test el::rotate::tests::arc_points_follow_a_half_circle ... ok
+test el::virtualize::tests::rows_in_sight_and_staleness ... ok
+test el::scroll::tests::it_glides_within_its_content_and_its_bar_fades_then_rests ... ok
+test focus::tests::enabled_labels_that_do_nothing_are_not_focus_stops ... ok
+test focus::tests::steps_skip_disabled_items_and_wrap ... ok
+test geom::continuous::tests::continuous_corner_matches_engine_extent_and_preserves_capsules ... ok
+test geom::tests::pixels_cover_fractional_edges_and_clip_to_the_bitmap ... ok
+test icons::tests::app_icons_draw_their_own_path ... ok
+test glass::tests::the_shape_is_the_body_on_screen_in_whole_pixels ... ok
+test controls::tests::hits_index_targets_and_scrolled_out_items_take_no_clicks ... ok
+test controls::tests::segments_share_a_group_and_report_their_check_state ... ok
+test icons::tests::levels_clamp_and_mdl2_gets_outlined_media ... ok
+test el::png::tests::a_snapshot_reads_back_as_the_same_pixels ... ok
+test controls::tests::kit_controls_follow_the_builders_input_and_draw_no_outlines_at_rest ... ok
+test interact::tests::keys_move_a_visible_focus_and_enter_fires_it ... ok
+test interact::tests::press_shows_at_once_and_release_over_the_same_item_fires ... ok
+test icons::tests::path_data_parses_compact_arcs_relative_moves_and_smooth_curves ... ok
+test interact::tests::an_enabled_label_takes_no_hover_or_press ... ok
+test controls::tests::filled_controls_keep_selection_and_fractional_dpi_thumb_geometry ... ok
+test interact::tests::releasing_elsewhere_cancels_and_disabled_items_never_fire ... ok
+test interaction_motion::tests::hover_and_press_have_separate_timing_and_rest_stops_frames ... ok
+test icons::tests::every_icon_has_an_outline ... ok
+test menu::tests::attached_menus_clear_each_bar_edge_and_clamp_with_their_shadow ... ok
+test layout::tests::stacks_splits_and_grids_place_boxes_without_overlap ... ok
+test menu::tests::submenus_butt_against_their_parent_level_with_their_row ... ok
+test menu::tests::the_menu_opens_at_the_cursor_and_flips_away_from_screen_edges ... ok
+test motion::tests::a_tween_ends_exactly_on_its_target ... ok
+test motion::tests::released_matches_the_step_response_and_its_own_velocity ... ok
+test motion::tests::springs_start_at_rest_and_settle_on_one_in_every_damping_regime ... ok
+test platform::a11y_bus::tests::a_restarted_service_is_asked_again_and_its_signals_count ... ok
+test platform::a11y_bus::tests::changes_from_the_owner_toggle_and_invalidation_asks_again ... ok
+test platform::a11y_bus::tests::overrides_and_addresses ... ok
+test chart::tests::compact_accounts_keep_initials_and_percent_at_dashboard_widths ... ok
+test kit::tests::a_scroll_view_clips_its_content_and_hits_and_keeps_its_header ... ok
+test kit::tests::a_hover_changes_only_its_wash_and_a_click_never_shows_a_ring ... ok
+test menu::tests::section_headers_are_muted_labels_without_pointer_or_keyboard_targets ... ok
+test menu::tests::the_view_hits_every_row_but_separators_and_marks_state ... ok
+test menu::tests::layout_stacks_rows_and_sizes_to_the_widest_label ... ok
+test el::layout::tests::a_box_losing_its_last_absolute_child_lays_out_again ... ok
+test el::layout::tests::a_row_places_fixed_and_growing_children_on_whole_pixels ... ok
+test el::layout::tests::an_absolute_child_sizes_by_percent_against_its_padded_parent ... ok
+test el::layout::tests::text_measures_through_the_cache_and_only_changed_nodes_are_touched ... ok
+test calendar::tests::civil_roundtrip_and_leap_months ... ok
+test platform::a11y_bus::tests::oversized_messages_are_read_past ... ok
+test platform::a11y_bus::tests::pipelines_auth_hello_match_and_a_non_starting_status_call ... ok
+test platform::a11y_bus::tests::rejected_auth_absent_service_and_garbage_close ... ok
+test platform::windows::a11y::semantic_tests::status_nodes_cannot_collide_with_disabled_controls ... ok
+test platform::windows::a11y::semantic_tests::ranges_fields_reordering_and_live_feedback_expose_semantic_contracts ... ok
+test platform::a11y_bus::tests::reply_decides_either_property_in_either_byte_order_fed_byte_by_byte ... ok
+test platform::windows::a11y::tests::deferred_adapter_keeps_the_latest_hits_before_activation ... ok
+test platform::windows::a11y::tests::duplicate_hits_and_stale_focus_still_make_a_valid_tree ... ok
+test platform::windows::a11y::tests::hits_become_nodes_with_their_state_and_focus ... ok
+test platform::windows::a11y::tests::triggers_offer_expand_when_closed_and_collapse_when_open ... ok
+test platform::windows::identity::tests::a_second_different_identity_is_refused ... ok
+test platform::windows::identity::tests::names_follow_the_prefix ... ok
+test platform::windows::modules::tests::vendor_drivers_match_and_system_dlls_do_not ... ok
+test platform::windows::a11y::tests::an_active_adapter_survives_duplicate_hits_and_a_stale_focus ... ok
+test el::runtime::native::tests::rich_edit_types_into_a_focused_field_and_goes_with_focus ... ok
+test platform::windows::render::tests::shadow_cost ... ignored, a measurement
+test platform::windows::render::marker_and_retained_clips_are_nested_and_balanced ... ok
+test kit::tests::edge_washes_share_the_surface_corner_without_damaging_the_whole_window ... ok
+test geom::continuous::tests::continuous_hit_fill_clears_corners_and_translates_with_its_surface ... ok
+test platform::windows::render::rounded_groups_clip_composed_pictures_and_translate_without_losing_the_mask ... ok
+test platform::windows::render::a_sparse_read_keeps_row_offsets_inside_one_nonzero_origin_lock ... ok
+test platform::windows::surface::tests::a_drop_reads_its_point_and_paths_through_the_lazy_shell32_calls ... ok
+test platform::windows::text::tests::long_text_is_cut_with_an_ellipsis_and_wraps_into_bounded_lines ... ok
+test platform::windows::render::canvas_releases_pictures_that_left_the_display_list ... ok
+test platform::windows::render::tests::a_fill_lands_premultiplied_and_only_the_damaged_area_is_redrawn ... ok
+test platform::windows::text::tests::the_layout_cache_stays_bounded_and_keeps_what_is_in_use ... ok
+test platform::windows::render::bounded_canvas_bands_preserve_partial_damage_and_the_last_short_band ... ok
+test platform::windows::render::tests::bitmap_ops_preserve_premultiplied_alpha_and_only_cover_their_rect ... ok
+test platform::windows::render::partial_updates_preserve_oversized_elliptical_corners ... ok
+test platform::windows::render::tests::a_rounded_image_clears_its_corners_and_maps_its_source_crop ... ok
+test reveal::tests::pointer_coordinates_and_rectangles_follow_the_same_transform ... ok
+test reveal::tests::presentation_styles_have_distinct_starts_and_an_exact_final_body ... ok
+test scene::tests::a_moving_soft_shadow_redraws_its_old_and_new_bounds_only ... ok
+test scene::tests::a_changed_scrolled_meter_damages_its_own_bounds_and_not_the_whole_viewport ... ok
+test scene::tests::damage_covers_only_the_operations_that_changed ... ok
+test platform::windows::watch::tests::atomic_replacement_removal_and_recreation_reload_without_a_poll_timer ... ok
+test scene::tests::identical_lists_need_no_redraw_whatever_their_hits_say ... ok
+test scene::tests::meter_sweep_damage_keeps_the_unchanged_ring ... ok
+test scene::tests::sparse_damage_keeps_distant_changes_separate_and_merges_neighbors ... ok
+test scroll::tests::the_scrollbar_shows_while_scrolling_then_fades_and_ticks_stop ... ok
+test scroll::tests::touchpad_deltas_move_at_once_and_notches_glide_within_the_content ... ok
+test shadow::mask::tests::small_axes_use_their_exact_length_and_large_ones_stretch ... ok
+test sortable::tests::drop_inserts_across_multiple_rows_and_rejects_outside_indices ... ok
+test platform::windows::render::tests::soft_shadows_of_one_shape_share_a_mask_wherever_and_however_large_they_are ... ok
+test shadow::mask::tests::the_mask_cache_stays_within_its_budget_and_keeps_recent_masks ... ok
+test shadow::mask::tests::the_shadow_is_symmetric_and_falls_off_monotonically_from_its_edge ... ok
+test theme::parts::tests::shadow_levels_follow_the_scheme_survive_mixing_and_turn_off_with_the_colour ... ok
+test theme::parts::tests::lens_is_owned_by_material_and_contrast_is_resolved_after_tint_changes ... ok
+test shadow::mask::tests::a_large_box_peaks_at_full_colour_and_is_zero_beyond_its_reach ... ok
+test theme::parts::tests::presets_pass_and_parts_survive_scheme_changes ... ok
+test theme::tests::apple_springs_match_liquid_rust ... ok
+test theme::tests::radii_are_concentric_and_glass_draws_no_border ... ok
+test theme::tests::knobs_drive_every_glass_style_to_both_ends ... ok
+test theme::tests::labels_keep_their_contrast_floors_over_their_own_surface_in_every_style ... ok
+test theme::tests::small_glass_flips_with_its_backdrop_and_panels_follow_the_scheme ... ok
+test transition::tests::a_timed_transition_lands_exactly_and_disabled_never_moves ... ok
+test shadow::mask::tests::the_nine_slices_reassemble_the_direct_render ... ok
+test platform::windows::timing::tests::the_ticker_fires_only_while_armed ... ok
+test platform::windows::layered_app::tests::alpha_canvas_preserves_native_client_geometry_and_can_return_to_opaque ... ok
+test platform::windows::render::tests::a_soft_shadow_draws_its_analytic_mask_in_its_colour ... ok
+test menu::tests::long_menus_fit_the_monitor_and_keyboard_selection_scrolls_into_view ... ok
+test platform::windows::text_field::tests::live_type_changes_preserve_text_selection_and_settle_after_one_request ... ok
+test platform::windows::text_field::tests::rich_edit_draws_bidi_cjk_selection_and_undo_on_the_software_target ... ok
+test platform::windows::watch::tests::a_thread_local_watch_can_be_dropped_during_process_exit ... ok
+test platform::windows::render::sparse_meter_updates_match_a_complete_render ... ok
+
+test result: ok. 124 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.04s
+

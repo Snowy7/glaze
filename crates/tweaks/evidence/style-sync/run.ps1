@@ -13,7 +13,7 @@ $out = $PSScriptRoot
 $configPath = Join-Path $env:APPDATA 'glaze\config.json'
 $palettePath = Join-Path $env:LOCALAPPDATA 'glaze\palette.json'
 $journalPath = Join-Path $env:LOCALAPPDATA 'glaze\undo.json'
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $tools = Split-Path $lock -Parent
 if (-not (Test-Path -LiteralPath $Probe)) { throw "Build the read-only probe first: $Probe" }
 Set-Location -LiteralPath $repo

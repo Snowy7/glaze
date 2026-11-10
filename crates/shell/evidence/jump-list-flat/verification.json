@@ -1,0 +1,38 @@
+{
+    "privacy":  "Only fixture-owned no-activate windows captured; all destination labels replaced; no input injected",
+    "deployedBinaryMatches":  {
+                                  "glaze-wallpaper":  true,
+                                  "glaze-studio":  true,
+                                  "glaze-core":  true,
+                                  "glaze-files":  true,
+                                  "glaze-shell":  true
+                              },
+    "guardedDeploy":  "passed",
+    "focusedTests":  [
+                         "section headers skip pointer and keyboard targets: passed",
+                         "attached menus clear all four edges and clamp with shadow: passed"
+                     ],
+    "glazeCommits":  [
+                         "f900d06e",
+                         "832832be"
+                     ],
+    "workspaceReleaseBuild":  "passed",
+    "deployedCpuNote":  "Observation includes pointer/desktop activity; not an idle comparison. See closed-menu-cpu.json for the controlled no-wake, no-CPU fixture.",
+    "configByteIdentical":  {
+                                "bars.json":  true,
+                                "config.json":  true
+                            },
+    "desktopLockReleased":  true,
+    "liveVariants":  [
+                         "basic-only menu",
+                         "two Recent items",
+                         "full native lists with stand-in labels",
+                         "in-place expansion preserves six-pixel gap",
+                         "raised dock bounds re-anchor menu"
+                     ],
+    "stillkitCommit":  "e11f35f",
+    "pluginBuild":  "passed",
+    "windowsCustomListReference":  "https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-icustomdestinationlist-appendknowncategory",
+    "baseStillkitCommit":  "7e9a3a2",
+    "baseFilesCommit":  "b45cf6e7"
+}

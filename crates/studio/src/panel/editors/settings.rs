@@ -37,7 +37,7 @@ pub fn frame_cap(app: &App, b: &mut B, c: &mut Col, path: &str, inherit: &str) {
     select(
         b,
         c,
-        "Cap",
+        "Frame rate cap",
         if custom || !known {
             serde_json::json!("custom")
         } else {
@@ -245,30 +245,22 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
                         .collect(),
                 );
                 notice(b, c, "Up to 100 desktops, saved between Studio sessions.");
-                action_button(b, c, "Open History", open(Page::History));
-                let r = Rect::new(c.x, c.y + b.px(4.0), c.w, b.px(30.0));
-                b.button(
-                    key("panel-clear-history"),
-                    r,
-                    "Clear history",
-                    None,
-                    glaze_ui::controls::ButtonKind::Ghost,
-                    app.panel.as_ref().unwrap().history.borrow().error.is_none(),
-                    Action::Panel(Command::ClearHistory),
-                );
-                c.y = r.bottom + b.px(6.0);
+                // Two actions of one kind, side by side.
+                let gap = b.px(8.0);
+                let w = (c.w - gap) / 2.0;
+                let y = c.y + b.px(4.0);
+                button(b, Rect::new(c.x, y, w, b.px(32.0)), "Open history", None, false, true, open(Page::History));
+                button(b, Rect::new(c.x + w + gap, y, w, b.px(32.0)), "Clear history", None, false,
+                    app.panel.as_ref().unwrap().history.borrow().error.is_none(), Action::Panel(Command::ClearHistory));
+                c.y = y + b.px(32.0) + b.px(10.0);
             });
         },
     );
 }
 
-pub fn keyboard(b: &mut B, c: &mut Col) {
-    crate::panel::controls::title(
-        b,
-        c,
-        "Keyboard",
-        "Reference · shortcuts cannot be changed yet",
-    );
+pub fn keyboard(app: &App, b: &mut B, c: &mut Col) {
+    page_title(app, b, c, "Keyboard", "");
+    notice(b, c, "A reference: shortcuts can't be changed yet.");
     let sections = [
         (
             "Anywhere",
@@ -465,7 +457,25 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
                     c,
                     "Ctrl Alt Shift Backspace restores the Windows desktop from anywhere.",
                 );
-                action_button(b, c, "Restore Windows desktop", Action::RestoreDesktop);
+                let running = matches!(app.system.restore, crate::system::Restore::Running);
+                let r = Rect::new(c.x, c.y + b.px(6.0), c.w, height(b, 30.0));
+                button(b, r, if running { "Restoring Windows desktop…" } else { "Restore Windows desktop" },
+                    None, false, !running, Action::RestoreDesktop);
+                c.y = r.bottom + b.px(8.0);
+                if let crate::system::Restore::Finished(result) = &app.system.restore {
+                    match result {
+                        Ok(result) => {
+                            notice(b, c, result.summary());
+                            if !result.report.restored.is_empty() {
+                                notice(b, c, &format!("Restored: {}.", result.report.restored.join(", ")));
+                            }
+                            for failure in &result.report.failed {
+                                notice(b, c, &format!("{}: {}", failure.step, failure.error));
+                            }
+                        }
+                        Err(error) => notice(b, c, &format!("Couldn't restore the Windows desktop: {error}")),
+                    }
+                }
                 let options = RESET_PARTS
                     .iter()
                     .enumerate()
@@ -512,6 +522,8 @@ pub fn troubleshoot(app: &App, b: &mut B, c: &mut Col) {
     );
 }
 
+const ABOUT_LICENSE_TEXT: &str = "MIT licensed.";
+
 pub fn about(app: &App, b: &mut B, c: &mut Col) {
     page_title(app, b, c, "About", "Glaze Studio");
     columns(
@@ -523,13 +535,21 @@ pub fn about(app: &App, b: &mut B, c: &mut Col) {
                 notice(
                     b,
                     c,
-                    "MIT licensed. A native desktop, built with Rust and Direct2D.",
+                    &format!("{ABOUT_LICENSE_TEXT} A native desktop, built with Rust and Direct2D."),
                 );
                 notice(
                     b,
                     c,
                     "Studio keeps your desktop settings on this PC. Connections describe their own data use.",
                 );
+            });
+            group(b, c, "Data sources", |b, c| {
+                row(b, c, None, "Weather data by Open-Meteo.com", "", "CC BY 4.0", None,
+                    Action::Open("https://open-meteo.com/".into()));
+                row(b, c, None, "CC BY 4.0 licence", "", "Open-Meteo weather data", None,
+                    Action::Open("https://creativecommons.org/licenses/by/4.0/".into()));
+                row(b, c, None, "Crypto prices by CoinGecko", "", "coingecko.com", None,
+                    Action::Open("https://www.coingecko.com/".into()));
             });
         },
         |b, c| {
@@ -579,7 +599,7 @@ fn menu_name(entry: &Entry) -> String {
             Builtin::Studio => "Glaze Studio",
             Builtin::Display => "Display settings",
             Builtin::Personalize => "Personalize",
-            Builtin::Terminal => "Open terminal here",
+            Builtin::Terminal => "Open in Terminal",
             Builtin::More => "Show more options",
         }
         .into(),
@@ -629,7 +649,8 @@ pub fn add_menu_item(app: &mut App) {
     }
 }
 
-pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
+pub fn desktop_menu(app: &App, b: &mut B, outer: &mut Col) {
+    let c = &mut *outer;
     page_title(app, b, c, "Desktop menu", "Right-click on bare wallpaper");
     group(b, c, "", |b, c| {
         setting(app, b, c, "desktop_menu", "Use Glaze's menu", "")
@@ -638,40 +659,41 @@ pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
         .get(DocId::Config, "/desktop_menu/items")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_else(default_items);
-    menu_preview(app, b, c, &items);
+    // "Add": the built-in items that aren't in the menu, your own program, or a reset.
+    let mut add = Vec::new();
+    let mut shown = Vec::new();
+    for item in default_items() {
+        if shown.contains(&item) || items.contains(&item) && item != Entry::Builtin(Builtin::Separator) {
+            continue;
+        }
+        shown.push(item.clone());
+        if let Entry::Builtin(builtin) = &item
+            && let Some(id) = serde_json::to_value(builtin).ok().and_then(|v| v.as_str().map(str::to_owned))
+        {
+            add.push(crate::actions::MenuItem::new(menu_name(&item), Action::MenuAdd(id)));
+        }
+    }
+    add.extend([
+        crate::actions::MenuItem::Separator,
+        crate::actions::MenuItem::new("Your own program…", Action::More(key("panel-menu-add"))),
+        crate::actions::MenuItem::new("Reset to the default menu", Action::MenuReset),
+    ]);
+    // The preview beside the items when there's room, so the list starts in view.
+    let side = c.w >= b.px(720.0);
+    let preview_w = if side { (c.w * 0.42).min(b.px(380.0)) } else { c.w };
+    let top = c.y;
+    let mut preview = Col { w: preview_w, ..*c };
+    menu_preview(app, b, &mut preview, &items);
+    let mut list = if side { Col { x: c.x + preview_w + b.px(24.0), w: c.w - preview_w - b.px(24.0), y: top, ..*c } } else { Col { y: preview.y, ..*c } };
+    let c = &mut list;
     super::group_action(
         b,
         c,
         "Items",
-        "Add your own",
-        Action::More(key("panel-menu-add")),
+        "Add",
+        Action::Menu(add),
         |b, c| {
             if app.is_open(key("panel-menu-add")) {
-                let mut shown = Vec::new();
-                for item in default_items().into_iter() {
-                    if shown.contains(&item)
-                        || items.contains(&item) && item != Entry::Builtin(Builtin::Separator)
-                    {
-                        continue;
-                    }
-                    shown.push(item.clone());
-                    if let Entry::Builtin(builtin) = &item {
-                        let id = serde_json::to_value(builtin)
-                            .ok()
-                            .and_then(|v| v.as_str().map(str::to_owned))
-                            .unwrap();
-                        row(
-                            b,
-                            c,
-                            Some(glyph::ADD),
-                            &menu_name(&item),
-                            "",
-                            "",
-                            None,
-                            Action::MenuAdd(id),
-                        );
-                    }
-                }
                 field(
                     app,
                     b,
@@ -700,7 +722,6 @@ pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
                     "",
                 );
                 action_button(b, c, "Add your item", Action::Panel(Command::AddMenuItem));
-                action_button(b, c, "Reset to the default menu", Action::MenuReset);
             }
 
             for (i, item) in items.iter().enumerate() {
@@ -770,6 +791,8 @@ pub fn desktop_menu(app: &App, b: &mut B, c: &mut Col) {
     group(b, c, "Explorer", |b, c| {
         setting(app, b, c, "classic_menu", "Full Windows menus", "")
     });
+    let bottom = c.y.max(preview.y);
+    outer.y = bottom;
 }
 
 /// The shell's actual menu drawing, reduced over the active wallpaper.

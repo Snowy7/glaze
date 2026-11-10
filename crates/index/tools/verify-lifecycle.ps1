@@ -2,7 +2,7 @@
 param([int]$StandalonePid = 0)
 $ErrorActionPreference = 'Stop'
 Add-Type 'public static class IndexConfigSwap { public static void Replace(string source, string destination) { System.IO.File.Replace(source, destination, null); } }'
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $configPath = Join-Path $env:APPDATA 'glaze\config.json'
 $exe = 'D:\Coding\projects\desktop\wallpaper\target\release\glaze-index.exe'
 $deadline = [DateTime]::UtcNow.AddMinutes(2)
@@ -77,7 +77,7 @@ try {
 } finally {
   try { if (-not $succeeded) { Set-IndexFlag $original } }
   finally {
-    if ([IO.Path]::GetFullPath($lock) -ne 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock') { throw 'Invalid desktop lock' }
+    if ([IO.Path]::GetFullPath($lock) -ne (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')) { throw 'Invalid desktop lock' }
     [IO.Directory]::Delete($lock)
   }
 }

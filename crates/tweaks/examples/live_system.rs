@@ -27,7 +27,8 @@ fn shell_flags() -> (i32, i32) {
 
 fn main() -> Result<()> {
     let lock =
-        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock");
+        std::path::PathBuf::from(std::env::var("LOCALAPPDATA")?)
+            .join(r"Temp\glaze-tools\desktop.lock");
     ensure!(
         lock.exists(),
         "caller must hold the desktop lock before running live_system"

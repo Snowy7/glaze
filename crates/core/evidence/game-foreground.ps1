@@ -4,7 +4,7 @@ param([ValidatePattern('^[a-z0-9-]+$')][string]$Label = 'fixed', [switch]$WakePr
 $ErrorActionPreference = 'Stop'
 $probeDir = 'C:\glaze-targets\game-quiet-live'
 $fixtureExe = Join-Path $probeDir 'index_game.exe'
-$desktopLock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$desktopLock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $signalPath = Join-Path $env:LOCALAPPDATA 'glaze/game-activity.json'
 $output = Join-Path $PSScriptRoot "game-foreground-$Label.json"
 Add-Type @'
@@ -58,7 +58,7 @@ try {
   $activated = $observations[-1].foreground_pid -eq $fixture.Id
   $engaged = $activated -and $observations[-1].signal.activity.pause_background -and $observations[-1].signal.activity.foreground_pid -eq $fixture.Id
   $samePublisher = @($observations | Where-Object { $_.signal.publisher_pid -ne $before.publisher_pid }).Count -eq 0
-  & 'C:\Users\you\AppData\Local\Temp\glaze-tools\shotall.ps1' -Out (Join-Path $probeDir "foreground-$Label.png") | Out-Null
+  & (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\shotall.ps1') -Out (Join-Path $probeDir "foreground-$Label.png") | Out-Null
   $wake = $null
   if ($WakeProbe) {
     $posted = [GameForegroundProbe]::WakePublisher()
@@ -81,7 +81,7 @@ try {
     Start-Sleep -Seconds 2
     $restored = Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json
     $restored | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $PSScriptRoot "game-foreground-$Label-restored.json") -Encoding utf8
-    & 'C:\Users\you\AppData\Local\Temp\glaze-tools\shotall.ps1' -Out (Join-Path $probeDir "foreground-$Label-restored.png") | Out-Null
+    & (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\shotall.ps1') -Out (Join-Path $probeDir "foreground-$Label-restored.png") | Out-Null
     if ($restored.activity.pause_background) { throw 'Pause did not clear after fixture exit' }
   } finally { [IO.Directory]::Delete($desktopLock) }
 }

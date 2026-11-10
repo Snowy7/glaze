@@ -51,6 +51,45 @@ pub struct Autostart {
 }
 
 #[derive(Debug, Clone, Default)]
+pub enum Restore {
+    #[default]
+    Idle,
+    Running,
+    Finished(std::result::Result<RestoreResult, String>),
+}
+
+/// The headless restore contract in docs/restore.md, plus its process exit code.
+#[derive(Debug, Clone)]
+pub struct RestoreResult {
+    pub code: u8,
+    pub report: RestoreReport,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RestoreReport {
+    pub stopped: bool,
+    pub restored: Vec<String>,
+    pub failed: Vec<RestoreFailure>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RestoreFailure {
+    pub step: String,
+    pub error: String,
+}
+
+impl RestoreResult {
+    pub fn summary(&self) -> &'static str {
+        match self.code {
+            0 if !self.report.stopped && self.report.restored.is_empty() => "Windows desktop is already restored.",
+            0 => "Windows desktop restored.",
+            1 => "Some Windows settings couldn't be restored.",
+            _ => "Glaze couldn't be stopped. Nothing was changed.",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct System {
     pub parts: [Part; 3],
     polled: Option<Instant>,
@@ -60,6 +99,7 @@ pub struct System {
     /// The card that drives the screens (where `auto` renders), read with `gpus`.
     pub display_gpu: Option<String>,
     pub core_path: Option<PathBuf>,
+    pub restore: Restore,
 }
 
 /// How often live numbers refresh while visible.
@@ -99,6 +139,7 @@ impl System {
             ]),
             display_gpu: Some("Intel Iris Xe Graphics".into()),
             core_path: Some(PathBuf::from("C:\\Program Files\\glaze\\glaze-core.exe")),
+            restore: Restore::Idle,
         }
     }
 
@@ -368,30 +409,29 @@ fn terminate(pid: u32) -> Result<()> {
     }
 }
 
-/// The emergency stop, as a button: the same keys core listens for anywhere.
-pub fn restore_desktop() {
-    use windows::Win32::UI::Input::KeyboardAndMouse::{
-        INPUT, INPUT_0, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput,
-        VIRTUAL_KEY, VK_BACK, VK_CONTROL, VK_MENU, VK_SHIFT,
+/// Run only on a worker: restore can wait for core to stop, and also works without a core.
+/// Resolve beside Studio itself, never through PATH or a development checkout.
+pub fn restore_desktop() -> Result<RestoreResult> {
+    let core = std::env::current_exe()?.with_file_name("glaze-core.exe");
+    let output = Command::new(&core)
+        .arg("--restore")
+        .current_dir(core.parent().context("Studio has no installation folder")?)
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(Stdio::null())
+        .output()
+        .context("starting glaze-core.exe beside Studio")?;
+    restore_result(output.status.code(), &output.stdout)
+}
+
+fn restore_result(code: Option<i32>, stdout: &[u8]) -> Result<RestoreResult> {
+    let code = match code {
+        Some(code @ 0..=2) => code as u8,
+        Some(code) => bail!("Restore command exited unexpectedly ({code})"),
+        None => bail!("Restore command ended without an exit code"),
     };
-    let key = |vk: VIRTUAL_KEY, up: bool| INPUT {
-        r#type: INPUT_KEYBOARD,
-        Anonymous: INPUT_0 {
-            ki: KEYBDINPUT {
-                wVk: vk,
-                dwFlags: if up { KEYEVENTF_KEYUP } else { KEYBD_EVENT_FLAGS(0) },
-                ..Default::default()
-            },
-        },
-    };
-    let chord = [VK_CONTROL, VK_MENU, VK_SHIFT, VK_BACK];
-    let inputs: Vec<INPUT> = chord
-        .iter()
-        .map(|&vk| key(vk, false))
-        .chain(chord.iter().rev().map(|&vk| key(vk, true)))
-        .collect();
-    // SAFETY: a local array of well-formed keyboard inputs.
-    unsafe { SendInput(&inputs, size_of::<INPUT>() as i32) };
+    let report: RestoreReport = serde_json::from_slice(stdout).context("reading the restore result")?;
+    anyhow::ensure!(code != 0 || report.failed.is_empty(), "Restore reported failed steps despite a successful exit");
+    Ok(RestoreResult { code, report })
 }
 
 /// Start with Windows, from core's `--autostart` (the source of truth).
@@ -488,5 +528,67 @@ pub fn open_logs() {
         } else if let Some(parent) = log.parent() {
             open(&parent.display().to_string());
         }
+    }
+}
+
+#[cfg(test)]
+mod restore_tests {
+    use super::*;
+
+    #[test]
+    fn restore_accepts_success_with_and_without_a_running_core() {
+        let idle = restore_result(Some(0), br#"{"stopped":false,"restored":[],"failed":[]}"#).unwrap();
+        assert_eq!(idle.summary(), "Windows desktop is already restored.");
+        let restored = restore_result(Some(0), br#"{"stopped":true,"restored":["taskbar","styling"],"failed":[]}"#).unwrap();
+        assert_eq!(restored.summary(), "Windows desktop restored.");
+        assert_eq!(restored.report.restored, ["taskbar", "styling"]);
+    }
+
+    #[test]
+    fn restore_keeps_partial_failures_and_stop_failures_distinct() {
+        let partial = restore_result(Some(1), br#"{"stopped":true,"restored":["styling"],"failed":[{"step":"wallpaper","error":"Original picture is unavailable"}]}"#).unwrap();
+        assert_eq!(partial.summary(), "Some Windows settings couldn't be restored.");
+        assert_eq!(partial.report.failed[0].step, "wallpaper");
+        assert_eq!(partial.report.failed[0].error, "Original picture is unavailable");
+        let stop = restore_result(Some(2), br#"{"stopped":false,"restored":[],"failed":[{"step":"stop","error":"Access denied"}]}"#).unwrap();
+        assert_eq!(stop.summary(), "Glaze couldn't be stopped. Nothing was changed.");
+    }
+
+    #[test]
+    fn malformed_or_unsuccessful_command_results_never_report_success() {
+        let ok = br#"{"stopped":false,"restored":[],"failed":[]}"#;
+        assert!(restore_result(None, ok).is_err());
+        assert!(restore_result(Some(3), ok).is_err());
+        assert!(restore_result(Some(0), b"{}").is_err());
+        assert!(restore_result(Some(0), b"not JSON").is_err());
+        assert!(restore_result(Some(0), br#"{"stopped":false,"restored":[],"failed":[{"step":"stop","error":"Denied"}]}"#).is_err());
+    }
+
+    #[test]
+    fn restore_feedback_releases_busy_state_and_stays_available_in_recovery() {
+        let mut ui = glaze_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::window_app(true, &ui, (1280, 800));
+        app.run(crate::actions::Action::Panel(crate::panel::Command::Open(crate::panel::Page::Troubleshoot)));
+        app.system.restore = Restore::Running;
+        // A second request is ignored even without an inbox: it cannot start another worker.
+        app.run(crate::actions::Action::RestoreDesktop);
+        assert!(matches!(app.system.restore, Restore::Running));
+        for (name, code, json) in [
+            ("restore-complete", 0, r#"{"stopped":true,"restored":["taskbar","styling"],"failed":[]}"#),
+            ("restore-partial", 1, r#"{"stopped":true,"restored":["styling"],"failed":[{"step":"wallpaper","error":"Original picture is unavailable"}]}"#),
+            ("restore-stop-failed", 2, r#"{"stopped":false,"restored":[],"failed":[{"step":"stop","error":"Access denied"}]}"#),
+        ] {
+            let result = restore_result(Some(code), json.as_bytes()).unwrap();
+            let summary = result.summary();
+            app.message(crate::app::Msg::DesktopRestored(Ok(result)));
+            assert!(matches!(app.system.restore, Restore::Finished(Ok(_))));
+            assert_eq!(app.toast.as_ref().unwrap().text, summary);
+            let shot = crate::goldens::shot(&mut app, &mut ui);
+            if let Some(out) = std::env::var_os("GLAZE_STUDIO_WINDOW_SHOTS") {
+                glaze_ui::golden::write(&shot, &PathBuf::from(out).join(format!("{name}.png"))).unwrap();
+            }
+        }
+        app.message(crate::app::Msg::DesktopRestored(Err("Core is missing".into())));
+        assert!(matches!(app.system.restore, Restore::Finished(Err(_))));
     }
 }

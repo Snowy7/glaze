@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 $dir = Join-Path $env:LOCALAPPDATA 'glaze\app-styler'
 $tapLog = Join-Path $dir 'styler.log'
 $appLog = Join-Path $env:LOCALAPPDATA 'glaze\glaze.log'
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 function Note([string]$m) { $l = '{0} {1}' -f (Get-Date -Format 'HH:mm:ss.fff'), $m; Add-Content -LiteralPath $Out -Value $l; Write-Host $l }
 function Take { for ($i = 0; -not (New-Item -ItemType Directory $lock -ErrorAction SilentlyContinue); $i++) { if ($i -gt 240) { throw 'desktop lock busy' }; Start-Sleep -Milliseconds 500 } }
 function Drop { if (Test-Path -LiteralPath $lock) { Remove-Item -LiteralPath $lock -Recurse -Force } }

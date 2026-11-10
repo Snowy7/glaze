@@ -3,7 +3,7 @@
 # move to the secondary screen without activation, navigate with Shell COM and close with Quit()
 # or WM_CLOSE. The desktop lock is held per action only.
 $ErrorActionPreference = 'Stop'
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 Add-Type -Namespace R5 -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr h, out uint pid);
 [DllImport("user32.dll")] public static extern bool SetWindowPos(System.IntPtr h, System.IntPtr after, int x, int y, int cx, int cy, uint flags);

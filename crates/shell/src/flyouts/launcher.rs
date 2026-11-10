@@ -1400,7 +1400,7 @@ mod search_tests {
     /// Run in release mode to measure the actual installed app list without a timing assertion
     /// whose outcome depends on unrelated desktop load.
     #[test]
-    #[ignore]
+    #[ignore = "benchmarks the local installed-app cache under live desktop load"]
     fn installed_app_list_search_timing() {
         let apps = index::parse_cache(
             &std::fs::read_to_string(files::local("apps.json").unwrap()).unwrap(),

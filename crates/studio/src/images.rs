@@ -42,9 +42,17 @@ pub struct Images {
     generation: Arc<std::sync::atomic::AtomicU64>,
     /// Goldens decode synchronously, with their own WIC factory.
     sync: Option<Decoder>,
+    #[cfg(test)]
+    fixture_sources: HashMap<PathBuf, PathBuf>,
 }
 
 impl Images {
+    /// OS thumbnail providers choose their own frame and cache size. Goldens use fixed
+    /// artwork; the poster integration test still exercises the real shell provider.
+    #[cfg(test)]
+    pub fn fixture_source(&mut self, path: PathBuf, source: PathBuf) {
+        self.fixture_sources.insert(path, source);
+    }
     /// Panel pages keep only stills requested by the frame that was actually presented.
     pub fn begin_frame(&mut self) {
         self.frame_start = Some(self.clock);
@@ -70,22 +78,32 @@ impl Images {
 
     /// `path` changed on disk: decode it again, keeping its newest pixels on screen until the
     /// new ones arrive (a live preview rewrites its file many times a second).
-    pub fn reload(&mut self, path: &Path) {
+    pub fn reload(&mut self, path: &Path) -> bool {
         let page = self.generation.load(std::sync::atomic::Ordering::Relaxed);
         let prefix = format!("{page}:{}|", path.display());
         let newest = self
             .slots
             .iter()
             .filter(|(key, _)| key.starts_with(&prefix))
-            .filter_map(|(_, slot)| match slot {
-                Slot::Ready(image, used, size) => Some((*used, image.clone(), *size)),
+            .filter_map(|(key, slot)| match slot {
+                Slot::Ready(image, used, size) => Some((*used, image.clone(), *size, key.clone())),
                 _ => None,
             })
             .max_by_key(|(used, ..)| *used);
         self.slots.retain(|key, _| !key.starts_with(&prefix));
-        if let Some((used, image, size)) = newest {
-            self.slots.insert(format!("{prefix}stale"), Slot::Ready(image, used, size));
+        if let Some((used, image, size, key)) = newest {
+            let dimensions = key.rsplit_once('|').and_then(|(_, tail)| tail.split(':').next())
+                .and_then(|tail| tail.split_once('x'))
+                .and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)));
+            let key = key.split(":stale").next().unwrap_or(&key);
+            self.slots.insert(format!("{key}:stale"), Slot::Ready(image, used, size));
+            // Queue the replacement directly; no extra UI paint just to ask for a decode.
+            if let Some(max) = dimensions {
+                self.get(path, max);
+            }
+            return true;
         }
+        false
     }
 
     /// Release a page's decoded pixels and skip its queued work; the decoder stays connected.
@@ -127,11 +145,8 @@ impl Images {
                 let decoded = decode(decoder, &path, max);
                 let source_size = decoded.as_ref().map(|(_, size)| *size);
                 let image = decoded.map(|(image, _)| Arc::new(image));
-                // The ready pixels outlive the decoder. Return its freed native buffers
-                // before the UI allocates a snapshot canvas or another specimen.
-                if release_decoders {
-                    crate::panel::optimize_heap();
-                }
+                // A live canvas replaces pixels at preview fps. Heap-wide compaction here
+                // dominated decoding; page navigation still reclaims released resources.
                 if page != generation.load(std::sync::atomic::Ordering::Relaxed) {
                     continue;
                 }
@@ -190,7 +205,7 @@ impl Images {
                 return Some(image.clone());
             }
             Some(Slot::Pending) => return self.previous_size(path),
-            Some(Slot::Failed) => return None,
+            Some(Slot::Failed) => return self.previous_size(path),
             None => {}
         }
         if let Some(worker) = &self.worker {
@@ -202,6 +217,8 @@ impl Images {
             Some(decoder) => decoder,
             None => self.sync.insert(Decoder::new().ok()?),
         };
+        #[cfg(test)]
+        let path = self.fixture_sources.get(path).map_or(path, PathBuf::as_path);
         let decoded = decode(decoder, path, max);
         let source_size = decoded.as_ref().map(|(_, size)| *size);
         let image = decoded.map(|(image, _)| Arc::new(image));
@@ -237,6 +254,11 @@ impl Images {
             return;
         }
         self.clock += 1;
+        if loaded.image.is_some() {
+            if let Some((prefix, _)) = loaded.key.rsplit_once('|') {
+                self.slots.retain(|key, _| !key.starts_with(&format!("{prefix}|")) || !key.ends_with(":stale"));
+            }
+        }
         let slot = match loaded.image {
             Some(image) => Slot::Ready(image, self.clock, loaded.source_size),
             None => Slot::Failed,
@@ -403,6 +425,19 @@ impl Decoder {
 
 /// Windows' own thumbnail of a file (what Explorer shows), as premultiplied BGRA.
 fn shell_thumbnail(path: &Path, max: (u32, u32)) -> anyhow::Result<Image> {
+    use std::os::windows::ffi::OsStrExt;
+    // Unlike file IO, shell parsing rejects slashes, dot segments and verbatim prefixes.
+    // Resolve the file first, then turn its canonical path into shell namespace syntax.
+    let canonical = path.canonicalize()?;
+    let mut path: Vec<u16> = canonical.as_os_str().encode_wide().collect();
+    if path.starts_with(&[92, 92, 63, 92]) {
+        if path[4..].starts_with(&[85, 78, 67, 92]) {
+            path.splice(..8, [92, 92]); // \\?\UNC\server -> \\server
+        } else {
+            path.drain(..4);
+        }
+    }
+    let path = windows::core::HSTRING::from_wide(&path);
     use windows::Win32::Foundation::SIZE;
     use windows::Win32::Graphics::Gdi::{
         BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC,
@@ -416,7 +451,7 @@ fn shell_thumbnail(path: &Path, max: (u32, u32)) -> anyhow::Result<Image> {
     unsafe {
         let _apartment = Apartment::new();
         let factory: IShellItemImageFactory =
-            SHCreateItemFromParsingName(&windows::core::HSTRING::from(path.as_os_str()), None)?;
+            SHCreateItemFromParsingName(&path, None)?;
         let bitmap = factory.GetImage(
             SIZE {
                 cx: max.0 as i32,
@@ -472,6 +507,34 @@ fn shell_thumbnail(path: &Path, max: (u32, u32)) -> anyhow::Result<Image> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shell_video_poster_accepts_theme_source_separators() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../themes/spring-forest/loop.mp4");
+        let image = shell_thumbnail(&path, (640, 360)).expect("shell video poster");
+        assert!(image.width > 32 && image.height > 32);
+    }
+
+    #[test]
+    fn live_reload_queues_without_a_paint_and_keeps_pixels_until_success() {
+        let mut images = Images::default();
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/icon-32.png");
+        let old = images.get(&path, (64, 64)).unwrap();
+        let (tx, rx) = channel();
+        images.worker = Some(tx);
+        assert!(images.reload(&path));
+        let Job::Decode(_, key, _, _) = rx.try_recv().unwrap() else { panic!("expected live decode") };
+        images.arrived(Loaded { key: key.clone(), image: None, source_size: None, received: None });
+        assert!(Arc::ptr_eq(&old, &images.get(&path, (64, 64)).unwrap()));
+        assert!(images.reload(&path));
+        let Job::Decode(_, key, _, _) = rx.try_recv().unwrap() else { panic!("expected retry") };
+        let next = Arc::new(Image { width: 32, height: 32, pixels: vec![255; 32 * 32 * 4] });
+        images.arrived(Loaded { key, image: Some(next.clone()), source_size: Some((32, 32)), received: None });
+        images.begin_frame();
+        assert!(Arc::ptr_eq(&next, &images.get(&path, (64, 64)).unwrap()));
+        assert!(!images.finish_frame(), "a frame replacement must not trigger page heap reclamation");
+        assert_eq!(images.slots.len(), 1);
+    }
 
     #[test]
     fn presented_frames_release_hidden_stills_and_keep_visible_source_metadata() {

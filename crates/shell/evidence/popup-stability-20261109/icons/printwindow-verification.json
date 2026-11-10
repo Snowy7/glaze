@@ -1,0 +1,30 @@
+[
+    {
+        "fixture":  "Glaze busy evidence window",
+        "printed":  true,
+        "noActivate":  true,
+        "role":  "ControlType.Pane",
+        "process":  32088
+    },
+    {
+        "fixture":  "frost",
+        "printed":  true,
+        "noActivate":  true,
+        "role":  "ControlType.Pane",
+        "process":  32088
+    },
+    {
+        "fixture":  "Glaze dock menu evidence",
+        "printed":  true,
+        "noActivate":  true,
+        "role":  "ControlType.Menu",
+        "process":  32088
+    },
+    {
+        "fixture":  "Glaze dock menu evidence",
+        "printed":  true,
+        "noActivate":  true,
+        "role":  "ControlType.Menu",
+        "process":  32088
+    }
+]

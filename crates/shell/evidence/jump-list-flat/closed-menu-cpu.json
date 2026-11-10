@@ -1,0 +1,24 @@
+{
+    "cpu":  {
+                "phase":  "controlled closed-menu fixture",
+                "seconds":  5.0037943,
+                "cpuMs":  0,
+                "machinePercent":  0,
+                "iconCacheRetained":  true,
+                "dockFrostRetained":  true,
+                "inputInjected":  false
+            },
+    "idle":  {
+                 "dockFrostAlive":  true,
+                 "frameEvents":  0,
+                 "iconCachePopulated":  true,
+                 "menuOpen":  false,
+                 "messages":  {
+
+                              },
+                 "seconds":  10.0093307,
+                 "sentOrTimeout":  1,
+                 "timerMessages":  0,
+                 "waitReturns":  1
+             }
+}

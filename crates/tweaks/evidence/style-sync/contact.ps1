@@ -36,7 +36,7 @@ foreach ($case in @('liquid-dark','liquid-light','explicit')) {
   } finally { $image.Dispose() }
 }
 
-$tools = 'C:\Users\you\AppData\Local\Temp\glaze-tools\'
+$tools = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\')
 $archive = [IO.Path]::GetFullPath((Join-Path $tools 'style-sync-full'))
 if (-not $archive.StartsWith($tools, [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid capture archive' }
 [IO.Directory]::CreateDirectory($archive) | Out-Null

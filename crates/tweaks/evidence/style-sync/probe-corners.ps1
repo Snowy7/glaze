@@ -38,7 +38,7 @@ public static class CornerProbe {
   }
 }
 '@
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $config = Join-Path $env:APPDATA 'glaze\config.json'
 $configBefore = (Get-FileHash -LiteralPath $config -Algorithm SHA256).Hash
 $foreground = [CornerProbe]::GetForegroundWindow()

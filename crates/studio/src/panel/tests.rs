@@ -6,6 +6,22 @@ use serde_json::json;
 use super::{Command, Page, State};
 use crate::actions::Action;
 use crate::app::App;
+
+/// The action a dropdown runs for the option `pick` accepts: a select's `Set` of that value.
+fn dropdown_option(built: &super::Built, path: &str, pick: impl Fn(&serde_json::Value) -> bool) -> Action {
+    built
+        .targets
+        .iter()
+        .find_map(|t| match &t.action {
+            Action::Choose(choices) if choices.edit.path.as_ref() == path => choices
+                .options
+                .iter()
+                .find(|(value, _)| pick(value))
+                .map(|(value, _)| Action::Set(choices.edit.clone(), value.clone())),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("a dropdown for {path}"))
+}
 use crate::docs::DocId;
 
 fn app(ui: &Ui, dark: bool) -> App {
@@ -170,13 +186,13 @@ fn render_panel_pages() {
                             crate::actions::Edit::new(
                                 DocId::Widgets,
                                 "/instances/0/appearance/surface",
-                                "Its own look",
+                                "Use a different look",
                             ),
                             json!("glass"),
                         ));
                         let layout = crate::editing::widgets::layout(&app);
                         let own = super::widget_look::appearance(&app, &layout.instances[0], super::widget_look::inherited_style(&app));
-                        app.run(Action::Set(crate::actions::Edit::new(DocId::Widgets, "/instances/0/appearance", "Its own look"), own));
+                        app.run(Action::Set(crate::actions::Edit::new(DocId::Widgets, "/instances/0/appearance", "Use a different look"), own));
                     } else if name != "clock" {
                         app.run(Action::Set(
                             crate::actions::Edit::new(
@@ -495,7 +511,7 @@ fn panel_controls_use_the_existing_validated_documents_and_undo() {
         app.get(DocId::Config, "/pause_on_battery"),
         Some(&json!(false))
     );
-    let gpu = built.targets.iter().find(|t| matches!(&t.action, Action::Set(edit, value) if edit.path.as_ref() == "/engine/gpu" && value == "auto")).unwrap().action.clone();
+    let gpu = dropdown_option(&built, "/engine/gpu", |value| value == "auto");
     app.run(gpu);
     assert_eq!(app.get(DocId::Config, "/engine/gpu"), Some(&json!("auto")));
     app.monitors.truncate(1);
@@ -566,8 +582,13 @@ fn panel_controls_stay_inside_laptop_and_scaled_widths() {
             }
             let built = super::build(&app, &mut ui.text);
             if page == Page::Performance && text_scale == 1.0 {
+                // Three or more choices are a dropdown: its menu lists every label.
+                let labels: Vec<_> = built.targets.iter().filter_map(|t| match &t.action {
+                    Action::Choose(choices) => Some(choices.options.iter().map(|(_, l)| l.clone()).collect::<Vec<_>>()),
+                    _ => None,
+                }).flatten().collect();
                 for label in ["On battery", "Like Windows", "Always", "Never"] {
-                    assert!(built.list.ops.iter().any(|op| matches!(op, glaze_ui::Op::Text { text, .. } if text.as_ref() == label)), "{label} is readable at {width}/{scale}");
+                    assert!(labels.iter().any(|l| l == label), "{label} is offered at {width}/{scale}");
                 }
             }
             for target in built.targets {
@@ -723,8 +744,15 @@ fn windows_as_is_is_explicit_and_escape_leaves_the_add_page() {
     let mut ui = Ui::new().unwrap();
     let mut app = app(&ui, true);
     super::run(&mut app, Command::Open(Page::Windows));
+    for mode in ["default", "round", "small", "square"] {
+        let built = super::build(&app, &mut ui.text);
+        let expected = serde_json::Value::String(mode.into());
+        let action = dropdown_option(&built, "/panel/windows/corners", |value| value == &expected);
+        app.run(action);
+        assert_eq!(app.docs.doc(DocId::Config).raw.pointer("/look/windows/corners"), Some(&expected));
+    }
     let built = super::build(&app, &mut ui.text);
-    let action = built.targets.iter().find(|t| matches!(&t.action, Action::Set(edit, value) if edit.path.as_ref() == "/panel/windows/corners" && value.is_null())).unwrap().action.clone();
+    let action = dropdown_option(&built, "/panel/windows/corners", serde_json::Value::is_null);
     app.run(action);
     assert_eq!(
         app.docs
@@ -914,24 +942,14 @@ fn built_in_wallpaper_fit_requires_an_explicit_copy() {
         .unwrap();
     super::run(&mut app, Command::Wallpaper(index));
     let built = super::build(&app, &mut ui.text);
-    assert!(
-        built
-            .targets
-            .iter()
-            .any(|t| t.action == Action::CopyWallpaper(index))
-    );
+    // The copy is offered in the details' "…" menu.
+    assert!(built.targets.iter().any(|t| matches!(&t.action, Action::Menu(items)
+        if items.iter().any(|item| matches!(item, crate::actions::MenuItem::Item { action, .. } if *action == Action::CopyWallpaper(index))))));
     assert!(
         !built.targets.iter().any(
             |t| matches!(&t.action,Action::Set(edit,_) if edit.path.ends_with("/wallpaper/fit"))
         )
     );
-    let copies: Vec<_> = built
-        .list
-        .hits
-        .iter()
-        .filter(|h| h.label.as_ref() == "Make a copy to edit")
-        .collect();
-    assert_eq!(copies.len(), 1);
 }
 
 #[test]
@@ -1143,4 +1161,63 @@ fn unreadable_history_cannot_be_cleared_by_an_older_reader() {
     let history = app.panel.as_ref().unwrap().history.borrow();
     assert_eq!(history.error.as_deref(), Some(crate::docs::NEWER));
     assert_eq!(history.entries.len(), count);
+}
+
+/// Edit mode is asked for, not entered, by pages: the window's loop does the Win32 part. While
+/// editing, Done and Esc ask to leave instead of closing Studio, and the panel shows its places.
+#[test]
+fn edit_mode_requests_and_leaves_without_quitting() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    app.panel.as_mut().unwrap().windowed = true;
+    super::run(&mut app, Command::Open(Page::Widgets));
+    super::run(&mut app, Command::EditDesktop(true));
+    assert_eq!(app.panel.as_mut().unwrap().edit_request.take(), Some(true));
+    // What the loop does once the window has become the panel.
+    let state = app.panel.as_mut().unwrap();
+    state.windowed = false;
+    state.editing = true;
+    let built = super::build(&app, &mut ui.text);
+    for place in ["Wallpaper", "Look", "Widgets", "Bars"] {
+        assert!(built.list.hits.iter().any(|hit| hit.label.as_ref() == format!("Edit: {place}")), "{place} is a place to edit");
+    }
+    super::run(&mut app, Command::Done);
+    assert!(!app.quit, "Done leaves edit mode, not Studio");
+    assert_eq!(app.panel.as_mut().unwrap().edit_request.take(), Some(false));
+    assert!(super::on_key(&mut app, 0x1B, (false, false, false)));
+    assert_eq!(app.panel.as_mut().unwrap().edit_request.take(), Some(false));
+    // A deeper page goes back first.
+    super::run(&mut app, Command::Open(Page::Widget));
+    app.nav.widget = Some("clock-1".into());
+    super::on_key(&mut app, 0x1B, (false, false, false));
+    assert_eq!(app.panel.as_ref().unwrap().edit_request, None);
+}
+
+/// An installed plugin that isn't set up offers no widgets in the gallery or search; once it
+/// runs, it does. Connections still lists it, as the place to set it up.
+#[test]
+fn plugin_widgets_appear_only_once_the_plugin_is_set_up() {
+    let mut ui = Ui::new().unwrap();
+    let mut app = app(&ui, true);
+    app.plugins.installed.push(glaze_widgets::manifest::PluginManifest::parse(
+        &json!({"id":"discord","name":"Discord","version":"1.0.0","component":"fixture.wasm","api":"0.1"}).to_string(), "discord").unwrap());
+    let id = "discord--status";
+    let manifest = glaze_widgets::manifest::WidgetManifest::parse(
+        &json!({"id": id, "name": "Discord · Status", "size": {"default": [3, 2]}, "settings": []}).to_string(), id).unwrap();
+    app.registry.widgets.insert(id.into(), glaze_widgets::registry::Installed { manifest });
+    let offered = |app: &mut App, ui: &mut Ui| {
+        super::run(app, Command::Open(Page::AddWidget));
+        let built = super::build(app, &mut ui.text);
+        // The card is named for its face; the plugin heads its section.
+        let in_gallery = built.list.hits.iter().any(|hit| hit.label.trim() == "Status");
+        app.texts.insert(crate::actions::FieldId::Palette, "Discord".into());
+        let in_search = crate::search::results(app).iter().any(|entry| entry.action == Action::AddWidget(id.into()));
+        (in_gallery, in_search)
+    };
+    assert_eq!(offered(&mut app, &mut ui), (false, false));
+    super::run(&mut app, Command::Open(Page::Connections));
+    let built = super::build(&app, &mut ui.text);
+    assert!(built.list.hits.iter().any(|hit| hit.label.starts_with("Discord")), "Connections lists it to set up");
+    app.plugins.snapshot.plugins.insert("discord".into(), glaze_widgets::plugin_manager::Metrics { status: "Live".into(), ..Default::default() });
+    assert_eq!(offered(&mut app, &mut ui), (true, true));
 }

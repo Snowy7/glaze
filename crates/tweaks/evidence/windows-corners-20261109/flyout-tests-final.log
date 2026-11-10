@@ -1,0 +1,90 @@
+cargo :    Compiling glaze-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
+At line:2 char:190
++ ... gets\main'; cargo test -p glaze-shell --lib flyouts::look::tests *> C ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling gl...r\crates\shell):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: structure field `Glaze` should have a snake case name
+  --> crates\shell\src\desktop_menu\items.rs:98:9
+   |
+98 |     pub Glaze: Option<&'a Arc<Image>>,
+   |         ^^^^^ help: convert the identifier to snake case: `glaze`
+   |
+   = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: variable `Glaze` should have a snake case name
+   --> crates\shell\src\desktop_menu\items.rs:161:9
+    |
+161 |     let Glaze = |glyph| match sources.Glaze {
+    |         ^^^^^ help: convert the identifier to snake case: `glaze`
+
+warning: function `the_default_menu_is_windows_full_menu_then_Glazes` should have a snake case name
+   --> crates\shell\src\desktop_menu\items.rs:555:8
+    |
+555 |     fn the_default_menu_is_windows_full_menu_then_Glazes() {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: 
+`the_default_menu_is_windows_full_menu_then_glazes`
+
+warning: function `an_installed_terminal_handler_replaces_Glazes_own` should have a snake case name
+   --> crates\shell\src\desktop_menu\items.rs:618:8
+    |
+618 |     fn an_installed_terminal_handler_replaces_Glazes_own() {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: 
+`an_installed_terminal_handler_replaces_glazes_own`
+
+warning: struct `Layout` is never constructed
+  --> crates\shell\src\widgets\views\integrations\mod.rs:19:19
+   |
+19 | pub(super) struct Layout {
+   |                   ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `layout` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:26:15
+   |
+26 | pub(super) fn layout(
+   |               ^^^^^^
+
+warning: function `footer` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:65:15
+   |
+65 | pub(super) fn footer(f: &mut Frame<'_>, m: &Model, area: Rect, default: &str) {
+   |               ^^^^^^
+
+warning: function `setup` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:85:15
+   |
+85 | pub(super) fn setup(
+   |               ^^^^^
+
+warning: function `metric` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:127:15
+    |
+127 | pub(super) fn metric(f: &mut Frame<'_>, rect: Rect, value: &str, caption: &str, color: Rgba) {
+    |               ^^^^^^
+
+warning: function `pill` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:139:15
+    |
+139 | pub(super) fn pill(f: &mut Frame<'_>, rect: Rect, text: &str, color: Rgba) {
+    |               ^^^^
+
+warning: function `icon_action` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:144:15
+    |
+144 | pub(super) fn icon_action(
+    |               ^^^^^^^^^^^
+
+warning: `glaze-shell` (lib test) generated 11 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.24s
+     Running unittests src\lib.rs 
+(C:\mypaper-targets\main\debug\build\glaze-shell/6a785db869b8ac25\out\glaze_shell-6a785db869b8ac25.exe)
+
+running 2 tests
+test flyouts::look::tests::the_users_controls_reach_the_flyouts ... ok
+test flyouts::look::tests::only_the_blurred_style_has_glass ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 228 filtered out; finished in 0.00s
+

@@ -14,11 +14,11 @@ mod app;
 mod builder;
 mod dialogs;
 mod docs;
-mod glass;
 mod images;
 mod library;
 mod look;
 mod editing;
+mod edit_mode;
 mod onboarding;
 mod panel;
 mod peek;
@@ -44,7 +44,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use glaze_ui::{Kind, Role, Surface, Ui, next_event};
-use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HANDLE, LPARAM, WAIT_OBJECT_0, WPARAM};
+use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, LPARAM, WPARAM};
 use windows::Win32::System::Threading::{CreateMutexW, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, FindWindowW, MSG, MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE,
@@ -94,11 +94,39 @@ struct Studio {
     /// The selects' menu (the kit's), made on first use so it costs nothing at startup, and
     /// the options it is showing.
     menu: Option<glaze_ui::Menu<usize>>,
-    picking: Option<actions::Choices>,
+    picking: Option<Picking>,
+    /// Edit mode on the desktop, while it lasts.
+    edit: Option<edit_mode::Session>,
     /// The DWM frame last set: dark, border colour.
     frame: Option<(bool, glaze_ui::Rgba)>,
     /// The full-screen first run, while it covers the displays.
     onboarding: Option<onboarding::Session>,
+}
+
+/// What the open menu answers to: a select's choices, or an action menu's rows by index.
+enum Picking {
+    Choices(actions::Choices),
+    Actions(Vec<actions::Action>),
+}
+
+/// The kit's rows for an action menu; each chosen row's index finds its action in `actions`.
+fn menu_entries(items: &[actions::MenuItem], actions: &mut Vec<actions::Action>) -> Vec<glaze_ui::menu::Entry<usize>> {
+    use glaze_ui::menu::{Entry, MenuIcon};
+    items
+        .iter()
+        .map(|item| match item {
+            actions::MenuItem::Separator => Entry::Separator,
+            actions::MenuItem::Submenu { label, items } => Entry::Submenu { label: label.clone(), items: menu_entries(items, actions) },
+            actions::MenuItem::Item { label, icon, checked, enabled, action } => {
+                actions.push(action.clone());
+                let entry = Entry::Action { label: label.clone(), command: actions.len() - 1, checked: *checked, enabled: *enabled };
+                match (icon, checked) {
+                    (Some(glyph), None) => entry.with_icon(MenuIcon::Glyph(*glyph)),
+                    _ => entry,
+                }
+            }
+        })
+        .collect()
 }
 
 impl Studio {
@@ -170,7 +198,19 @@ impl Studio {
 
     /// Opens the kit's menu under the select that asked for it.
     fn open_picker(&mut self) {
-        let Some((rect, choices)) = self.app.picking.take() else {
+        let (rect, picking, items) = if let Some((rect, choices)) = self.app.picking.take() {
+            let items = choices
+                .options
+                .iter()
+                .enumerate()
+                .map(|(i, (value, label))| glaze_ui::menu::Entry::check(label, i, choices.current.as_ref() == Some(value)))
+                .collect();
+            (rect, Picking::Choices(choices), items)
+        } else if let Some((rect, rows)) = self.app.menu.take() {
+            let mut actions = Vec::new();
+            let items = menu_entries(&rows, &mut actions);
+            (rect, Picking::Actions(actions), items)
+        } else {
             return;
         };
         if self.menu.is_none() {
@@ -179,26 +219,26 @@ impl Studio {
                 .ok();
         }
         let Some(menu) = self.menu.as_mut() else { return };
-        let items = choices
-            .options
-            .iter()
-            .enumerate()
-            .map(|(i, (value, label))| glaze_ui::menu::Entry::check(label, i, choices.current.as_ref() == Some(value)))
-            .collect();
+        menu.set_no_activate(std::env::args().any(|arg| arg == "--no-activate"));
+        let p = panel::palette_for(&self.app);
+        let mut tokens = p.theme().tokens();
+        // A popover over the window: the card fill, Studio's selected wash, no hairline in dark.
+        tokens.material.tint = p.panel;
+        tokens.colors.hover = p.selected;
+        // Menus line up with their control's right edge: dropdown values sit at a row's end and
+        // "…" buttons at a panel's, so the menu opens over the page instead of past it.
         let mut at = windows::Win32::Foundation::POINT {
             x: rect.left as i32,
             y: (rect.bottom + self.app.px(4.0)) as i32,
         };
         // SAFETY: our own window; `at` is a valid out pointer.
         let _ = unsafe { windows::Win32::Graphics::Gdi::ClientToScreen(self.surface.hwnd(), &mut at) };
-        let p = panel::palette_for(&self.app);
-        let mut tokens = p.theme().tokens();
-        // A popover over the window: the card fill, Studio's selected wash, no hairline in dark.
-        tokens.material.tint = p.panel;
-        tokens.colors.hover = p.selected;
         let screen = glaze_ui::menu::screen_at(at.x, at.y);
+        let scale = screen.dpi.max(96) as f32 / 96.0 * tokens.scale.clamp(0.5, 2.0);
+        let width = glaze_ui::menu::layout(&items, &tokens, scale, &mut self.ui.text).size().0;
+        if rect.width() > 0.0 { at.x += rect.width() as i32 - width; }
         match menu.open(&mut self.ui, items, (at.x, at.y), screen, &tokens) {
-            Ok(()) => self.picking = Some(choices),
+            Ok(()) => self.picking = Some(picking),
             Err(e) => log::error!("select menu: {e:#}"),
         }
     }
@@ -206,9 +246,14 @@ impl Studio {
     /// The select menu closed: apply the choice and give the window its focus back (unless
     /// the user clicked into another app).
     fn picked(&mut self, outcome: glaze_ui::menu::Outcome<usize>) {
-        let choices = self.picking.take();
-        if let (glaze_ui::menu::Outcome::Chosen(i), Some(choices)) = (&outcome, &choices) {
-            self.app.chose(choices, *i);
+        match (&outcome, self.picking.take()) {
+            (glaze_ui::menu::Outcome::Chosen(i), Some(Picking::Choices(choices))) => self.app.chose(&choices, *i),
+            (glaze_ui::menu::Outcome::Chosen(i), Some(Picking::Actions(actions))) => {
+                if let Some(action) = actions.get(*i) {
+                    self.app.run(action.clone());
+                }
+            }
+            _ => {}
         }
         use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
         // SAFETY: plain window queries; activating our own window while it is ours to give.
@@ -216,7 +261,7 @@ impl Studio {
             let front = GetForegroundWindow();
             let mut pid = 0;
             GetWindowThreadProcessId(front, Some(&mut pid));
-            if front.is_invalid() || pid == std::process::id() {
+            if !std::env::args().any(|arg| arg == "--no-activate") && (front.is_invalid() || pid == std::process::id()) {
                 let _ = SetForegroundWindow(self.surface.hwnd());
             }
         }
@@ -251,7 +296,41 @@ impl Studio {
             // An event may have opened or closed the live field: attach it to the window.
             self.sync_field();
             self.open_picker();
+            self.apply_edit_request();
         }
+    }
+
+    /// Enters or leaves edit mode when a page asked for it: the window becomes the docked
+    /// panel over the cleared desktop, and goes back to where it was afterwards.
+    fn apply_edit_request(&mut self) {
+        let Some(on) = self.app.panel.as_mut().and_then(|state| state.edit_request.take()) else { return };
+        if self.app.fixture || on == self.app.panel.as_ref().unwrap().editing {
+            return;
+        }
+        if on {
+            let state = self.app.panel.as_mut().unwrap();
+            // Settings pages have nothing on the desktop: start at its overview.
+            if !crate::view::on_desktop(state.page) && state.page != panel::Page::Wallpapers {
+                state.page = panel::Page::Root;
+            }
+            state.windowed = false;
+            state.editing = true;
+            let bounds = panel::placement(&self.app);
+            self.edit = Some(edit_mode::Session::enter(self.surface.hwnd(), bounds));
+            panel::fit_client(&self.surface, bounds);
+        } else {
+            let state = self.app.panel.as_mut().unwrap();
+            state.windowed = true;
+            state.editing = false;
+            if let Some(session) = self.edit.take() {
+                session.exit();
+            }
+        }
+        self.app.scale = self.surface.scale();
+        self.app.input.focus = None;
+        self.frame = None;
+        self.app.dirty = true;
+        self.render();
     }
 
     /// Onboarding finished or was skipped: fade the main display out, show Studio as a normal
@@ -336,7 +415,7 @@ fn run() -> Result<()> {
         app.images.borrow_mut().set_budget(ONBOARDING_IMAGES);
         app.scale = surface.scale();
     }
-    let studio = Rc::new(RefCell::new(Studio { app, ui, surface, menu: None, picking: None, frame: None, onboarding }));
+    let studio = Rc::new(RefCell::new(Studio { app, ui, surface, menu: None, picking: None, edit: None, frame: None, onboarding }));
     {
         let mut s = studio.borrow_mut();
         s.sync_frame();
@@ -366,6 +445,10 @@ fn run() -> Result<()> {
     let result = pump(&studio, &rx);
     glaze_ui::set_modal_hook(None);
     let mut s = studio.borrow_mut();
+    // Closing mid-edit: windows come back and Studio's own place is the window's, not the panel's.
+    if let Some(session) = s.edit.take() {
+        session.exit();
+    }
     // A window closed mid-onboarding was full screen: that is no place to reopen at.
     if !panel_mode && s.onboarding.is_none() {
         remember_placement(&mut s);
@@ -415,30 +498,11 @@ fn set_window_icons(hwnd: windows::Win32::Foundation::HWND, scale: f32) -> Resul
 fn pump(studio: &Rc<RefCell<Studio>>, rx: &Receiver<Msg>) -> Result<()> {
     let mut msg = MSG::default();
     loop {
-        let (handles, timeout): (Vec<HANDLE>, u32) = {
-            let s = studio.borrow();
-            let handles = s.app.glass.borrow().handle().into_iter().collect();
-            let timeout = s.app.deadline().map_or(u32::MAX, |d| {
-                d.saturating_duration_since(Instant::now()).as_millis().min(u32::MAX as u128 - 1) as u32
-            });
-            (handles, timeout)
-        };
-        // SAFETY: the handles stay open while waited on (owned by `glass`).
-        let woke = unsafe {
-            MsgWaitForMultipleObjectsEx(
-                (!handles.is_empty()).then_some(handles.as_slice()),
-                timeout,
-                QS_ALLINPUT,
-                MWMO_INPUTAVAILABLE,
-            )
-        };
-        if !handles.is_empty() && woke == WAIT_OBJECT_0 {
-            let s = studio.borrow();
-            if s.app.glass.borrow_mut().arrived() {
-                drop(s);
-                studio.borrow_mut().app.dirty = true;
-            }
-        }
+        let timeout = studio.borrow().app.deadline().map_or(u32::MAX, |d| {
+            d.saturating_duration_since(Instant::now()).as_millis().min(u32::MAX as u128 - 1) as u32
+        });
+        // SAFETY: waits on this thread's queue only.
+        unsafe { MsgWaitForMultipleObjectsEx(None, timeout, QS_ALLINPUT, MWMO_INPUTAVAILABLE) };
         // SAFETY: the standard pump on the thread that owns the window.
         unsafe {
             while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
@@ -448,7 +512,7 @@ fn pump(studio: &Rc<RefCell<Studio>>, rx: &Receiver<Msg>) -> Result<()> {
                 if msg.hwnd.is_invalid() {
                     match msg.message {
                         WM_STUDIO => continue,
-                        // The shell's icon service (in the stage) has news.
+                        // The shell's icon service (app lists) has news.
                         glaze_bars_wake::WM_WAKE => {
                             let s = studio.borrow();
                             let rebuilt = s.app.stage.borrow_mut().icons_arrived();

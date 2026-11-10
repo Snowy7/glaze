@@ -1,0 +1,59 @@
+{
+    "theme":  "bg",
+    "configs":  [
+                    {
+                        "identical":  true,
+                        "live_sha256":  "241F746ADE7A5D1C329422C1A6191268C51D4E2C0DEFCBD1DED943BB928EB81A",
+                        "file":  "bars.json",
+                        "backup_sha256":  "241F746ADE7A5D1C329422C1A6191268C51D4E2C0DEFCBD1DED943BB928EB81A"
+                    },
+                    {
+                        "identical":  true,
+                        "live_sha256":  "BDCE564961BE7A9B2B4EF7D412C7FFAD9B8F738B34BC5505A8CD76540EA70A2D",
+                        "file":  "config.json",
+                        "backup_sha256":  "BDCE564961BE7A9B2B4EF7D412C7FFAD9B8F738B34BC5505A8CD76540EA70A2D"
+                    },
+                    {
+                        "identical":  true,
+                        "live_sha256":  "406E6555D1A18C6940798822307383B511DB2AEBACE0B6E295FAEC79C1708447",
+                        "file":  "displays.json",
+                        "backup_sha256":  "406E6555D1A18C6940798822307383B511DB2AEBACE0B6E295FAEC79C1708447"
+                    },
+                    {
+                        "identical":  true,
+                        "live_sha256":  "F91D0EEED824F66AF765763A120803944C1E9025C704985F4B9119358DA8CBAE",
+                        "file":  "files.json",
+                        "backup_sha256":  "F91D0EEED824F66AF765763A120803944C1E9025C704985F4B9119358DA8CBAE"
+                    },
+                    {
+                        "identical":  true,
+                        "live_sha256":  "0E1A561EFF50F35C44B861A83F8172FC86B1FDAE482FA5F88C072FA3A1222AEC",
+                        "file":  "integrations.json",
+                        "backup_sha256":  "0E1A561EFF50F35C44B861A83F8172FC86B1FDAE482FA5F88C072FA3A1222AEC"
+                    },
+                    {
+                        "identical":  true,
+                        "live_sha256":  "0B4AD67AFBBC054C43D25F342551BD65094A367DA6372D567F717EC162E83B46",
+                        "file":  "plugin-manager.json",
+                        "backup_sha256":  "0B4AD67AFBBC054C43D25F342551BD65094A367DA6372D567F717EC162E83B46"
+                    },
+                    {
+                        "identical":  true,
+                        "live_sha256":  "2FE4C53F6D15373415E01FB41CCE01BDE0E88E624F6FAF98EF17F57254040FF6",
+                        "file":  "studio-panel-history.json",
+                        "backup_sha256":  "2FE4C53F6D15373415E01FB41CCE01BDE0E88E624F6FAF98EF17F57254040FF6"
+                    },
+                    {
+                        "identical":  true,
+                        "live_sha256":  "B8E95381236CDD539DC2474A6622454C8FF7DE6BCD96B6375556B19B38260ACF",
+                        "file":  "studio.json",
+                        "backup_sha256":  "B8E95381236CDD539DC2474A6622454C8FF7DE6BCD96B6375556B19B38260ACF"
+                    },
+                    {
+                        "identical":  true,
+                        "live_sha256":  "011048900C7F0248674013DBFB30006A08528CCB0A0445958C58C437FC9613FE",
+                        "file":  "widgets.json",
+                        "backup_sha256":  "011048900C7F0248674013DBFB30006A08528CCB0A0445958C58C437FC9613FE"
+                    }
+                ]
+}

@@ -1,6 +1,6 @@
 # Brief: app-styler round 3 (fix the review findings)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/windows-styling.md` › "App styler", and
+Read `plans/native/LIVE.md`, `docs/windows-styling.md` › "App styler", and
 the review below (an independent Sol review of everything through c4d2749). The styler is **on** in the
 user's config with the glass preset and runs inside Explorer and Settings, so these are real-desktop
 bugs. Fix every finding below, verify each one, and re-soak. You own `crates/app-styler`, plus small

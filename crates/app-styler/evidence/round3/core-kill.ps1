@@ -5,7 +5,7 @@ param([string]$Out = "C:\glaze-targets\app-styler\round3\core-kill.txt")
 $ErrorActionPreference = 'Stop'
 $repo = 'D:\Coding\projects\desktop\wallpaper'
 $release = Join-Path $repo 'target\release'
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $tapLog = Join-Path $env:LOCALAPPDATA 'glaze\app-styler\styler.log'
 function Note([string]$m) { $l = '{0} {1}' -f (Get-Date -Format 'HH:mm:ss.fff'), $m; Add-Content -LiteralPath $Out -Value $l; Write-Host $l }
 function Procs { (Get-Process glaze-* -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Name) $($_.Id)" }) -join ', ' }

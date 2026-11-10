@@ -1046,7 +1046,11 @@ impl BaseDraw {
             Base::Glsl(b) => glsl(gpu, &theme.asset(&b.source))?,
             Base::Theme(b) => {
                 let other = b.load()?;
-                let source = super::load(gpu, &other, &[])?;
+                let mut source = super::load(gpu, &other, &[])?;
+                // A slideshow is OnChange until its first update anchors the timeline.
+                // Classifying it before that update bakes its first slide forever beneath
+                // animated layers. Prime state before deciding what may be cached.
+                source.update(gpu, Duration::ZERO);
                 let every = match source.redraw(Duration::ZERO) {
                     super::Redraw::Every(every) => Some(every),
                     // A slideshow schedules its own frames; see `redraw`.

@@ -20,6 +20,12 @@ fn plugin_status<'a>(app: &'a App, id: &str) -> &'a str {
         })
 }
 
+/// Set up (running, starting or needing attention), not merely installed: only then are its
+/// widgets and bar modules offered. Connections is where an available one gets set up.
+pub fn connected(app: &App, id: &str) -> bool {
+    plugin_status(app, id) != "Available"
+}
+
 pub fn visible_plugin(plugin: &glaze_widgets::manifest::PluginManifest) -> bool {
     !["hello", "hello-ts", "demo", "experimental"].contains(&plugin.id.as_str())
         && !plugin
@@ -94,8 +100,21 @@ pub fn list(app: &App, b: &mut B, c: &mut Col) {
                     continue;
                 }
                 let item = &app.plugins.installed[index - legacy::LIST.len()];
-                let status = plugin_status(app, &item.id);
-                let detail = {
+                // A status with a reason shows one word; the reason becomes the caption.
+                let (status, reason) = match plugin_status(app, &item.id).split_once(": ") {
+                    Some((word, reason)) => (word, Some(reason)),
+                    None => (plugin_status(app, &item.id), None),
+                };
+                // One vocabulary with the built-ins: running reads On. Under "Available" the heading
+                // already says it, so the row needs no status.
+                let status = match status {
+                    "Live" => "On",
+                    "Available" => "",
+                    other => other,
+                };
+                let detail = if let Some(reason) = reason {
+                    reason.to_owned()
+                } else {
                     let faces = item
                         .faces
                         .iter()

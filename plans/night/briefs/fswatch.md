@@ -1,6 +1,6 @@
 # Brief: fswatch (a file watcher that sleeps)
 
-Read `plans/night/2026-11-06.md` and `plans/native/LIVE.md`.
+Read `plans/native/LIVE.md`.
 
 ## Problem
 

@@ -155,8 +155,9 @@ preview and the desktop use):
 - Size things in 1080p units (`paper.resolution.y / 1080`, or `uv`), never in raw pixels, so an
   effect looks the same on a 1080p and a 1440p screen. Keep a whole-pixel pitch for patterns
   that would otherwise alias (scanlines, phosphor masks).
-- Tone curves must not assume a bright photo: a fixed luma threshold turns a low-key picture
-  into a flat field. Adapt to the input (e.g. `halftone` levels from a 3x3 sample of `src`).
+- Tone curves must preserve low-key pictures too. Halftone derives ink coverage from each
+  cell's input brightness and the chosen ink/paper brightness, including joined dots in shadows;
+  stretching a dark photo's range or capping dot coverage floods it with paper.
 - Defaults must visibly change a photo: adding an effect that does nothing reads as broken.
 - Studio writes `params` as JSON: a color as `"#rrggbb"`, a bool as `true`/`false`, an enum as
   its option name (an index also works).
@@ -239,3 +240,11 @@ It renders the draft offscreen and rewrites `<file.jpg>` atomically (`.tmp`, the
 on every change to the draft folder or a used effect folder, and at `--fps` while the stack moves.
 Its own output, `*.tmp`, `*.log`, `preview.*` and `CREDITS.md` changes do not reload it. Studio
 ends it by ending the process.
+
+Video sources return from loading with their first decoded frame already bound/uploaded
+(decoder startup is bounded to 10 seconds). The first output is therefore a real video frame,
+including when an offscreen caller renders before its first update. No CLI or JPEG format change.
+
+For diagnostic software rendering, set `GLAZE_FORCE_WARP=1` before launching the child.
+It forces wgpu's DX12 fallback adapter and bypasses the display-GPU preference. Other values
+leave normal adapter selection in effect. This does not emulate missing Windows media codecs.

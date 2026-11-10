@@ -1,6 +1,6 @@
 # Brief: research (primary sources, no code)
 
-Read `plans/night/2026-11-06.md`, `docs/windows-styling.md`, `crates/inject/src/lib.rs` and the
+Read `docs/windows-styling.md`, `crates/inject/src/lib.rs` and the
 memory-style notes in `docs/research/` if any. Write **one** file: `docs/research/explorer-and-files.md`,
 every claim linked to its primary source (Microsoft Learn, Windows SDK headers, source code on
 GitHub, official READMEs). Commit it with `git commit -m "docs(research): ..." -- docs/research/explorer-and-files.md`.

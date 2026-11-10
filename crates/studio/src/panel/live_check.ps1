@@ -37,7 +37,7 @@ function SettingsHashes {
     return $result
 }
 function WithDesktopLock([scriptblock]$Action) {
-    $lockPath = Join-Path $env:TEMP 'glaze-tools\desktop.lock'
+    $lockPath = Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock'
     [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($lockPath)) | Out-Null
     $lock = $null
     for ($attempt = 0; $attempt -lt 20; $attempt++) {

@@ -1,5 +1,5 @@
 $ErrorActionPreference='Stop'
-$lock='C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock=(Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $until=(Get-Date).AddMinutes(2)
 while(-not (New-Item -ItemType Directory -Path $lock -ErrorAction SilentlyContinue)) {
   if((Get-Date) -ge $until){throw 'Desktop lock is busy'}

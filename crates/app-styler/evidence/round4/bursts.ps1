@@ -15,7 +15,7 @@ function Append-Line([string]$file, [string]$line) {
   for ($i = 0; $i -lt 20; $i++) { try { [IO.File]::AppendAllText($file, $line + "`r`n"); break } catch { Start-Sleep -Milliseconds 100 } }
   Write-Host $line
 }
-$lock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lock = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 
 Add-Type -Namespace R4 -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hwnd, out uint pid);

@@ -51,6 +51,14 @@ pub fn card_selection(b: &mut B, picture: Rect) {
     );
 }
 
+/// The one mark of what's applied: a filled check in the picture's top-right corner.
+pub fn applied_badge(b: &mut B, picture: Rect) {
+    let size = b.px(18.0);
+    let check = Rect::new(picture.right - size - b.px(8.0), picture.top + b.px(8.0), size, size);
+    b.fill(check, size / 2.0, b.p.solid);
+    b.icon(check, crate::theme::glyph::CHECK, 11.0, b.p.on_solid);
+}
+
 /// A card is its picture, rounded on its own, with the label under it: no plate behind either.
 /// Hovering washes the picture; selection is [`card_selection`] around it.
 pub fn card_picture(b: &mut B, picture: Rect, hot: bool, draw: impl FnOnce(&mut B, Rect)) {
@@ -154,7 +162,13 @@ pub fn displays(app: &App, b: &mut B, c: &mut Col) {
         });
         return;
     }
-    let r = Rect::new(c.x, c.y + b.px(6.0), c.w, height(b, 30.0));
+    // "Display" says what Left and Right mean; the switch is as wide as its labels.
+    let caption = font(b, 13.0, 500);
+    let label_w = b.measure("Display", &caption).0 + b.px(12.0);
+    let row = Rect::new(c.x, c.y + b.px(6.0), c.w, height(b, 30.0));
+    text(b, Rect::new(row.left, row.top, label_w, row.height()), "Display", 13.0, 500, b.p.ink2, Align::Start);
+    let w = b.segmented_width(&labels).max(b.px(200.0)).min(c.w - label_w);
+    let r = Rect::new(row.left + label_w, row.top, w, row.height());
     b.segmented(
         key(("panel-displays", c.view)),
         r,
@@ -171,6 +185,11 @@ pub fn display_order(app: &App) -> Vec<usize> {
     let mut order: Vec<_> = (0..app.monitors.len()).collect();
     order.sort_by_key(|&i| (app.monitors[i].rect.x, app.monitors[i].rect.y));
     order
+}
+
+/// A display named for prose: "Right display", or "This display" on a single-monitor PC.
+pub fn display_label(app: &App, index: usize) -> String {
+    if app.monitors.len() < 2 { "This display".into() } else { format!("{} display", display_name(app, index)) }
 }
 
 /// Place names remain stable when Windows enumerates the monitors in another order.
@@ -472,14 +491,13 @@ pub fn title(b: &mut B, c: &mut Col, title: &str, subtitle: &str) {
 
 /// Keep a sub-page's return action beside its actual heading in the editor column.
 pub fn page_title(app: &App, b: &mut B, c: &mut Col, heading: &str, subtitle: &str) {
-    if app.panel.as_ref().is_some_and(|state| state.windowed) && crate::view::header_back(app) {
-        icon_button(b, Rect::new(c.x, c.y + b.px(6.0), b.px(28.0), b.px(28.0)), glyph::CHEVRON_LEFT, "Back", true, Action::Panel(super::Command::Back));
-        let mut text = Col { x: c.x + b.px(36.0), w: c.w - b.px(36.0), ..*c };
-        title(b, &mut text, heading, subtitle);
-        c.y = text.y;
-    } else {
-        title(b, c, heading, subtitle);
+    let windowed = app.panel.as_ref().is_some_and(|state| state.windowed);
+    // A tab already names the page; the page starts with its content.
+    if windowed && crate::view::tabbed(crate::panel::current_page(app)) {
+        return;
     }
+    // The window's back button sits before its breadcrumbs; the docked panel has its header's.
+    title(b, c, heading, subtitle);
 }
 
 pub fn group(b: &mut B, c: &mut Col, heading: &str, content: impl FnOnce(&mut B, &mut Col)) {
@@ -561,14 +579,14 @@ pub fn button(
     enabled: bool,
     action: Action,
 ) {
-    let primary = primary && enabled;
+    // A disabled primary stays recognisably primary, only faded.
     let k = key(("panel-button", label));
     let hot = b.hovered(k) || b.pressed(k);
     b.fill(
         r,
         b.control_radius(r),
         if primary {
-            b.p.solid
+            if enabled { b.p.solid } else { b.p.solid.with_alpha(0.4) }
         } else if hot && enabled {
             b.p.hover
         } else {
@@ -578,10 +596,10 @@ pub fn button(
     if !primary {
         b.stroke(r, b.control_radius(r), b.px(1.0), b.p.line);
     }
-    let ink = if !enabled {
-        b.p.ink3
-    } else if primary {
+    let ink = if primary {
         b.p.on_solid
+    } else if !enabled {
+        b.p.ink3
     } else {
         b.p.ink1
     };
@@ -615,15 +633,7 @@ pub fn button(
         b.focus_ring(k, r, b.control_radius(r));
     } else {
         // Keep deferred actions discoverable to screen readers without making them focus stops.
-        b.list.hits.push(glaze_ui::Hit {
-            id: u32::MAX - b.list.hits.len() as u32,
-            rect: r,
-            role: Role::Button,
-            label: label.into(),
-            enabled: false,
-            actionable: false,
-            checked: None,
-        });
+        b.list.hits.push(glaze_ui::Hit::new(u32::MAX - b.list.hits.len() as u32, r, Role::Button, label, false, None));
     }
 }
 
@@ -646,16 +656,22 @@ pub fn icon_button(b: &mut B, r: Rect, icon: Glyph, label: &str, enabled: bool, 
         b.hit(k, r, Role::Button, label, action, Behavior::Click);
         b.focus_ring(k, r, b.control_radius(r));
     } else {
-        b.list.hits.push(glaze_ui::Hit {
-            id: u32::MAX - b.list.hits.len() as u32,
-            rect: r,
-            role: Role::Button,
-            label: label.into(),
-            enabled: false,
-            actionable: false,
-            checked: None,
-        });
+        b.list.hits.push(glaze_ui::Hit::new(u32::MAX - b.list.hits.len() as u32, r, Role::Button, label, false, None));
     }
+}
+
+/// A compact dropdown for toolbars: the current value and a chevron in a filled box. `action`
+/// opens its menu (`Action::Menu` or `Action::Choose`). Returns the width it took.
+pub fn dropdown(b: &mut B, k: glaze_ui::controls::Key, x: f32, y: f32, label: &str, value: &str, action: Action) -> f32 {
+    let style = font(b, 13.0, 500);
+    let w = b.measure(value, &style).0 + b.px(42.0);
+    let r = Rect::new(x, y, w, height(b, 32.0));
+    b.fill(r, b.px(radius::CONTROL), if b.hovered(k) { b.p.hover } else { b.p.fill });
+    text(b, Rect::new(r.left + b.px(12.0), r.top, w - b.px(36.0), r.height()), value, 13.0, 500, b.p.ink1, Align::Start);
+    b.icon(Rect::new(r.right - b.px(26.0), r.top, b.px(16.0), r.height()), glyph::CHEVRON_DOWN, 14.0, b.p.ink3);
+    b.hit(k, r, Role::ComboBox, &format!("{label} {value}"), action, Behavior::Click);
+    b.focus_ring(k, r, b.px(radius::CONTROL));
+    w
 }
 
 /// A 52-DIP row, or 64 with a caption. Values yield space to the label and ellipsize.
@@ -687,7 +703,7 @@ fn row_content(
     let h = row_height(b, caption);
     let r = Rect::new(c.x, c.y, c.w, h);
     let k = key(("panel-row", c.view, label, caption));
-    let choice = matches!(&action, Action::Choose(_));
+    let choice = matches!(&action, Action::Choose(_) | Action::Menu(_));
     let on = checked == Some(true);
     let area = b.list_row_area(r);
     if on {
@@ -713,7 +729,26 @@ fn row_content(
         x += gw + b.px(if boxed { 12.0 } else { 10.0 });
     }
     let tail_w = height(b, 16.0);
-    let tail = Rect::new(r.right - tail_w, r.top, tail_w, h);
+    let mut tail = Rect::new(r.right - tail_w, r.top, tail_w, h);
+    // A select's value and chevron sit in a dropdown box at the row's end.
+    let dropdown = choice && checked.is_none() && !value.is_empty();
+    if dropdown {
+        tail = Rect::new(r.right - tail_w - b.px(10.0), r.top, tail_w, h);
+    }
+    let end = tail.left - b.px(8.0);
+    let value_w = if value.is_empty() {
+        0.0
+    } else {
+        let style = font(b, 13.0, 400);
+        b.measure(value, &style)
+            .0
+            .min((end - x - b.px(140.0)).max(0.0))
+    };
+    if dropdown {
+        let left = end - value_w - b.px(12.0);
+        let boxed = Rect::new(left, r.top + (h - height(b, 32.0)) / 2.0, r.right - left, height(b, 32.0));
+        b.fill(boxed, b.px(radius::CONTROL), b.p.fill);
+    }
     if let Some(checked) = checked {
         if checked {
             b.icon(tail, glyph::CHECK, 16.0, b.p.ink1);
@@ -730,15 +765,6 @@ fn row_content(
             b.p.ink3,
         );
     }
-    let end = tail.left - b.px(8.0);
-    let value_w = if value.is_empty() {
-        0.0
-    } else {
-        let style = font(b, 13.0, 400);
-        b.measure(value, &style)
-            .0
-            .min((end - x - b.px(140.0)).max(0.0))
-    };
     let label_end = end - value_w - if value_w > 0.0 { b.px(12.0) } else { 0.0 };
     let label_h = if caption.is_empty() {
         h

@@ -1,0 +1,37 @@
+[
+    {
+        "fixture":  "Glaze test backdrop",
+        "printed":  true,
+        "noActivate":  true,
+        "role":  "ControlType.Pane",
+        "process":  38112
+    },
+    {
+        "fixture":  "frost",
+        "printed":  true,
+        "noActivate":  true,
+        "role":  "ControlType.Pane",
+        "process":  38112
+    },
+    {
+        "fixture":  "Glaze test dock",
+        "printed":  true,
+        "noActivate":  true,
+        "role":  "ControlType.ToolBar",
+        "process":  38112
+    },
+    {
+        "fixture":  "frost",
+        "printed":  true,
+        "noActivate":  true,
+        "role":  "ControlType.Pane",
+        "process":  38112
+    },
+    {
+        "fixture":  "Glaze jump-list evidence",
+        "printed":  true,
+        "noActivate":  true,
+        "role":  "ControlType.Menu",
+        "process":  38112
+    }
+]

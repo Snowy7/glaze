@@ -409,6 +409,7 @@ struct Overlay {
     plate: Option<u64>,
     /// Shows its last glass and takes no frames (a plate on a covered or held screen).
     frozen: bool,
+    hidden: bool,
     /// A newer overlapping popup samples this window and its retained glass. Do not capture
     /// into it at the same time: that would feed its own pixels back through the lens.
     behind_popup: bool,
@@ -508,6 +509,12 @@ impl Overlays {
                 client: overlay.client,
                 style: overlay.style,
             })?;
+            if !overlay.visible {
+                self.apply(Request::Visibility {
+                    client: overlay.client,
+                    visible: false,
+                })?;
+            }
         }
         for plate in self.plates.clone() {
             // Frozen plates need a fresh crop on the new device before they can freeze again.
@@ -799,6 +806,29 @@ impl Overlays {
                 self.close(client);
                 Ok(())
             }
+            Request::Visibility { client, visible } => {
+                for o in 0..self.open.len() {
+                    if self.open[o].client == client && self.open[o].plate.is_none() {
+                        // Show the retained compositor surface before restarting WGC, which
+                        // can take hundreds of milliseconds under load. No fade on resume.
+                        self.open[o].hidden = !visible;
+                        self.open[o].window.visibility(visible);
+                        if visible && self.open[o].shown.is_some() {
+                            self.open[o].window.settle()?;
+                            if let Some(live) = &self.live {
+                                unsafe {
+                                    live.dcomp.Commit()?;
+                                }
+                            }
+                        }
+                        self.set_frozen(o, !visible)?;
+                        if !visible {
+                            self.open[o].window.visibility(false);
+                        }
+                    }
+                }
+                Ok(())
+            }
             Request::Style { client, style } => {
                 for o in 0..self.open.len() {
                     if self.open[o].client == client && self.open[o].plate.is_none() {
@@ -878,7 +908,7 @@ impl Overlays {
     /// left with only frozen overlays loses its session) or thaws it (it takes the next frame).
     fn set_frozen(&mut self, o: usize, frozen: bool) -> Result<()> {
         // A rebuilt frozen plate needs one fresh crop before retaining its last frame again.
-        if frozen && self.open[o].shown.is_none() {
+        if frozen && self.open[o].shown.is_none() && !self.open[o].hidden {
             return Ok(());
         }
         if std::mem::replace(&mut self.open[o].frozen, frozen) == frozen {
@@ -955,6 +985,7 @@ impl Overlays {
                         radius,
                         material,
                         style: Style::DEFAULT,
+                        visible: true,
                     },
                     plate,
                     (monitor, bounds),
@@ -1024,6 +1055,7 @@ impl Overlays {
             layer,
             plate,
             frozen: false,
+            hidden: false,
             behind_popup: false,
             rect,
             radius,
@@ -1167,7 +1199,8 @@ impl Overlays {
         let open = &self.open;
         let closed = &mut self.closed_counts;
         self.sessions.retain(|s| {
-            let used = warm || open.iter().any(|o| o.monitor == s.monitor && !o.frozen);
+            let used = (warm && open.is_empty())
+                || open.iter().any(|o| o.monitor == s.monitor && !o.frozen);
             if !used {
                 *closed = closed.plus(s.counts());
             }
@@ -1181,16 +1214,25 @@ impl Overlays {
         // One shared monitor capture still suffices for nested menus. Retain the lower
         // popup's glass while its child is up, and let the child's capture see the actual
         // lower popup (including icons/text). Closing the child restores live capture.
-        let sources: Vec<HWND> = self.open.iter().filter(|lower| {
-            lower.plate.is_none() && lower.layer == Layer::Popup && lower.shown.is_some()
-                && self.open.iter().any(|upper| {
-                    upper.plate.is_none() && upper.layer == Layer::Popup
-                        && upper.client != lower.client && upper.monitor == lower.monitor
-                        && geometry::touches(lower.rect, upper.frame)
-                        && window::above(upper.client, lower.client)
-                })
-                && !self.inbox.affinity.get()
-        }).map(|lower| lower.client).collect();
+        let sources: Vec<HWND> = self
+            .open
+            .iter()
+            .filter(|lower| {
+                lower.plate.is_none()
+                    && lower.layer == Layer::Popup
+                    && lower.shown.is_some()
+                    && self.open.iter().any(|upper| {
+                        upper.plate.is_none()
+                            && upper.layer == Layer::Popup
+                            && upper.client != lower.client
+                            && upper.monitor == lower.monitor
+                            && geometry::touches(lower.rect, upper.frame)
+                            && window::above(upper.client, lower.client)
+                    })
+                    && !self.inbox.affinity.get()
+            })
+            .map(|lower| lower.client)
+            .collect();
         let mut nesting_changed = false;
         for overlay in &mut self.open {
             // Exclusion is per HWND, not per monitor piece. All pieces of an included client
@@ -1198,7 +1240,9 @@ impl Overlays {
             let source = sources.contains(&overlay.client);
             if overlay.behind_popup != source {
                 overlay.behind_popup = source;
-                if !source { overlay.fresh = true; }
+                if !source {
+                    overlay.fresh = true;
+                }
                 nesting_changed = true;
             }
         }
@@ -1422,9 +1466,32 @@ impl Overlays {
         }
         // SAFETY: a commit on a live device: the new glass shows at the next composition.
         unsafe { live.dcomp.Commit()? };
+        for &o in which {
+            let overlay = &self.open[o];
+            // SAFETY: value property on our overlay and a pointer-free wake to its client.
+            unsafe {
+                if !windows::Win32::UI::WindowsAndMessaging::GetPropW(
+                    overlay.window.hwnd(),
+                    w!("glaze.glass.ready"),
+                )
+                .is_invalid()
+                {
+                    continue;
+                }
+                windows::Win32::UI::WindowsAndMessaging::SetPropW(
+                    overlay.window.hwnd(),
+                    w!("glaze.glass.ready"),
+                    Some(windows::Win32::Foundation::HANDLE(1usize as _)),
+                )?;
+                let message = RegisterWindowMessageW(w!("glaze.glass.ready"));
+                let _ = PostMessageW(Some(overlay.client), message, WPARAM(0), LPARAM(0));
+            }
+        }
         self.stats.passes += which.len() as u64;
         self.failure = None;
-        if first { self.sync_capture(None)?; }
+        if first {
+            self.sync_capture(None)?;
+        }
         Ok(())
     }
 

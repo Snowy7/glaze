@@ -135,15 +135,7 @@ impl Notice {
                         color: Rgba::rgb8([245, 245, 245], alpha),
                     },
                 ],
-                hits: vec![Hit {
-                    id: 1,
-                    rect: self.bounds,
-                    role: Role::Button,
-                    label: self.text.clone().into(),
-                    enabled: self.step != 0,
-                    actionable: self.step != 0,
-                    checked: None,
-                }],
+                hits: vec![Hit::new(1, self.bounds, Role::Button, self.text.clone(), self.step != 0, None)],
                 ..Default::default()
             },
         )?;

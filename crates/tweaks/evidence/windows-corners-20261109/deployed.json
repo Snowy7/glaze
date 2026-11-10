@@ -1,0 +1,32 @@
+[
+    {
+        "deployed_sha256":  "CEC8D43D4325DA38022862DA00C980483B5BB4F27633C8AD37F34F7DF2B24084",
+        "built_sha256":  "CEC8D43D4325DA38022862DA00C980483B5BB4F27633C8AD37F34F7DF2B24084",
+        "name":  "glaze-core",
+        "matches":  true
+    },
+    {
+        "deployed_sha256":  "246A719A0C707E8DB668E0C0F7D08BBD7EADF11DE0CFDFB26B827C801E77AB3C",
+        "built_sha256":  "246A719A0C707E8DB668E0C0F7D08BBD7EADF11DE0CFDFB26B827C801E77AB3C",
+        "name":  "glaze-shell",
+        "matches":  true
+    },
+    {
+        "deployed_sha256":  "0079D442FE17EA5CCB069AC2ECC987BDF862B2B01F7CF45948767EFF28EE8C67",
+        "built_sha256":  "0079D442FE17EA5CCB069AC2ECC987BDF862B2B01F7CF45948767EFF28EE8C67",
+        "name":  "glaze-wallpaper",
+        "matches":  true
+    },
+    {
+        "deployed_sha256":  "427B7D2D68BDFDB9FD7599CB0952F49BD85D220FBCE336A38025704FC096C1B0",
+        "built_sha256":  "427B7D2D68BDFDB9FD7599CB0952F49BD85D220FBCE336A38025704FC096C1B0",
+        "name":  "glaze-files",
+        "matches":  true
+    },
+    {
+        "deployed_sha256":  "E4E590F9A10B80D0EC6AEFE465E66BD53622C6FF111E9AF814AD6F9561335B08",
+        "built_sha256":  "E4E590F9A10B80D0EC6AEFE465E66BD53622C6FF111E9AF814AD6F9561335B08",
+        "name":  "glaze-studio",
+        "matches":  true
+    }
+]

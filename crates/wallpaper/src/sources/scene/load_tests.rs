@@ -36,6 +36,7 @@ fn tiny_glb_preserves_hierarchy_pbr_and_alpha() {
     let m = &data.materials[0].uniform;
     assert_eq!(m.base, [1.0, 0.5, 0.25, 0.6]);
     assert_eq!(m.surface[..2], [0.7, 0.3]);
+    assert_eq!(m.surface[2], 0.0, "absent normal maps must not perturb UV seams");
     assert_eq!(m.alpha[..2], [1.0, 0.4]);
     assert!(data.clips.is_empty());
 }

@@ -124,6 +124,7 @@
     },
     "glitch": {
       "photo": "city",
+      "time": 6.98,
       "crop": [
         0.05,
         0,
@@ -192,7 +193,7 @@
     },
     "lightning": {
       "photo": "forest",
-      "event_peak": true,
+      "time": 5.11,
       "params": {
         "intensity": 0.9,
         "sky": 0.35

@@ -1,6 +1,6 @@
 # Brief: style-sync (parity row C25: one switch styles everything)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `plans/native/parity.md` row C25 and its
+Read `plans/native/LIVE.md`, `plans/native/parity.md` row C25 and its
 links, `docs/windows-styling.md` (including "App styler"), `docs/bars.md` (the bars-parity handoff,
 b727049), `docs/system.md`.
 

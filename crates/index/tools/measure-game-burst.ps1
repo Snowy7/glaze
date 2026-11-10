@@ -1,7 +1,7 @@
 # Owns only index_game.exe and the desktop lock; never moves another application's window.
 param([int]$Seconds = 60, [string]$FixtureExe = 'C:\glaze-targets\index\release\examples\index_game.exe', [switch]$TestCatchup, [int]$Files = 20000, [string]$Prefix = 'review-game-before')
 $ErrorActionPreference = 'Stop'
-$lockDir = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$lockDir = (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock')
 $signalPath = Join-Path $env:LOCALAPPDATA 'glaze\game-activity.json'
 $evidence = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\evidence'))
 $deployed = 'D:\Coding\projects\desktop\wallpaper\target\release\glaze-index.exe'
@@ -135,7 +135,7 @@ try {
   $fixture.Refresh()
   [IndexGameThreads]::ActivateOwn($fixture.MainWindowHandle,$fixture.Id)
   Start-Sleep -Seconds 10
-  & 'C:\Users\you\AppData\Local\Temp\glaze-tools\shotall.ps1' -Out (Join-Path $evidence ($Prefix + '-fullscreen.png')) | Out-Null
+  & (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\shotall.ps1') -Out (Join-Path $evidence ($Prefix + '-fullscreen.png')) | Out-Null
   $signal = Get-Content -LiteralPath $signalPath -Raw | ConvertFrom-Json
   if (-not $signal.activity.pause_background -or $signal.activity.foreground_pid -ne $fixture.Id -or [IndexGameThreads]::ForegroundPid() -ne $fixture.Id) {
     [IndexGameThreads]::ActivateOwn($fixture.MainWindowHandle,$fixture.Id)
@@ -226,7 +226,7 @@ try {
       Start-Sleep -Seconds 2
     }
     $lockReleased = $false
-    & 'C:\Users\you\AppData\Local\Temp\glaze-tools\shotall.ps1' -Out (Join-Path $evidence ($Prefix + '-restored.png')) | Out-Null
+    & (Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\shotall.ps1') -Out (Join-Path $evidence ($Prefix + '-restored.png')) | Out-Null
   } finally { if (-not $lockReleased) { [IO.Directory]::Delete($lockDir) } }
 }
 } finally {

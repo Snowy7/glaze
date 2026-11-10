@@ -179,7 +179,10 @@ impl Pin {
     fn matches(&self, group: &Group) -> bool {
         let same = |a: &Option<String>, b: &Option<String>| matches!((a, b), (Some(a), Some(b)) if a.eq_ignore_ascii_case(b));
         let exe = |e: &Option<String>| e.as_deref().map(exe_identity);
-        same(&self.aumid, &group.aumid) || same(&exe(&self.exe), &exe(&group.exe))
+        match (&self.aumid, &group.aumid) {
+            (Some(_), Some(_)) => same(&self.aumid, &group.aumid),
+            _ => same(&exe(&self.exe), &exe(&group.exe)),
+        }
     }
 }
 
@@ -756,6 +759,52 @@ mod tests {
         let summary: Vec<(&str, bool, usize)> =
             items.iter().map(|i| (i.name.as_str(), i.pinned, i.windows.len())).collect();
         assert_eq!(summary, [("Discord", true, 2), ("x", false, 1)]);
+    }
+
+    #[test]
+    fn chromium_pins_keep_distinct_appids_and_remain_visible_while_running() {
+        let groups = group(vec![
+            window(30, Some("Helium"), Some(CHROME)),
+            window(31, Some("Helium._crx_chat"), Some(CHROME)),
+        ]);
+        let apps: Vec<_> = groups.into_iter().map(|g| running(g, "browser")).collect();
+        let pins = [
+            Pin {
+                path: "Helium.lnk".into(),
+                name: "Helium".into(),
+                aumid: Some("Helium".into()),
+                exe: Some(CHROME.into()),
+                ..Default::default()
+            },
+            Pin {
+                path: "Chat.lnk".into(),
+                name: "Chat".into(),
+                aumid: Some("Helium._crx_chat".into()),
+                exe: Some(CHROME.into()),
+                ..Default::default()
+            },
+        ];
+        let items = dock_items(&pins, &apps, &[], View::default());
+        assert_eq!(items.len(), 2);
+        assert!(
+            items
+                .iter()
+                .all(|item| item.pinned && item.windows.len() == 1)
+        );
+        assert_eq!(items[0].windows[0].hwnd, 30);
+        assert_eq!(items[1].windows[0].hwnd, 31);
+        let without_pin = dock_items(&pins[..1], &apps, &[], View::default());
+        assert_eq!(
+            without_pin.len(),
+            2,
+            "an unpinned PWA remains a separate running app"
+        );
+        let stopped = dock_items(&pins, &[], &[], View::default());
+        assert_eq!(
+            stopped.len(),
+            2,
+            "pins stay visible after their windows close"
+        );
     }
 
     /// Notification badges key by AUMID: a grouped Squirrel pin carries its windows' one, and

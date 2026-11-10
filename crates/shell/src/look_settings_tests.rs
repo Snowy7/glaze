@@ -379,7 +379,7 @@ fn menus_family_style_is_independent_of_bars_and_resets_to_the_global_style() {
 }
 
 #[test]
-fn menus_share_explicit_radius_and_edge_with_their_glass_shape() {
+fn menus_keep_native_corners_and_share_the_explicit_edge_with_their_glass_shape() {
     let mut ui = Ui::new().unwrap();
     let user = settings(json!({"shape":{"corners":0,"edge":true}, "menus":{"style":"solid"}}));
     let bars = BarsConfig::parse("{}").unwrap();
@@ -398,8 +398,9 @@ fn menus_share_explicit_radius_and_edge_with_their_glass_shape() {
     );
     let mut panel = crate::flyouts::look::Look::resolve(&bar_look, &a, &system);
     panel.apply_settings(&user, &ui.text);
-    assert_eq!(panel.radius, 0.0);
-    assert_eq!(panel.menu_tokens().radius, 0.0);
+    // Top-level popups follow Windows geometry even when bars/widgets use square corners.
+    assert_eq!(panel.radius, glaze_ui::WINDOW_CORNER_RADIUS);
+    assert_eq!(panel.menu_tokens().radius, glaze_ui::WINDOW_CORNER_RADIUS);
     assert!(panel.menu_tokens().border);
     assert!(panel.glass.is_none());
     let items = vec![glaze_ui::Entry::action("Settings", ())];
@@ -409,6 +410,6 @@ fn menus_share_explicit_radius_and_edge_with_their_glass_shape() {
     assert!(
         list.ops
             .iter()
-            .any(|op| matches!(op, Op::Stroke { radius, .. } if *radius == 0.0))
+            .any(|op| matches!(op, Op::Stroke { radius, .. } if *radius == glaze_ui::WINDOW_CORNER_RADIUS))
     );
 }

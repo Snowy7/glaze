@@ -126,7 +126,8 @@ fn main() -> Result<()> {
         return test_window();
     }
     ensure!(
-        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock")
+        std::path::PathBuf::from(std::env::var("LOCALAPPDATA")?)
+            .join(r"Temp\glaze-tools\desktop.lock")
             .exists(),
         "caller must hold desktop lock"
     );

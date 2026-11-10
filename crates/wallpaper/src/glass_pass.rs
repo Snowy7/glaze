@@ -1,5 +1,5 @@
-//! Liquid Glass plates in the wallpaper frame, drawn by liquid-rust (`crates/liquid-rust`, a
-//! vendored copy of al1h3n/liquid-rust, MIT OR Apache-2.0) from the shell's latest
+//! Liquid Glass plates in the wallpaper frame, drawn by stillkit-glass (stillkit's
+//! copy of al1h3n/liquid-rust, MIT OR Apache-2.0) from the shell's latest
 //! shared-memory snapshot. See `docs/glass.md`.
 //!
 //! Each screen keeps one liquid-rust `Scene` (its plates, in points). Each kept frame glass is
@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use anyhow::Result;
-use liquid_rust as lr;
+use stillkit_glass as lr;
 use glaze_desktop::{Rect, monitor_infos};
 use glaze_glass_ipc::{Plate, Reader, Style};
 use windows::Win32::Foundation::HANDLE;

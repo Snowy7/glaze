@@ -1,0 +1,303 @@
+cargo :    Compiling glaze-tweaks v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\tweaks)
+At line:2 char:147
++ ... gets\main'; cargo test -p glaze-studio --bin glaze-studio windows_as_ ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling gl...\crates\tweaks):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   Compiling accesskit_windows v0.35.2 
+(https://github.com/Snowy7/stillkit?rev=e8db92773c860fc7e99ddb2cf58666e394684f15#e8db9277)
+   Compiling glaze-bars v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\bars)
+   Compiling glaze-index v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\index)
+   Compiling stillkit v0.0.1 (D:\Coding\projects\desktop\stillkit\crates\stillkit)
+   Compiling glaze-shell v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\shell)
+warning: structure field `Glaze` should have a snake case name
+  --> crates\shell\src\desktop_menu\items.rs:98:9
+   |
+98 |     pub Glaze: Option<&'a Arc<Image>>,
+   |         ^^^^^ help: convert the identifier to snake case: `glaze`
+   |
+   = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: variable `Glaze` should have a snake case name
+   --> crates\shell\src\desktop_menu\items.rs:161:9
+    |
+161 |     let Glaze = |glyph| match sources.Glaze {
+    |         ^^^^^ help: convert the identifier to snake case: `glaze`
+
+warning: struct `Layout` is never constructed
+  --> crates\shell\src\widgets\views\integrations\mod.rs:19:19
+   |
+19 | pub(super) struct Layout {
+   |                   ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `layout` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:26:15
+   |
+26 | pub(super) fn layout(
+   |               ^^^^^^
+
+warning: function `footer` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:65:15
+   |
+65 | pub(super) fn footer(f: &mut Frame<'_>, m: &Model, area: Rect, default: &str) {
+   |               ^^^^^^
+
+warning: function `setup` is never used
+  --> crates\shell\src\widgets\views\integrations\mod.rs:85:15
+   |
+85 | pub(super) fn setup(
+   |               ^^^^^
+
+warning: function `metric` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:127:15
+    |
+127 | pub(super) fn metric(f: &mut Frame<'_>, rect: Rect, value: &str, caption: &str, color: Rgba) {
+    |               ^^^^^^
+
+warning: function `pill` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:139:15
+    |
+139 | pub(super) fn pill(f: &mut Frame<'_>, rect: Rect, text: &str, color: Rgba) {
+    |               ^^^^
+
+warning: function `icon_action` is never used
+   --> crates\shell\src\widgets\views\integrations\mod.rs:144:15
+    |
+144 | pub(super) fn icon_action(
+    |               ^^^^^^^^^^^
+
+warning: `glaze-shell` (lib) generated 9 warnings
+   Compiling glaze-studio v0.1.0 (D:\Coding\projects\desktop\wallpaper\crates\studio)
+warning: unused import: `glaze_ui::controls::segment_fill as thumb`
+  --> crates\studio\src\panel\tokens.rs:20:9
+   |
+20 | pub use glaze_ui::controls::segment_fill as thumb;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated function `from_key` is never used
+  --> crates\studio\src\actions.rs:72:12
+   |
+24 | impl Page {
+   | --------- associated function in this implementation
+...
+72 |     pub fn from_key(key: &str) -> Option<Self> {
+   |            ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: multiple variants are never constructed
+   --> crates\studio\src\actions.rs:324:5
+    |
+286 | pub enum Action {
+    |          ------ variants in this enum
+...
+324 |     SelectWallpaper(usize),
+    |     ^^^^^^^^^^^^^^^
+...
+336 |     WallpapersOwn,
+    |     ^^^^^^^^^^^^^
+337 |     // Look
+338 |     LookTab(bool),
+    |     ^^^^^^^
+339 |     LookScope(bool),
+    |     ^^^^^^^^^
+...
+349 |     StageReal(bool),
+    |     ^^^^^^^^^
+350 |     // Widgets and stages
+351 |     Display(usize),
+    |     ^^^^^^^
+...
+366 |     SelectBar(Option<Bar>),
+    |     ^^^^^^^^^
+...
+371 |     InsertModule(Bar, &'static str, String),
+    |     ^^^^^^^^^^^^
+...
+374 |     DeleteCustom(String),
+    |     ^^^^^^^^^^^^
+375 |     ResetBar(Bar),
+    |     ^^^^^^^^
+...
+378 |     PinRemove(Pins, usize),
+    |     ^^^^^^^^^
+...
+386 |     MenuRemove(usize),
+    |     ^^^^^^^^^^
+...
+397 |     ToastButton,
+    |     ^^^^^^^^^^^
+    |
+    = note: `Action` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during 
+dead code analysis
+
+warning: method `section` is never used
+  --> crates\studio\src\app.rs:49:12
+   |
+44 | impl Nav {
+   | -------- method in this implementation
+...
+49 |     pub fn section(&self) -> Section {
+   |            ^^^^^^^
+
+warning: field `alert` is never read
+   --> crates\studio\src\app.rs:108:9
+    |
+103 | pub struct Toast {
+    |            ----- field in this struct
+...
+108 |     pub alert: bool,
+    |         ^^^^^
+    |
+    = note: `Toast` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during 
+dead code analysis
+
+warning: method `restore_place` is never used
+    --> crates\studio\src\app.rs:1294:8
+     |
+ 178 | impl App {
+     | -------- method in this implementation
+...
+1294 |     fn restore_place(&mut self) {
+     |        ^^^^^^^^^^^^^
+
+warning: field `engine` is never read
+   --> crates\studio\src\library.rs:106:9
+    |
+ 86 | pub struct Wallpaper {
+    |            --------- field in this struct
+...
+106 |     pub engine: glaze_config::RenderOptions,
+    |         ^^^^^^
+    |
+    = note: `Wallpaper` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored 
+during dead code analysis
+
+warning: function `edit_theme` is never used
+   --> crates\studio\src\library.rs:343:8
+    |
+343 | pub fn edit_theme(dir: &Path, pointer: &str, value: Option<serde_json::Value>) -> Result<()> {
+    |        ^^^^^^^^^^
+
+warning: variants `SidebarSettings` and `ShowThemeFolder` are never constructed
+   --> crates\studio\src\panel\mod.rs:200:5
+    |
+197 | pub enum Command {
+    |          ------- variants in this enum
+...
+200 |     SidebarSettings,
+    |     ^^^^^^^^^^^^^^^
+...
+243 |     ShowThemeFolder(std::path::PathBuf),
+    |     ^^^^^^^^^^^^^^^
+    |
+    = note: `Command` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during 
+dead code analysis
+
+warning: function `icon_group` is never used
+   --> crates\studio\src\panel\controls.rs:507:8
+    |
+507 | pub fn icon_group(b: &mut B, c: &mut Col, heading: &str, icon: Glyph, content: impl FnOnce(&mut B, &mut Col)) {
+    |        ^^^^^^^^^^
+
+warning: function `starter_bars` is never used
+    --> crates\studio\src\panel\specimens.rs:1072:8
+     |
+1072 | pub fn starter_bars(app: &App, b: &mut B, rect: Rect, raw: &serde_json::Value) {
+     |        ^^^^^^^^^^^^
+
+warning: function `desktop_bars` is never used
+    --> crates\studio\src\panel\specimens.rs:1076:8
+     |
+1076 | pub fn desktop_bars(app: &App, b: &mut B, rect: Rect, raw: &serde_json::Value) {
+     |        ^^^^^^^^^^^^
+
+warning: fields `checkpoint`, `label`, and `last` are never read
+   --> crates\studio\src\panel\..\pick_client.rs:324:5
+    |
+321 | struct ColorDrag {
+    |        --------- fields in this struct
+...
+324 |     checkpoint: usize,
+    |     ^^^^^^^^^^
+325 |     label: String,
+    |     ^^^^^
+326 |     last: String,
+    |     ^^^^
+
+warning: constant `GLOBE` is never used
+   --> crates\studio\src\theme.rs:209:15
+    |
+209 |     pub const GLOBE: Glyph = i(Icon::Globe);
+    |               ^^^^^
+
+warning: constant `POINTER` is never used
+   --> crates\studio\src\theme.rs:212:15
+    |
+212 |     pub const POINTER: Glyph = i(Icon::Pointer);
+    |               ^^^^^^^
+
+warning: constant `SLIDESHOW` is never used
+   --> crates\studio\src\theme.rs:230:15
+    |
+230 |     pub const SLIDESHOW: Glyph = i(Icon::Images);
+    |               ^^^^^^^^^
+
+warning: constant `TERMINAL` is never used
+   --> crates\studio\src\theme.rs:231:15
+    |
+231 |     pub const TERMINAL: Glyph = i(Icon::Terminal);
+    |               ^^^^^^^^
+
+warning: function `publish_color` is never used
+   --> crates\studio\src\panel\..\pick_client.rs:429:4
+    |
+429 | fn publish_color(color: u32) {
+    |    ^^^^^^^^^^^^^
+
+warning: constant `PULSE` is never used
+   --> crates\studio\src\theme.rs:232:15
+    |
+232 |     pub const PULSE: Glyph = i(Icon::Activity);
+    |               ^^^^^
+
+warning: struct `ColorSession` is never constructed
+   --> crates\studio\src\panel\..\pick_client.rs:466:8
+    |
+466 | struct ColorSession {
+    |        ^^^^^^^^^^^^
+
+warning: constant `PALETTE` is never used
+   --> crates\studio\src\theme.rs:251:15
+    |
+251 |     pub const PALETTE: Glyph = i(Icon::Palette);
+    |               ^^^^^^^
+
+warning: function `choose_color` is never used
+   --> crates\studio\src\panel\..\pick_client.rs:497:8
+    |
+497 | pub fn choose_color(
+    |        ^^^^^^^^^^^^
+
+warning: function `color_hook` is never used
+   --> crates\studio\src\panel\..\pick_client.rs:528:27
+    |
+528 | unsafe extern "system" fn color_hook(
+    |                           ^^^^^^^^^^
+
+warning: `glaze-studio` (bin "glaze-studio" test) generated 23 warnings (run `cargo fix --bin "glaze-studio" -p 
+glaze-studio --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 18.71s
+     Running unittests src\main.rs 
+(C:\mypaper-targets\main\debug\build\glaze-studio/dedb68af482c4828\out\glaze_studio-dedb68af482c4828.exe)
+
+running 1 test
+test panel::tests::windows_as_is_is_explicit_and_escape_leaves_the_add_page ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 186 filtered out; finished in 0.70s
+

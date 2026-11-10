@@ -45,7 +45,7 @@ WebView2.
   proven libraries and techniques rather than inventing new ones.
 - **Research already done** (reuse it): `plans/council/liquid-glass-research.md`,
   `docs/research/customization-landscape.md`, and the menus/icons/motion findings summarized in
-  `plans/council/brief.md`.
+  `plans/council/plan.md`.
 
 ## Your task (round 1, native)
 Write a concrete, opinionated plan, under ~1300 words, citing file paths. Fight scope creep.

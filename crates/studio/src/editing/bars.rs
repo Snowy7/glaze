@@ -1,13 +1,13 @@
 //! Bar presets, module editing and pinned app actions shared by Studio pages.
 
 use glaze_bars::{BarsConfig, ModuleRef};
-use glaze_ui::Point;
+
 use glaze_ui::controls::Glyph;
 use glaze_ui::controls::key;
 use serde_json::{Value, json};
 
 use crate::actions::{Action, Bar, Page, Pins, Slot};
-use crate::app::{App, Drag, Overlay};
+use crate::app::{App, Overlay};
 use crate::docs::{DocId, Op, token};
 use crate::theme::glyph;
 
@@ -402,64 +402,3 @@ pub fn on_key(app: &mut App, vk: u16) -> bool {
     false
 }
 
-pub fn drag_to(app: &mut App, drag: Drag, p: Point) {
-    if let Drag::Module { from, .. } = drag
-        && ((p.x - from.x).abs() > 4.0 || (p.y - from.y).abs() > 4.0)
-        && let Some(Drag::Module { moved, .. }) = &mut app.drag
-    {
-        *moved = true;
-        app.dirty = true;
-    }
-}
-
-/// A dropped module: onto a list row (moved there) or off the bar (removed).
-pub fn drop_drag(app: &mut App, drag: Drag) {
-    let Drag::Module {
-        slot, moved: true, ..
-    } = drag
-    else {
-        return;
-    };
-    let Some(p) = app.input.pointer else { return };
-    // Over a list row of the inspector: the row's slot is where it goes.
-    let target = app
-        .frame
-        .targets
-        .iter()
-        .rev()
-        .find(|t| t.visible.is_some_and(|r| r.contains(p)))
-        .map(|t| t.action.clone());
-    match target {
-        Some(Action::SelectModule(Some(to))) if to.bar == slot.bar && to != slot => {
-            let Some(config) = config(app) else { return };
-            let mut from = list_of(&config, slot.bar, slot.list);
-            if slot.index >= from.len() {
-                return;
-            }
-            let item = from.remove(slot.index);
-            let mut ops = Vec::new();
-            if to.list == slot.list {
-                from.insert(to.index.min(from.len()), item);
-            } else {
-                let mut dest = list_of(&config, to.bar, to.list);
-                dest.insert(to.index.min(dest.len()), item);
-                ops.push(Op {
-                    doc: DocId::Bars,
-                    path: format!("/{}/{}", to.bar.key(), to.list),
-                    value: Some(Value::Array(dest)),
-                });
-            }
-            ops.push(Op {
-                doc: DocId::Bars,
-                path: format!("/{}/{}", slot.bar.key(), slot.list),
-                value: Some(Value::Array(from)),
-            });
-            app.apply("Move module", ops);
-        }
-        Some(Action::SelectBar(None)) | Some(Action::None) | None => {
-            // Dropped on the bare stage: off the bar.
-            app.run(Action::RemoveModule(slot));
-        }
-        _ => {}
-    }
-}

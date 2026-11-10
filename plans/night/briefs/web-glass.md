@@ -1,6 +1,6 @@
 # Brief: web-glass (parity row P14) + covered-screen wakes
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/glass.md`, `docs/web-and-app-wallpapers.md`,
+Read `plans/native/LIVE.md`, `docs/glass.md`, `docs/web-and-app-wallpapers.md`,
 `docs/performance.md` ("Hidden = free"), and row P14 in `plans/native/parity.md`. You own
 `crates/wallpaper`, `crates/glass-ipc`, `crates/liquid-rust`, the engine docs, and small additive
 edits in `crates/shell` (bars/widgets glass requests; game-quiet is finishing in `crates/shell`,

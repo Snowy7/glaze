@@ -27,7 +27,8 @@ unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
 
 fn main() -> Result<()> {
     ensure!(
-        std::path::Path::new(r"C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock")
+        std::path::PathBuf::from(std::env::var("LOCALAPPDATA")?)
+            .join(r"Temp\glaze-tools\desktop.lock")
             .is_dir(),
         "take the desktop lock first"
     );

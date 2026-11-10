@@ -1,6 +1,6 @@
 # Brief: engine-parity (the last three glass rows: C10, C12, C14)
 
-Read `plans/night/2026-11-06.md`, `plans/native/LIVE.md`, `docs/glass.md` (incl. "Finer knobs on the
+Read `plans/native/LIVE.md`, `docs/glass.md` (incl. "Finer knobs on the
 wire"), `docs/bars.md` from line 185 (bars-parity-2 handoff), and rows C10, C12, C14 in
 `plans/native/parity.md`. You own `crates/wallpaper`, `crates/glass-ipc`, `crates/liquid-rust` and the
 engine docs. Additive wire changes only (old shells and engines must keep working, as in 9e0a0db).

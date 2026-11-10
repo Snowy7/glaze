@@ -278,10 +278,7 @@ impl Look {
                     glass
                 }
             });
-        let radius = bar
-            .radius
-            .or(appearance.radius)
-            .unwrap_or(tokens.theme.radius.surface);
+        let radius = glaze_ui::WINDOW_CORNER_RADIUS;
         let mut resolved = tokens.theme.clone();
         resolved.glass = glass;
         if appearance.tint.is_some() || appearance.opacity.is_some() || tokens.fill.is_some() {
@@ -352,7 +349,7 @@ impl Look {
 
     /// The kit's theme for the flyouts (docs/ui.md "The kit"): the bar's style (the same as the
     /// bar's own, see bars/look.rs), the ink the scheme, and the accent carries over. The body's
-    /// radius is the look's (the user's `radius`, else the kit's), cards concentric inside it.
+    /// outer radius follows Windows' top-level geometry.
     pub fn theme(&self) -> Theme {
         self.resolved.clone()
     }
@@ -360,7 +357,7 @@ impl Look {
     /// Menus share the active family, font, colors and material with the panels.
     pub fn menu_tokens(&self) -> glaze_ui::Tokens {
         glaze_ui::Tokens {
-            radius: self.menu_radius.unwrap_or_else(|| Radii::concentric(self.radius, 6.0, 8.0)),
+            radius: glaze_ui::WINDOW_CORNER_RADIUS,
             icons: self.icons.clone(),
             icon_set: Some(self.resolved.icons.clone()),
             scale: self.scale,
