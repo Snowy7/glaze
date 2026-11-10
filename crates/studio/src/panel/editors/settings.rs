@@ -98,6 +98,21 @@ mod frame_cap_tests {
     use super::*;
 
     #[test]
+    fn scrolling_tiling_is_written_only_while_on_and_remains_undoable() {
+        let ui = glaze_ui::Ui::new().unwrap();
+        let mut app = crate::goldens::app(true, &ui);
+        let edit = Edit::new(DocId::Config, "/experimental/tiling", "Scrolling tiling");
+        app.set(&edit, serde_json::json!(true));
+        assert_eq!(app.docs.doc(DocId::Config).raw.pointer(&edit.path), Some(&serde_json::json!(true)));
+        app.set(&edit, serde_json::json!(false));
+        assert!(app.docs.doc(DocId::Config).raw.pointer(&edit.path).is_none());
+        app.run(Action::Undo);
+        assert_eq!(app.docs.doc(DocId::Config).raw.pointer(&edit.path), Some(&serde_json::json!(true)));
+        app.run(Action::Redo);
+        assert!(app.docs.doc(DocId::Config).raw.pointer(&edit.path).is_none());
+    }
+
+    #[test]
     fn custom_frame_rate_is_staged_and_the_slider_spans_the_supported_range() {
         let mut ui = glaze_ui::Ui::new().unwrap();
         let mut app = crate::goldens::app(true, &ui);
@@ -185,6 +200,10 @@ pub fn general(app: &App, b: &mut B, c: &mut Col) {
                     b,
                     c,
                     "New or unproven features. Each one turns on and off live.",
+                );
+                setting(
+                    app, b, c, "experimental_tiling", "Scrolling tiling",
+                    "Replaces Snap: windows in an endless row of columns",
                 );
                 setting(
                     app,

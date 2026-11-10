@@ -1,0 +1,2985 @@
+[
+  {
+    "name": "1Password",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "1Password.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Ableton Live",
+    "matches": [
+      {
+        "field": "class",
+        "value": "AbletonVstPlugClass",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Ableton Live",
+    "matches": [
+      {
+        "field": "class",
+        "value": "Vst3PlugWindow",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Adobe Creative Cloud",
+    "matches": [
+      {
+        "field": "class",
+        "value": "CreativeCloudDesktopWindowClass",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Adobe Premiere Pro",
+    "matches": [
+      {
+        "field": "class",
+        "value": "DroverLord - Window Class",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Affinity Designer 2",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Affinity Designer 2",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "force": true
+    }
+  },
+  {
+    "name": "Affinity Designer 2",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Designer.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Affinity Photo 2",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Affinity Photo 2",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "force": true
+    }
+  },
+  {
+    "name": "Affinity Photo 2",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Photo.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Affinity Publisher 2",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Affinity Publisher 2",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "force": true
+    }
+  },
+  {
+    "name": "Affinity Publisher 2",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Publisher.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Akiflow",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Akiflow.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Amazon Chime",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Meeting Controls",
+        "strategy": "ends_with"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Android Studio",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "studio64.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true
+    }
+  },
+  {
+    "name": "Anki",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "anki.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "ArmCord",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ArmCord.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "AutoDesk AutoCAD Suite",
+    "matches": [
+      {
+        "field": "class",
+        "value": "Afx:",
+        "strategy": "contains"
+      },
+      {
+        "field": "exe",
+        "value": "acad.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "AutoDesk AutoCAD Suite",
+    "matches": [
+      {
+        "field": "class",
+        "value": "HwndWrapper[DefaultDomain",
+        "strategy": "starts_with"
+      },
+      {
+        "field": "exe",
+        "value": "acad.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "AutoHotkey",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "AutoHotkeyU64.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "AutoHotkey",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Window Spy",
+        "strategy": "starts_with"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "AutoHotkey",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "AutoHotkeyUX.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Beeper",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Beeper.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Bitwarden",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Bitwarden.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Blitz",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Blitz.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Bloxstrap",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Bloxstrap.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Brave Browser",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "brave.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "CLion",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "clion64.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "CLion",
+    "matches": [
+      {
+        "field": "class",
+        "value": "SunAwtDialog",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Calculator",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Calculator",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Citrix Receiver",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "SelfService.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Citrix Receiver",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "SelfService.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Clash Verge",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Clash Verge.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Clementine",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "clementine.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "CopyQ",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "copyq.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Core Temp",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Core Temp.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Credential Manager UI Host",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "CredentialUIBroker.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Cron",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Cron.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "DS4Windows",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "DS4Windows.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "DataGrip",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "datagrip64.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "Delphi applications",
+    "matches": [
+      {
+        "field": "class",
+        "value": "TApplication",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Delphi applications",
+    "matches": [
+      {
+        "field": "class",
+        "value": "TWizardForm",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Discord",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Discord.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true,
+      "layered": true
+    }
+  },
+  {
+    "name": "DiscordCanary",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "DiscordCanary.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "DiscordDevelopment",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "DiscordDevelopment.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "DiscordPTB",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "DiscordPTB.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Dropbox",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Dropbox.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Eagle",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Eagle.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "ElectronMail",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ElectronMail.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Element",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Element.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Elephicon",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Elephicon.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "ElevenClock",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ElevenClock.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Elgato Camera Hub",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Camera Hub.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Elgato Control Center",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ControlCenter.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Elgato Wave Link",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "WaveLink.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Epic Games Launcher",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "EpicGamesLauncher.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Everything",
+    "matches": [
+      {
+        "field": "class",
+        "value": "EVERYTHING",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Everything1.5a",
+    "matches": [
+      {
+        "field": "class",
+        "value": "EVERYTHING_(1.5a)",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "force": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "FFMetrics",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "FFMetrics.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Files",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Files.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "GOG Galaxy",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "GalaxyClient.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "force": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "GOG Galaxy",
+    "matches": [
+      {
+        "field": "class",
+        "value": "Chrome_RenderWidgetHostHWND",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "GitHub Credential Manager",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "git-credential-manager.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "GoPro Webcam",
+    "matches": [
+      {
+        "field": "class",
+        "value": "GoPro Webcam",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Godot Manager",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "GodotManager.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "force": true,
+      "late_title": true
+    }
+  },
+  {
+    "name": "Golden Dict",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "GoldenDict.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Google Chrome",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "chrome.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Google Drive",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "GoogleDriveFS.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Google Drive",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "GoogleDriveFS.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Guitar Rig 7",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Guitar Rig 7.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "IntelliJ IDEA",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "idea64.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "IntelliJ IDEA",
+    "matches": [
+      {
+        "field": "class",
+        "value": "SunAwtDialog",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Itch.io",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "itch.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "KOOK",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "KOOK.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Keyviz",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "keyviz.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Kleopatra",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "kleopatra.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Kotatogram",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Kotatogram.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "LocalSend",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "localsend_app.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Logi Bolt",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "LogiBolt.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "LogiTune",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "LogiTune.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "LogiTune",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "LogiTune.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Logitech G HUB",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "lghub.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Logitech Options",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "LogiOptionsUI.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Mailspring",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "mailspring.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "ManicTime",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ManicTimeClient.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "force": true,
+      "late_title": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "ManyCam",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ManyCam.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Mattermost",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Mattermost.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Microsoft Active Accessibility",
+    "matches": [
+      {
+        "field": "class",
+        "value": "#32770",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Microsoft Excel",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "EXCEL.EXE",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "layered": true
+    }
+  },
+  {
+    "name": "Microsoft Excel",
+    "matches": [
+      {
+        "field": "class",
+        "value": "_WwB",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Microsoft Outlook",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "OUTLOOK.EXE",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "layered": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "Microsoft Outlook",
+    "matches": [
+      {
+        "field": "class",
+        "value": "_WwB",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Microsoft Outlook",
+    "matches": [
+      {
+        "field": "class",
+        "value": "MsoSplash",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Microsoft PC Manager",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "MSPCManager.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Microsoft PowerPoint",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "POWERPNT.EXE",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "layered": true
+    }
+  },
+  {
+    "name": "Microsoft PowerPoint",
+    "matches": [
+      {
+        "field": "class",
+        "value": "_WwB",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Microsoft Teams",
+    "matches": [
+      {
+        "field": "class",
+        "value": "TeamsWebView",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Microsoft Teams classic",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Microsoft Teams Notification",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Microsoft Teams classic",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Microsoft Teams Call",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Microsoft Word",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "WINWORD.EXE",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "layered": true
+    }
+  },
+  {
+    "name": "Microsoft Word",
+    "matches": [
+      {
+        "field": "class",
+        "value": "_WwB",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Modern Flyouts",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ModernFlyoutsHost.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Mozilla Firefox",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "firefox.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "Mozilla Firefox",
+    "matches": [
+      {
+        "field": "class",
+        "value": "MozillaTaskbarPreviewClass",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Mozilla Firefox",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Picture-in-Picture",
+        "strategy": "equals"
+      },
+      {
+        "field": "exe",
+        "value": "firefox.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "NZXT CAM",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "NZXT CAM.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "NetEase Cloud Music",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "cloudmusic.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "NiceHash Miner",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "nhm_app.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "force": true
+    }
+  },
+  {
+    "name": "NohBoard",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "NohBoard.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Notion Enhanced",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Notion Enhanced.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "OBS Studio (32-bit)",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "obs32.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "OBS Studio (64-bit)",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "obs64.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "ONLYOFFICE Editors",
+    "matches": [
+      {
+        "field": "class",
+        "value": "DocEditorsWindowClass",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "OneDrive",
+    "matches": [
+      {
+        "field": "class",
+        "value": "OneDriveReactNativeWin32WindowClass",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "OneQuick",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "OneQuick.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "OpenRGB",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "OpenRGB.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Paradox Launcher",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Paradox Launcher.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "PhpStorm",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "phpstorm64.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "PhpStorm",
+    "matches": [
+      {
+        "field": "class",
+        "value": "SunAwtDialog",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Playnite",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Playnite.DesktopApp.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Playnite",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Playnite.FullscreenApp.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "PowerToys",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "PowerToys.ColorPickerUI.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "PowerToys",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "PowerToys.CropAndLock.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "PowerToys",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "PowerToys.ImageResizer.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "PowerToys",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "PowerToys.Peek.UI.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "PowerToys",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "PowerToys.PowerLauncher.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "PowerToys",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "PowerToys.PowerAccent.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Process Hacker",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ProcessHacker.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Process Hacker",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ProcessHacker.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "ProtonDrive",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ProtonDrive.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "ProtonVPN",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ProtonVPN.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "PyCharm",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "pycharm64.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "PyCharm",
+    "matches": [
+      {
+        "field": "class",
+        "value": "SunAwtDialog",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "QQ",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "QQ.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "QQ",
+    "matches": [
+      {
+        "field": "title",
+        "value": "\u56fe\u7247\u67e5\u770b\u5668",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "QQ",
+    "matches": [
+      {
+        "field": "title",
+        "value": "\u7fa4\u804a\u7684\u804a\u5929\u8bb0\u5f55",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "QQ",
+    "matches": [
+      {
+        "field": "title",
+        "value": "\u8bed\u97f3\u901a\u8bdd",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "QtScrcpy",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "QtScrcpy.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "QuickLook",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "QuickLook.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "RepoZ",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "RepoZ.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Rider",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "rider64.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "Rider",
+    "matches": [
+      {
+        "field": "class",
+        "value": "SunAwtDialog",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Rider",
+    "matches": [
+      {
+        "field": "title",
+        "value": "PopupMessageWindow",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Roblox FPS Unlocker",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "rbxfpsunlocker.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "RoundedTB",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "RoundedTB.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "RoundedTB",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "RoundedTB.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "RustRover",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "rustrover64.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "RustRover",
+    "matches": [
+      {
+        "field": "class",
+        "value": "SunAwtDialog",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Sandboxie Plus",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "SandMan.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "ShareX",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ShareX.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Sideloadly",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "sideloadly.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Signal",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Signal.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "SiriKali",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "sirikali.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Slack",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Slack.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Slack",
+    "matches": [
+      {
+        "field": "class",
+        "value": "Chrome_RenderWidgetHostHWND",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Slack",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "slack.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Slack",
+    "matches": [
+      {
+        "field": "class",
+        "value": "Chrome_RenderWidgetHostHWND",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Smart Install Maker",
+    "matches": [
+      {
+        "field": "class",
+        "value": "obj_App",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Smart Install Maker",
+    "matches": [
+      {
+        "field": "class",
+        "value": "obj_Form",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "SnippingTool",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "SnippingTool.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "SoulseekQt",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "SoulseekQt.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Spotify",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Spotify.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Steam",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "steamwebhelper.exe",
+        "strategy": "equals"
+      },
+      {
+        "field": "title",
+        "value": "Steam",
+        "strategy": "does_not_equal"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Steam Beta",
+    "matches": [
+      {
+        "field": "class",
+        "value": "SDL_app",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Steam Beta",
+    "matches": [
+      {
+        "field": "title",
+        "value": "notificationtoasts_",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Stremio",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "stremio.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "System Informer",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "SystemInformer.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "System Informer",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "SystemInformer.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "SystemSettings",
+    "matches": [
+      {
+        "field": "class",
+        "value": "Shell_Dialog",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Task Manager",
+    "matches": [
+      {
+        "field": "class",
+        "value": "TaskManagerWindow",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Telegram",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Telegram.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "TickTick",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "TickTick.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Total Commander",
+    "matches": [
+      {
+        "field": "class",
+        "value": "TDLG2FILEACTIONMIN",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "TouchCursor",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "tcconfig.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "TouchCursor",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "tcconfig.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "TranslucentTB",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "TranslucentTB.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "TranslucentTB",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "TranslucentTB.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "UniGetUI",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "UniGetUI.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Unity Hub",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Unity Hub.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Unreal Editor",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "UnrealEditor.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "VMware Horizon Client",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "vmware-view.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "VRCX",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "VRCX.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Visual Studio",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "devenv.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true
+    }
+  },
+  {
+    "name": "Voice.ai",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "VoiceAI.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "WeChat",
+    "matches": [
+      {
+        "field": "class",
+        "value": "WeChatMainWndForPC",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "force": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "WeChat",
+    "matches": [
+      {
+        "field": "class",
+        "value": "WeChatLoginWndForPC",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "WeChat",
+    "matches": [
+      {
+        "field": "class",
+        "value": "FileListMgrWnd",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "WeChat",
+    "matches": [
+      {
+        "field": "class",
+        "value": "CWebviewControlHostWnd",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "WeChat",
+    "matches": [
+      {
+        "field": "class",
+        "value": "ChatWnd",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "WeChat",
+    "matches": [
+      {
+        "field": "class",
+        "value": "EmotionTipWnd",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "WeChat",
+    "matches": [
+      {
+        "field": "class",
+        "value": "ChatContactMenu",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "WeChat",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "WeChatAppEx.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "WebStorm",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "webstorm64.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "WebStorm",
+    "matches": [
+      {
+        "field": "class",
+        "value": "SunAwtDialog",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "WebTorrent Desktop",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "WebTorrent.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "WinZip (32-bit)",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "winzip32.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "WinZip (64-bit)",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "winzip64.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Windows Console (conhost.exe)",
+    "matches": [
+      {
+        "field": "class",
+        "value": "ConsoleWindowClass",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "force": true
+    }
+  },
+  {
+    "name": "Windows Explorer",
+    "matches": [
+      {
+        "field": "class",
+        "value": "OperationStatusWindow",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Windows Explorer",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Control Panel",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Windows Installer",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "msiexec.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Windows Subsystem for Android",
+    "matches": [
+      {
+        "field": "class",
+        "value": "android(splash)",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Windows Update Standalone Installer",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "wusa.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "WingetUI",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "WingetUI.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "WingetUI",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "wingetui.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Wox",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Hotkey sink",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "XAMPP Control Panel",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "xampp-control.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "Zebar",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "zebar.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Zen Browser",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "zen.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true,
+      "tray": true
+    }
+  },
+  {
+    "name": "Zen Browser",
+    "matches": [
+      {
+        "field": "class",
+        "value": "MozillaTaskbarPreviewClass",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Zen Browser",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Picture-in-Picture",
+        "strategy": "equals"
+      },
+      {
+        "field": "exe",
+        "value": "zen.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Zoom",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "Zoom.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "komorebi-gui",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "komorebi-gui.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "mpv",
+    "matches": [
+      {
+        "field": "class",
+        "value": "mpv",
+        "strategy": "legacy"
+      }
+    ],
+    "options": {
+      "late_title": true
+    }
+  },
+  {
+    "name": "mpv.net",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "mpvnet.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "late_title": true
+    }
+  },
+  {
+    "name": "paint.net",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "paintdotnet.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "pinentry",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "pinentry.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "qBittorrent",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "qbittorrent.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "ueli",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ueli.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "tray": true
+    }
+  },
+  {
+    "name": "ueli",
+    "matches": [
+      {
+        "field": "exe",
+        "value": "ueli.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "visio",
+    "matches": [
+      {
+        "field": "class",
+        "value": "VISIOA",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "force": true
+    }
+  },
+  {
+    "name": "visio",
+    "matches": [
+      {
+        "field": "class",
+        "value": "VISIOS",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "visio",
+    "matches": [
+      {
+        "field": "class",
+        "value": "VISIOQ",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Picture in Picture",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Picture-in-Picture",
+        "strategy": "equals"
+      },
+      {
+        "field": "exe",
+        "value": "firefox.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Picture in Picture",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Picture-in-Picture",
+        "strategy": "equals"
+      },
+      {
+        "field": "exe",
+        "value": "chrome.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  },
+  {
+    "name": "Picture in Picture",
+    "matches": [
+      {
+        "field": "title",
+        "value": "Picture-in-Picture",
+        "strategy": "equals"
+      },
+      {
+        "field": "exe",
+        "value": "msedge.exe",
+        "strategy": "equals"
+      }
+    ],
+    "options": {
+      "float": true
+    }
+  }
+]

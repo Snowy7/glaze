@@ -114,6 +114,9 @@ fn run() -> Result<()> {
     // The shell paints before acquiring the taskbar journal and hiding Explorer. Start it
     // before the wallpaper and all of core's optional work.
     startup::ready("core", "shell_spawn_begin_ms");
+    if let Err(e) = glaze_desktop::tiling_recovery::restore_pending() {
+        log::error!("recovering tiling before shell startup: {e:#}");
+    }
     let mut shell = start_optional("shell", exe.with_file_name("glaze-shell.exe"));
     startup::ready("core", "shell_spawn_ms");
 
@@ -216,6 +219,9 @@ fn run() -> Result<()> {
                     }
                 }
                 name if shell.as_ref().is_some_and(|s| s.name == name) => {
+                    if let Err(e) = glaze_desktop::tiling_recovery::restore_pending() {
+                        log::error!("recovering tiling after shell exit: {e:#}");
+                    }
                     // The exited shell released its lease. Its replacement may paint while
                     // core owns the journal, then waits before changing Explorer or the journal.
                     let journal = glaze_bars::taskbar::JournalLease::acquire()?;
@@ -331,6 +337,9 @@ fn run() -> Result<()> {
     }
     bars::replay_journal();
     wallpaper.stop();
+    if let Err(e) = glaze_desktop::tiling_recovery::restore_pending() {
+        log::error!("recovering tiling on shutdown: {e:#}");
+    }
     if let Some(child) = &mut file_index {
         child.stop();
     }

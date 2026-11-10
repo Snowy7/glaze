@@ -17,6 +17,7 @@ mod power;
 pub mod raw_input;
 pub mod startup;
 pub mod win_events;
+pub mod tiling_recovery;
 
 pub use config_watch::{ConfigWatcher, watch_config, watch_file};
 pub use control::{ControlWindow, WM_FACT};

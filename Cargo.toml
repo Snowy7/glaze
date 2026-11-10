@@ -20,6 +20,7 @@ glaze-desktop = { path = "crates/desktop" }
 glaze-inject = { path = "crates/inject" }
 glaze-tweaks = { path = "crates/tweaks" }
 glaze-bars = { path = "crates/bars" }
+glaze-tiling = { path = "crates/tiling" }
 # The UI library, its own repo since 2026-11-07. .cargo/config.toml patches it to the sibling
 # checkout at D:/Coding/projects/desktop/stillkit, so both change together on this PC.
 glaze-ui = { package = "stillkit", git = "https://github.com/Snowy7/stillkit", rev = "52e36f9f2d1997668b03f4a558f32534671f87ef" }
