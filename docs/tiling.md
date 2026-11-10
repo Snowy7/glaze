@@ -233,7 +233,7 @@ block capture/positioning and the cancellation join. Mid-call cancellation is a 
 Run only PID-scoped, medium-integrity fixtures; never exercise the normal tiler on the user's windows:
 
 ```powershell
-$env:CARGO_TARGET_DIR = 'C:\mypaper-targets\tiling\target'
+$env:CARGO_TARGET_DIR = 'C:\glaze-targets\tiling'   # the script's default
 cargo build --release -p glaze-shell --example glaze-tiling-fixture
 .\scripts\test-tiling.ps1 -Count 4 -Cases
 .\scripts\test-tiling.ps1 -Count 30 -Benchmark

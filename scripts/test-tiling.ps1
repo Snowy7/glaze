@@ -11,10 +11,11 @@ $ErrorActionPreference = 'Stop'
 if (!('GlazeTilingForeground' -as [type])) {
     Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class GlazeTilingForeground{[DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();}'
 }
-$taskTarget = 'C:\mypaper-targets\tiling\target'
+$taskTarget = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { 'C:\glaze-targets\tiling' }
 $fixture = Join-Path $taskTarget 'release\examples\glaze-tiling-fixture.exe'
-$outputDir = Join-Path 'C:\mypaper-targets\tiling\evidence' ($Label + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-$desktopLock = 'C:\Users\you\AppData\Local\Temp\glaze-tools\desktop.lock'
+$outputDir = Join-Path (Join-Path $taskTarget 'evidence') ($Label + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+# Shared with every desktop-changing tool; see AGENTS.md.
+$desktopLock = Join-Path $env:LOCALAPPDATA 'Temp\glaze-tools\desktop.lock'
 if (!(Test-Path -LiteralPath $fixture)) { throw 'Build the release tiling_fixture example in the task target directory first.' }
 New-Item -ItemType Directory -Path $outputDir | Out-Null
 $foreground = [GlazeTilingForeground]::GetForegroundWindow()
