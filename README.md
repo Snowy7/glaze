@@ -12,7 +12,7 @@
   <a href="#whats-inside">What's inside</a> ·
   <a href="#performance">Performance</a> ·
   <a href="#architecture">Architecture</a> ·
-  <a href="#quick-start">Quick start</a> ·
+  <a href="#install">Install</a> ·
   <a href="#make-your-own">Make your own</a> ·
   <a href="docs/README.md">Docs</a>
 </p>
@@ -248,7 +248,14 @@ glaze-studio       the settings app (software Direct2D); runs only while open
 
 More in [docs/ui.md](docs/ui.md) and the [native plan](plans/council/native-plan.md).
 
-## Quick start
+## Install
+
+Download the latest `Glaze-*-windows-x64.zip` from [Releases](https://github.com/Snowy7/glaze/releases),
+extract all of it and double-click `install.cmd` (not as administrator). It installs per user, and
+uninstalling from Settings > Apps first undoes every change Glaze made to Windows. See
+[docs/release.md](docs/release.md) for SmartScreen and signing.
+
+## Build from source
 
 You need Windows 10 or 11 and [rustup](https://rustup.rs); the pinned nightly toolchain installs
 itself.

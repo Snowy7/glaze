@@ -4,10 +4,16 @@ Glaze is a native Windows desktop customizer written in Rust. It draws live wall
 
 v0.0.1 was a prototype whose bars, widgets and Studio ran on WebView2. v0.1.0 rebuilds them natively: the shell and Studio draw with software Direct2D through [stillkit](https://github.com/Snowy7/stillkit), a UI library extracted from this repo, only the wallpaper engine holds a hardware GPU device, and WebView2 remains only for `web` wallpapers. Glaze was formerly called mypaper; to move an existing local install, stop it and run `scripts/migrate-local.ps1` as described in the README.
 
+This is a pre-release, tested on one PC so far.
+
+## Install
+
+Download `Glaze-0.1.0-windows-x64.zip` below, extract all of it, and double-click `install.cmd` (not as administrator). It installs per user to `%LOCALAPPDATA%\Programs\Glaze`, with no admin rights. Uninstall from Settings > Apps; it first undoes every change Glaze made to Windows. The executables and the package identity are not signed by a trusted certificate, so Windows SmartScreen may warn; check the SHA256 below first. Details are in [docs/release.md](https://github.com/Snowy7/glaze/blob/v0.1.0/docs/release.md).
+
 ## Highlights
 
 - A native top bar, dock, flyouts, launcher and desktop menu replace the taskbar; on the development machine the shell idled at 32 MB with bars, dock and six widgets.
-- Liquid Glass on every surface, drawn by the engine with liquid-rust, in five styles: Liquid, One UI, Fluent, Solid and Mono.
+- Liquid Glass on every surface, drawn by the engine with stillkit-glass (stillkit's copy of liquid-rust), in five styles: Liquid, One UI, Fluent, Solid and Mono.
 - A wallpaper editor in Studio stacks 38 effects, images and 3D models over any base, with a shader editor that reloads live.
 - The dock groups windows by app and shows live previews and Windows jump lists.
 - 17 native widgets, plus WebAssembly plugins with a permission review at install; T3 Code, Discord, Docker, OBS, Tailscale and Grok Bot ship as plugins.
